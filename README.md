@@ -15,7 +15,7 @@
 |---------------|------------------------------------|
 | Interfaz      | React + Tailwind + Tauri           |
 | Backend       | FastAPI                            |
-| Base de datos | PostgreSQL (AWS RDS)               |
+| Base de datos | Firebird SQL                       |
 | ORM           | SQLAlchemy                         |
 | Autenticación | JWT (tokens firmados)              |
 | Validación    | Pydanti                            |
