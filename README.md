@@ -16,11 +16,10 @@
 | Interfaz      | React + Tailwind + Tauri           |
 | Backend       | FastAPI                            |
 | Base de datos | PostgreSQL (AWS RDS)               |
-| ORM           | SQLAlchemy ?                       |
-| Autenticación | JWT (tokens firmados) ?            |
-| Validación    | Pydanti?                           |
-| API Client    | Axios o Fetch ?                    |
-| Dev tools     | Docker (opcional), Vite?, Alembic? |
+| ORM           | SQLAlchemy                         |
+| Autenticación | JWT (tokens firmados)              |
+| Validación    | Pydanti                            |
+| Dev tools     | Docker, Alembic (opcional)         |
 
 
 ## 📊 Funcionalidades esperadas
