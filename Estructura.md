@@ -4,7 +4,7 @@ Este documento explica de forma técnica pero accesible qué se debe incluir en 
 
 ---
 
-## 📁 Estructura del proyecto (propuesta inicial)
+## 📁 Estructura del proyecto (propuesta inicial, estructura visible en Visual Studio Code o cualquier otro IDE)
 
 
 ferredesk/
