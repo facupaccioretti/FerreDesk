@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/
+.env
+
+# VSCode / JetBrains IDE settings
+.vscode/
+.idea/
+
+# Node modules (frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Tailwind generated files
+frontend/.next/
+frontend/.turbo/
+frontend/tailwind.config.js
+frontend/postcss.config.js
+
+# Tauri build output
+src-tauri/target/
+src-tauri/.cargo/
+
+# Rust / Cargo
+Cargo.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Alembic (si se incorpora después)
+alembic/versions/*.pyc
