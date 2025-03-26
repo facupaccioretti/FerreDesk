@@ -24,7 +24,7 @@
 
 ## 📊 Funcionalidades esperadas
 
-- ✅ Login y autenticación con roles (`admin`, `vendedor`)
+- ✅ Login y autenticación con roles (`admin`, `cli_admin`, `cli_user`, `prueba`, `auditor`)
 - ✅ CRUD de productos
 - ✅ Gestión de ventas por usuario y por ferretería
 - ✅ Reportes y métricas (top productos, ingresos, etc.)
