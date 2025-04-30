@@ -51,9 +51,9 @@ FERREDESK/
 │       │   ├── ferredesk.fdb      # Archivo opcional de base real
 │       │   └── diagrama_db.pdf
 │       ├── vercel/        
-│       │   ├── schema.sql         # Creación de la base Firebird
-│       │   ├── ferredesk.fdb      # Archivo opcional de base real
-│       │   └── diagrama_db.pdf
+│       │   ├── Pagina Login       # Prototipo de Login
+│       │   ├── 
+│       │   └── 
 │       └── scripts/
 │           └── setup_dev.ps1      # Script para inicializar entorno dev
 │
