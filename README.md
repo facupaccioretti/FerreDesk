@@ -44,12 +44,11 @@ FERREDESK/
 │   │   ├── src/
 │   │   ├── package.json
 │   │   └── .env
-│   │
+│   ├── database/
+│   │   ├── schema.sql         # Creación de la base Firebird
+│   │   ├── ferredesk.fdb      # Archivo opcional de base real
+│   │   └── diagrama_db.pdf
 │   └── utilidades/                # Scripts, diagramas, documentos extras
-│       ├── database/
-│       │   ├── schema.sql         # Creación de la base Firebird
-│       │   ├── ferredesk.fdb      # Archivo opcional de base real
-│       │   └── diagrama_db.pdf
 │       ├── vercel/        
 │       │   ├── Pagina Login       # Prototipo de Login
 │       │   ├── 
