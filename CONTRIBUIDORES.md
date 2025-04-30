@@ -68,24 +68,13 @@ pip install fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary python-dotenv
 
 ---
 
-### Frontend (React + Tailwind + Tauri)
+### Frontend (React + Tailwind)
 
 ```bash
 # Desde la carpeta frontend
 npm install
 npm install -D tailwindcss postcss autoprefixer
-npm install --save-dev @tauri-apps/cli
-npm install @tauri-apps/api
+
 ```
 
----
-
-### Rust y Tauri CLI (para compilar la app de escritorio)
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-cargo install tauri-cli
-```
-
----
 
