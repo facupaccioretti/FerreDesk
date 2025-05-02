@@ -38,8 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
         # Apps propias
-    'apps.usuarios',
-    'apps.productos',
+    'ferreapps.usuarios',
+    'ferreapps.productos',
 ]
 
 MIDDLEWARE = [
@@ -77,10 +77,11 @@ WSGI_APPLICATION = 'ferredesk_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.sqlite3',  # o postgresql
+        'NAME': BASE_DIR / 'db.sqlite3',         # o tu base principal de Django
     }
 }
+
 
 
 # Password validation
