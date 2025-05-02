@@ -64,4 +64,4 @@ FERREDESK/
 
 ---
 
-Este README sirve como base completa para el repositorio de GitHub de "FerreDesk App". 
+Este README sirve como base completa para el repositorio de GitHub de "FerreDesk App". .
