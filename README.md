@@ -14,7 +14,7 @@
 |---------------|------------------------------------|
 | Interfaz      | React + Tailwind                   |
 | Backend       | Django                             |
-| Base de datos | Firebird SQL                       |
+| Base de datos | PostgreSQL                         |
 
 
 ## 📊 Funcionalidades esperadas
