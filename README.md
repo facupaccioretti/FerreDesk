@@ -32,35 +32,77 @@
 FERREDESK/
 ├── ferredesk_v1/                   # Versión principal del sistema
 │   ├── backend/                    # Backend con Django
-│   │   ├── manage.py
-│   │   ├── ferredesk_backend/     # Configuración global Django
-│   │   ├── apps/                  # Apps internas: productos, ventas, etc.
-│   │   ├── .env                   # Configuración sensible (NO commitear)
-│   │   ├── requirements.txt       # Dependencias del backend
-│   │   └── .gitignore
+│   │   ├── manage.py              # Script principal de Django para gestionar el proyecto
+│   │   ├── ferredesk_backend/     # Configuración global Django (settings, urls, wsgi)
+│   │   ├── apps/                  # Módulos de la aplicación
+│   │   │   ├── productos/        # Gestión de catálogo de productos
+│   │   │   ├── ventas/          # Sistema de ventas y facturación
+│   │   │   ├── usuarios/        # Gestión de usuarios y autenticación
+│   │   │   └── reportes/        # Generación de reportes y estadísticas
+│   │   ├── .env                  # Variables de entorno (configuración sensible)
+│   │   ├── requirements.txt      # Dependencias de Python
+│   │   └── .gitignore           # Archivos ignorados por Git
 │   │
 │   ├── frontend/                  # Frontend con React
-│   │   ├── public/
-│   │   ├── src/
-│   │   ├── package.json
-│   │   └── .env
-│   ├── database/
-│   │   ├── schema.sql         # Creación de la base Firebird
-│   │   ├── ferredesk.fdb      # Archivo opcional de base real
-│   │   └── diagrama_db.pdf
-│   └── utilidades/                # Scripts, diagramas, documentos extras
-│       ├── vercel/        
-│       │   ├── Pagina Login       # Prototipo de Login
-│       │   ├── 
-│       │   └── 
-│       └── scripts/
-│           └── setup_dev.ps1      # Script para inicializar entorno dev
+│   │   ├── public/               # Archivos estáticos y assets públicos
+│   │   ├── src/                  # Código fuente de React
+│   │   │   ├── components/      # Componentes reutilizables
+│   │   │   ├── pages/          # Páginas principales
+│   │   │   ├── hooks/          # Custom hooks de React
+│   │   │   ├── context/        # Contextos de React
+│   │   │   └── utils/          # Utilidades y helpers
+│   │   ├── package.json         # Dependencias de Node.js
+│   │   └── .env                # Variables de entorno del frontend
+│   │
+│   ├── database/                 # Configuración y scripts de base de datos
+│   │   ├── schema.sql           # Esquema de la base de datos
+│   │   ├── ferredesk.fdb        # Archivo de base de datos (opcional)
+│   │   └── diagrama_db.pdf      # Diagrama ER de la base de datos
+│   │
+│   └── utilidades/               # Herramientas y recursos adicionales
+│       ├── vercel/              # Configuración de despliegue en Vercel
+│       │   ├── Pagina Login     # Prototipo de la página de login
+│       │   └── assets/          # Recursos para el prototipo
+│       └── scripts/             # Scripts de utilidad
+│           ├── setup_dev.ps1    # Script para configurar entorno de desarrollo
+│           └── backup_db.ps1    # Script para respaldar la base de datos
 │
-├── .gitignore
-├── README.md                      # Documentación general
-├── CONTRIBUIDORES.md              # Ayuda para contribuidores del proyecto
-└── 
+├── .gitignore                    # Archivos y carpetas ignorados por Git
+├── README.md                     # Documentación principal del proyecto
+└── CONTRIBUIDORES.md             # Guía para contribuidores
+```
 
+### Descripción de los directorios principales
+
+#### 📦 Backend (`backend/`)
+El backend está construido con Django y contiene toda la lógica de negocio. Incluye:
+- Configuración del proyecto Django
+- Aplicaciones modulares para cada funcionalidad
+- Sistema de autenticación y autorización
+- APIs REST para comunicación con el frontend
+- Configuración de la base de datos
+
+#### 🎨 Frontend (`frontend/`)
+La interfaz de usuario desarrollada con React y Tailwind CSS:
+- Componentes reutilizables y modulares
+- Sistema de rutas y navegación
+- Integración con APIs del backend
+- Estilos y temas personalizados
+- Gestión de estado global
+
+#### 💾 Base de datos (`database/`)
+Contiene todo lo relacionado con la base de datos:
+- Scripts de migración
+- Esquema de la base de datos
+- Diagramas y documentación
+- Scripts de respaldo
+
+#### 🛠️ Utilidades (`utilidades/`)
+Herramientas y recursos para desarrollo y mantenimiento:
+- Scripts de automatización
+- Prototipos y diseños
+- Documentación adicional
+- Herramientas de despliegue
 
 ---
 

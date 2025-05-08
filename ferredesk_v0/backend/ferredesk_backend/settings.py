@@ -58,7 +58,10 @@ ROOT_URLCONF = 'ferredesk_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'DIRS': [
+            os.path.join(BASE_DIR.parent, 'frontend', 'build'),
+            os.path.join(BASE_DIR, 'templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -120,15 +123,30 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Configuración de archivos estáticos
 STATICFILES_DIRS = [
+    os.path.join(BASE_DIR.parent, 'frontend', 'build'),
     os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
 ]
 
+# Configuración para servir el index.html de React
+REACT_APP_DIR = os.path.join(BASE_DIR.parent, 'frontend', 'build')
+
+# Configuración de archivos estáticos en desarrollo
+if DEBUG:
+    STATICFILES_DIRS = [
+        os.path.join(BASE_DIR.parent, 'frontend', 'build'),
+        os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
+    ]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Configuración del modelo de usuario personalizado
+AUTH_USER_MODEL = 'usuarios.Usuario'
 
