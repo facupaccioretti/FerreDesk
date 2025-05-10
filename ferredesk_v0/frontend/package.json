@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8000",
   "dependencies": {
     "cra-template-tailwindcss": "4.0.1",
     "react": "^18.2.0",

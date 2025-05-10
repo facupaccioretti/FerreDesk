@@ -5,11 +5,20 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
 import json
 import os
+from ferreapps.usuarios.models import CliUsuario
 
 # Create your views here.
 
 def index(request):
-    # Servir el index.html de React para todas las rutas
+    # Si el usuario NO está autenticado y está intentando acceder al dashboard, redirigir a la landing
+    if not request.user.is_authenticated and request.path.startswith('/dashboard'):
+        with open(os.path.join(settings.REACT_APP_DIR, 'index.html'), 'rb') as f:
+            content = f.read()
+            # Insertar el meta tag de redirección después del <head>
+            content = content.replace(b'<head>', b'<head><meta name="x-redirect" content="/">')
+            return FileResponse(content, content_type='text/html')
+    
+    # Para todas las demás rutas, servir el index.html de React
     index_path = os.path.join(settings.REACT_APP_DIR, 'index.html')
     return FileResponse(open(index_path, 'rb'))
 
@@ -24,6 +33,16 @@ def login_view(request):
             user = authenticate(request, username=username, password=password)
             
             if user is not None:
+                # Verificar si es un usuario cliente y si su cuenta está activa
+                try:
+                    cli_usuario = CliUsuario.objects.get(user=user)
+                    if not cli_usuario.cuenta_activa:
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': 'La cuenta aún no está activada. Por favor, contacta al administrador.'
+                        }, status=403)
+                except CliUsuario.DoesNotExist:
+                    pass  # Si no es un usuario cliente, permitir el login normalmente
                 login(request, user)
                 return JsonResponse({
                     'status': 'success',

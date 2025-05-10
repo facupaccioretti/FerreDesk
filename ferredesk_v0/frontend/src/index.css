@@ -3,3 +3,22 @@
 @tailwind components;
 
 @tailwind utilities;
+
+@keyframes float {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-30px) scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.4;
+  }
+}
+
+.animate-float {
+  animation: float infinite ease-in-out;
+}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Usuario
+from .models import Usuario, CliUsuario
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
@@ -20,3 +20,19 @@ class UsuarioAdmin(UserAdmin):
     )
     search_fields = ('username', 'first_name', 'last_name', 'email')
     ordering = ('username',)
+
+@admin.register(CliUsuario)
+class CliUsuarioAdmin(admin.ModelAdmin):
+    list_display = ('user', 'cuenta_activa', 'fecha_creacion', 'ultima_modificacion')
+    list_filter = ('cuenta_activa', 'fecha_creacion')
+    search_fields = ('user__username', 'user__email')
+    ordering = ('-fecha_creacion',)
+    actions = ['activar_cuentas', 'desactivar_cuentas']
+
+    def activar_cuentas(self, request, queryset):
+        queryset.update(cuenta_activa=True)
+    activar_cuentas.short_description = "Activar las cuentas seleccionadas"
+
+    def desactivar_cuentas(self, request, queryset):
+        queryset.update(cuenta_activa=False)
+    desactivar_cuentas.short_description = "Desactivar las cuentas seleccionadas"
