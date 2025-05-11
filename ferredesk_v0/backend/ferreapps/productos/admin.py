@@ -19,3 +19,4 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ('codigo', 'nombre', 'descripcion')
     list_editable = ('precio_venta', 'stock', 'activo')
     readonly_fields = ('fecha_creacion', 'fecha_actualizacion')
+ 
