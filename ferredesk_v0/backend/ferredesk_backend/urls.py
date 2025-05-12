@@ -21,5 +21,6 @@ from django.views.generic import TemplateView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/usuarios/', include('ferreapps.usuarios.urls')),
+    path('api/clientes/', include('ferreapps.clientes.urls')),
     path('', include('ferreapps.login.urls')),
 ]

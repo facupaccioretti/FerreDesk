@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'ferreapps.usuarios',
     'ferreapps.productos',
     'ferreapps.login',
+    'ferreapps.clientes',
 ]
 
 MIDDLEWARE = [

@@ -4,6 +4,8 @@ import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
 import Register from './components/Register';
+import ClientesManager from './components/ClientesManager';
+import PrivateRoute from './components/PrivateRoute';
 
 // Componente principal con rutas
 export default function App() {
@@ -11,7 +13,22 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/dashboard" element={<Home />} />
+        <Route
+          path="/dashboard"
+          element={
+            <PrivateRoute>
+              <Home />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/clientes"
+          element={
+            <PrivateRoute>
+              <ClientesManager />
+            </PrivateRoute>
+          }
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
       </Routes>

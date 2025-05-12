@@ -1,8 +1,10 @@
 from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import authenticate, login
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 import json
 import os
 from ferreapps.usuarios.models import CliUsuario
@@ -69,3 +71,24 @@ def login_view(request):
         'status': 'error',
         'message': 'Método no permitido'
     }, status=405)
+
+@csrf_exempt
+def logout_view(request):
+    if request.method == 'POST':
+        logout(request)
+        return JsonResponse({'status': 'success', 'message': 'Sesión cerrada'})
+    return JsonResponse({'status': 'error', 'message': 'Método no permitido'}, status=405)
+
+@ensure_csrf_cookie
+def user_view(request):
+    if request.user.is_authenticated:
+        return JsonResponse({
+            'status': 'success',
+            'user': {
+                'username': request.user.username,
+                'is_staff': request.user.is_staff,
+                # Agrega aquí más campos si lo deseas
+            }
+        })
+    else:
+        return JsonResponse({'status': 'error', 'message': 'No autenticado'}, status=401)

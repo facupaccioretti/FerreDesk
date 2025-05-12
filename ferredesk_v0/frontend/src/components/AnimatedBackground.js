@@ -7,7 +7,7 @@ const AnimatedBackground = () => (
       {[...Array(30)].map((_, i) => (
         <div
           key={i}
-          className="absolute w-4 h-4 bg-blue-500 rounded-full animate-float"
+          className="absolute w-4 h-4 bg-gray-600 rounded-full animate-float"
           style={{
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
