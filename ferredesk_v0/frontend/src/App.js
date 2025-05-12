@@ -6,6 +6,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import ClientesManager from './components/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
+import ProductosManager from './components/ProductosManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -26,6 +27,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ClientesManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/productos"
+          element={
+            <PrivateRoute>
+              <ProductosManager />
             </PrivateRoute>
           }
         />
