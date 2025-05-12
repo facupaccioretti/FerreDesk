@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardBackground from './DashboardBackground';
+import Navbar from './Navbar';
 
 const cards = [
   {
@@ -58,7 +59,7 @@ const getInitialDarkMode = () => {
 
 const Home = () => {
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
-  const navigate = useNavigate();
+  const [user, setUser] = useState({ username: "ferreadmin" });
 
   useEffect(() => {
     const html = document.documentElement;
@@ -76,33 +77,44 @@ const Home = () => {
 
   const handleCardClick = (label) => {
     if (label === 'Clientes') {
-      navigate('/dashboard/clientes');
+      window.open('/dashboard/clientes', '_blank');
+    }
+    if (label === 'Productos') {
+      window.open('/dashboard/productos', '_blank');
     }
     // Puedes agregar navegación para otras tarjetas aquí
   };
 
+  const handleLogout = () => {
+    setUser(null);
+    window.location.href = "/login";
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 relative">
+    <div className="min-h-screen relative">
       <DashboardBackground dark={darkMode} />
-      <button
-        onClick={toggleDarkMode}
-        className="absolute top-6 right-6 z-10 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-full p-3 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition"
-        aria-label="Alternar modo oscuro"
-      >
-        {darkMode ? '🌙' : '☀️'}
-      </button>
-      <h2 className="mb-10 text-4xl font-extrabold text-red dark:text-black text-center">Panel Principal</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="flex flex-col items-center justify-center rounded-xl shadow-lg p-8 w-56 h-56 transition-transform hover:scale-105 hover:shadow-2xl cursor-pointer border border-gray-100 dark:border-gray-700 bg-white dark:bg-white"
-            onClick={() => handleCardClick(card.label)}
-          >
-            <span className="mb-4">{card.icon}</span>
-            <span className="text-xl font-semibold mt-2 text-black">{card.label}</span>
-          </div>
-        ))}
+      <Navbar user={user} onLogout={handleLogout} />
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <button
+          onClick={toggleDarkMode}
+          className="fixed bottom-6 right-6 z-50 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-full p-3 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition"
+          aria-label="Alternar modo oscuro"
+        >
+          {darkMode ? '🌙' : '☀️'}
+        </button>
+        <h2 className="mb-10 text-4xl font-extrabold text-red dark:text-black text-center">Panel Principal</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+          {cards.map((card) => (
+            <div
+              key={card.label}
+              className="flex flex-col items-center justify-center rounded-xl shadow-lg p-8 w-56 h-56 transition-transform hover:scale-105 hover:shadow-2xl cursor-pointer border border-gray-100 dark:border-gray-700 bg-white dark:bg-white"
+              onClick={() => handleCardClick(card.label)}
+            >
+              <span className="mb-4">{card.icon}</span>
+              <span className="text-xl font-semibold mt-2 text-black">{card.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

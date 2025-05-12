@@ -50,12 +50,6 @@ const useClientesService = (initial) => {
   return { clientes, getClientes, addCliente, updateCliente, deleteCliente };
 };
 
-const Badge = ({ children }) => (
-  <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
-    {children}
-  </span>
-);
-
 const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId }) => {
   const filtered = clientes.filter((cli) =>
     cli.razon.toLowerCase().includes(search.toLowerCase()) ||

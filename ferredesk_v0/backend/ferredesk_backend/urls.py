@@ -17,9 +17,18 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from rest_framework.routers import DefaultRouter
+from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet
+
+router = DefaultRouter()
+router.register(r'productos/stock', StockViewSet, basename='stock')
+router.register(r'productos/proveedores', ProveedorViewSet, basename='proveedor')
+router.register(r'productos/stockprove', StockProveViewSet, basename='stockprove')
+router.register(r'productos/familias', FamiliaViewSet, basename='familia')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', include(router.urls)),
     path('api/usuarios/', include('ferreapps.usuarios.urls')),
     path('api/clientes/', include('ferreapps.clientes.urls')),
     path('', include('ferreapps.login.urls')),
