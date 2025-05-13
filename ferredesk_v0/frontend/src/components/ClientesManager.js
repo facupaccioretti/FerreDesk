@@ -598,7 +598,7 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
         <button
           type="button"
           onClick={handleCancel}
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
         >
           Cancelar
         </button>
@@ -735,12 +735,12 @@ const ClientesManager = () => {
             ))}
             {/* Botón Nuevo Cliente solo en la tab de lista */}
             {activeTab === 'lista' && (
-              <div className="flex-1 flex justify-end">
+              <div className="flex-1 flex justify-end mb-2">
                 <button
                   onClick={() => openTab('nuevo', 'Nuevo Cliente')}
-                  className="bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-xl font-semibold flex items-center gap-2 transition-colors"
+                  className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
                 >
-                  <span className="text-xl">+</span> Nuevo Cliente
+                  <span className="text-lg">+</span> Nuevo Cliente
                 </button>
               </div>
             )}

@@ -59,11 +59,11 @@ function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
           <input name="cuit" value={form.cuit} onChange={handleChange} placeholder="CUIT" className="border rounded p-2 col-span-2" />
         </div>
         <div className="flex gap-2 mb-4">
-          <button onClick={handleSave} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-semibold">
+          <button onClick={handleSave} className="bg-black text-white px-4 py-2 rounded hover:bg-gray-700 font-semibold transition-colors">
             {editId ? 'Guardar cambios' : 'Agregar proveedor'}
           </button>
           {editId && (
-            <button onClick={() => { setForm({ razon: '', fantasia: '', domicilio: '', tel1: '', cuit: '' }); setEditId(null); }} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Cancelar</button>
+            <button onClick={() => { setForm({ razon: '', fantasia: '', domicilio: '', tel1: '', cuit: '' }); setEditId(null); }} className="px-4 py-2 bg-white text-black border border-gray-300 rounded hover:bg-red-500 hover:text-white transition-colors">Cancelar</button>
           )}
         </div>
         <table className="min-w-full text-sm">
@@ -82,8 +82,10 @@ function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
                 <td className="px-2 py-1">{p.fantasia}</td>
                 <td className="px-2 py-1">{p.tel1}</td>
                 <td className="px-2 py-1 flex gap-2">
-                  <button onClick={() => handleEdit(p)} className="text-blue-600 hover:underline">Editar</button>
-                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:underline">Eliminar</button>
+                  <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(p)} className="text-blue-600 hover:underline">Editar</button>
+                    <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:underline">Eliminar</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -147,11 +149,11 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
           </select>
         </div>
         <div className="flex gap-2 mb-4">
-          <button onClick={handleSave} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-semibold">
+          <button onClick={handleSave} className="bg-black text-white px-4 py-2 rounded hover:bg-gray-700 font-semibold transition-colors">
             {editId ? 'Guardar cambios' : 'Agregar familia'}
           </button>
           {editId && (
-            <button onClick={() => { setForm({ deno: '', comentario: '', nivel: '', acti: 'S' }); setEditId(null); }} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Cancelar</button>
+            <button onClick={() => { setForm({ deno: '', comentario: '', nivel: '', acti: 'S' }); setEditId(null); }} className="px-4 py-2 bg-white text-black border border-gray-300 rounded hover:bg-red-500 hover:text-white transition-colors">Cancelar</button>
           )}
         </div>
         <table className="min-w-full text-sm">
@@ -170,8 +172,10 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
                 <td className="px-2 py-1">{f.comentario}</td>
                 <td className="px-2 py-1">{f.nivel}</td>
                 <td className="px-2 py-1 flex gap-2">
-                  <button onClick={() => handleEdit(f)} className="text-blue-600 hover:underline">Editar</button>
-                  <button onClick={() => handleDelete(f.id)} className="text-red-600 hover:underline">Eliminar</button>
+                  <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(f)} className="text-blue-600 hover:underline">Editar</button>
+                    <button onClick={() => handleDelete(f.id)} className="text-red-600 hover:underline">Eliminar</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -267,13 +271,13 @@ export default function ProductosTable({
         />
         <button
           onClick={() => setShowProvModal(true)}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          className="bg-black hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
         >
           Gestionar Proveedores
         </button>
         <button
           onClick={() => setShowFamiliasModal(true)}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          className="bg-black hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
         >
           Gestionar Familias
         </button>
@@ -293,7 +297,7 @@ export default function ProductosTable({
             </select>
             <button
               onClick={() => setGroupByFamilia(false)}
-              className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+              className="bg-black hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
             >
               Ver Lista Normal
             </button>
@@ -304,7 +308,7 @@ export default function ProductosTable({
           <div className="mb-4">
             <button
               onClick={() => setGroupByFamilia(true)}
-              className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+              className="bg-black hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
             >
               Agrupar por Familias
             </button>
@@ -383,18 +387,20 @@ export default function ProductosTable({
                                 {product.stock_proveedores?.reduce((acc, sp) => acc + sp.cantidad, 0) || 0}
                               </td>
                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                                <button
-                                  onClick={() => onEdit(product)}
-                                  className="text-blue-600 hover:text-blue-900 mr-2"
-                                >
-                                  Editar
-                                </button>
-                                <button
-                                  onClick={() => deleteProveedor(product.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  Eliminar
-                                </button>
+                                <div className="flex justify-center gap-2">
+                                  <button
+                                    onClick={() => onEdit(product)}
+                                    className="text-blue-600 hover:text-blue-900 mr-2"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => deleteProveedor(product.id)}
+                                    className="text-red-600 hover:text-red-900"
+                                  >
+                                    Eliminar
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                             {expandedRows.has(product.id) && (
@@ -491,18 +497,20 @@ export default function ProductosTable({
                         {product.stock_proveedores?.reduce((acc, sp) => acc + (Number(sp.cantidad) || 0), 0) || 0}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                        <button
-                          onClick={() => onEdit(product)}
-                          className="text-blue-600 hover:text-blue-900 mr-2"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => deleteProveedor(product.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Eliminar
-                        </button>
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => onEdit(product)}
+                            className="text-blue-600 hover:text-blue-900 mr-2"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => deleteProveedor(product.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {expandedRows.has(product.id) && (
