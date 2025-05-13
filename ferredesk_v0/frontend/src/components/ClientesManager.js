@@ -331,15 +331,45 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
   const [provincias, setProvincias] = useState([...mockProvincias]);
 
   // Estado para modales
-  const [modal, setModal] = useState(null); // { type: 'barrio'|'localidad'|'provincia', open: bool }
+  const [modal, setModal] = useState(null);
   const [newValue, setNewValue] = useState('');
 
-  const [form, setForm] = useState(
-    initialData || {
-      codigo: '', razon: '', fantasia: '', domicilio: '', tel1: '', tel2: '', tel3: '', email: '', cuit: '', ib: '', status: '', iva: '', contacto: '', comentario: '', lineacred: '', impsalcta: '', fecsalcta: '', descu1: '', descu2: '', descu3: '', cpostal: '', zona: '', cancela: '', barrio: '', localidad: '', provincia: '', transporte: '', vendedor: '', plazo: '', categoria: '', estado: 'Activo'
+  // Cargar datos guardados o usar initialData
+  const [form, setForm] = useState(() => {
+    const savedForm = localStorage.getItem('clienteFormDraft');
+    if (savedForm && !initialData) {
+      return JSON.parse(savedForm);
     }
-  );
+    return initialData || {
+      codigo: '', razon: '', fantasia: '', domicilio: '', tel1: '', tel2: '', tel3: '', email: '', cuit: '', ib: '', status: '', iva: '', contacto: '', comentario: '', lineacred: '', impsalcta: '', fecsalcta: '', descu1: '', descu2: '', descu3: '', cpostal: '', zona: '', cancela: '', barrio: '', localidad: '', provincia: '', transporte: '', vendedor: '', plazo: '', categoria: '', estado: 'Activo'
+    };
+  });
+
   const [error, setError] = useState('');
+
+  // Guardar en localStorage cuando el formulario cambie
+  useEffect(() => {
+    if (!initialData) {
+      localStorage.setItem('clienteFormDraft', JSON.stringify(form));
+    }
+  }, [form, initialData]);
+
+  // Limpiar el draft cuando se guarda o cancela
+  const handleSave = (e) => {
+    e.preventDefault();
+    if (!form.razon.trim() || !form.codigo.trim()) {
+      setError('El código y la razón social son obligatorios');
+      return;
+    }
+    setError('');
+    localStorage.removeItem('clienteFormDraft');
+    onSave(form);
+  };
+
+  const handleCancel = () => {
+    localStorage.removeItem('clienteFormDraft');
+    onCancel();
+  };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -374,18 +404,8 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
     closeModal();
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.razon.trim() || !form.codigo.trim()) {
-      setError('El código y la razón social son obligatorios');
-      return;
-    }
-    setError('');
-    onSave(form);
-  };
-
   return (
-    <form className="max-w-3xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="max-w-3xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSave}>
       <h3 className="text-xl font-semibold text-gray-800 mb-6">
         {initialData ? 'Editar Cliente' : 'Nuevo Cliente'}
       </h3>
@@ -577,7 +597,7 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
       <div className="mt-8 flex justify-end space-x-3">
         <button
           type="button"
-          onClick={onCancel}
+          onClick={handleCancel}
           className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
         >
           Cancelar
@@ -593,7 +613,11 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
   );
 };
 
-export default function ClientesManager() {
+const ClientesManager = () => {
+  useEffect(() => {
+    document.title = "Clientes FerreDesk";
+  }, []);
+
   const {
     clientes,
     addCliente,
@@ -602,14 +626,29 @@ export default function ClientesManager() {
   } = useClientesService(initialClientes);
 
   const [search, setSearch] = useState('');
-  // Sistema de tabs tipo browser
-  const [tabs, setTabs] = useState([
-    { key: 'lista', label: 'Lista de Clientes', closable: false }
-  ]);
-  const [activeTab, setActiveTab] = useState('lista');
+  
+  // Cargar estado de pestañas desde localStorage
+  const [tabs, setTabs] = useState(() => {
+    const savedTabs = localStorage.getItem('clientesTabs');
+    return savedTabs ? JSON.parse(savedTabs) : [
+      { key: 'lista', label: 'Lista de Clientes', closable: false }
+    ];
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedActiveTab = localStorage.getItem('clientesActiveTab');
+    return savedActiveTab || 'lista';
+  });
+
   const [editCliente, setEditCliente] = useState(null);
   const [expandedClientId, setExpandedClientId] = useState(null);
   const [user, setUser] = useState(null);
+
+  // Guardar estado de pestañas en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem('clientesTabs', JSON.stringify(tabs));
+    localStorage.setItem('clientesActiveTab', activeTab);
+  }, [tabs, activeTab]);
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -732,10 +771,12 @@ export default function ClientesManager() {
       </div>
     </div>
   );
-}
+};
 
 // Modificar ClientesTable para alinear acciones correctamente
 ClientesTable.defaultProps = {
   expandedClientId: null,
   setExpandedClientId: () => {},
-}; 
+};
+
+export default ClientesManager; 

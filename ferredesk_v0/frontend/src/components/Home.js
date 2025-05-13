@@ -62,6 +62,10 @@ const Home = () => {
   const [user, setUser] = useState({ username: "ferreadmin" });
 
   useEffect(() => {
+    document.title = "Panel Principal FerreDesk";
+  }, []);
+
+  useEffect(() => {
     const html = document.documentElement;
     if (darkMode) {
       html.classList.add('dark');

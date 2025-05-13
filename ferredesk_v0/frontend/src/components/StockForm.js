@@ -1,15 +1,23 @@
 import React, { useState, useEffect } from 'react';
 
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
-  const [formData, setFormData] = useState({
-    codvta: '',
-    codcom: '',
-    deno: '',
-    unidad: '',
-    cantmin: 0,
-    proveedor_habitual_id: '',
-    stock_proveedores: [],
-    idfam1: null
+  const [form, setForm] = useState(() => {
+    const savedForm = localStorage.getItem('stockFormDraft');
+    if (savedForm && !stock) {
+      return JSON.parse(savedForm);
+    }
+    return stock || {
+      codvta: '',
+      codcom: '',
+      deno: '',
+      unidad: '',
+      cantmin: 0,
+      proveedor_habitual_id: '',
+      stock_proveedores: [],
+      idfam1: null,
+      idfam2: null,
+      idfam3: null
+    };
   });
 
   const [newStockProve, setNewStockProve] = useState({
@@ -20,7 +28,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
 
   useEffect(() => {
     if (stock) {
-      setFormData({
+      setForm({
         codvta: stock.codvta || '',
         codcom: stock.codcom || '',
         deno: stock.deno || '',
@@ -28,16 +36,24 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
         cantmin: stock.cantmin || 0,
         proveedor_habitual_id: stock.proveedor_habitual?.id || '',
         stock_proveedores: stock.stock_proveedores || [],
-        idfam1: stock.idfam1 || null
+        idfam1: stock.idfam1 || null,
+        idfam2: stock.idfam2 || null,
+        idfam3: stock.idfam3 || null
       });
     }
   }, [stock]);
 
-  const handleInputChange = (e) => {
+  useEffect(() => {
+    if (!stock) {
+      localStorage.setItem('stockFormDraft', JSON.stringify(form));
+    }
+  }, [form, stock]);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setForm(prev => ({
       ...prev,
-      [name]: name === "idfam1"
+      [name]: ["idfam1", "idfam2", "idfam3"].includes(name)
         ? value === "" ? null : Number(value)
         : value
     }));
@@ -59,7 +75,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
 
     const proveedor = proveedores.find(p => p.id === parseInt(newStockProve.proveedor_id));
     
-    setFormData(prev => ({
+    setForm(prev => ({
       ...prev,
       stock_proveedores: [
         ...prev.stock_proveedores,
@@ -80,28 +96,34 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
   };
 
   const removeStockProve = (proveedorId) => {
-    setFormData(prev => ({
+    setForm(prev => ({
       ...prev,
       stock_proveedores: prev.stock_proveedores.filter(sp => sp.proveedor.id !== proveedorId)
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSave = (e) => {
     e.preventDefault();
-    onSave(formData);
+    localStorage.removeItem('stockFormDraft');
+    onSave(form);
+  };
+
+  const handleCancel = () => {
+    localStorage.removeItem('stockFormDraft');
+    onCancel();
   };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Código de Venta</label>
             <input
               type="text"
               name="codvta"
-              value={formData.codvta}
-              onChange={handleInputChange}
+              value={form.codvta}
+              onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
             />
@@ -111,8 +133,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
             <input
               type="text"
               name="codcom"
-              value={formData.codcom}
-              onChange={handleInputChange}
+              value={form.codcom}
+              onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
             />
@@ -124,8 +146,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
           <input
             type="text"
             name="deno"
-            value={formData.deno}
-            onChange={handleInputChange}
+            value={form.deno}
+            onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             required
           />
@@ -137,9 +159,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
             <input
               type="text"
               name="unidad"
-              value={formData.unidad}
-              onChange={handleInputChange}
+              value={form.unidad}
+              onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
             />
           </div>
           <div>
@@ -147,8 +170,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
             <input
               type="number"
               name="cantmin"
-              value={formData.cantmin}
-              onChange={handleInputChange}
+              value={form.cantmin}
+              onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
@@ -158,8 +181,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
           <label className="block text-sm font-medium text-gray-700">Proveedor Habitual</label>
           <select
             name="proveedor_habitual_id"
-            value={formData.proveedor_habitual_id}
-            onChange={handleInputChange}
+            value={form.proveedor_habitual_id}
+            onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           >
             <option value="">Seleccione un proveedor</option>
@@ -175,15 +198,43 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
           <label className="block text-sm font-medium text-gray-700">Familia</label>
           <select
             name="idfam1"
-            value={formData.idfam1 ?? ""}
-            onChange={handleInputChange}
+            value={form.idfam1 ?? ""}
+            onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           >
             <option value="">Sin familia</option>
-            {familias.map(fam => (
-              <option key={fam.id} value={fam.id}>
-                {fam.deno}
-              </option>
+            {familias.filter(fam => fam.nivel === '1').map(fam => (
+              <option key={fam.id} value={fam.id}>{fam.deno}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Subfamilia</label>
+          <select
+            name="idfam2"
+            value={form.idfam2 ?? ""}
+            onChange={handleChange}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">Sin subfamilia</option>
+            {familias.filter(fam => fam.nivel === '2').map(fam => (
+              <option key={fam.id} value={fam.id}>{fam.deno}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Sub-subfamilia</label>
+          <select
+            name="idfam3"
+            value={form.idfam3 ?? ""}
+            onChange={handleChange}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">Sin sub-subfamilia</option>
+            {familias.filter(fam => fam.nivel === '3').map(fam => (
+              <option key={fam.id} value={fam.id}>{fam.deno}</option>
             ))}
           </select>
         </div>
@@ -232,7 +283,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
           </button>
 
           <div className="mt-4 space-y-2">
-            {formData.stock_proveedores.map((sp, index) => (
+            {form.stock_proveedores.map((sp, index) => (
               <div key={index} className="bg-gray-50 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -257,7 +308,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
         <div className="flex justify-end space-x-4">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={handleCancel}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             Cancelar
@@ -266,7 +317,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias }) => {
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            Guardar
+            {stock ? 'Actualizar' : 'Guardar'}
           </button>
         </div>
       </form>

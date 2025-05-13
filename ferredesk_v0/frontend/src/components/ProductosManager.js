@@ -37,19 +37,42 @@ const mockProductos = [
   }
 ];
 
-export default function ProductosManager() {
+const ProductosManager = () => {
+  useEffect(() => {
+    document.title = "Productos FerreDesk";
+  }, []);
+
   // Estado
   const [productos, setProductos] = useState([]);
   const [familias, setFamilias] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [search, setSearch] = useState('');
-  const [tabs, setTabs] = useState([{ key: 'lista', label: 'Lista de Productos', closable: false }]);
-  const [activeTab, setActiveTab] = useState('lista');
+
+  // Cargar estado de pestañas desde localStorage
+  const [tabs, setTabs] = useState(() => {
+    const savedTabs = localStorage.getItem('productosTabs');
+    return savedTabs ? JSON.parse(savedTabs) : [
+      { key: 'lista', label: 'Lista de Productos', closable: false }
+    ];
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedActiveTab = localStorage.getItem('productosActiveTab');
+    return savedActiveTab || 'lista';
+  });
+
   const [editProducto, setEditProducto] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [groupByFamilia, setGroupByFamilia] = useState(false);
+  const [selectedNivel, setSelectedNivel] = useState('1');
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null });
-  const [user, setUser] = useState({ username: "ferreadmin" }); // o el usuario real
+  const [user, setUser] = useState({ username: "ferreadmin" });
+
+  // Guardar estado de pestañas en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem('productosTabs', JSON.stringify(tabs));
+    localStorage.setItem('productosActiveTab', activeTab);
+  }, [tabs, activeTab]);
 
   // Simula fetch inicial
   useEffect(() => {
@@ -139,15 +162,6 @@ export default function ProductosManager() {
       <Navbar user={user} onLogout={handleLogout} />
       <div className="flex justify-between items-center px-6 py-4">
         <h2 className="text-2xl font-bold text-gray-800">Gestión de Productos y Stock</h2>
-        <div>
-          <label className="mr-2 font-medium text-gray-700">Agrupar por familia</label>
-          <input
-            type="checkbox"
-            checked={groupByFamilia}
-            onChange={e => setGroupByFamilia(e.target.checked)}
-            className="form-checkbox h-5 w-5 text-blue-600"
-          />
-        </div>
       </div>
       <div className="flex flex-1 px-6 gap-4 min-h-0">
         <div className="flex-1 flex flex-col">
@@ -196,6 +210,9 @@ export default function ProductosManager() {
                 expandedId={expandedId}
                 setExpandedId={setExpandedId}
                 groupByFamilia={groupByFamilia}
+                setGroupByFamilia={setGroupByFamilia}
+                selectedNivel={selectedNivel}
+                setSelectedNivel={setSelectedNivel}
                 addFamilia={addFamilia}
                 updateFamilia={updateFamilia}
                 deleteFamilia={deleteFamilia}
@@ -273,4 +290,6 @@ export default function ProductosManager() {
       )}
     </div>
   );
-} 
+}
+
+export default ProductosManager; 
