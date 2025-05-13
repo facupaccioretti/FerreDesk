@@ -7,6 +7,7 @@ import Register from './components/Register';
 import ClientesManager from './components/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
 import ProductosManager from './components/ProductosManager';
+import ProveedoresManager from './components/ProveedoresManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -35,6 +36,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ProductosManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/proveedores"
+          element={
+            <PrivateRoute>
+              <ProveedoresManager />
             </PrivateRoute>
           }
         />
