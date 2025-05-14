@@ -31,5 +31,6 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/usuarios/', include('ferreapps.usuarios.urls')),
     path('api/clientes/', include('ferreapps.clientes.urls')),
+    path('api/ventas/', include('ferreapps.ventas.urls')),
     path('', include('ferreapps.login.urls')),
 ]
