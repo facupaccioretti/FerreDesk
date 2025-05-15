@@ -1,0 +1,30 @@
+Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo) El de Nuevo Producto si tiene :)
+
+En Productos
+   Delete en Lista de Productos no anda
+   En Nuevo Producto no puedo asignarle producto no existente en la lista de excel al Proveedor (verificar direccion endpoint API)
+
+
+El enter en ningun formulario deberia completar el formulario (es molesto ya que si queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
+
+En Proveedores
+  Si me detecta que el proveedor tiene un item cargado, no puedo agregar Stock del Proveedor en Editar Producto ni en Nuevo Producto
+     Hay que modificar la logica del excel, el excel solo nos dice cuanto sale algo. El usuario le puede poner cuanto quiera producto a cuanto quiera proveedor y no deberia haber problema.
+      el excel existe nomas para que si el codigo de la lista y el codigo del item cargado por el usuario existen, se actualiza el costo. Recordar que el costo lo puede poner el cliente manualmente
+      o se saca del excel, la eleccion de cual de los dos se usa esta definida por la ultima actualizacion. Si tenemos excel pero el usuario cargo el costo manualmente se usa el costo manual, si teniamos 
+      costo manual pero se actualizo la lista de excel se usa el excel.
+
+Presupuestos anda para la bosta
+  Esto es porque por algun motivo se guardo como venta pero figura (abierto)
+     Los presupuestos son abiertos porque se pueden seguir editando
+     Las ventas y facturas son cerradas
+     El presupuesto se puede convertir a venta o factura y se cierran
+     La venta se puede convertir a factura pero no al reves
+  Agregar el uso de Cuenta Corriente a cliente por defecto
+  Crear un Presupuesto se pone en Todos pero no en la vista de Presupuestos
+  El boton de ver mas no se asigna a las acciones por algun motivo
+  Tampoco el boton de convertir para hacer las conversiones de Presupuesto a Venta/Factura o de Venta a Factura
+  Boton de imprimir no anda
+  Nueva Venta no anda
+
+Es posible que falten errores de enlistar.
