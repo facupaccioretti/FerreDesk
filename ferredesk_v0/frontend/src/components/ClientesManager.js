@@ -1,56 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from "./Navbar";
+import { getCookie } from '../utils/csrf';
+import { useBarriosAPI } from '../utils/useBarriosAPI';
+import { useLocalidadesAPI } from '../utils/useLocalidadesAPI';
+import { useProvinciasAPI } from '../utils/useProvinciasAPI';
+import { useTiposIVAAPI } from '../utils/useTiposIVAAPI';
+import { useTransportesAPI } from '../utils/useTransportesAPI';
+import { useVendedoresAPI } from '../utils/useVendedoresAPI';
+import { usePlazosAPI } from '../utils/usePlazosAPI';
+import { useCategoriasAPI } from '../utils/useCategoriasAPI';
+import { useClientesAPI } from '../utils/useClientesAPI';
 
-// --- Mock de datos y servicios ---
-const initialClientes = [
-  {
-    id: 1,
-    codigo: '1001',
-    razon: 'Empresa Ejemplo S.A.',
-    fantasia: 'Ejemplo S.A.',
-    domicilio: 'Calle Principal 123',
-    tel1: '123-456-7890',
-    email: 'contacto@ejemplo.com',
-    cuit: '30-12345678-9',
-    estado: 'Activo',
-  },
-  {
-    id: 2,
-    codigo: '1002',
-    razon: 'Comercio XYZ S.R.L.',
-    fantasia: 'XYZ',
-    domicilio: 'Avenida Central 456',
-    tel1: '987-654-3210',
-    email: 'info@xyz.com',
-    cuit: '30-98765432-1',
-    estado: 'Activo',
-  },
-];
-
-// Simulación de servicios (fácil de reemplazar por fetch/axios en el futuro)
-const useClientesService = (initial) => {
-  const [clientes, setClientes] = useState(initial);
-  const [nextId, setNextId] = useState(initial.length + 1);
-
-  const getClientes = () => clientes;
-
-  const addCliente = (cliente) => {
-    setClientes((prev) => [...prev, { ...cliente, id: nextId }]);
-    setNextId((id) => id + 1);
-  };
-
-  const updateCliente = (id, updated) => {
-    setClientes((prev) => prev.map((cli) => (cli.id === id ? { ...cli, ...updated } : cli)));
-  };
-
-  const deleteCliente = (id) => {
-    setClientes((prev) => prev.filter((cli) => cli.id !== id));
-  };
-
-  return { clientes, getClientes, addCliente, updateCliente, deleteCliente };
-};
-
-const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId }) => {
+const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId, barrios, localidades, provincias, tiposIVA, transportes, vendedores, plazos, categorias }) => {
   const filtered = clientes.filter((cli) =>
     cli.razon.toLowerCase().includes(search.toLowerCase()) ||
     cli.fantasia.toLowerCase().includes(search.toLowerCase())
@@ -181,39 +142,35 @@ const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expanded
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Zona</span>
-                          <span className="block text-gray-700 mt-1">{cli.zona}</span>
+                          <span className="block text-gray-700 mt-1">{barrios.find(b => String(b.id) === String(cli.barrio))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Barrio</span>
-                          <span className="block text-gray-700 mt-1">{mockBarrios.find(b => String(b.id) === String(cli.barrio))?.nombre || ''}</span>
-                        </div>
-                        <div>
-                          <span className="block text-gray-400 font-medium">Localidad</span>
-                          <span className="block text-gray-700 mt-1">{mockLocalidades.find(l => String(l.id) === String(cli.localidad))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{localidades.find(l => String(l.id) === String(cli.localidad))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Provincia</span>
-                          <span className="block text-gray-700 mt-1">{mockProvincias.find(p => String(p.id) === String(cli.provincia))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{provincias.find(p => String(p.id) === String(cli.provincia))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Tipo de IVA</span>
-                          <span className="block text-gray-700 mt-1">{mockIVA.find(i => String(i.id) === String(cli.iva))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{tiposIVA.find(i => String(i.id) === String(cli.iva))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Transporte</span>
-                          <span className="block text-gray-700 mt-1">{mockTransportes.find(t => String(t.id) === String(cli.transporte))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{transportes.find(t => String(t.id) === String(cli.transporte))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Vendedor</span>
-                          <span className="block text-gray-700 mt-1">{mockVendedores.find(v => String(v.id) === String(cli.vendedor))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{vendedores.find(v => String(v.id) === String(cli.vendedor))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Plazo</span>
-                          <span className="block text-gray-700 mt-1">{mockPlazos.find(p => String(p.id) === String(cli.plazo))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{plazos.find(p => String(p.id) === String(cli.plazo))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Categoría</span>
-                          <span className="block text-gray-700 mt-1">{mockCategorias.find(c => String(c.id) === String(cli.categoria))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{categorias.find(c => String(c.id) === String(cli.categoria))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Línea de Crédito</span>
@@ -251,42 +208,6 @@ const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expanded
     </div>
   );
 };
-
-// MOCKS para campos relacionales
-const mockBarrios = [
-  { id: 1, nombre: 'Centro' },
-  { id: 2, nombre: 'Norte' },
-  { id: 3, nombre: 'Sur' },
-];
-const mockLocalidades = [
-  { id: 1, nombre: 'Ciudad A' },
-  { id: 2, nombre: 'Ciudad B' },
-];
-const mockProvincias = [
-  { id: 1, nombre: 'Provincia X' },
-  { id: 2, nombre: 'Provincia Y' },
-];
-const mockIVA = [
-  { id: 1, nombre: 'Responsable Inscripto' },
-  { id: 2, nombre: 'Monotributo' },
-  { id: 3, nombre: 'Exento' },
-];
-const mockTransportes = [
-  { id: 1, nombre: 'Transporte 1' },
-  { id: 2, nombre: 'Transporte 2' },
-];
-const mockVendedores = [
-  { id: 1, nombre: 'Juan Pérez' },
-  { id: 2, nombre: 'María González' },
-];
-const mockPlazos = [
-  { id: 1, nombre: 'Contado' },
-  { id: 2, nombre: '30 días' },
-];
-const mockCategorias = [
-  { id: 1, nombre: 'Minorista' },
-  { id: 2, nombre: 'Mayorista' },
-];
 
 const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder, addLabel, name }) => {
   const [open, setOpen] = useState(false);
@@ -338,292 +259,539 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
   );
 };
 
-const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
-  // Estado para los mocks editables
-  const [barrios, setBarrios] = useState([...mockBarrios]);
-  const [localidades, setLocalidades] = useState([...mockLocalidades]);
-  const [provincias, setProvincias] = useState([...mockProvincias]);
-
-  // Estado para modales
-  const [modal, setModal] = useState(null);
-  const [newValue, setNewValue] = useState('');
-
-  // Cargar datos guardados o usar initialData
-  const [form, setForm] = useState(() => {
-    const savedForm = localStorage.getItem('clienteFormDraft');
-    if (savedForm && !initialData) {
-      return JSON.parse(savedForm);
-    }
-    return initialData || {
-      codigo: '', razon: '', fantasia: '', domicilio: '', tel1: '', tel2: '', tel3: '', email: '', cuit: '', ib: '', status: '', iva: '', contacto: '', comentario: '', lineacred: '', impsalcta: '', fecsalcta: '', descu1: '', descu2: '', descu3: '', cpostal: '', zona: '', cancela: '', barrio: '', localidad: '', provincia: '', transporte: '', vendedor: '', plazo: '', categoria: '', estado: 'Activo'
-    };
+const NuevoClienteForm = ({
+  onSave, onCancel, initialData,
+  barrios, localidades, provincias, transportes, vendedores, plazos, categorias,
+  setBarrios, setLocalidades, setProvincias, setTransportes, setVendedores, setPlazos, setCategorias,
+  apiError
+}) => {
+  const [form, setForm] = useState({
+    codigo: initialData?.codigo || '',
+    razon: initialData?.razon || '',
+    domicilio: initialData?.domicilio || '',
+    lineacred: initialData?.lineacred || '',
+    impsalcta: initialData?.impsalcta || '',
+    fecsalcta: initialData?.fecsalcta || '',
+    zona: initialData?.zona || '',
+    fantasia: initialData?.fantasia || '',
+    cuit: initialData?.cuit || '',
+    ib: initialData?.ib || '',
+    cpostal: initialData?.cpostal || '',
+    tel1: initialData?.tel1 || '',
+    tel2: initialData?.tel2 || '',
+    tel3: initialData?.tel3 || '',
+    email: initialData?.email || '',
+    contacto: initialData?.contacto || '',
+    comentario: initialData?.comentario || '',
+    barrio: initialData?.barrio || '',
+    localidad: initialData?.localidad || '',
+    provincia: initialData?.provincia || '',
+    iva: initialData?.iva || '',
+    transporte: initialData?.transporte || '',
+    vendedor: initialData?.vendedor || '',
+    plazo: initialData?.plazo || '',
+    categoria: initialData?.categoria || '',
+    activo: initialData?.activo || 'A',
+    cancela: initialData?.cancela || '',
+    descu1: initialData?.descu1 || '',
+    descu2: initialData?.descu2 || '',
+    descu3: initialData?.descu3 || '',
   });
-
   const [error, setError] = useState('');
+  const [modal, setModal] = useState(null);
+  const [modalForm, setModalForm] = useState({});
+  const [modalLoading, setModalLoading] = useState(false);
 
-  // Guardar en localStorage cuando el formulario cambie
-  useEffect(() => {
-    if (!initialData) {
-      localStorage.setItem('clienteFormDraft', JSON.stringify(form));
-    }
-  }, [form, initialData]);
-
-  // Limpiar el draft cuando se guarda o cancela
-  const handleSave = (e) => {
-    e.preventDefault();
-    if (!form.razon.trim() || !form.codigo.trim()) {
-      setError('El código y la razón social son obligatorios');
+  const handleChange = e => {
+    const { name, value } = e.target;
+    if (name === "codigo" && value && !/^\d*$/.test(value)) {
       return;
     }
-    setError('');
-    localStorage.removeItem('clienteFormDraft');
-    onSave(form);
+    setForm(f => ({ ...f, [name]: value }));
   };
 
-  const handleCancel = () => {
-    localStorage.removeItem('clienteFormDraft');
-    onCancel();
-  };
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  // Modal handlers
+  // Modal dinámico para agregar entidades relacionales
   const openAddModal = (type) => {
     setModal({ type, open: true });
-    setNewValue('');
+    setModalForm({});
+    setError('');
   };
   const closeModal = () => {
     setModal(null);
-    setNewValue('');
+    setModalForm({});
+    setError('');
   };
-  const handleAdd = () => {
-    if (!newValue.trim()) return;
-    if (modal.type === 'barrio') {
-      const nuevo = { id: barrios.length + 1, nombre: newValue };
-      setBarrios([...barrios, nuevo]);
-      setForm({ ...form, barrio: nuevo.id });
+
+  // Lógica para crear entidad relacional
+  const handleAddModalSave = async () => {
+    setModalLoading(true);
+    try {
+      let url = '';
+      let body = {};
+      let setList = null;
+      switch (modal.type) {
+        case 'barrio':
+          url = '/api/barrios/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setBarrios;
+          break;
+        case 'localidad':
+          url = '/api/localidades/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setLocalidades;
+          break;
+        case 'provincia':
+          url = '/api/provincias/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setProvincias;
+          break;
+        case 'transporte':
+          url = '/api/transportes/';
+          body = { nombre: modalForm.nombre, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
+          setList = setTransportes;
+          break;
+        case 'vendedor':
+          url = '/api/vendedores/';
+          body = { nombre: modalForm.nombre, dni: modalForm.dni, comivta: modalForm.comivta, liquivta: modalForm.liquivta, comicob: modalForm.comicob, liquicob: modalForm.liquicob, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
+          setList = setVendedores;
+          break;
+        case 'plazo':
+          url = '/api/plazos/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setPlazos;
+          break;
+        case 'categoria':
+          url = '/api/categorias/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setCategorias;
+          break;
+        default:
+          setModalLoading(false);
+          return;
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('Error al crear');
+      // Refresca la lista
+      const data = await fetch(url).then(r => r.json());
+      setList(Array.isArray(data) ? data : data.results || []);
+      closeModal();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setModalLoading(false);
     }
-    if (modal.type === 'localidad') {
-      const nuevo = { id: localidades.length + 1, nombre: newValue };
-      setLocalidades([...localidades, nuevo]);
-      setForm({ ...form, localidad: nuevo.id });
+  };
+
+  // Renderiza el formulario mínimo requerido para cada entidad relacional
+  const renderModalForm = () => {
+    switch (modal?.type) {
+      case 'barrio':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'localidad':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'provincia':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'transporte':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Localidad *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.localidad || ''} onChange={e => setModalForm(f => ({ ...f, localidad: e.target.value }))} required>
+              <option value="">Seleccionar...</option>
+              {localidades.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </select>
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'vendedor':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">DNI *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.dni || ''} onChange={e => setModalForm(f => ({ ...f, dni: e.target.value }))} required />
+            <label className="block mb-2">Comisión Venta *</label>
+            <input type="number" className="w-full border rounded px-2 py-1 mb-2" value={modalForm.comivta || ''} onChange={e => setModalForm(f => ({ ...f, comivta: e.target.value }))} required />
+            <label className="block mb-2">Liquida Venta *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.liquivta || 'S'} onChange={e => setModalForm(f => ({ ...f, liquivta: e.target.value }))} required>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+            <label className="block mb-2">Comisión Cobro *</label>
+            <input type="number" className="w-full border rounded px-2 py-1 mb-2" value={modalForm.comicob || ''} onChange={e => setModalForm(f => ({ ...f, comicob: e.target.value }))} required />
+            <label className="block mb-2">Liquida Cobro *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.liquicob || 'S'} onChange={e => setModalForm(f => ({ ...f, liquicob: e.target.value }))} required>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+            <label className="block mb-2">Localidad *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.localidad || ''} onChange={e => setModalForm(f => ({ ...f, localidad: e.target.value }))} required>
+              <option value="">Seleccionar...</option>
+              {localidades.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </select>
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'plazo':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500">Plazo {i+1}</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1"
+                    value={modalForm[`pla_pla${i+1}`] || ''}
+                    onChange={e => setModalForm(f => ({ ...f, [`pla_pla${i+1}`]: e.target.value }))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500">Porcentaje {i+1}</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1"
+                    value={modalForm[`pla_por${i+1}`] || ''}
+                    onChange={e => setModalForm(f => ({ ...f, [`pla_por${i+1}`]: e.target.value }))}
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+              </div>
+            ))}
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'categoria':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      default:
+        return null;
     }
-    if (modal.type === 'provincia') {
-      const nuevo = { id: provincias.length + 1, nombre: newValue };
-      setProvincias([...provincias, nuevo]);
-      setForm({ ...form, provincia: nuevo.id });
+  };
+
+  const handleSubmit = e => {
+    e.preventDefault();
+    // Validación solo de los campos obligatorios según el modelo
+    if (!form.codigo || !form.razon || !form.domicilio || !form.lineacred || !form.impsalcta || !form.fecsalcta || !form.zona) {
+      setError('Por favor completa todos los campos obligatorios.');
+      return;
     }
-    closeModal();
+    if (form.zona && form.zona.length > 10) {
+      setError('El campo Zona no debe exceder los 10 caracteres.');
+      return;
+    }
+    setError('');
+    onSave(form);
   };
 
   return (
-    <form className="max-w-3xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSave}>
-      <h3 className="text-xl font-semibold text-gray-800 mb-6">
-        {initialData ? 'Editar Cliente' : 'Nuevo Cliente'}
-      </h3>
-      {error && (
-        <div className="mb-6 p-4 bg-red-100 border-l-4 border-red-900 text-red">
-          {error}
-        </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Código *</label>
-          <input name="codigo" value={form.codigo} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Razón Social *</label>
-          <input name="razon" value={form.razon} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Nombre Comercial</label>
-          <input name="fantasia" value={form.fantasia} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">CUIT</label>
-          <input name="cuit" value={form.cuit} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">IB</label>
-          <input name="ib" value={form.ib} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
-          <select name="estado" value={form.estado} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="Activo">Activo</option>
-            <option value="Inactivo">Inactivo</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
-          <input name="domicilio" value={form.domicilio} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 1</label>
-          <input name="tel1" value={form.tel1} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 2</label>
-          <input name="tel2" value={form.tel2} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 3</label>
-          <input name="tel3" value={form.tel3} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
-          <input name="email" value={form.email} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Contacto</label>
-          <input name="contacto" value={form.contacto} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Comentario</label>
-          <input name="comentario" value={form.comentario} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Código Postal</label>
-          <input name="cpostal" value={form.cpostal} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Zona</label>
-          <input name="zona" value={form.zona} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Barrio"
-            name="barrio"
-            options={barrios}
-            value={form.barrio}
-            onChange={handleChange}
-            onAdd={() => openAddModal('barrio')}
-            placeholder="Buscar barrio..."
-            addLabel="Agregar Barrio"
-          />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Localidad"
-            name="localidad"
-            options={localidades}
-            value={form.localidad}
-            onChange={handleChange}
-            onAdd={() => openAddModal('localidad')}
-            placeholder="Buscar localidad..."
-            addLabel="Agregar Localidad"
-          />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Provincia"
-            name="provincia"
-            options={provincias}
-            value={form.provincia}
-            onChange={handleChange}
-            onAdd={() => openAddModal('provincia')}
-            placeholder="Buscar provincia..."
-            addLabel="Agregar Provincia"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de IVA</label>
-          <select name="iva" value={form.iva} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockIVA.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Transporte</label>
-          <select name="transporte" value={form.transporte} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockTransportes.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Vendedor</label>
-          <select name="vendedor" value={form.vendedor} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockVendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Plazo</label>
-          <select name="plazo" value={form.plazo} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockPlazos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Categoría</label>
-          <select name="categoria" value={form.categoria} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockCategorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-        {/* Otros campos numéricos y de fecha */}
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Línea de Crédito</label>
-          <input name="lineacred" value={form.lineacred} onChange={handleChange} type="number" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Importe Saldo Cta.</label>
-          <input name="impsalcta" value={form.impsalcta} onChange={handleChange} type="number" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Fecha Saldo Cta.</label>
-          <input name="fecsalcta" value={form.fecsalcta} onChange={handleChange} type="date" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 1</label>
-          <input name="descu1" value={form.descu1} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 2</label>
-          <input name="descu2" value={form.descu2} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 3</label>
-          <input name="descu3" value={form.descu3} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-      </div>
-      {/* Modal flotante para agregar barrio/localidad/provincia */}
-      {modal && modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[300px]">
-            <h4 className="text-lg font-semibold mb-2">Agregar {modal.type.charAt(0).toUpperCase() + modal.type.slice(1)}</h4>
+    <>
+      <form className="bg-white p-6 rounded-lg shadow-md w-full max-w-2xl" onSubmit={handleSubmit}>
+        <h3 className="text-xl font-bold mb-4">Nuevo Cliente</h3>
+        {error && <div className="mb-4 text-red-600">{error}</div>}
+        {apiError && <div className="mb-4 text-red-600">{apiError}</div>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Código *</label>
             <input
-              type="text"
-              value={newValue}
-              onChange={e => setNewValue(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded mb-4"
-              placeholder={`Nombre del ${modal.type}`}
+              name="codigo"
+              value={form.codigo}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              min="0"
             />
-            <div className="flex justify-end gap-2">
-              <button onClick={closeModal} type="button" className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
-              <button onClick={handleAdd} type="button" className="px-3 py-1 bg-black text-white rounded hover:bg-gray-800">Agregar</button>
+            {form.codigo && isNaN(Number(form.codigo)) && (
+              <div className="mb-2 text-red-600">El código debe ser un número entero.</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Razón Social *</label>
+            <input name="razon" value={form.razon} onChange={handleChange} required className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Domicilio *</label>
+            <input name="domicilio" value={form.domicilio} onChange={handleChange} required className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Línea de Crédito *</label>
+            <input
+              name="lineacred"
+              value={form.lineacred}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Importe Saldo Cta. *</label>
+            <input
+              name="impsalcta"
+              value={form.impsalcta}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              step="any"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Fecha Saldo Cta. *</label>
+            <input name="fecsalcta" value={form.fecsalcta} onChange={handleChange} required type="date" className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Zona *</label>
+            <input name="zona" value={form.zona} onChange={handleChange} required maxLength={10} className="w-full border rounded px-3 py-2" />
+            {form.zona && form.zona.length > 10 && (
+              <div className="mt-1 text-xs text-red-600">La zona no debe exceder los 10 caracteres.</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Nombre Comercial</label>
+            <input name="fantasia" value={form.fantasia} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">CUIT</label>
+            <input name="cuit" value={form.cuit} onChange={handleChange} maxLength={11} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">IB</label>
+            <input name="ib" value={form.ib} onChange={handleChange} maxLength={10} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Código Postal</label>
+            <input name="cpostal" value={form.cpostal} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 1</label>
+            <input name="tel1" value={form.tel1} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 2</label>
+            <input name="tel2" value={form.tel2} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 3</label>
+            <input name="tel3" value={form.tel3} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
+            <input name="email" value={form.email} onChange={handleChange} type="email" className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Contacto</label>
+            <input name="contacto" value={form.contacto} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Comentario</label>
+            <input name="comentario" value={form.comentario} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Barrio"
+              name="barrio"
+              options={barrios}
+              value={form.barrio}
+              onChange={handleChange}
+              onAdd={() => openAddModal('barrio')}
+              placeholder="Buscar barrio..."
+              addLabel="Agregar Barrio"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Localidad"
+              name="localidad"
+              options={localidades}
+              value={form.localidad}
+              onChange={handleChange}
+              onAdd={() => openAddModal('localidad')}
+              placeholder="Buscar localidad..."
+              addLabel="Agregar Localidad"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Provincia"
+              name="provincia"
+              options={provincias}
+              value={form.provincia}
+              onChange={handleChange}
+              onAdd={() => openAddModal('provincia')}
+              placeholder="Buscar provincia..."
+              addLabel="Agregar Provincia"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Tipo de IVA"
+              name="iva"
+              options={categorias}
+              value={form.iva}
+              onChange={handleChange}
+              onAdd={() => openAddModal('categoria')}
+              placeholder="Buscar tipo de IVA..."
+              addLabel="Agregar Tipo de IVA"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Transporte"
+              name="transporte"
+              options={transportes}
+              value={form.transporte}
+              onChange={handleChange}
+              onAdd={() => openAddModal('transporte')}
+              placeholder="Buscar transporte..."
+              addLabel="Agregar Transporte"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Vendedor"
+              name="vendedor"
+              options={vendedores}
+              value={form.vendedor}
+              onChange={handleChange}
+              onAdd={() => openAddModal('vendedor')}
+              placeholder="Buscar vendedor..."
+              addLabel="Agregar Vendedor"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Plazo"
+              name="plazo"
+              options={plazos}
+              value={form.plazo}
+              onChange={handleChange}
+              placeholder="Buscar plazo..."
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Categoría"
+              name="categoria"
+              options={categorias}
+              value={form.categoria}
+              onChange={handleChange}
+              onAdd={() => openAddModal('categoria')}
+              placeholder="Buscar categoría..."
+              addLabel="Agregar Categoría"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
+            <select name="activo" value={form.activo} onChange={handleChange} className="w-full border rounded px-3 py-2">
+              <option value="A">Activo</option>
+              <option value="I">Inactivo</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Cancela</label>
+            <input name="cancela" value={form.cancela} onChange={handleChange} maxLength={1} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 1</label>
+            <input name="descu1" value={form.descu1} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 2</label>
+            <input name="descu2" value={form.descu2} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 3</label>
+            <input name="descu3" value={form.descu3} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <button type="submit" className="bg-black text-white px-4 py-2 rounded">Guardar</button>
+          <button type="button" className="bg-gray-300 px-4 py-2 rounded" onClick={onCancel}>Cancelar</button>
+        </div>
+      </form>
+      {/* Modal para alta de entidades relacionales */}
+      {modal?.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative">
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-red-500" onClick={closeModal}>×</button>
+            <h4 className="text-lg font-bold mb-4">Agregar {modal.type.charAt(0).toUpperCase() + modal.type.slice(1)}</h4>
+            {error && <div className="mb-2 text-red-600">{error}</div>}
+            {renderModalForm()}
+            <div className="flex gap-2 mt-4">
+              <button className="bg-black text-white px-4 py-2 rounded" onClick={handleAddModalSave} disabled={modalLoading}>Guardar</button>
+              <button className="bg-gray-300 px-4 py-2 rounded" onClick={closeModal}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
-      <div className="mt-8 flex justify-end space-x-3">
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-        >
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          {initialData ? 'Guardar Cambios' : 'Crear Cliente'}
-        </button>
-      </div>
-    </form>
+    </>
   );
 };
 
@@ -634,10 +802,13 @@ const ClientesManager = () => {
 
   const {
     clientes,
+    loading,
+    error,
+    fetchClientes,
     addCliente,
     updateCliente,
     deleteCliente,
-  } = useClientesService(initialClientes);
+  } = useClientesAPI();
 
   const [search, setSearch] = useState('');
   
@@ -718,6 +889,16 @@ const ClientesManager = () => {
     openTab('nuevo', 'Nuevo Cliente', cliente);
   };
 
+  // Reemplazo los estados y fetchs directos por hooks personalizados
+  const { barrios, setBarrios } = useBarriosAPI();
+  const { localidades, setLocalidades } = useLocalidadesAPI();
+  const { provincias, setProvincias } = useProvinciasAPI();
+  const { tiposIVA, setTiposIVA } = useTiposIVAAPI();
+  const { transportes, setTransportes } = useTransportesAPI();
+  const { vendedores, setVendedores } = useVendedoresAPI();
+  const { plazos, setPlazos } = usePlazosAPI();
+  const { categorias, setCategorias } = useCategoriasAPI();
+
   return (
     <div className="h-full flex flex-col">
       <Navbar user={user} onLogout={handleLogout} />
@@ -769,6 +950,14 @@ const ClientesManager = () => {
                 setSearch={setSearch}
                 expandedClientId={expandedClientId}
                 setExpandedClientId={setExpandedClientId}
+                barrios={barrios}
+                localidades={localidades}
+                provincias={provincias}
+                tiposIVA={tiposIVA}
+                transportes={transportes}
+                vendedores={vendedores}
+                plazos={plazos}
+                categorias={categorias}
               />
             )}
             {activeTab === 'nuevo' && (
@@ -777,12 +966,29 @@ const ClientesManager = () => {
                   onSave={handleSaveCliente}
                   onCancel={() => closeTab('nuevo')}
                   initialData={editCliente}
+                  barrios={barrios}
+                  localidades={localidades}
+                  provincias={provincias}
+                  transportes={transportes}
+                  vendedores={vendedores}
+                  plazos={plazos}
+                  categorias={categorias}
+                  setBarrios={setBarrios}
+                  setLocalidades={setLocalidades}
+                  setProvincias={setProvincias}
+                  setTransportes={setTransportes}
+                  setVendedores={setVendedores}
+                  setPlazos={setPlazos}
+                  setCategorias={setCategorias}
+                  apiError={error}
                 />
               </div>
             )}
           </div>
         </div>
       </div>
+      {loading && <div className="p-4 text-center text-gray-500">Cargando clientes...</div>}
+      {error && <div className="p-4 text-center text-red-600">{error}</div>}
     </div>
   );
 };

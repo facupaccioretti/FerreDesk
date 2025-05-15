@@ -2,93 +2,104 @@ import React, { useEffect, useState } from 'react';
 import Navbar from "./Navbar";
 import ListaPreciosModal from "./ListaPreciosModal";
 import HistorialListasModal from "./HistorialListasModal";
-import useProveedores from './useProveedores';
-import ProveedorForm from './ProveedorForm';
-
-// Datos mock iniciales (listos para ser reemplazados por fetch a la API)
-const mockProveedores = [
-  { id: 1, razon: 'Juan', fantasia: 'Juan SRL', domicilio: 'Calle 1', tel1: '123', cuit: '20-12345678-9', sigla: 'JUA' },
-  { id: 2, razon: 'Marquitos', fantasia: 'Marquitos SA', domicilio: 'Calle 2', tel1: '456', cuit: '20-98765432-1', sigla: 'MAR' },
-  { id: 3, razon: 'Ferretería S.A.', fantasia: 'Ferretería S.A.', domicilio: 'Calle 3', tel1: '789', cuit: '30-11112222-3', sigla: 'FER' },
-];
+import ProveedorForm from "./ProveedorForm";
+import { useProveedoresAPI } from '../utils/useProveedoresAPI';
 
 const mockHistorial = [
   { fecha: '2024-06-01', archivo: 'macons_junio.xlsx', usuario: 'ferreadmin', productosActualizados: 120 },
   { fecha: '2024-05-01', archivo: 'macons_mayo.xlsx', usuario: 'ferreadmin', productosActualizados: 110 },
 ];
 
-const DRAFT_KEY = 'proveedorFormDraft';
-
 const ProveedoresManager = () => {
-  // Hook centralizado
+  // Hook API real
   const {
-    proveedores, setProveedores, search, setSearch, expandedId, setExpandedId, proveedoresFiltrados
-  } = useProveedores();
+    proveedores, addProveedor, updateProveedor, deleteProveedor, loading, error
+  } = useProveedoresAPI();
 
-  // Estados para modales de lista de precios e historial
-  const [showListaModal, setShowListaModal] = React.useState(false);
-  const [proveedorSeleccionado, setProveedorSeleccionado] = React.useState(null);
-  const [showHistorialModal, setShowHistorialModal] = React.useState(false);
-  const [proveedorHistorial, setProveedorHistorial] = React.useState(null);
-
+  // Estados para búsqueda y UI
+  const [search, setSearch] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
   const [tabs, setTabs] = useState([
     { key: 'lista', label: 'Lista de Proveedores', closable: false }
   ]);
   const [activeTab, setActiveTab] = useState('lista');
   const [editProveedor, setEditProveedor] = useState(null);
+  const [formError, setFormError] = useState(null);
 
-  React.useEffect(() => {
+  // Modales
+  const [showListaModal, setShowListaModal] = React.useState(false);
+  const [proveedorSeleccionado, setProveedorSeleccionado] = React.useState(null);
+  const [showHistorialModal, setShowHistorialModal] = React.useState(false);
+  const [proveedorHistorial, setProveedorHistorial] = React.useState(null);
+
+  useEffect(() => {
     document.title = "Proveedores FerreDesk";
-    setProveedores(mockProveedores);
-  }, [setProveedores]);
+  }, []);
 
-  const handleOpenListaModal = (proveedor) => {
-    setProveedorSeleccionado(proveedor);
-    setShowListaModal(true);
-  };
-
-  const handleImportLista = (info) => {
-    alert(`Lista importada para ${info.proveedor.razon} (mock)`);
-  };
-
-  const handleOpenHistorialModal = (proveedor) => {
-    setProveedorHistorial(proveedor);
-    setShowHistorialModal(true);
-  };
-
+  // Tabs y edición
   const openTab = (key, label, proveedor = null) => {
     setEditProveedor(proveedor);
+    setFormError(null);
     setTabs(prev => {
       if (prev.find(t => t.key === key)) return prev;
       return [...prev, { key, label, closable: true }];
     });
     setActiveTab(key);
   };
-
   const closeTab = (key) => {
     setTabs(prev => prev.filter(t => t.key !== key));
     if (activeTab === key) setActiveTab('lista');
     setEditProveedor(null);
+    setFormError(null);
+  };
+
+  // Guardar proveedor (alta o edición)
+  const handleSaveProveedor = async (data) => {
+    setFormError(null);
+    try {
+      if (editProveedor) {
+        await updateProveedor(editProveedor.id, data);
+      } else {
+        await addProveedor(data);
+      }
+      closeTab('nuevo');
+    } catch (err) {
+      setFormError(err.message || 'Error al guardar el proveedor');
+    }
   };
 
   const handleEditProveedor = (prov) => {
     openTab('nuevo', 'Editar Proveedor', prov);
   };
 
-  const handleSaveProveedor = (data) => {
-    if (editProveedor) {
-      setProveedores(prev => prev.map(p => p.id === editProveedor.id ? { ...p, ...data } : p));
-    } else {
-      const newId = Math.max(0, ...proveedores.map(p => p.id)) + 1;
-      setProveedores(prev => [...prev, { ...data, id: newId }]);
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Seguro que deseas eliminar este proveedor?')) {
+      try {
+        await deleteProveedor(id);
+      } catch (err) {
+        alert(err.message || 'Error al eliminar proveedor');
+      }
     }
-    closeTab('nuevo');
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm('¿Seguro que deseas eliminar este proveedor?')) {
-      setProveedores(prev => prev.filter(p => p.id !== id));
-    }
+  // Filtro de búsqueda
+  const proveedoresFiltrados = proveedores.filter(p =>
+    (p.razon || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.fantasia || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.cuit || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Modales
+  const handleOpenListaModal = (proveedor) => {
+    setProveedorSeleccionado(proveedor);
+    setShowListaModal(true);
+  };
+  const handleImportLista = (info) => {
+    alert(`Lista importada para ${info.proveedor.razon}\n${info.message || ''}\nRegistros procesados: ${info.registrosProcesados ?? 'N/D'}`);
+  };
+  const handleOpenHistorialModal = (proveedor) => {
+    setProveedorHistorial(proveedor);
+    setShowHistorialModal(true);
   };
 
   return (
@@ -144,6 +155,8 @@ const ProveedoresManager = () => {
                     onChange={e => setSearch(e.target.value)}
                   />
                 </div>
+                {loading && <div className="text-gray-500 mb-2">Cargando proveedores...</div>}
+                {error && <div className="text-red-600 mb-2">{error}</div>}
                 <div className="overflow-auto rounded-xl shadow bg-white">
                   <table className="min-w-full">
                     <thead>
@@ -273,6 +286,7 @@ const ProveedoresManager = () => {
                   onSave={handleSaveProveedor}
                   onCancel={() => closeTab('nuevo')}
                   initialData={editProveedor}
+                  formError={formError}
                 />
               </div>
             )}

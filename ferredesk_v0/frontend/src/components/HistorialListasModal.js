@@ -1,11 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const HistorialListasModal = ({ open, onClose, proveedor, historial }) => {
-  const [expandedIdx, setExpandedIdx] = useState(null);
+const HistorialListasModal = ({ open, onClose, proveedor }) => {
+  const [historial, setHistorial] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleExpand = (idx) => {
-    setExpandedIdx(expandedIdx === idx ? null : idx);
-  };
+  useEffect(() => {
+    if (open && proveedor?.id) {
+      setLoading(true);
+      setError('');
+      fetch(`/api/productos/proveedores/${proveedor.id}/historial-listas/`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(data => setHistorial(data))
+        .catch(() => setError('Error al cargar historial'))
+        .finally(() => setLoading(false));
+    } else {
+      setHistorial([]);
+    }
+  }, [open, proveedor]);
 
   if (!open) return null;
   return (
@@ -14,40 +26,30 @@ const HistorialListasModal = ({ open, onClose, proveedor, historial }) => {
         <button onClick={onClose} className="absolute top-3 right-3 text-2xl text-gray-400 hover:text-red-500">×</button>
         <h2 className="text-xl font-bold mb-4">Historial de Listas - {proveedor?.razon}</h2>
         <div className="mb-4">
-          <table className="min-w-full text-sm border">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-2 py-1">Fecha</th>
-                <th className="px-2 py-1">Archivo</th>
-                <th className="px-2 py-1">Usuario</th>
-                <th className="px-2 py-1">Productos Actualizados</th>
-                <th className="px-2 py-1">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(historial || []).map((item, idx) => (
-                <tr key={idx}>
-                  <td className="px-2 py-1">{item.fecha}</td>
-                  <td className="px-2 py-1">{item.archivo}</td>
-                  <td className="px-2 py-1">{item.usuario}</td>
-                  <td className="px-2 py-1">{item.productosActualizados}</td>
-                  <td className="px-2 py-1">
-                    <button
-                      onClick={() => handleExpand(idx)}
-                      className={`flex items-center justify-center w-6 h-6 text-gray-700 transition-transform duration-200 ${expandedIdx === idx ? 'rotate-90' : 'rotate-0'}`}
-                      aria-label={expandedIdx === idx ? 'Ocultar detalles' : 'Mostrar detalles'}
-                      style={{ padding: 0 }}
-                      title={expandedIdx === idx ? 'Ocultar detalles' : 'Mostrar detalles'}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" className="block m-auto">
-                        <polygon points="5,3 15,10 5,17" />
-                      </svg>
-                    </button>
-                  </td>
+          {loading ? (
+            <div className="text-gray-500">Cargando historial...</div>
+          ) : error ? (
+            <div className="text-red-600">{error}</div>
+          ) : (
+            <table className="min-w-full text-sm border">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-2 py-1">Fecha</th>
+                  <th className="px-2 py-1">Archivo</th>
+                  <th className="px-2 py-1">Productos Actualizados</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(historial || []).map((item, idx) => (
+                  <tr key={idx}>
+                    <td className="px-2 py-1">{item.fecha}</td>
+                    <td className="px-2 py-1">{item.archivo}</td>
+                    <td className="px-2 py-1">{item.productos_actualizados}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-red-500 hover:text-white">Cerrar</button>

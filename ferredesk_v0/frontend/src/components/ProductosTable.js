@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-
-// Proveedores mock iniciales
-const PROVEEDORES_MOCK = [
-  { id: 1, razon: 'Juan', fantasia: 'Juan SRL', domicilio: 'Calle 1', tel1: '123', cuit: '20-12345678-9' },
-  { id: 2, razon: 'Marquitos', fantasia: 'Marquitos SA', domicilio: 'Calle 2', tel1: '456', cuit: '20-98765432-1' },
-  { id: 3, razon: 'Ferretería S.A.', fantasia: 'Ferretería S.A.', domicilio: 'Calle 3', tel1: '789', cuit: '30-11112222-3' },
-];
+import PrecioExcelItem from './PrecioExcelItem';
 
 const getStockTotal = (stock_proveedores) =>
   stock_proveedores.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0);
@@ -430,6 +424,9 @@ export default function ProductosTable({
                                         <p><span className="font-medium">Unidad:</span> {product.unidad}</p>
                                         <p><span className="font-medium">Cantidad Mínima:</span> {product.cantmin}</p>
                                         <p><span className="font-medium">Proveedor Habitual:</span> {product.proveedor_habitual?.razon || 'No asignado'}</p>
+                                        {product.proveedor_habitual?.id && (product.codcom || product.codvta) && (
+                                          <p><span className="font-medium">Precio Excel (Habitual):</span> <PrecioExcelItem proveedorId={product.proveedor_habitual.id} codigoProducto={product.codcom || product.codvta} /></p>
+                                        )}
                                       </div>
                                       <div>
                                         <h5 className="font-medium mb-2">Stock por Proveedor:</h5>

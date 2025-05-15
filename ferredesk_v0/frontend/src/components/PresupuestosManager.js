@@ -1,494 +1,594 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from "./Navbar";
-
-// Mock de presupuestos/ventas
-const initialPresupuestos = [
-  {
-    id: 1,
-    numero: 'P-0001',
-    cliente: 'Empresa Ejemplo S.A.',
-    fecha: '2024-06-01',
-    estado: 'Abierto',
-    total: 15000,
-    tipo: 'Presupuesto',
-    items: [
-      { id: 1, producto: { id: 1, codigo: 'P001', nombre: 'Tornillo 2"', precio: 100 }, cantidad: 10, precio: 100, subtotal: 1000 },
-      { id: 2, producto: { id: 2, codigo: 'P002', nombre: 'Martillo', precio: 500 }, cantidad: 2, precio: 500, subtotal: 1000 }
-    ]
-  },
-  {
-    id: 2,
-    numero: 'P-0002',
-    cliente: 'Comercio XYZ S.R.L.',
-    fecha: '2024-06-02',
-    estado: 'Convertido',
-    total: 25000,
-    tipo: 'Venta',
-    items: [
-      { id: 3, producto: { id: 3, codigo: 'P003', nombre: 'Destornillador', precio: 300 }, cantidad: 5, precio: 300, subtotal: 1500 }
-    ]
-  },
-];
-
-// Mock de productos disponibles
-const productosDisponibles = [
-  { id: 1, codigo: 'P001', nombre: 'Tornillo 2"', precio: 100 },
-  { id: 2, codigo: 'P002', nombre: 'Martillo', precio: 500 },
-  { id: 3, codigo: 'P003', nombre: 'Destornillador', precio: 300 },
-  { id: 4, codigo: 'P004', nombre: 'Taladro', precio: 2000 },
-  { id: 5, codigo: 'P005', nombre: 'Sierra', precio: 800 },
-];
+import { BotonConvertir, BotonEditar, BotonEliminar, BotonVinculado, BotonImprimir } from "./Botones";
+import { useVentasAPI } from '../utils/useVentasAPI';
+import { useProductosAPI } from '../utils/useProductosAPI';
+import { useFamiliasAPI } from '../utils/useFamiliasAPI';
+import { useProveedoresAPI } from '../utils/useProveedoresAPI';
+import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
+import { useComprobantesAPI } from '../utils/useComprobantesAPI';
+import { useClientesAPI } from '../utils/useClientesAPI';
+import { usePlazosAPI } from '../utils/usePlazosAPI';
+import { useVendedoresAPI } from '../utils/useVendedoresAPI';
+import VendedorForm from './VendedorForm';
+import { useLocalidadesAPI } from '../utils/useLocalidadesAPI';
+import VendedoresTable from './VendedoresTable';
+import PresupuestoForm from './PresupuestoForm';
+import VentaForm from './VentaForm';
+import FacturaForm from './FacturaForm';
+import ItemsGrid from './ItemsGrid';
 
 const filtros = [
   { key: 'todos', label: 'Todos' },
   { key: 'presupuestos', label: 'Presupuestos' },
   { key: 'ventas', label: 'Ventas' },
-  { key: 'facturas', label: 'Facturas' },
-  { key: 'abiertos', label: 'Abiertos' },
-  { key: 'cerrados', label: 'Cerrados' },
-  { key: 'convertidos', label: 'Convertidos' },
+  { key: 'facturas', label: 'Facturas' }
 ];
 
-// Componente para la grilla de ítems
-const ItemsGrid = ({ items, onAddItem, onEditItem, onDeleteItem, productosDisponibles, autoSumarDuplicados, setAutoSumarDuplicados }) => {
-  const [selectedProducto, setSelectedProducto] = useState('');
-  const [cantidad, setCantidad] = useState(1);
-  const [showDuplicadoModal, setShowDuplicadoModal] = useState(false);
-  const [duplicadoInfo, setDuplicadoInfo] = useState(null);
-
-  const handleAddItem = () => {
-    if (!selectedProducto) return;
-    
-    const producto = productosDisponibles.find(p => p.id === parseInt(selectedProducto));
-    const itemExistente = items.find(item => item.producto.id === producto.id);
-
-    if (itemExistente && !autoSumarDuplicados) {
-      setDuplicadoInfo({
-        producto,
-        itemExistente,
-        cantidad: parseInt(cantidad)
-      });
-      setShowDuplicadoModal(true);
-      return;
-    }
-
-    if (itemExistente && autoSumarDuplicados) {
-      onEditItem(itemExistente.id, {
-        ...itemExistente,
-        cantidad: itemExistente.cantidad + parseInt(cantidad),
-        subtotal: (itemExistente.cantidad + parseInt(cantidad)) * itemExistente.precio
-      });
-    } else {
-      onAddItem({
-        id: Math.max(0, ...items.map(i => i.id)) + 1,
-        producto,
-        cantidad: parseInt(cantidad),
-        precio: producto.precio,
-        subtotal: producto.precio * parseInt(cantidad)
-      });
-    }
-
-    setSelectedProducto('');
-    setCantidad(1);
-  };
-
-  const handleDuplicadoAction = (action) => {
-    if (action === 'sumar') {
-      onEditItem(duplicadoInfo.itemExistente.id, {
-        ...duplicadoInfo.itemExistente,
-        cantidad: duplicadoInfo.itemExistente.cantidad + duplicadoInfo.cantidad,
-        subtotal: (duplicadoInfo.itemExistente.cantidad + duplicadoInfo.cantidad) * duplicadoInfo.itemExistente.precio
-      });
-    } else if (action === 'eliminar') {
-      onDeleteItem(duplicadoInfo.itemExistente.id);
-      onAddItem({
-        id: Math.max(0, ...items.map(i => i.id)) + 1,
-        producto: duplicadoInfo.producto,
-        cantidad: duplicadoInfo.cantidad,
-        precio: duplicadoInfo.producto.precio,
-        subtotal: duplicadoInfo.producto.precio * duplicadoInfo.cantidad
-      });
-    }
-    setShowDuplicadoModal(false);
-    setDuplicadoInfo(null);
-  };
-
+// Badge de estado
+const EstadoBadge = ({ estado }) => {
+  if (estado === 'Cerrado') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+        Cerrado
+      </span>
+    );
+  }
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex-1">
-          <select
-            value={selectedProducto}
-            onChange={(e) => setSelectedProducto(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-          >
-            <option value="">Seleccionar producto...</option>
-            {productosDisponibles.map(p => (
-              <option key={p.id} value={p.id}>{p.codigo} - {p.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="w-32">
-          <input
-            type="number"
-            value={cantidad}
-            onChange={(e) => setCantidad(e.target.value)}
-            min="1"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-          />
-        </div>
-        <button
-          onClick={handleAddItem}
-          className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          Agregar
-        </button>
-      </div>
-
-      <div className="flex items-center gap-2 mb-4">
-        <input
-          type="checkbox"
-          id="autoSumar"
-          checked={autoSumarDuplicados}
-          onChange={(e) => setAutoSumarDuplicados(e.target.checked)}
-          className="rounded border-gray-300"
-        />
-        <label htmlFor="autoSumar" className="text-sm text-gray-600">
-          Sumar cantidades automáticamente al agregar productos duplicados
-        </label>
-      </div>
-
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {items.map(item => (
-            <tr key={item.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 whitespace-nowrap">
-                {item.producto.codigo} - {item.producto.nombre}
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap">
-                <input
-                  type="number"
-                  value={item.cantidad}
-                  onChange={(e) => {
-                    const newCantidad = parseInt(e.target.value);
-                    onEditItem(item.id, {
-                      ...item,
-                      cantidad: newCantidad,
-                      subtotal: newCantidad * item.precio
-                    });
-                  }}
-                  min="1"
-                  className="w-20 px-2 py-1 border border-gray-200 rounded"
-                />
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap">
-                <input
-                  type="number"
-                  value={item.precio}
-                  onChange={(e) => {
-                    const newPrecio = parseFloat(e.target.value);
-                    onEditItem(item.id, {
-                      ...item,
-                      precio: newPrecio,
-                      subtotal: item.cantidad * newPrecio
-                    });
-                  }}
-                  min="0"
-                  step="0.01"
-                  className="w-24 px-2 py-1 border border-gray-200 rounded"
-                />
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap">${item.subtotal}</td>
-              <td className="px-3 py-2 whitespace-nowrap">
-                <button
-                  onClick={() => onDeleteItem(item.id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Eliminar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Modal de duplicado */}
-      {showDuplicadoModal && duplicadoInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Producto duplicado</h3>
-            <p className="mb-4">
-              El producto {duplicadoInfo.producto.nombre} ya fue cargado. ¿Qué desea hacer?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => handleDuplicadoAction('sumar')}
-                className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800"
-              >
-                Sumar cantidades
-              </button>
-              <button
-                onClick={() => handleDuplicadoAction('eliminar')}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-              >
-                Eliminar anterior
-              </button>
-              <button
-                onClick={() => setShowDuplicadoModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+      </svg>
+      Abierto
+    </span>
   );
 };
+
+const mainTabs = [
+  { key: 'presupuestos', label: 'Presupuestos y Ventas', closable: false },
+  { key: 'vendedores', label: 'Vendedores', closable: false }
+];
 
 const PresupuestosManager = () => {
   useEffect(() => {
     document.title = "Presupuestos y Ventas FerreDesk";
   }, []);
 
-  const [presupuestos, setPresupuestos] = useState(initialPresupuestos);
+  const { ventas, loading, error, addVenta, updateVenta, deleteVenta } = useVentasAPI();
+  const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI();
+  const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI();
+  const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI();
+  const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
+  const { comprobantes, loading: loadingComprobantes, error: errorComprobantes } = useComprobantesAPI();
+  const { clientes } = useClientesAPI();
+  const { plazos } = usePlazosAPI();
+  const {
+    vendedores,
+    loading: loadingVendedores,
+    error: errorVendedores,
+    fetchVendedores,
+    addVendedor,
+    updateVendedor,
+    deleteVendedor
+  } = useVendedoresAPI();
+  const sucursales = [ { id: 1, nombre: 'Casa Central' } ]; // Ajusta según tu negocio
+  const puntosVenta = [ { id: 1, nombre: 'PV 1' } ];        // Ajusta según tu negocio
   const [filtro, setFiltro] = useState('todos');
-  const [tabs, setTabs] = useState([
-    { key: 'lista', label: 'Presupuestos y Ventas', closable: false }
-  ]);
-  const [activeTab, setActiveTab] = useState('lista');
+  const [tabs, setTabs] = useState([...mainTabs]);
+  const [activeTab, setActiveTab] = useState('presupuestos');
   const [editPresupuesto, setEditPresupuesto] = useState(null);
-  const [user, setUser] = useState({ username: "ferreadmin" });
+  const { localidades } = useLocalidadesAPI();
   const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false);
+  const [draggedTabKey, setDraggedTabKey] = useState(null);
+  const tiposComprobante = [
+    { value: 1, label: 'Factura A', campo: 'cbt_facturaa' },
+    { value: 2, label: 'Factura B', campo: 'cbt_facturab' },
+    { value: 3, label: 'Remito', campo: 'cbt_remito' },
+    { value: 4, label: 'Presupuesto', campo: 'cbt_presupuesto' },
+    // Agrega más si necesitas
+  ];
+  const [tipoComprobante, setTipoComprobante] = useState(1); // 1=Factura A por defecto
+  const [searchVendedor, setSearchVendedor] = useState('');
+  const [editVendedorData, setEditVendedorData] = useState(null);
+  const [busquedaProducto, setBusquedaProducto] = useState('');
+
+  // Guardar estado de pestañas en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem('presupuestosTabs', JSON.stringify(tabs));
+    localStorage.setItem('presupuestosActiveTab', activeTab);
+  }, [tabs, activeTab]);
+
+  // Al montar, NO abrir automáticamente la tab de 'nuevo' aunque haya draft
+  // (el draft se mantiene, pero la tab solo se abre si el usuario la elige)
+  // eslint-disable-next-line
+  useEffect(() => {
+    // Solo restaurar tabs guardadas, no abrir 'nuevo' por draft
+    // (el draft se mantiene, pero la tab solo se abre si el usuario la elige)
+    // eslint-disable-next-line
+  }, []);
 
   // Filtros
   const filtrar = (lista) => {
     switch (filtro) {
       case 'presupuestos':
-        return lista.filter(p => p.tipo === 'Presupuesto');
+        return lista.filter(p => p.tipo === 'Presupuesto' && p.estado === 'Abierto');
       case 'ventas':
         return lista.filter(p => p.tipo === 'Venta');
       case 'facturas':
         return lista.filter(p => p.tipo === 'Factura');
-      case 'abiertos':
-        return lista.filter(p => p.estado === 'Abierto');
-      case 'cerrados':
-        return lista.filter(p => p.estado === 'Cerrado');
-      case 'convertidos':
-        return lista.filter(p => p.estado === 'Convertido');
+      case 'todos':
       default:
         return lista;
     }
   };
 
+  // Funciones para tabs
+  const openTab = (key, label, data = null) => {
+    setEditVendedorData(data);
+    setTabs((prev) => {
+      if (prev.find((t) => t.key === key)) return prev;
+      return [...prev, { key, label, closable: true, data }];
+    });
+    setActiveTab(key);
+  };
+  const closeTab = (key) => {
+    setTabs((prev) => prev.filter((t) => t.key !== key));
+    if (activeTab === key) setActiveTab('presupuestos');
+    setEditVendedorData(null);
+  };
+
   // Acciones
   const handleNuevo = () => {
+    const newKey = `nuevo-${Date.now()}`;
+    setTabs(prev => [...prev, { key: newKey, label: 'Nuevo Presupuesto', closable: true }]);
     setEditPresupuesto(null);
-    setTabs(prev => [...prev, { key: 'nuevo', label: 'Nuevo Presupuesto', closable: true }]);
-    setActiveTab('nuevo');
+    setActiveTab(newKey);
+    localStorage.removeItem('presupuestoFormDraft');
   };
 
   const handleEdit = (presupuesto) => {
     setEditPresupuesto(presupuesto);
-    setTabs(prev => [...prev, { key: 'editar', label: 'Editar Presupuesto', closable: true }]);
-    setActiveTab('editar');
+    openTab('editar', 'Editar Presupuesto', presupuesto);
   };
 
-  const handleConvertir = (presupuesto) => {
-    // Simula conversión heredando datos
-    alert(`Convertir presupuesto ${presupuesto.numero} a Venta o Factura (heredando datos)`);
+  const handleImprimir = async (presupuesto) => {
+    try {
+      const response = await fetch(`/api/ventas/${presupuesto.id}/imprimir/`, { method: 'GET' });
+      if (!response.ok) throw new Error('No se pudo imprimir');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url);
+    } catch (err) {
+      alert('Error al imprimir: ' + (err.message || ''));
+    }
   };
 
-  const handleDelete = (id) => {
+  const handleConvertir = async (presupuesto) => {
+    try {
+      const response = await fetch(`/api/ventas/${presupuesto.id}/convertir-a-venta/`, { method: 'POST' });
+      if (!response.ok) throw new Error('No se pudo convertir');
+      // Opcional: recargar lista o mostrar mensaje
+      window.location.reload();
+    } catch (err) {
+      alert('Error al convertir: ' + (err.message || ''));
+    }
+  };
+
+  const handleDelete = async (id) => {
     if (window.confirm('¿Seguro que deseas eliminar este presupuesto/venta?')) {
-      setPresupuestos(prev => prev.filter(p => p.id !== id));
+      await deleteVenta(id);
     }
   };
 
-  const handleRefresh = () => {
-    // Simula refresco
-    alert('Refrescando datos...');
-  };
-
-  // Tabs y cierre
-  const closeTab = (key) => {
-    setTabs(prev => prev.filter(t => t.key !== key));
-    setActiveTab('lista');
-    setEditPresupuesto(null);
-  };
-
-  // Formulario de alta/edición
-  const PresupuestoForm = ({ onSave, onCancel, initialData }) => {
-    const [form, setForm] = useState(initialData || {
-      numero: '',
-      cliente: '',
-      fecha: new Date().toISOString().split('T')[0],
-      estado: 'Abierto',
-      tipo: 'Presupuesto',
-      items: []
+  // Nueva función para abrir subtab de vista no editable
+  const openVistaTab = (presupuesto) => {
+    setTabs(prev => {
+      if (prev.find(t => t.key === `vista-${presupuesto.id}`)) return prev;
+      return [...prev, { key: `vista-${presupuesto.id}`, label: `Vista Presupuesto ${presupuesto.numero}`, closable: true, presupuestoId: presupuesto.id }];
     });
-
-    const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
-
-    const handleAddItem = (item) => {
-      setForm(prev => ({
-        ...prev,
-        items: [...prev.items, item],
-        total: prev.items.reduce((sum, i) => sum + i.subtotal, 0) + item.subtotal
-      }));
-    };
-
-    const handleEditItem = (id, updatedItem) => {
-      setForm(prev => ({
-        ...prev,
-        items: prev.items.map(item => item.id === id ? updatedItem : item),
-        total: prev.items.reduce((sum, i) => sum + (i.id === id ? updatedItem.subtotal : i.subtotal), 0)
-      }));
-    };
-
-    const handleDeleteItem = (id) => {
-      setForm(prev => ({
-        ...prev,
-        items: prev.items.filter(item => item.id !== id),
-        total: prev.items.reduce((sum, i) => sum + (i.id === id ? 0 : i.subtotal), 0)
-      }));
-    };
-
-    const handleSubmit = e => {
-      e.preventDefault();
-      onSave(form);
-    };
-
-    return (
-      <form className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
-        <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? 'Editar' : 'Nuevo'} Presupuesto</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">N° Presupuesto</label>
-            <input name="numero" value={form.numero} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Cliente</label>
-            <input name="cliente" value={form.cliente} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Fecha</label>
-            <input name="fecha" type="date" value={form.fecha} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Total</label>
-            <input type="text" value={`$${form.total || 0}`} className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50" readOnly />
-          </div>
-        </div>
-
-        <div className="mb-8">
-          <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems del Presupuesto</h4>
-          <ItemsGrid
-            items={form.items}
-            onAddItem={handleAddItem}
-            onEditItem={handleEditItem}
-            onDeleteItem={handleDeleteItem}
-            productosDisponibles={productosDisponibles}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-          />
-        </div>
-
-        <div className="mt-8 flex justify-end space-x-3">
-          <button type="button" onClick={onCancel} className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors">Cancelar</button>
-          <button type="submit" className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">{initialData ? 'Guardar Cambios' : 'Crear Presupuesto'}</button>
-        </div>
-      </form>
-    );
+    setEditPresupuesto(presupuesto);
+    setActiveTab(`vista-${presupuesto.id}`);
   };
 
-  // Guardar presupuesto (alta o edición)
-  const handleSavePresupuesto = (data) => {
-    if (editPresupuesto) {
-      setPresupuestos(prev => prev.map(p => p.id === editPresupuesto.id ? { ...p, ...data } : p));
-    } else {
-      setPresupuestos(prev => [...prev, { ...data, id: prev.length + 1 }]);
+  // Vendedores: abrir nuevo/editar
+  const handleNuevoVendedor = () => {
+    const newKey = `nuevo-vendedor-${Date.now()}`;
+    openTab(newKey, 'Nuevo Vendedor');
+  };
+  const handleEditVendedor = (vendedor) => {
+    const editKey = `editar-vendedor-${vendedor.id}`;
+    openTab(editKey, `Editar Vendedor: ${vendedor.nombre.substring(0,15)}...`, vendedor);
+  };
+  const handleSaveVendedor = async (data) => {
+    try {
+      if (editVendedorData) {
+        await updateVendedor(editVendedorData.id, data);
+      } else {
+        await addVendedor(data);
+      }
+      fetchVendedores();
+      closeTab(activeTab);
+    } catch (err) {
+      // Manejo de error opcional
     }
-    closeTab('nuevo');
-    closeTab('editar');
   };
+  const handleDeleteVendedor = async (id) => {
+    if (window.confirm('¿Seguro que deseas eliminar este vendedor?')) {
+      try {
+        await deleteVendedor(id);
+        fetchVendedores();
+      } catch (err) {}
+    }
+  };
+
+  // Normalizar datos de ventas/presupuestos para la grilla
+  const normalizarVenta = (venta) => {
+    return {
+      ...venta,
+      tipo: venta.tipo || 'Presupuesto',
+      estado: venta.estado || 'Abierto',
+      numero: venta.ven_numero || venta.numero || '',
+      cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
+      fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
+      total: venta.ven_total || venta.total || 0,
+      id: venta.id || venta.ven_id || venta.pk,
+      items: venta.items || [],
+      plazoId: venta.ven_idpla || venta.plazoId || '',
+      vendedorId: venta.ven_idvdo || venta.vendedorId || '',
+      sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
+      puntoVentaId: venta.ven_punto || venta.puntoVentaId || 1,
+      bonificacionGeneral: venta.bonificacionGeneral || 0,
+      descu1: venta.ven_descu1 || venta.descu1 || 0,
+      descu2: venta.ven_descu2 || venta.descu2 || 0,
+      descu3: venta.ven_descu3 || venta.descu3 || 0,
+      copia: venta.ven_copia || venta.copia || 1,
+      cae: venta.ven_cae || venta.cae || '',
+    };
+  };
+
+  // En el render, usar ventasNormalizadas en vez de ventas
+  const ventasNormalizadas = ventas.map(normalizarVenta);
 
   return (
     <div className="h-full flex flex-col">
-      <Navbar user={user} onLogout={() => {}} />
+      <Navbar onLogout={() => {}} />
       <div className="flex justify-between items-center px-6 py-4">
         <h2 className="text-2xl font-bold text-gray-800">Gestión de Presupuestos y Ventas</h2>
-        <button onClick={handleRefresh} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors text-sm">Refrescar</button>
       </div>
-      <div className="flex gap-2 px-6 mb-4">
-        {filtros.map(f => (
-          <button
-            key={f.key}
-            onClick={() => setFiltro(f.key)}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${filtro === f.key ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            {f.label}
-          </button>
-        ))}
-        <button
-          onClick={handleNuevo}
-          className="ml-auto bg-black hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
-        >
-          <span className="text-lg">+</span> Nuevo Presupuesto
-        </button>
-      </div>
-      <div className="flex-1 bg-white rounded-xl shadow-sm min-h-0 p-6">
-        {activeTab === 'lista' && (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filtrar(presupuestos).map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 whitespace-nowrap">{p.numero}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{p.fecha}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{p.estado}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{p.tipo}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div className="flex gap-2">
-                      <button onClick={() => handleEdit(p)} className="text-blue-600 hover:underline">Editar</button>
-                      <button onClick={() => handleConvertir(p)} className="text-green-600 hover:underline">Convertir</button>
-                      <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:underline">Eliminar</button>
+      {error && (
+        <div className="mx-6 mb-2 p-3 bg-red-100 text-red-800 rounded border border-red-300">
+          {error}
+        </div>
+      )}
+      <div className="flex flex-1 px-6 gap-4 min-h-0">
+        <div className="flex-1 flex flex-col">
+          {/* Tabs tipo browser, todas al mismo nivel */}
+          <div className="flex items-center border-b border-gray-200 bg-white rounded-t-xl px-4 pt-2">
+            {tabs.map((tab, idx) => (
+              <div
+                key={tab.key}
+                className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${activeTab === tab.key ? 'bg-white border border-b-0 border-gray-200 font-semibold text-gray-900' : 'bg-gray-100 text-gray-500'}`}
+                onClick={() => setActiveTab(tab.key)}
+                style={{ position: 'relative', zIndex: 1 }}
+                draggable={tab.closable}
+                onDragStart={tab.closable ? (e) => { setDraggedTabKey(tab.key); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+                onDrop={tab.closable ? (e) => {
+                  e.preventDefault();
+                  if (draggedTabKey && draggedTabKey !== tab.key) {
+                    const dynamicTabs = tabs.filter(t => t.closable);
+                    const fixedTabs = tabs.filter(t => !t.closable);
+                    const draggedIdx = dynamicTabs.findIndex(t => t.key === draggedTabKey);
+                    const dropIdx = dynamicTabs.findIndex(t => t.key === tab.key);
+                    if (draggedIdx !== -1 && dropIdx !== -1) {
+                      const newDynamicTabs = [...dynamicTabs];
+                      const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1);
+                      newDynamicTabs.splice(dropIdx, 0, draggedTab);
+                      setTabs([...fixedTabs, ...newDynamicTabs]);
+                    }
+                  }
+                  setDraggedTabKey(null);
+                } : undefined}
+                onDragEnd={() => { setDraggedTabKey(null); }}
+              >
+                {tab.label}
+                {tab.closable && (
+                  <button
+                    onClick={e => { e.stopPropagation(); closeTab(tab.key); }}
+                    className="ml-2 text-lg font-bold text-gray-400 hover:text-red-400 focus:outline-none"
+                    title="Cerrar"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 bg-white rounded-b-xl shadow-sm min-h-0 p-6">
+            {/* Presupuestos y Ventas */}
+            {activeTab === 'presupuestos' && (
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex gap-2">
+                    {filtros.map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setFiltro(f.key)}
+                        className={`px-4 py-1.5 rounded-lg font-semibold text-sm transition-colors border border-gray-200 focus:outline-none ${filtro === f.key ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  {filtro === 'presupuestos' || filtro === 'todos' ? (
+                    <button
+                      onClick={handleNuevo}
+                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                    >
+                      <span className="text-lg">+</span> Nuevo Presupuesto
+                    </button>
+                  ) : filtro === 'ventas' ? (
+                    <button
+                      onClick={() => {
+                        const newKey = `nueva-venta-${Date.now()}`;
+                        setTabs(prev => [...prev, { key: newKey, label: 'Nueva Venta', closable: true }]);
+                        setActiveTab(newKey);
+                        localStorage.removeItem('ventaFormDraft');
+                      }}
+                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                    >
+                      <span className="text-lg">+</span> Nueva Venta
+                    </button>
+                  ) : filtro === 'facturas' ? (
+                    <button
+                      onClick={() => {
+                        const newKey = `nueva-factura-${Date.now()}`;
+                        setTabs(prev => [...prev, { key: newKey, label: 'Nueva Factura', closable: true }]);
+                        setActiveTab(newKey);
+                        localStorage.removeItem('facturaFormDraft');
+                      }}
+                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                    >
+                      <span className="text-lg">+</span> Nueva Factura
+                    </button>
+                  ) : null}
+                </div>
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filtrar(ventasNormalizadas).map(p => {
+                      // <-- CONSOLE LOG 3
+                      console.log('[PresupuestosManager] Rendering row, item p:', p, 'Estado:', p.estado, 'Tipo:', p.tipo);
+                      return (
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {p.numero}
+                              <EstadoBadge estado={p.estado} />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{p.fecha}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{p.estado}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{p.tipo}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex gap-2">
+                              {p.estado === 'Abierto' ? (
+                                <>
+                                  <BotonEditar onClick={() => handleEdit(p)} />
+                                  {p.tipo === 'Presupuesto' && <BotonConvertir onClick={() => handleConvertir(p)} />}
+                                  <BotonEliminar onClick={() => handleDelete(p.id)} />
+                                  <BotonImprimir onClick={() => handleImprimir(p)} title="Imprimir" />
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    title="Ver presupuesto"
+                                    className="transition-colors px-1 py-1 text-gray-700 hover:text-black"
+                                    onClick={() => openVistaTab(p)}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12Z" />
+                                      <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                  </button>
+                                  {p.tipo === 'Venta' && p.estado === 'Cerrado' && !p.facturada && (
+                                    <BotonConvertir onClick={() => handleConvertir(p)} />
+                                  )}
+                                  {p.presupuestoOrigenId && (
+                                    <BotonVinculado
+                                      onClick={() => {
+                                        const vinculado = ventas.find(x => x.id === p.presupuestoOrigenId);
+                                        if (vinculado) openVistaTab(vinculado);
+                                      }}
+                                      title="Ver presupuesto vinculado"
+                                    />
+                                  )}
+                                  <BotonImprimir onClick={() => handleImprimir(p)} title="Imprimir" />
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+            {/* Vendedores: lista */}
+            {activeTab === 'vendedores' && (
+              <>
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={handleNuevoVendedor}
+                    className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                  >
+                    <span className="text-lg">+</span> Nuevo Vendedor
+                  </button>
+                </div>
+                <VendedoresTable
+                  vendedores={vendedores}
+                  onEdit={handleEditVendedor}
+                  onDelete={handleDeleteVendedor}
+                  search={searchVendedor}
+                  setSearch={setSearchVendedor}
+                />
+              </>
+            )}
+            {/* Vendedores: nuevo/editar */}
+            {(activeTab.startsWith('nuevo-vendedor') || activeTab.startsWith('editar-vendedor')) && (
+              <div className="flex justify-center items-center min-h-[60vh]">
+                <VendedorForm
+                  initialData={editVendedorData}
+                  onSave={handleSaveVendedor}
+                  onCancel={() => closeTab(activeTab)}
+                  loading={loadingVendedores}
+                  error={errorVendedores}
+                  localidades={localidades}
+                />
+              </div>
+            )}
+            {/* Presupuestos: nuevo/editar/vista */}
+            {(activeTab.startsWith('nuevo-') || activeTab.startsWith('editar') || activeTab.startsWith('vista-') || activeTab.startsWith('nueva-venta-') || activeTab.startsWith('nueva-factura-')) &&
+             !activeTab.startsWith('nuevo-vendedor') && !activeTab.startsWith('editar-vendedor') && (
+              activeTab.startsWith('nueva-venta-') ? (
+                <VentaForm
+                  onSave={async (payload, items) => {
+                    await addVenta({ ...payload, tipo: 'Venta', estado: 'Abierto', items });
+                    closeTab(activeTab);
+                  }}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={null}
+                  readOnlyOverride={false}
+                  comprobantes={comprobantes}
+                  tiposComprobante={tiposComprobante}
+                  tipoComprobante={tipoComprobante}
+                  setTipoComprobante={setTipoComprobante}
+                  clientes={clientes}
+                  plazos={plazos}
+                  vendedores={vendedores}
+                  sucursales={sucursales}
+                  puntosVenta={puntosVenta}
+                  loadingComprobantes={loadingComprobantes}
+                  errorComprobantes={errorComprobantes}
+                  productos={productos}
+                  loadingProductos={loadingProductos}
+                  familias={familias}
+                  loadingFamilias={loadingFamilias}
+                  proveedores={proveedores}
+                  loadingProveedores={loadingProveedores}
+                  alicuotas={alicuotas}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProductos={errorProductos}
+                  errorFamilias={errorFamilias}
+                  errorProveedores={errorProveedores}
+                  errorAlicuotas={errorAlicuotas}
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  ItemsGrid={ItemsGrid}
+                />
+              ) : activeTab.startsWith('nueva-factura-') ? (
+                <FacturaForm
+                  onSave={async (payload, items) => {
+                    await addVenta({ ...payload, tipo: 'Factura', estado: 'Abierto', items });
+                    closeTab(activeTab);
+                  }}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={null}
+                  readOnlyOverride={false}
+                  comprobantes={comprobantes}
+                  tiposComprobante={tiposComprobante}
+                  tipoComprobante={tipoComprobante}
+                  setTipoComprobante={setTipoComprobante}
+                  clientes={clientes}
+                  plazos={plazos}
+                  vendedores={vendedores}
+                  sucursales={sucursales}
+                  puntosVenta={puntosVenta}
+                  loadingComprobantes={loadingComprobantes}
+                  errorComprobantes={errorComprobantes}
+                  productos={productos}
+                  loadingProductos={loadingProductos}
+                  familias={familias}
+                  loadingFamilias={loadingFamilias}
+                  proveedores={proveedores}
+                  loadingProveedores={loadingProveedores}
+                  alicuotas={alicuotas}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProductos={errorProductos}
+                  errorFamilias={errorFamilias}
+                  errorProveedores={errorProveedores}
+                  errorAlicuotas={errorAlicuotas}
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  ItemsGrid={ItemsGrid}
+                />
+              ) : (
+                <>
+                  <PresupuestoForm
+                    onSave={async (payload, items) => {
+                      if (editPresupuesto && editPresupuesto.id) {
+                        await updateVenta(editPresupuesto.id, { ...payload, tipoOriginal: editPresupuesto.tipo, estadoOriginal: editPresupuesto.estado, items });
+                      } else {
+                        await addVenta({ ...payload, tipo: 'Presupuesto', estado: 'Abierto', items });
+                      }
+                      closeTab(activeTab);
+                    }}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
+                    readOnlyOverride={activeTab.startsWith('vista-')}
+                    comprobantes={comprobantes}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
+                    clientes={clientes}
+                    plazos={plazos}
+                    vendedores={vendedores}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    loadingComprobantes={loadingComprobantes}
+                    errorComprobantes={errorComprobantes}
+                    productos={productos}
+                    loadingProductos={loadingProductos}
+                    familias={familias}
+                    loadingFamilias={loadingFamilias}
+                    proveedores={proveedores}
+                    loadingProveedores={loadingProveedores}
+                    alicuotas={alicuotas}
+                    loadingAlicuotas={loadingAlicuotas}
+                    errorProductos={errorProductos}
+                    errorFamilias={errorFamilias}
+                    errorProveedores={errorProveedores}
+                    errorAlicuotas={errorAlicuotas}
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    ItemsGrid={ItemsGrid}
+                  />
+                  {/* Botón Editar en la vista si el presupuesto está abierto */}
+                  {activeTab.startsWith('vista-') && (tabs.find(t => t.key === activeTab)?.data || editPresupuesto)?.estado === 'Abierto' && (
+                    <div className="flex justify-end mt-4">
+                      <BotonEditar onClick={() => handleEdit((tabs.find(t => t.key === activeTab)?.data || editPresupuesto))} />
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {(activeTab === 'nuevo' || activeTab === 'editar') && (
-          <PresupuestoForm
-            onSave={handleSavePresupuesto}
-            onCancel={() => closeTab(activeTab)}
-            initialData={editPresupuesto}
-          />
-        )}
+                  )}
+                </>
+              )
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

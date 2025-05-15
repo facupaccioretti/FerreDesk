@@ -2,50 +2,34 @@ import React, { useEffect, useState } from 'react';
 import Navbar from "./Navbar";
 import StockForm from './StockForm';
 import ProductosTable from './ProductosTable';
-
-// Datos mock iniciales
-const mockFamilias = [
-  { id: 1, deno: 'Caños', comentario: '', nivel: '1', acti: 'S' },
-  { id: 2, deno: 'Tornillos', comentario: '', nivel: '1', acti: 'S' },
-];
-const mockProveedores = [
-  { id: 1, razon: 'Juan' },
-  { id: 2, razon: 'Marquitos' },
-  { id: 3, razon: 'Ferretería S.A.' }
-];
-const mockProductos = [
-  {
-    id: 1,
-    codvta: 'PVC001',
-    deno: 'Tubo PVC 1"',
-    unidad: 'm',
-    idfam1: 1,
-    stock_proveedores: [
-      { id: 1, proveedor: 1, cantidad: 50, costo: 100 },
-      { id: 2, proveedor: 2, cantidad: 30, costo: 110 }
-    ]
-  },
-  {
-    id: 2,
-    codvta: 'TOR002',
-    deno: 'Tornillo 2"',
-    unidad: 'unidad',
-    idfam1: 2,
-    stock_proveedores: [
-      { id: 3, proveedor: 3, cantidad: 200, costo: 2 }
-    ]
-  }
-];
+import { useProductosAPI } from '../utils/useProductosAPI';
+import { useFamiliasAPI } from '../utils/useFamiliasAPI';
+import { useProveedoresAPI } from '../utils/useProveedoresAPI';
+import { useStockProveAPI } from '../utils/useStockProveAPI';
 
 const ProductosManager = () => {
   useEffect(() => {
     document.title = "Productos FerreDesk";
   }, []);
 
-  // Estado
-  const [productos, setProductos] = useState([]);
-  const [familias, setFamilias] = useState([]);
-  const [proveedores, setProveedores] = useState([]);
+  // Hooks API
+  const {
+    productos,
+    addProducto, updateProducto
+  } = useProductosAPI();
+  const {
+    familias,
+    addFamilia, updateFamilia, deleteFamilia
+  } = useFamiliasAPI();
+  const {
+    proveedores,
+    addProveedor, updateProveedor, deleteProveedor
+  } = useProveedoresAPI();
+  const {
+    stockProve,
+    updateStockProve
+  } = useStockProveAPI();
+
   const [search, setSearch] = useState('');
 
   // Cargar estado de pestañas desde localStorage
@@ -74,26 +58,80 @@ const ProductosManager = () => {
     localStorage.setItem('productosActiveTab', activeTab);
   }, [tabs, activeTab]);
 
-  // Simula fetch inicial
+  // Efecto para manejar la carga inicial y recargas
   useEffect(() => {
-    setFamilias(mockFamilias);
-    setProveedores(mockProveedores);
-    setProductos(mockProductos);
-  }, []);
+    const savedActiveTab = localStorage.getItem('productosActiveTab');
+    const stockFormDraft = localStorage.getItem('stockFormDraft');
 
-  // CRUD Familias
-  const addFamilia = (familia) => setFamilias(prev => [...prev, { ...familia, id: prev.length + 1 }]);
-  const updateFamilia = (id, updated) => setFamilias(prev => prev.map(f => f.id === id ? { ...f, ...updated } : f));
-  const deleteFamilia = (id) => setFamilias(prev => prev.filter(f => f.id !== id));
+    if (savedActiveTab === 'nuevo') {
+      if (stockFormDraft) {
+        try {
+          const draftData = JSON.parse(stockFormDraft);
+          // Asegurarse de que el draft no sea un producto existente (sin ID)
+          if (!draftData.id) {
+            setEditProducto(draftData); // Cargar el draft para un nuevo producto
+          } else {
+            // Si el draft tiene ID, es de un producto que se estaba editando.
+            // Podríamos intentar buscarlo en `productos` o simplemente limpiar.
+            // Por ahora, limpiamos para evitar inconsistencias si el producto ya no existe.
+            localStorage.removeItem('stockFormDraft');
+            setEditProducto(null);
+            setActiveTab('lista'); // Volver a la lista si el draft es inválido para "nuevo"
+          }
+        } catch (error) {
+          console.error("Error al parsear stockFormDraft:", error);
+          localStorage.removeItem('stockFormDraft');
+          setEditProducto(null);
+          setActiveTab('lista'); // Volver a la lista en caso de error
+        }
+      } else {
+        // No hay draft, y la tab activa era "nuevo", lo cual no tiene sentido sin un producto a editar o un draft.
+        // Forzar a la pestaña de lista y limpiar editProducto.
+        setActiveTab('lista');
+        setEditProducto(null); // Asegurar que no haya un producto para editar si no hay draft
+      }
+    } else if (savedActiveTab && savedActiveTab.startsWith('editar-')) {
+        // Lógica para restaurar un producto en edición si es necesario (más complejo)
+        // Por ahora, si se recarga en una pestaña de edición, podría perderse el contexto.
+        // Considerar guardar el ID del producto en edición en localStorage también.
+        // O simplemente forzar a la lista para simplificar.
+        // setActiveTab('lista');
+        // setEditProducto(null);
+    }
+    // Si la activeTab no es 'nuevo', editProducto debería ser null o el producto que se está editando
+    // (que se setea al hacer click en editar).
+    if (savedActiveTab !== 'nuevo' && !savedActiveTab?.startsWith('editar-')) {
+        setEditProducto(null); // Limpiar si no estamos en nuevo/editar explícitamente
+    }
 
-  // CRUD Proveedores
-  const addProveedor = (proveedor) => setProveedores(prev => [...prev, { ...proveedor, id: prev.length + 1 }]);
-  const updateProveedor = (id, updated) => setProveedores(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p));
-  const deleteProveedor = (id) => setProveedores(prev => prev.filter(p => p.id !== id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Se ejecuta solo al montar
 
   // Tabs y edición
   const openTab = (key, label, producto = null) => {
-    setEditProducto(producto);
+    if (key === 'nuevo' && !producto) { // Al abrir "Nuevo Producto"
+      const stockFormDraft = localStorage.getItem('stockFormDraft');
+      if (stockFormDraft) {
+        try {
+          const draftData = JSON.parse(stockFormDraft);
+          if (!draftData.id) { // Solo usar draft si es para un producto nuevo (sin ID)
+            setEditProducto(draftData);
+          } else {
+            setEditProducto(null); // No usar draft con ID para "Nuevo Producto"
+            localStorage.removeItem('stockFormDraft'); // Limpiar draft inválido
+          }
+        } catch (error) {
+          console.error("Error al parsear stockFormDraft para nuevo producto:", error);
+          setEditProducto(null);
+          localStorage.removeItem('stockFormDraft');
+        }
+      } else {
+        setEditProducto(null); // No hay draft, abrir vacío
+      }
+    } else {
+      setEditProducto(producto); // Para editar un producto existente
+    }
+
     setTabs(prev => {
       if (prev.find(t => t.key === key)) return prev;
       return [...prev, { key, label, closable: true }];
@@ -104,24 +142,23 @@ const ProductosManager = () => {
     setTabs(prev => prev.filter(t => t.key !== key));
     if (activeTab === key) setActiveTab('lista');
     setEditProducto(null);
+    if (key === 'nuevo') { // Limpiar draft al cerrar la pestaña de nuevo/editar
+        localStorage.removeItem('stockFormDraft');
+    }
   };
 
   // Guardar producto (alta o edición)
   const handleSaveProducto = async (data) => {
-    if (editProducto) {
-      // Edición
-      setProductos(prev => prev.map(p => 
-        p.id === editProducto.id ? { ...p, ...data } : p
-      ));
-    } else {
-      // Alta
-      const newProducto = {
-        ...data,
-        id: Math.max(0, ...productos.map(p => p.id)) + 1
-      };
-      setProductos(prev => [...prev, newProducto]);
+    try {
+      if (editProducto) {
+        await updateProducto(editProducto.id, data);
+      } else {
+        await addProducto(data);
+      }
+      closeTab('nuevo');
+    } catch (err) {
+      throw err;
     }
-    closeTab('nuevo');
   };
 
   // Editar producto
@@ -134,20 +171,22 @@ const ProductosManager = () => {
     setUpdateStockModal({ show: true, stockId, providerId });
   };
 
-  const handleStockUpdate = (stockId, providerId, cantidad, costo) => {
-    setProductos(prev => prev.map(producto => {
-      if (producto.id === stockId) {
-        return {
-          ...producto,
-          stock_proveedores: producto.stock_proveedores.map(sp => 
-            sp.proveedor.id === providerId 
-              ? { ...sp, cantidad: Number(cantidad), costo: Number(costo) }
-              : sp
-          )
-        };
-      }
-      return producto;
-    }));
+  // Nuevo: obtener el registro de stockprove a editar
+  const stockProveToEdit = stockProve.find(sp => sp.stock === updateStockModal.stockId && sp.proveedor === updateStockModal.providerId);
+  const [editStockValues, setEditStockValues] = useState({ cantidad: '', costo: '' });
+  useEffect(() => {
+    if (updateStockModal.show && stockProveToEdit) {
+      setEditStockValues({ cantidad: stockProveToEdit.cantidad, costo: stockProveToEdit.costo });
+    }
+  }, [updateStockModal, stockProveToEdit]);
+
+  const handleStockUpdate = async (stockId, providerId, cantidad, costo) => {
+    if (stockProveToEdit) {
+      await updateStockProve(stockProveToEdit.id, {
+        cantidad: parseFloat(cantidad),
+        costo: parseFloat(costo)
+      });
+    }
     setUpdateStockModal({ show: false, stockId: null, providerId: null });
   };
 
@@ -204,7 +243,7 @@ const ProductosManager = () => {
                 productos={productos}
                 familias={familias}
                 proveedores={proveedores}
-                setProveedores={setProveedores}
+                setProveedores={addProveedor}
                 search={search}
                 setSearch={setSearch}
                 expandedId={expandedId}
@@ -228,8 +267,8 @@ const ProductosManager = () => {
                 stock={editProducto}
                 onSave={handleSaveProducto}
                 onCancel={() => closeTab('nuevo')}
-                proveedores={proveedores}
-                familias={familias}
+                proveedores={proveedores.filter(p => !!p.id)}
+                familias={familias.filter(f => !!f.id)}
               />
             )}
           </div>
@@ -242,12 +281,11 @@ const ProductosManager = () => {
             <h3 className="text-lg font-medium mb-4">Actualizar Stock</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
-              const formData = new FormData(e.target);
               handleStockUpdate(
                 updateStockModal.stockId,
                 updateStockModal.providerId,
-                formData.get('cantidad'),
-                formData.get('costo')
+                editStockValues.cantidad,
+                editStockValues.costo
               );
             }}>
               <div className="mb-4">
@@ -255,6 +293,8 @@ const ProductosManager = () => {
                 <input
                   type="number"
                   name="cantidad"
+                  value={editStockValues.cantidad}
+                  onChange={e => setEditStockValues(v => ({ ...v, cantidad: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   required
                 />
@@ -265,6 +305,8 @@ const ProductosManager = () => {
                   type="number"
                   name="costo"
                   step="0.01"
+                  value={editStockValues.costo}
+                  onChange={e => setEditStockValues(v => ({ ...v, costo: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   required
                 />

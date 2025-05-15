@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Stock, Proveedor, StockProve, Familia
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -36,4 +36,9 @@ class StockSerializer(serializers.ModelSerializer):
             'id', 'codvta', 'codcom', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva',
             'idfam1', 'idfam1_id', 'idfam2', 'idfam2_id', 'idfam3', 'idfam3_id',
             'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores'
-        ] 
+        ]
+
+class AlicuotaIVASerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AlicuotaIVA
+        fields = ['id', 'codigo', 'deno', 'porce'] 

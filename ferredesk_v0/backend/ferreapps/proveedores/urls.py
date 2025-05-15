@@ -1,7 +1,7 @@
-from django.urls import path
-from .views import ProveedorListCreateView, ProveedorRetrieveUpdateDestroyView
+from rest_framework.routers import DefaultRouter
+from .views import ProveedorViewSet
 
-urlpatterns = [
-    path('', ProveedorListCreateView.as_view(), name='proveedor-list-create'),
-    path('<int:pk>/', ProveedorRetrieveUpdateDestroyView.as_view(), name='proveedor-detail'),
-] 
+router = DefaultRouter()
+router.register(r'', ProveedorViewSet, basename='proveedor')
+
+urlpatterns = router.urls 

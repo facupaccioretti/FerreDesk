@@ -43,6 +43,9 @@ INSTALLED_APPS = [
     'ferreapps.login',
     'ferreapps.clientes',
     'ferreapps.ventas',
+    'rest_framework',
+    'django_filters',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
@@ -151,4 +154,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuración del modelo de usuario personalizado
 AUTH_USER_MODEL = 'usuarios.Usuario'
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    )
+}
 
