@@ -2,6 +2,41 @@ import React, { useState, useEffect, useRef } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
 
+const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
+  numero: '',
+  cliente: '',
+  clienteId: '',
+  plazoId: '',
+  vendedorId: '',
+  sucursalId: sucursales[0]?.id || '',
+  puntoVentaId: puntosVenta[0]?.id || '',
+  fecha: new Date().toISOString().split('T')[0],
+  estado: 'Abierto',
+  tipo: 'Venta',
+  items: [],
+  bonificacionGeneral: 0,
+  total: 0,
+  descu1: 0,
+  descu2: 0,
+  descu3: 0,
+  copia: 1,
+  cae: '',
+});
+
+const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
+  const defaults = getInitialFormState(sucursales, puntosVenta);
+  return { ...defaults, ...data };
+};
+
+const getDefaultClienteId = (clientes) => {
+  const cc = clientes.find(c => (c.razon || c.nombre)?.toLowerCase().includes('cuenta corriente'));
+  return cc ? cc.id : '';
+};
+const getDefaultPlazoId = (plazos) => {
+  const contado = plazos.find(p => (p.nombre || '').toLowerCase().includes('contado'));
+  return contado ? contado.id : '';
+};
+
 const VentaForm = ({
   onSave,
   onCancel,
@@ -44,18 +79,23 @@ const VentaForm = ({
           const subtotal = (parseFloat(item.precio) * parseInt(item.cantidad)) * (1 - bonifParticular / 100);
           return { ...item, subtotal };
         });
-        return mergeWithDefaults({ ...parsed, items });
+        return mergeWithDefaults({ ...parsed, items }, sucursales, puntosVenta);
       } catch (e) {
         console.error('Error al cargar formulario guardado:', e);
-        return getInitialFormState();
+        return getInitialFormState(sucursales, puntosVenta);
       }
     }
-    return mergeWithDefaults(initialData || {});
+    return mergeWithDefaults(initialData || {
+      clienteId: getDefaultClienteId(clientes),
+      plazoId: getDefaultPlazoId(plazos),
+      vendedorId: '',
+    }, sucursales, puntosVenta);
   });
 
   const [editRow, setEditRow] = useState({ codigo: '', cantidad: 1, costo: '', bonificacion: 0 });
   const [selectedProducto, setSelectedProducto] = useState(null);
   const codigoInputRef = useRef();
+  const itemsGridRef = useRef();
 
   useEffect(() => {
     if (!initialData) {
@@ -130,36 +170,32 @@ const VentaForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     localStorage.removeItem('ventaFormDraft');
-    
-    // Determinar si es presupuesto
-    const esPresupuesto = (form.tipo === 'Presupuesto' || (typeof tipoComprobante === 'number' && tipoComprobante === 4));
-    const ven_estado = esPresupuesto ? 'PR' : (form.estado || 'AB');
-    const ven_cae = form.cae && form.cae.trim() ? form.cae : '00000000000000';
-    
-    // Asegurar que los números estén en el formato correcto
-    const total = parseFloat(form.total) || 0;
+    // Fuerza estado y tipo
     const payload = {
-      ven_codcomprob: tipoComprobante,
+      ...form,
+      estado: 'Cerrado',
+      tipo: 'Venta',
+      ven_estado: 'CE',
+      ven_codcomprob: 1,
       ven_numero: form.numero,
       ven_sucursal: form.sucursalId || 1,
       ven_fecha: form.fecha,
       ven_punto: form.puntoVentaId || 1,
-      ven_impneto: total.toFixed(2), // Máximo 2 decimales y 15 dígitos en total
+      ven_impneto: (parseFloat(form.total) || 0).toFixed(2),
       ven_descu1: (form.descu1 || 0).toFixed(2),
       ven_descu2: (form.descu2 || 0).toFixed(2),
       ven_descu3: (form.descu3 || 0).toFixed(2),
-      ven_total: Math.round(total), // Entero redondeado
+      ven_total: Math.round(form.total) || 0,
       ven_vdocomvta: form.vdocomvta || 0,
       ven_vdocomcob: form.vdocomcob || 0,
-      ven_estado: ven_estado.substring(0, 2),
       ven_idcli: form.clienteId,
       ven_idpla: form.plazoId,
       ven_idvdo: form.vendedorId,
       ven_copia: form.copia || 1,
-      ven_cae: ven_cae,
+      ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
     };
-    
-    await onSave(payload, form.items);
+    const items = itemsGridRef.current.getItems();
+    await onSave({ ...payload, items });
   };
 
   const handleCancel = () => {
@@ -169,39 +205,12 @@ const VentaForm = ({
     }
   };
 
-  // Función para obtener el estado inicial del formulario
-  const getInitialFormState = () => ({
-    numero: '',
-    cliente: '',
-    clienteId: '',
-    plazoId: '',
-    vendedorId: '',
-    sucursalId: sucursales[0]?.id || '',
-    puntoVentaId: puntosVenta[0]?.id || '',
-    fecha: new Date().toISOString().split('T')[0],
-    estado: 'Abierto',
-    tipo: 'Venta',
-    items: [],
-    bonificacionGeneral: 0,
-    total: 0,
-    descu1: 0,
-    descu2: 0,
-    descu3: 0,
-    copia: 1,
-    cae: '',
-  });
-
-  const mergeWithDefaults = (data) => {
-    const defaults = getInitialFormState();
-    return { ...defaults, ...data };
-  };
-
   return (
-    <form className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="w-full max-w-6xl mx-auto py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
       <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? (isReadOnly ? 'Ver Venta' : 'Editar Venta') : 'Nueva Venta'}</h3>
       {isReadOnly && (
         <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
-          Este presupuesto/venta/factura está cerrado y no puede ser editado. Solo lectura.
+          Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -342,37 +351,15 @@ const VentaForm = ({
         ) : errorAlicuotas ? (
           <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
         ) : (
-          <BuscadorProducto
-            productos={productos}
-            onSelect={producto => {
-              setEditRow({
-                codigo: producto.codvta || producto.codigo || '',
-                cantidad: 1,
-                costo: producto.precio || producto.preciovta || producto.preciounitario || '',
-                bonificacion: 0
-              });
-              setSelectedProducto(producto);
-              setTimeout(() => codigoInputRef.current?.focus(), 100);
-            }}
+          <ItemsGrid
+            ref={itemsGridRef}
+            productosDisponibles={productos}
+            autoSumarDuplicados={autoSumarDuplicados}
+            setAutoSumarDuplicados={setAutoSumarDuplicados}
+            bonificacionGeneral={form.bonificacionGeneral}
+            setBonificacionGeneral={v => setForm(f => ({ ...f, bonificacionGeneral: v }))}
           />
         )}
-        <ItemsGrid
-          items={form.items}
-          onAddItem={isReadOnly ? () => {} : handleAddItem}
-          onEditItem={isReadOnly ? () => {} : handleEditItem}
-          onDeleteItem={isReadOnly ? () => {} : handleDeleteItem}
-          productosDisponibles={productos}
-          autoSumarDuplicados={autoSumarDuplicados}
-          setAutoSumarDuplicados={isReadOnly ? () => {} : setAutoSumarDuplicados}
-          isReadOnly={isReadOnly}
-          bonificacionGeneral={form.bonificacionGeneral}
-          setBonificacionGeneral={isReadOnly ? () => {} : val => setForm(f => ({ ...f, bonificacionGeneral: val }))}
-          editRow={editRow}
-          setEditRow={setEditRow}
-          setSelectedProducto={setSelectedProducto}
-          codigoInputRef={codigoInputRef}
-          selectedProducto={selectedProducto}
-        />
       </div>
 
       <div className="mt-8 flex justify-end space-x-3">

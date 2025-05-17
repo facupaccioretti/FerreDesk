@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from "./Navbar";
-import { BotonConvertir, BotonEditar, BotonEliminar, BotonVinculado, BotonImprimir } from "./Botones";
 import { useVentasAPI } from '../utils/useVentasAPI';
 import { useProductosAPI } from '../utils/useProductosAPI';
 import { useFamiliasAPI } from '../utils/useFamiliasAPI';
@@ -15,14 +14,15 @@ import { useLocalidadesAPI } from '../utils/useLocalidadesAPI';
 import VendedoresTable from './VendedoresTable';
 import PresupuestoForm from './PresupuestoForm';
 import VentaForm from './VentaForm';
-import FacturaForm from './FacturaForm';
 import ItemsGrid from './ItemsGrid';
+import { BotonEditar, BotonEliminar, BotonImprimir, BotonExpandir, BotonConvertir, BotonVerDetalle } from './Botones';
+import PresupuestoVentaVista from './PresupuestoVentaVista';
+import { getCookie } from '../utils/csrf';
 
 const filtros = [
   { key: 'todos', label: 'Todos' },
   { key: 'presupuestos', label: 'Presupuestos' },
-  { key: 'ventas', label: 'Ventas' },
-  { key: 'facturas', label: 'Facturas' }
+  { key: 'ventas', label: 'Ventas' }
 ];
 
 // Badge de estado
@@ -57,7 +57,7 @@ const PresupuestosManager = () => {
     document.title = "Presupuestos y Ventas FerreDesk";
   }, []);
 
-  const { ventas, loading, error, addVenta, updateVenta, deleteVenta } = useVentasAPI();
+  const { ventas, loading, error, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
   const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI();
   const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI();
   const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI();
@@ -84,11 +84,8 @@ const PresupuestosManager = () => {
   const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false);
   const [draggedTabKey, setDraggedTabKey] = useState(null);
   const tiposComprobante = [
-    { value: 1, label: 'Factura A', campo: 'cbt_facturaa' },
-    { value: 2, label: 'Factura B', campo: 'cbt_facturab' },
-    { value: 3, label: 'Remito', campo: 'cbt_remito' },
     { value: 4, label: 'Presupuesto', campo: 'cbt_presupuesto' },
-    // Agrega más si necesitas
+    { value: 1, label: 'Venta', campo: 'cbt_pedidovta' }
   ];
   const [tipoComprobante, setTipoComprobante] = useState(1); // 1=Factura A por defecto
   const [searchVendedor, setSearchVendedor] = useState('');
@@ -116,9 +113,7 @@ const PresupuestosManager = () => {
       case 'presupuestos':
         return lista.filter(p => p.tipo === 'Presupuesto' && p.estado === 'Abierto');
       case 'ventas':
-        return lista.filter(p => p.tipo === 'Venta');
-      case 'facturas':
-        return lista.filter(p => p.tipo === 'Factura');
+        return lista.filter(p => p.tipo === 'Venta' && p.estado === 'Cerrado');
       case 'todos':
       default:
         return lista;
@@ -146,7 +141,16 @@ const PresupuestosManager = () => {
     setTabs(prev => [...prev, { key: newKey, label: 'Nuevo Presupuesto', closable: true }]);
     setEditPresupuesto(null);
     setActiveTab(newKey);
+    setTipoComprobante(4); // Forzar tipoComprobante a 4 para presupuesto
     localStorage.removeItem('presupuestoFormDraft');
+  };
+
+  const handleNuevaVenta = () => {
+    const newKey = `nueva-venta-${Date.now()}`;
+    setTabs(prev => [...prev, { key: newKey, label: 'Nueva Venta', closable: true }]);
+    setActiveTab(newKey);
+    setTipoComprobante(1); // Forzar tipoComprobante a 1 para venta
+    localStorage.removeItem('ventaFormDraft');
   };
 
   const handleEdit = (presupuesto) => {
@@ -168,10 +172,24 @@ const PresupuestosManager = () => {
 
   const handleConvertir = async (presupuesto) => {
     try {
-      const response = await fetch(`/api/ventas/${presupuesto.id}/convertir-a-venta/`, { method: 'POST' });
-      if (!response.ok) throw new Error('No se pudo convertir');
-      // Opcional: recargar lista o mostrar mensaje
-      window.location.reload();
+      const csrftoken = getCookie('csrftoken');
+      const response = await fetch(`/api/ventas/${presupuesto.id}/convertir-a-venta/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        let msg = 'No se pudo convertir';
+        try {
+          const data = await response.json();
+          msg = data.detail || msg;
+        } catch {}
+        throw new Error(msg);
+      }
+      await fetchVentas();
+      const ventaConvertida = ventas.find(v => v.id === presupuesto.id);
+      if (ventaConvertida) openVistaTab(ventaConvertida);
+      else window.location.reload();
     } catch (err) {
       alert('Error al convertir: ' + (err.message || ''));
     }
@@ -179,7 +197,11 @@ const PresupuestosManager = () => {
 
   const handleDelete = async (id) => {
     if (window.confirm('¿Seguro que deseas eliminar este presupuesto/venta?')) {
-      await deleteVenta(id);
+      try {
+        await deleteVenta(id);
+      } catch (err) {
+        alert('Error al eliminar: ' + (err.message || ''));
+      }
     }
   };
 
@@ -187,9 +209,8 @@ const PresupuestosManager = () => {
   const openVistaTab = (presupuesto) => {
     setTabs(prev => {
       if (prev.find(t => t.key === `vista-${presupuesto.id}`)) return prev;
-      return [...prev, { key: `vista-${presupuesto.id}`, label: `Vista Presupuesto ${presupuesto.numero}`, closable: true, presupuestoId: presupuesto.id }];
+      return [...prev, { key: `vista-${presupuesto.id}`, label: `Vista ${presupuesto.tipo} ${presupuesto.numero}`, closable: true, data: presupuesto }];
     });
-    setEditPresupuesto(presupuesto);
     setActiveTab(`vista-${presupuesto.id}`);
   };
 
@@ -228,8 +249,8 @@ const PresupuestosManager = () => {
   const normalizarVenta = (venta) => {
     return {
       ...venta,
-      tipo: venta.tipo || 'Presupuesto',
-      estado: venta.estado || 'Abierto',
+      tipo: venta.tipo || (venta.ven_codcomprob === 4 ? 'Presupuesto' : venta.ven_codcomprob === 1 ? 'Venta' : ''),
+      estado: venta.estado || (venta.ven_estado === 'AB' ? 'Abierto' : venta.ven_estado === 'CE' ? 'Cerrado' : ''),
       numero: venta.ven_numero || venta.numero || '',
       cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
@@ -331,27 +352,10 @@ const PresupuestosManager = () => {
                     </button>
                   ) : filtro === 'ventas' ? (
                     <button
-                      onClick={() => {
-                        const newKey = `nueva-venta-${Date.now()}`;
-                        setTabs(prev => [...prev, { key: newKey, label: 'Nueva Venta', closable: true }]);
-                        setActiveTab(newKey);
-                        localStorage.removeItem('ventaFormDraft');
-                      }}
+                      onClick={handleNuevaVenta}
                       className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
                     >
                       <span className="text-lg">+</span> Nueva Venta
-                    </button>
-                  ) : filtro === 'facturas' ? (
-                    <button
-                      onClick={() => {
-                        const newKey = `nueva-factura-${Date.now()}`;
-                        setTabs(prev => [...prev, { key: newKey, label: 'Nueva Factura', closable: true }]);
-                        setActiveTab(newKey);
-                        localStorage.removeItem('facturaFormDraft');
-                      }}
-                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
-                    >
-                      <span className="text-lg">+</span> Nueva Factura
                     </button>
                   ) : null}
                 </div>
@@ -386,38 +390,26 @@ const PresupuestosManager = () => {
                           <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex gap-2">
-                              {p.estado === 'Abierto' ? (
+                              {p.tipo === 'Presupuesto' && p.estado === 'Abierto' ? (
                                 <>
                                   <BotonEditar onClick={() => handleEdit(p)} />
-                                  {p.tipo === 'Presupuesto' && <BotonConvertir onClick={() => handleConvertir(p)} />}
+                                  <BotonImprimir onClick={() => handleImprimir(p)} />
+                                  <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                  <BotonConvertir onClick={() => {
+                                    if (window.confirm('¿Seguro que deseas convertir este presupuesto a venta?')) handleConvertir(p);
+                                  }} />
                                   <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                  <BotonImprimir onClick={() => handleImprimir(p)} title="Imprimir" />
+                                </>
+                              ) : p.tipo === 'Venta' && p.estado === 'Cerrado' ? (
+                                <>
+                                  <BotonImprimir onClick={() => handleImprimir(p)} />
+                                  <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                  <BotonEliminar onClick={() => handleDelete(p.id)} />
                                 </>
                               ) : (
                                 <>
-                                  <button
-                                    title="Ver presupuesto"
-                                    className="transition-colors px-1 py-1 text-gray-700 hover:text-black"
-                                    onClick={() => openVistaTab(p)}
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12Z" />
-                                      <circle cx="12" cy="12" r="3" />
-                                    </svg>
-                                  </button>
-                                  {p.tipo === 'Venta' && p.estado === 'Cerrado' && !p.facturada && (
-                                    <BotonConvertir onClick={() => handleConvertir(p)} />
-                                  )}
-                                  {p.presupuestoOrigenId && (
-                                    <BotonVinculado
-                                      onClick={() => {
-                                        const vinculado = ventas.find(x => x.id === p.presupuestoOrigenId);
-                                        if (vinculado) openVistaTab(vinculado);
-                                      }}
-                                      title="Ver presupuesto vinculado"
-                                    />
-                                  )}
-                                  <BotonImprimir onClick={() => handleImprimir(p)} title="Imprimir" />
+                                  <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                  <BotonImprimir onClick={() => handleImprimir(p)} />
                                 </>
                               )}
                             </div>
@@ -463,12 +455,12 @@ const PresupuestosManager = () => {
               </div>
             )}
             {/* Presupuestos: nuevo/editar/vista */}
-            {(activeTab.startsWith('nuevo-') || activeTab.startsWith('editar') || activeTab.startsWith('vista-') || activeTab.startsWith('nueva-venta-') || activeTab.startsWith('nueva-factura-')) &&
+            {(activeTab.startsWith('nuevo-') || activeTab.startsWith('editar') || activeTab.startsWith('nueva-venta-') || activeTab.startsWith('vista-')) &&
              !activeTab.startsWith('nuevo-vendedor') && !activeTab.startsWith('editar-vendedor') && (
               activeTab.startsWith('nueva-venta-') ? (
                 <VentaForm
                   onSave={async (payload, items) => {
-                    await addVenta({ ...payload, tipo: 'Venta', estado: 'Abierto', items });
+                    await addVenta({ ...payload, tipo: 'Venta', estado: 'Cerrado', items });
                     closeTab(activeTab);
                   }}
                   onCancel={() => closeTab(activeTab)}
@@ -501,90 +493,61 @@ const PresupuestosManager = () => {
                   setAutoSumarDuplicados={setAutoSumarDuplicados}
                   ItemsGrid={ItemsGrid}
                 />
-              ) : activeTab.startsWith('nueva-factura-') ? (
-                <FacturaForm
-                  onSave={async (payload, items) => {
-                    await addVenta({ ...payload, tipo: 'Factura', estado: 'Abierto', items });
-                    closeTab(activeTab);
-                  }}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={null}
-                  readOnlyOverride={false}
-                  comprobantes={comprobantes}
-                  tiposComprobante={tiposComprobante}
-                  tipoComprobante={tipoComprobante}
-                  setTipoComprobante={setTipoComprobante}
+              ) : activeTab.startsWith('vista-') ? (
+                <PresupuestoVentaVista
+                  data={tabs.find(t => t.key === activeTab)?.data}
                   clientes={clientes}
-                  plazos={plazos}
                   vendedores={vendedores}
+                  plazos={plazos}
                   sucursales={sucursales}
                   puntosVenta={puntosVenta}
-                  loadingComprobantes={loadingComprobantes}
-                  errorComprobantes={errorComprobantes}
-                  productos={productos}
-                  loadingProductos={loadingProductos}
-                  familias={familias}
-                  loadingFamilias={loadingFamilias}
-                  proveedores={proveedores}
-                  loadingProveedores={loadingProveedores}
-                  alicuotas={alicuotas}
-                  loadingAlicuotas={loadingAlicuotas}
-                  errorProductos={errorProductos}
-                  errorFamilias={errorFamilias}
-                  errorProveedores={errorProveedores}
-                  errorAlicuotas={errorAlicuotas}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  ItemsGrid={ItemsGrid}
+                  onImprimir={handleImprimir}
+                  onEliminar={async (id) => {
+                    await handleDelete(id);
+                    closeTab(activeTab);
+                  }}
+                  onCerrar={() => closeTab(activeTab)}
                 />
               ) : (
-                <>
-                  <PresupuestoForm
-                    onSave={async (payload, items) => {
-                      if (editPresupuesto && editPresupuesto.id) {
-                        await updateVenta(editPresupuesto.id, { ...payload, tipoOriginal: editPresupuesto.tipo, estadoOriginal: editPresupuesto.estado, items });
-                      } else {
-                        await addVenta({ ...payload, tipo: 'Presupuesto', estado: 'Abierto', items });
-                      }
-                      closeTab(activeTab);
-                    }}
-                    onCancel={() => closeTab(activeTab)}
-                    initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
-                    readOnlyOverride={activeTab.startsWith('vista-')}
-                    comprobantes={comprobantes}
-                    tiposComprobante={tiposComprobante}
-                    tipoComprobante={tipoComprobante}
-                    setTipoComprobante={setTipoComprobante}
-                    clientes={clientes}
-                    plazos={plazos}
-                    vendedores={vendedores}
-                    sucursales={sucursales}
-                    puntosVenta={puntosVenta}
-                    loadingComprobantes={loadingComprobantes}
-                    errorComprobantes={errorComprobantes}
-                    productos={productos}
-                    loadingProductos={loadingProductos}
-                    familias={familias}
-                    loadingFamilias={loadingFamilias}
-                    proveedores={proveedores}
-                    loadingProveedores={loadingProveedores}
-                    alicuotas={alicuotas}
-                    loadingAlicuotas={loadingAlicuotas}
-                    errorProductos={errorProductos}
-                    errorFamilias={errorFamilias}
-                    errorProveedores={errorProveedores}
-                    errorAlicuotas={errorAlicuotas}
-                    autoSumarDuplicados={autoSumarDuplicados}
-                    setAutoSumarDuplicados={setAutoSumarDuplicados}
-                    ItemsGrid={ItemsGrid}
-                  />
-                  {/* Botón Editar en la vista si el presupuesto está abierto */}
-                  {activeTab.startsWith('vista-') && (tabs.find(t => t.key === activeTab)?.data || editPresupuesto)?.estado === 'Abierto' && (
-                    <div className="flex justify-end mt-4">
-                      <BotonEditar onClick={() => handleEdit((tabs.find(t => t.key === activeTab)?.data || editPresupuesto))} />
-                    </div>
-                  )}
-                </>
+                <PresupuestoForm
+                  onSave={async (payload, items) => {
+                    if (editPresupuesto && editPresupuesto.id) {
+                      await updateVenta(editPresupuesto.id, { ...payload, tipoOriginal: editPresupuesto.tipo, estadoOriginal: editPresupuesto.estado, items });
+                    } else {
+                      await addVenta({ ...payload, tipo: 'Presupuesto', estado: 'Abierto', items });
+                    }
+                    closeTab(activeTab);
+                  }}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
+                  readOnlyOverride={false}
+                  comprobantes={comprobantes}
+                  tiposComprobante={tiposComprobante}
+                  tipoComprobante={tipoComprobante}
+                  setTipoComprobante={setTipoComprobante}
+                  clientes={clientes}
+                  plazos={plazos}
+                  vendedores={vendedores}
+                  sucursales={sucursales}
+                  puntosVenta={puntosVenta}
+                  loadingComprobantes={loadingComprobantes}
+                  errorComprobantes={errorComprobantes}
+                  productos={productos}
+                  loadingProductos={loadingProductos}
+                  familias={familias}
+                  loadingFamilias={loadingFamilias}
+                  proveedores={proveedores}
+                  loadingProveedores={loadingProveedores}
+                  alicuotas={alicuotas}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProductos={errorProductos}
+                  errorFamilias={errorFamilias}
+                  errorProveedores={errorProveedores}
+                  errorAlicuotas={errorAlicuotas}
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  ItemsGrid={ItemsGrid}
+                />
               )
             )}
           </div>

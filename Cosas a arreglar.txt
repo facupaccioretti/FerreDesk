@@ -1,29 +1,49 @@
 Actualizar el sistema para que trabaje con transacciones atomicas (Mejor pasarse a POSTGRESQL)
 
 
-Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo) El de Nuevo Producto si tiene :)
+Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo)
 
 En Productos
   Compaginacion de la tabla para cuando haya muchos Productos
   En el modal asociar codigo proveedor mejorar como se muestran los codigos
-  Verificar si al actualizar por ej lista de excel Marvi, los costos pasan a ser de Marvi
-   Verificar que si los items se agregaron a una venta o factura se resten de la cantidad total
+  
+ 
    
 El enter en ningun formulario deberia completar el formulario (es molesto ya que si queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
 
 
 
 Presupuestos anda para la bosta 
-  Esto es porque por algun motivo se guardo como venta pero figura (abierto)
+
+   Verificar que si los items se agregaron a una venta o factura se resten de la cantidad total
+  
      Los presupuestos son abiertos porque se pueden seguir editando
      Las ventas y facturas son cerradas
-     El presupuesto se puede convertir a venta o factura y se cierran
-     La venta se puede convertir a factura pero no al reves
-  Agregar el uso de Cuenta Corriente a cliente por defecto
-  Crear un Presupuesto se pone en Todos pero no en la vista de Presupuestos
-  El boton de ver mas no se asigna a las acciones por algun motivo
-  Tampoco el boton de convertir para hacer las conversiones de Presupuesto a Venta/Factura o de Venta a Factura
-  Boton de imprimir no anda
-  Nueva Venta no anda
+     El presupuesto se puede convertir a venta  cierra
+     Agregar el uso de Cuenta Corriente a cliente por defecto
+     Crear un Presupuesto se pone en Todos pero no en la vista de Presupuestos
+     El boton de ver mas no se asigna a las acciones por algun motivo
+     Tampoco el boton de convertir para hacer las conversiones de Presupuesto a Venta
+     Boton de imprimir no anda
+     Nueva Venta no anda
 
+
+libro anotaciones 
+
+botonera de acciones (presupuestos y capaz otras pantallas)
+cambiar zona horaria django
 Es posible que falten errores de enlistar.
+
+
+Agregar los datos de TIPOSIVA
+
+
+
+
+
+En los formularios la opcion de Sumar cantidades, Duplicar item, Borrar
+Checkbox sumar automaticamente
+Que la vista traiga los datos enteros
+Anulacion de venta y pagina de ventas anuladas
+Sacar barras amarillas feardas
+Sistema de bonificacion particular y general

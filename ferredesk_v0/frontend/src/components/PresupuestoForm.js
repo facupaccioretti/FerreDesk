@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import BuscadorProducto from './BuscadorProducto';
+import ItemsGrid from './ItemsGrid';
 
 const PresupuestoForm = ({
   onSave,
@@ -33,17 +34,66 @@ const PresupuestoForm = ({
   setAutoSumarDuplicados,
   ItemsGrid
 }) => {
+  const getDefaultClienteId = (clientes) => {
+    const cc = clientes.find(c => (c.razon || c.nombre)?.toLowerCase().includes('cuenta corriente'));
+    return cc ? cc.id : '';
+  };
+  const getDefaultPlazoId = (plazos) => {
+    const contado = plazos.find(p => (p.nombre || '').toLowerCase().includes('contado'));
+    return contado ? contado.id : '';
+  };
+
+  // Normaliza initialData para edición
+  function normalizeInitialData(initialData, clientes, productosDisponibles = []) {
+    if (!initialData) return initialData;
+    let clienteId = initialData.clienteId;
+    // Si viene el nombre del cliente, buscar el id
+    if (!clienteId && initialData.cliente) {
+      const found = clientes.find(c => (c.razon || c.nombre) === initialData.cliente);
+      if (found) clienteId = found.id;
+    }
+    // Si viene como número, convertir a string
+    if (clienteId !== undefined && clienteId !== null) clienteId = String(clienteId);
+    // Normalizar items
+    let items = initialData.items;
+    if (!items && initialData.detalle) items = initialData.detalle;
+    if (!items && initialData.productos) items = initialData.productos;
+    if (!Array.isArray(items)) items = [];
+    // Mapear cada item al formato esperado por la grilla
+    items = items.map((item, idx) => {
+      // Si ya tiene producto, dejarlo
+      if (item.producto) return { ...item, id: item.id || idx + 1 };
+      // Buscar producto por código si es posible
+      let prod = null;
+      if (item.codigo || item.codvta) {
+        prod = productosDisponibles.find(p => (p.codvta || p.codigo)?.toString() === (item.codigo || item.codvta)?.toString());
+      }
+      return {
+        id: item.id || idx + 1,
+        producto: prod || undefined,
+        codigo: item.codigo || item.codvta || (prod ? prod.codvta || prod.codigo : ''),
+        denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ''),
+        unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ''),
+        cantidad: item.cantidad || 1,
+        costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
+        bonificacion: item.bonificacion || 0,
+        subtotal: item.subtotal || 0
+      };
+    });
+    return { ...initialData, clienteId, items };
+  }
+
   // Cargar draft si existe y no es edición
   const [form, setForm] = useState(() => {
     const savedForm = localStorage.getItem('presupuestoFormDraft');
     if (savedForm && !initialData) {
       return JSON.parse(savedForm);
     }
-    return initialData || {
+    return normalizeInitialData(initialData, clientes, productos) || {
       numero: '',
       cliente: '',
-      clienteId: '',
-      plazoId: '',
+      clienteId: getDefaultClienteId(clientes),
+      plazoId: getDefaultPlazoId(plazos),
       vendedorId: '',
       sucursalId: sucursales[0].id,
       puntoVentaId: puntosVenta[0].id,
@@ -55,6 +105,13 @@ const PresupuestoForm = ({
       total: 0,
     };
   });
+
+  // Si initialData cambia (por ejemplo, al editar otro presupuesto), actualizo el form
+  useEffect(() => {
+    if (initialData) {
+      setForm(normalizeInitialData(initialData, clientes, productos));
+    }
+  }, [initialData, clientes, productos]);
 
   // Guardar en localStorage cuando el formulario cambie (solo si es alta)
   useEffect(() => {
@@ -121,25 +178,23 @@ const PresupuestoForm = ({
     return (comprobantes[0][tipo.campo] || 0) + 1;
   })();
 
+  const itemsGridRef = useRef();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     localStorage.removeItem('presupuestoFormDraft');
-
-    // Mapea los campos requeridos por el modelo Venta
-    const ven_estado = 'PR';
-    const ven_cae = form.cae && form.cae.trim() ? form.cae : '00000000000000';
-    // Formatear ven_impneto y ven_total correctamente
+    // Fuerza estado y tipo
     let impneto = parseFloat(form.total) || 0;
     impneto = Number(impneto.toFixed(2));
-    let total = Math.round(impneto); // Entero redondeado
-    // Si el total tiene más de 15 dígitos, recortar
-    if (impneto.toString().replace('.', '').length > 15) {
-      impneto = Number(impneto.toString().slice(0, 15));
-    }
-    // Si no hay cliente seleccionado, usar 0 (Consumidor Final)
+    let total = Math.round(impneto);
     const clienteId = form.clienteId || 0;
+    const items = itemsGridRef.current.getItems();
     const payload = {
-      ven_codcomprob: tipoComprobante,
+      ...form,
+      estado: 'Abierto',
+      tipo: 'Presupuesto',
+      ven_estado: 'AB',
+      ven_codcomprob: 4,
       ven_numero: numeroComprobante,
       ven_sucursal: form.sucursalId || 1,
       ven_fecha: form.fecha,
@@ -151,16 +206,14 @@ const PresupuestoForm = ({
       ven_total: total,
       ven_vdocomvta: form.vdocomvta || 0,
       ven_vdocomcob: form.vdocomcob || 0,
-      ven_estado: ven_estado.substring(0, 2),
       ven_idcli: clienteId,
       ven_idpla: form.plazoId,
       ven_idvdo: form.vendedorId,
       ven_copia: form.copia || 1,
-      ven_cae: ven_cae,
+      ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
+      items,
     };
-    delete payload.tipoComprobante;
-    delete payload.numero;
-    await onSave(payload, form.items);
+    await onSave(payload);
   };
 
   const handleCancel = () => {
@@ -175,11 +228,11 @@ const PresupuestoForm = ({
   const codigoInputRef = useRef();
 
   return (
-    <form className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="w-full max-w-6xl mx-auto py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
       <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? (isReadOnly ? 'Ver Presupuesto' : 'Editar Presupuesto') : 'Nuevo Presupuesto'}</h3>
       {isReadOnly && (
         <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
-          Este presupuesto/venta/factura está cerrado y no puede ser editado. Solo lectura.
+          Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -332,21 +385,12 @@ const PresupuestoForm = ({
               }}
             />
             <ItemsGrid
-              items={form.items}
-              onAddItem={isReadOnly ? () => {} : handleAddItem}
-              onEditItem={isReadOnly ? () => {} : handleEditItem}
-              onDeleteItem={isReadOnly ? () => {} : handleDeleteItem}
+              ref={itemsGridRef}
               productosDisponibles={productos}
               autoSumarDuplicados={autoSumarDuplicados}
               setAutoSumarDuplicados={isReadOnly ? () => {} : setAutoSumarDuplicados}
-              isReadOnly={isReadOnly}
               bonificacionGeneral={form.bonificacionGeneral}
               setBonificacionGeneral={isReadOnly ? () => {} : val => setForm(f => ({ ...f, bonificacionGeneral: val }))}
-              editRow={editRow}
-              setEditRow={setEditRow}
-              setSelectedProducto={setSelectedProducto}
-              codigoInputRef={codigoInputRef}
-              selectedProducto={selectedProducto}
             />
           </>
         )}

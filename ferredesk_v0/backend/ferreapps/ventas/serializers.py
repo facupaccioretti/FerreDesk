@@ -25,9 +25,9 @@ class VentaSerializer(serializers.ModelSerializer):
         return None
 
     def get_estado(self, obj):
-        if obj.ven_estado in ['PR', 'Abierto']:
+        if obj.ven_estado == 'AB':
             return 'Abierto'
-        elif obj.ven_estado in ['FN', 'Cerrado']:
+        elif obj.ven_estado == 'CE':
             return 'Cerrado'
         return obj.ven_estado
 

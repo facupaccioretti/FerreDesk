@@ -25,27 +25,15 @@ class VentaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     def convertir_a_venta(self, request, pk=None):
         venta = get_object_or_404(Venta, pk=pk)
-        
-        # Lógica para convertir presupuesto a venta
-        # Asumimos que tienes un campo 'tipo_comprobante' o similar en tu modelo Venta
-        # y que 'PRESUPUESTO' y 'VENTA' son identificadores válidos.
-        # También podrías querer cambiar el estado, ej. venta.estado = 'CERRADO'
-        
-        # Ejemplo: Suponiendo que el modelo Comprobante tiene un código para 'VENTA'
-        # y Venta tiene una ForeignKey a Comprobante llamada 'ven_codcomprob'
         try:
-            comprobante_venta = Comprobante.objects.get(pk=1) # Ajusta el PK/criterio según tu modelo Comprobante para VENTA
-            if venta.ven_codcomprob.pk == 4: # Asumiendo que 4 es el PK de Presupuesto
-                venta.ven_codcomprob = comprobante_venta
-                # Aquí podrías querer cambiar el estado, ej:
-                # venta.ven_estado = 'FN' # O el estado que signifique finalizado/convertido
+            if venta.ven_codcomprob == 4: # 4 = Presupuesto
+                venta.ven_codcomprob = 1  # 1 = Venta
+                venta.ven_estado = 'CE'
                 venta.save()
                 serializer = self.get_serializer(venta)
                 return Response(serializer.data)
             else:
                 return Response({'detail': 'Este documento no es un presupuesto o ya fue convertido.'}, status=status.HTTP_400_BAD_REQUEST)
-        except Comprobante.DoesNotExist:
-            return Response({'detail': 'Tipo de comprobante VENTA no encontrado.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return Response({'detail': f'Error al convertir: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
