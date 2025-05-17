@@ -214,7 +214,7 @@ export default function ProductosTable({
   deleteFamilia,
   addProveedor,
   updateProveedor,
-  deleteProveedor,
+  deleteProducto,
   onEdit,
   onUpdateStock
 }) {
@@ -267,6 +267,12 @@ export default function ProductosTable({
   const getFamiliaNombre = (id) => {
     const fam = familias.find(f => f.id === id);
     return fam ? fam.deno : 'Sin asignar';
+  };
+
+  const handleDeleteProducto = (id) => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer.')) {
+      deleteProducto(id);
+    }
   };
 
   return (
@@ -402,7 +408,7 @@ export default function ProductosTable({
                                     </svg>
                                   </button>
                                   <button
-                                    onClick={() => deleteProveedor(product.id)}
+                                    onClick={() => handleDeleteProducto(product.id)}
                                     title="Eliminar"
                                     className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
                                   >
@@ -521,7 +527,7 @@ export default function ProductosTable({
                             </svg>
                           </button>
                           <button
-                            onClick={() => deleteProveedor(product.id)}
+                            onClick={() => handleDeleteProducto(product.id)}
                             title="Eliminar"
                             className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
                           >

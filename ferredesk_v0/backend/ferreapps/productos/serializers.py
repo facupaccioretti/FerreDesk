@@ -17,12 +17,30 @@ class StockProveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StockProve
-        fields = ['id', 'stock', 'proveedor', 'proveedor_id', 'cantidad', 'costo', 'fecultcan', 'fecultcos']
+        fields = ['id', 'stock', 'proveedor', 'proveedor_id', 'cantidad', 'costo', 'fecultcan', 'fecultcos', 'codigo_producto_proveedor', 'fecha_actualizacion']
+
+    def validate(self, data):
+        # Solo validar unicidad si hay código de proveedor asociado
+        # Así permitimos varios proveedores sin código asociado (campo vacío o null)
+        proveedor = data.get('proveedor') or self.initial_data.get('proveedor_id')
+        codigo = data.get('codigo_producto_proveedor')
+        if codigo:
+            existe = StockProve.objects.filter(
+                proveedor=proveedor,
+                codigo_producto_proveedor=codigo
+            )
+            if self.instance:
+                existe = existe.exclude(pk=self.instance.pk)
+            if existe.exists():
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Ya existe un stock con este proveedor y código de proveedor.']
+                })
+        return data
 
 class StockSerializer(serializers.ModelSerializer):
     stock_proveedores = StockProveSerializer(many=True, read_only=True)
     proveedor_habitual = ProveedorSerializer(read_only=True)
-    proveedor_habitual_id = serializers.PrimaryKeyRelatedField(queryset=Proveedor.objects.all(), source='proveedor_habitual', write_only=True, required=False)
+    proveedor_habitual_id = serializers.PrimaryKeyRelatedField(queryset=Proveedor.objects.all(), source='proveedor_habitual', write_only=True, required=False, allow_null=True)
     idfam1 = FamiliaSerializer(read_only=True)
     idfam1_id = serializers.PrimaryKeyRelatedField(queryset=Familia.objects.all(), source='idfam1', write_only=True, required=False)
     idfam2 = FamiliaSerializer(read_only=True)
