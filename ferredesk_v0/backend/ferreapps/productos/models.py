@@ -56,12 +56,13 @@ class Proveedor(models.Model):
     idprv = models.IntegerField(null=True, blank=True, db_column='PRO_IDPRV')
     idcap = models.IntegerField(null=True, blank=True, db_column='PRO_IDCAP')
     acti = models.CharField(max_length=1, null=True, blank=True, db_column='PRO_ACTI')
+    sigla = models.CharField(max_length=3, unique=True, db_column='PRO_SIGLA', blank=True, null=True)
 
     class Meta:
         db_table = 'PROVEEDORES'
 
 class Stock(models.Model):
-    id = models.AutoField(primary_key=True, db_column='STO_ID')
+    id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
     codcom = models.CharField(max_length=15, unique=True, db_column='STO_CODCOM')
     deno = models.CharField(max_length=50, db_column='STO_DENO')
@@ -69,7 +70,9 @@ class Stock(models.Model):
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
     margen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, db_column='STO_MARGEN')
     cantmin = models.IntegerField(null=True, blank=True, db_column='STO_CANTMIN')
-    idaliiva = models.SmallIntegerField(db_column='STO_IDALIIVA')
+    idaliiva = models.ForeignKey(
+        'AlicuotaIVA', db_column='STO_IDALIIVA', on_delete=models.PROTECT, related_name='stocks'
+    )
     idfam1 = models.ForeignKey(
         'Familia', null=True, blank=True, db_column='STO_IDFAM1', on_delete=models.SET_NULL, related_name='stocks_fam1'
     )
@@ -80,7 +83,7 @@ class Stock(models.Model):
         'Familia', null=True, blank=True, db_column='STO_IDFAM3', on_delete=models.SET_NULL, related_name='stocks_fam3'
     )
     proveedor_habitual = models.ForeignKey(
-        'Proveedor', null=True, blank=True, db_column='STO_IDPRO', on_delete=models.SET_NULL, related_name='productos_habituales'
+        'Proveedor', null=False, blank=False, db_column='STO_IDPRO', on_delete=models.PROTECT, related_name='productos_habituales'
     )
     acti = models.CharField(max_length=1, null=True, blank=True, db_column='STO_ACTI')
 
@@ -90,14 +93,17 @@ class Stock(models.Model):
 class StockProve(models.Model):
     stock = models.ForeignKey(Stock, on_delete=models.CASCADE, db_column='STP_IDSTO', related_name='stock_proveedores')
     proveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE, db_column='STP_IDPRO', related_name='proveedor_stocks')
-    cantidad = models.DecimalField(max_digits=15, decimal_places=2, db_column='STP_CANTIDAD')
-    costo = models.DecimalField(max_digits=15, decimal_places=2, db_column='STP_COSTO')
+    cantidad = models.DecimalField(max_digits=15, decimal_places=2, db_column='STP_CANTIDAD', default=0)
+    costo = models.DecimalField(max_digits=15, decimal_places=2, db_column='STP_COSTO', default=0)
     fecultcan = models.DateField(null=True, blank=True, db_column='STP_FECULTCAN')
     fecultcos = models.DateField(null=True, blank=True, db_column='STP_FECULTCOS')
+    fecha_actualizacion = models.DateTimeField(auto_now=True, db_column='STP_FECHA_ACTUALIZACION')
+    codigo_producto_proveedor = models.CharField(max_length=100, null=True, blank=True, db_column='STP_CODPROV')
 
     class Meta:
         db_table = 'STOCKPROVE'
         unique_together = (('stock', 'proveedor'),)
+        # NOTA: La unicidad (proveedor, codigo_producto_proveedor) solo se valida en el serializer si el código no está vacío.
 
 class Familia(models.Model):
     id = models.AutoField(primary_key=True, db_column='FAM_ID')
@@ -111,5 +117,41 @@ class Familia(models.Model):
 
     def __str__(self):
         return self.deno
+
+class AlicuotaIVA(models.Model):
+    id = models.AutoField(primary_key=True, db_column='ALI_ID')
+    codigo = models.CharField(max_length=5, unique=True, db_column='ALI_CODIGO', blank=True, null=True)
+    deno = models.CharField(max_length=20, db_column='ALI_DENO')
+    porce = models.DecimalField(max_digits=5, decimal_places=2, db_column='ALI_PORCE')
+
+    class Meta:
+        db_table = 'ALICUOTASIVA'
+        verbose_name = 'Alicuota IVA'
+        verbose_name_plural = 'Alicuotas IVA'
+
+    def __str__(self):
+        return f'{self.deno} ({self.porce}%)'
+
+class PrecioProveedorExcel(models.Model):
+    proveedor = models.ForeignKey('Proveedor', on_delete=models.CASCADE, related_name='precios_excel')
+    codigo_producto_excel = models.CharField(max_length=100, db_index=True)
+    precio = models.DecimalField(max_digits=15, decimal_places=2)
+    fecha_carga = models.DateTimeField(auto_now_add=True)
+    nombre_archivo = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = (('proveedor', 'codigo_producto_excel'),)
+        verbose_name = "Precio de producto por proveedor (Excel)"
+        verbose_name_plural = "Precios de productos por proveedor (Excel)"
+
+    def __str__(self):
+        return f"{self.proveedor.razon} - {self.codigo_producto_excel}: {self.precio}"
+
+class ProductoTempID(models.Model):
+    id = models.IntegerField(primary_key=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"TempID {self.id} ({self.fecha_creacion})"
 
 

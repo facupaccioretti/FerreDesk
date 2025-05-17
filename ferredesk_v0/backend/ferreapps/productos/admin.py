@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Ferreteria, Categoria, Producto
+from .models import Ferreteria, Categoria, Producto, PrecioProveedorExcel
 
 @admin.register(Ferreteria)
 class FerreteriaAdmin(admin.ModelAdmin):
@@ -19,3 +19,9 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ('codigo', 'nombre', 'descripcion')
     list_editable = ('precio_venta', 'stock', 'activo')
     readonly_fields = ('fecha_creacion', 'fecha_actualizacion')
+
+@admin.register(PrecioProveedorExcel)
+class PrecioProveedorExcelAdmin(admin.ModelAdmin):
+    list_display = ('proveedor', 'codigo_producto_excel', 'precio', 'fecha_carga', 'nombre_archivo')
+    search_fields = ('codigo_producto_excel', 'proveedor__razon')
+    list_filter = ('proveedor', 'nombre_archivo')

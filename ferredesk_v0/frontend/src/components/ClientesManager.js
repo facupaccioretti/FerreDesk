@@ -1,56 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from "./Navbar";
+import { getCookie } from '../utils/csrf';
+import { useBarriosAPI } from '../utils/useBarriosAPI';
+import { useLocalidadesAPI } from '../utils/useLocalidadesAPI';
+import { useProvinciasAPI } from '../utils/useProvinciasAPI';
+import { useTiposIVAAPI } from '../utils/useTiposIVAAPI';
+import { useTransportesAPI } from '../utils/useTransportesAPI';
+import { useVendedoresAPI } from '../utils/useVendedoresAPI';
+import { usePlazosAPI } from '../utils/usePlazosAPI';
+import { useCategoriasAPI } from '../utils/useCategoriasAPI';
+import { useClientesAPI } from '../utils/useClientesAPI';
 
-// --- Mock de datos y servicios ---
-const initialClientes = [
-  {
-    id: 1,
-    codigo: '1001',
-    razon: 'Empresa Ejemplo S.A.',
-    fantasia: 'Ejemplo S.A.',
-    domicilio: 'Calle Principal 123',
-    tel1: '123-456-7890',
-    email: 'contacto@ejemplo.com',
-    cuit: '30-12345678-9',
-    estado: 'Activo',
-  },
-  {
-    id: 2,
-    codigo: '1002',
-    razon: 'Comercio XYZ S.R.L.',
-    fantasia: 'XYZ',
-    domicilio: 'Avenida Central 456',
-    tel1: '987-654-3210',
-    email: 'info@xyz.com',
-    cuit: '30-98765432-1',
-    estado: 'Activo',
-  },
-];
-
-// Simulación de servicios (fácil de reemplazar por fetch/axios en el futuro)
-const useClientesService = (initial) => {
-  const [clientes, setClientes] = useState(initial);
-  const [nextId, setNextId] = useState(initial.length + 1);
-
-  const getClientes = () => clientes;
-
-  const addCliente = (cliente) => {
-    setClientes((prev) => [...prev, { ...cliente, id: nextId }]);
-    setNextId((id) => id + 1);
-  };
-
-  const updateCliente = (id, updated) => {
-    setClientes((prev) => prev.map((cli) => (cli.id === id ? { ...cli, ...updated } : cli)));
-  };
-
-  const deleteCliente = (id) => {
-    setClientes((prev) => prev.filter((cli) => cli.id !== id));
-  };
-
-  return { clientes, getClientes, addCliente, updateCliente, deleteCliente };
-};
-
-const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId }) => {
+const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId, barrios, localidades, provincias, tiposIVA, transportes, vendedores, plazos, categorias }) => {
   const filtered = clientes.filter((cli) =>
     cli.razon.toLowerCase().includes(search.toLowerCase()) ||
     cli.fantasia.toLowerCase().includes(search.toLowerCase())
@@ -80,27 +41,41 @@ const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expanded
             {filtered.map(cli => (
               <React.Fragment key={cli.id}>
                 <tr className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">{cli.razon}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-600">{cli.fantasia}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex gap-4 items-center">
+                  <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
+                    <div className="flex items-center">
                       <button
                         onClick={() => setExpandedClientId(expandedClientId === cli.id ? null : cli.id)}
-                        className="text-gray-600 hover:underline"
+                        className={`flex items-center justify-center w-6 h-6 mr-2 text-gray-700 transition-transform duration-200 ${expandedClientId === cli.id ? 'rotate-90' : 'rotate-0'}`}
+                        aria-label={expandedClientId === cli.id ? 'Ocultar detalles' : 'Mostrar detalles'}
+                        style={{ padding: 0 }}
                       >
-                        Ver más
+                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" className="block m-auto">
+                          <polygon points="5,3 15,10 5,17" />
+                        </svg>
                       </button>
+                      <span>{cli.razon}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-600">{cli.fantasia}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex gap-2 items-center">
                       <button
                         onClick={() => onEdit(cli)}
-                        className="text-blue-600 hover:underline"
+                        title="Editar"
+                        className="transition-colors px-1 py-1 text-blue-500 hover:text-blue-700"
                       >
-                        Editar
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                        </svg>
                       </button>
                       <button
                         onClick={() => onDelete(cli.id)}
-                        className="text-red-300 hover:text-red-500"
+                        title="Eliminar"
+                        className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
                       >
-                        Eliminar
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
                       </button>
                     </div>
                   </td>
@@ -167,39 +142,35 @@ const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expanded
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Zona</span>
-                          <span className="block text-gray-700 mt-1">{cli.zona}</span>
+                          <span className="block text-gray-700 mt-1">{barrios.find(b => String(b.id) === String(cli.barrio))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Barrio</span>
-                          <span className="block text-gray-700 mt-1">{mockBarrios.find(b => String(b.id) === String(cli.barrio))?.nombre || ''}</span>
-                        </div>
-                        <div>
-                          <span className="block text-gray-400 font-medium">Localidad</span>
-                          <span className="block text-gray-700 mt-1">{mockLocalidades.find(l => String(l.id) === String(cli.localidad))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{localidades.find(l => String(l.id) === String(cli.localidad))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Provincia</span>
-                          <span className="block text-gray-700 mt-1">{mockProvincias.find(p => String(p.id) === String(cli.provincia))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{provincias.find(p => String(p.id) === String(cli.provincia))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Tipo de IVA</span>
-                          <span className="block text-gray-700 mt-1">{mockIVA.find(i => String(i.id) === String(cli.iva))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{tiposIVA.find(i => String(i.id) === String(cli.iva))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Transporte</span>
-                          <span className="block text-gray-700 mt-1">{mockTransportes.find(t => String(t.id) === String(cli.transporte))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{transportes.find(t => String(t.id) === String(cli.transporte))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Vendedor</span>
-                          <span className="block text-gray-700 mt-1">{mockVendedores.find(v => String(v.id) === String(cli.vendedor))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{vendedores.find(v => String(v.id) === String(cli.vendedor))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Plazo</span>
-                          <span className="block text-gray-700 mt-1">{mockPlazos.find(p => String(p.id) === String(cli.plazo))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{plazos.find(p => String(p.id) === String(cli.plazo))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Categoría</span>
-                          <span className="block text-gray-700 mt-1">{mockCategorias.find(c => String(c.id) === String(cli.categoria))?.nombre || ''}</span>
+                          <span className="block text-gray-700 mt-1">{categorias.find(c => String(c.id) === String(cli.categoria))?.nombre || ''}</span>
                         </div>
                         <div>
                           <span className="block text-gray-400 font-medium">Línea de Crédito</span>
@@ -237,42 +208,6 @@ const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expanded
     </div>
   );
 };
-
-// MOCKS para campos relacionales
-const mockBarrios = [
-  { id: 1, nombre: 'Centro' },
-  { id: 2, nombre: 'Norte' },
-  { id: 3, nombre: 'Sur' },
-];
-const mockLocalidades = [
-  { id: 1, nombre: 'Ciudad A' },
-  { id: 2, nombre: 'Ciudad B' },
-];
-const mockProvincias = [
-  { id: 1, nombre: 'Provincia X' },
-  { id: 2, nombre: 'Provincia Y' },
-];
-const mockIVA = [
-  { id: 1, nombre: 'Responsable Inscripto' },
-  { id: 2, nombre: 'Monotributo' },
-  { id: 3, nombre: 'Exento' },
-];
-const mockTransportes = [
-  { id: 1, nombre: 'Transporte 1' },
-  { id: 2, nombre: 'Transporte 2' },
-];
-const mockVendedores = [
-  { id: 1, nombre: 'Juan Pérez' },
-  { id: 2, nombre: 'María González' },
-];
-const mockPlazos = [
-  { id: 1, nombre: 'Contado' },
-  { id: 2, nombre: '30 días' },
-];
-const mockCategorias = [
-  { id: 1, nombre: 'Minorista' },
-  { id: 2, nombre: 'Mayorista' },
-];
 
 const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder, addLabel, name }) => {
   const [open, setOpen] = useState(false);
@@ -324,60 +259,288 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
   );
 };
 
-const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
-  // Estado para los mocks editables
-  const [barrios, setBarrios] = useState([...mockBarrios]);
-  const [localidades, setLocalidades] = useState([...mockLocalidades]);
-  const [provincias, setProvincias] = useState([...mockProvincias]);
-
-  // Estado para modales
-  const [modal, setModal] = useState(null); // { type: 'barrio'|'localidad'|'provincia', open: bool }
-  const [newValue, setNewValue] = useState('');
-
-  const [form, setForm] = useState(
-    initialData || {
-      codigo: '', razon: '', fantasia: '', domicilio: '', tel1: '', tel2: '', tel3: '', email: '', cuit: '', ib: '', status: '', iva: '', contacto: '', comentario: '', lineacred: '', impsalcta: '', fecsalcta: '', descu1: '', descu2: '', descu3: '', cpostal: '', zona: '', cancela: '', barrio: '', localidad: '', provincia: '', transporte: '', vendedor: '', plazo: '', categoria: '', estado: 'Activo'
-    }
-  );
+const NuevoClienteForm = ({
+  onSave, onCancel, initialData,
+  barrios, localidades, provincias, transportes, vendedores, plazos, categorias,
+  setBarrios, setLocalidades, setProvincias, setTransportes, setVendedores, setPlazos, setCategorias,
+  apiError
+}) => {
+  const [form, setForm] = useState({
+    codigo: initialData?.codigo || '',
+    razon: initialData?.razon || '',
+    domicilio: initialData?.domicilio || '',
+    lineacred: initialData?.lineacred || '',
+    impsalcta: initialData?.impsalcta || '',
+    fecsalcta: initialData?.fecsalcta || '',
+    zona: initialData?.zona || '',
+    fantasia: initialData?.fantasia || '',
+    cuit: initialData?.cuit || '',
+    ib: initialData?.ib || '',
+    cpostal: initialData?.cpostal || '',
+    tel1: initialData?.tel1 || '',
+    tel2: initialData?.tel2 || '',
+    tel3: initialData?.tel3 || '',
+    email: initialData?.email || '',
+    contacto: initialData?.contacto || '',
+    comentario: initialData?.comentario || '',
+    barrio: initialData?.barrio || '',
+    localidad: initialData?.localidad || '',
+    provincia: initialData?.provincia || '',
+    iva: initialData?.iva || '',
+    transporte: initialData?.transporte || '',
+    vendedor: initialData?.vendedor || '',
+    plazo: initialData?.plazo || '',
+    categoria: initialData?.categoria || '',
+    activo: initialData?.activo || 'A',
+    cancela: initialData?.cancela || '',
+    descu1: initialData?.descu1 || '',
+    descu2: initialData?.descu2 || '',
+    descu3: initialData?.descu3 || '',
+  });
   const [error, setError] = useState('');
+  const [modal, setModal] = useState(null);
+  const [modalForm, setModalForm] = useState({});
+  const [modalLoading, setModalLoading] = useState(false);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = e => {
+    const { name, value } = e.target;
+    if (name === "codigo" && value && !/^\d*$/.test(value)) {
+      return;
+    }
+    setForm(f => ({ ...f, [name]: value }));
   };
 
-  // Modal handlers
+  // Modal dinámico para agregar entidades relacionales
   const openAddModal = (type) => {
     setModal({ type, open: true });
-    setNewValue('');
+    setModalForm({});
+    setError('');
   };
   const closeModal = () => {
     setModal(null);
-    setNewValue('');
-  };
-  const handleAdd = () => {
-    if (!newValue.trim()) return;
-    if (modal.type === 'barrio') {
-      const nuevo = { id: barrios.length + 1, nombre: newValue };
-      setBarrios([...barrios, nuevo]);
-      setForm({ ...form, barrio: nuevo.id });
-    }
-    if (modal.type === 'localidad') {
-      const nuevo = { id: localidades.length + 1, nombre: newValue };
-      setLocalidades([...localidades, nuevo]);
-      setForm({ ...form, localidad: nuevo.id });
-    }
-    if (modal.type === 'provincia') {
-      const nuevo = { id: provincias.length + 1, nombre: newValue };
-      setProvincias([...provincias, nuevo]);
-      setForm({ ...form, provincia: nuevo.id });
-    }
-    closeModal();
+    setModalForm({});
+    setError('');
   };
 
-  const handleSubmit = (e) => {
+  // Lógica para crear entidad relacional
+  const handleAddModalSave = async () => {
+    setModalLoading(true);
+    try {
+      let url = '';
+      let body = {};
+      let setList = null;
+      switch (modal.type) {
+        case 'barrio':
+          url = '/api/barrios/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setBarrios;
+          break;
+        case 'localidad':
+          url = '/api/localidades/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setLocalidades;
+          break;
+        case 'provincia':
+          url = '/api/provincias/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setProvincias;
+          break;
+        case 'transporte':
+          url = '/api/transportes/';
+          body = { nombre: modalForm.nombre, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
+          setList = setTransportes;
+          break;
+        case 'vendedor':
+          url = '/api/vendedores/';
+          body = { nombre: modalForm.nombre, dni: modalForm.dni, comivta: modalForm.comivta, liquivta: modalForm.liquivta, comicob: modalForm.comicob, liquicob: modalForm.liquicob, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
+          setList = setVendedores;
+          break;
+        case 'plazo':
+          url = '/api/plazos/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setPlazos;
+          break;
+        case 'categoria':
+          url = '/api/categorias/';
+          body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
+          setList = setCategorias;
+          break;
+        default:
+          setModalLoading(false);
+          return;
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('Error al crear');
+      // Refresca la lista
+      const data = await fetch(url).then(r => r.json());
+      setList(Array.isArray(data) ? data : data.results || []);
+      closeModal();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  // Renderiza el formulario mínimo requerido para cada entidad relacional
+  const renderModalForm = () => {
+    switch (modal?.type) {
+      case 'barrio':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'localidad':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'provincia':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'transporte':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Localidad *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.localidad || ''} onChange={e => setModalForm(f => ({ ...f, localidad: e.target.value }))} required>
+              <option value="">Seleccionar...</option>
+              {localidades.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </select>
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'vendedor':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">DNI *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.dni || ''} onChange={e => setModalForm(f => ({ ...f, dni: e.target.value }))} required />
+            <label className="block mb-2">Comisión Venta *</label>
+            <input type="number" className="w-full border rounded px-2 py-1 mb-2" value={modalForm.comivta || ''} onChange={e => setModalForm(f => ({ ...f, comivta: e.target.value }))} required />
+            <label className="block mb-2">Liquida Venta *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.liquivta || 'S'} onChange={e => setModalForm(f => ({ ...f, liquivta: e.target.value }))} required>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+            <label className="block mb-2">Comisión Cobro *</label>
+            <input type="number" className="w-full border rounded px-2 py-1 mb-2" value={modalForm.comicob || ''} onChange={e => setModalForm(f => ({ ...f, comicob: e.target.value }))} required />
+            <label className="block mb-2">Liquida Cobro *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.liquicob || 'S'} onChange={e => setModalForm(f => ({ ...f, liquicob: e.target.value }))} required>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+            <label className="block mb-2">Localidad *</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.localidad || ''} onChange={e => setModalForm(f => ({ ...f, localidad: e.target.value }))} required>
+              <option value="">Seleccionar...</option>
+              {localidades.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </select>
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'plazo':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500">Plazo {i+1}</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1"
+                    value={modalForm[`pla_pla${i+1}`] || ''}
+                    onChange={e => setModalForm(f => ({ ...f, [`pla_pla${i+1}`]: e.target.value }))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500">Porcentaje {i+1}</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1"
+                    value={modalForm[`pla_por${i+1}`] || ''}
+                    onChange={e => setModalForm(f => ({ ...f, [`pla_por${i+1}`]: e.target.value }))}
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+              </div>
+            ))}
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      case 'categoria':
+        return (
+          <>
+            <label className="block mb-2">Nombre *</label>
+            <input className="w-full border rounded px-2 py-1 mb-2" value={modalForm.nombre || ''} onChange={e => setModalForm(f => ({ ...f, nombre: e.target.value }))} required />
+            <label className="block mb-2">Activo</label>
+            <select className="w-full border rounded px-2 py-1 mb-2" value={modalForm.activo || 'S'} onChange={e => setModalForm(f => ({ ...f, activo: e.target.value }))}>
+              <option value="S">Sí</option>
+              <option value="N">No</option>
+            </select>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleSubmit = e => {
     e.preventDefault();
-    if (!form.razon.trim() || !form.codigo.trim()) {
-      setError('El código y la razón social son obligatorios');
+    // Validación solo de los campos obligatorios según el modelo
+    if (!form.codigo || !form.razon || !form.domicilio || !form.lineacred || !form.impsalcta || !form.fecsalcta || !form.zona) {
+      setError('Por favor completa todos los campos obligatorios.');
+      return;
+    }
+    if (form.zona && form.zona.length > 10) {
+      setError('El campo Zona no debe exceder los 10 caracteres.');
       return;
     }
     setError('');
@@ -385,231 +548,292 @@ const NuevoClienteForm = ({ onSave, onCancel, initialData }) => {
   };
 
   return (
-    <form className="max-w-3xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
-      <h3 className="text-xl font-semibold text-gray-800 mb-6">
-        {initialData ? 'Editar Cliente' : 'Nuevo Cliente'}
-      </h3>
-      {error && (
-        <div className="mb-6 p-4 bg-red-100 border-l-4 border-red-900 text-red">
-          {error}
-        </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Código *</label>
-          <input name="codigo" value={form.codigo} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Razón Social *</label>
-          <input name="razon" value={form.razon} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Nombre Comercial</label>
-          <input name="fantasia" value={form.fantasia} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">CUIT</label>
-          <input name="cuit" value={form.cuit} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">IB</label>
-          <input name="ib" value={form.ib} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
-          <select name="estado" value={form.estado} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="Activo">Activo</option>
-            <option value="Inactivo">Inactivo</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
-          <input name="domicilio" value={form.domicilio} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 1</label>
-          <input name="tel1" value={form.tel1} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 2</label>
-          <input name="tel2" value={form.tel2} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 3</label>
-          <input name="tel3" value={form.tel3} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
-          <input name="email" value={form.email} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Contacto</label>
-          <input name="contacto" value={form.contacto} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Comentario</label>
-          <input name="comentario" value={form.comentario} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Código Postal</label>
-          <input name="cpostal" value={form.cpostal} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Zona</label>
-          <input name="zona" value={form.zona} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Barrio"
-            name="barrio"
-            options={barrios}
-            value={form.barrio}
-            onChange={handleChange}
-            onAdd={() => openAddModal('barrio')}
-            placeholder="Buscar barrio..."
-            addLabel="Agregar Barrio"
-          />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Localidad"
-            name="localidad"
-            options={localidades}
-            value={form.localidad}
-            onChange={handleChange}
-            onAdd={() => openAddModal('localidad')}
-            placeholder="Buscar localidad..."
-            addLabel="Agregar Localidad"
-          />
-        </div>
-        <div>
-          <FilterableSelect
-            label="Provincia"
-            name="provincia"
-            options={provincias}
-            value={form.provincia}
-            onChange={handleChange}
-            onAdd={() => openAddModal('provincia')}
-            placeholder="Buscar provincia..."
-            addLabel="Agregar Provincia"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de IVA</label>
-          <select name="iva" value={form.iva} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockIVA.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Transporte</label>
-          <select name="transporte" value={form.transporte} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockTransportes.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Vendedor</label>
-          <select name="vendedor" value={form.vendedor} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockVendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Plazo</label>
-          <select name="plazo" value={form.plazo} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockPlazos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Categoría</label>
-          <select name="categoria" value={form.categoria} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent">
-            <option value="">Seleccione...</option>
-            {mockCategorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-        {/* Otros campos numéricos y de fecha */}
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Línea de Crédito</label>
-          <input name="lineacred" value={form.lineacred} onChange={handleChange} type="number" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Importe Saldo Cta.</label>
-          <input name="impsalcta" value={form.impsalcta} onChange={handleChange} type="number" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Fecha Saldo Cta.</label>
-          <input name="fecsalcta" value={form.fecsalcta} onChange={handleChange} type="date" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 1</label>
-          <input name="descu1" value={form.descu1} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 2</label>
-          <input name="descu2" value={form.descu2} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 3</label>
-          <input name="descu3" value={form.descu3} onChange={handleChange} type="number" step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
-        </div>
-      </div>
-      {/* Modal flotante para agregar barrio/localidad/provincia */}
-      {modal && modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[300px]">
-            <h4 className="text-lg font-semibold mb-2">Agregar {modal.type.charAt(0).toUpperCase() + modal.type.slice(1)}</h4>
+    <>
+      <form className="bg-white p-6 rounded-lg shadow-md w-full max-w-2xl" onSubmit={handleSubmit}>
+        <h3 className="text-xl font-bold mb-4">Nuevo Cliente</h3>
+        {error && <div className="mb-4 text-red-600">{error}</div>}
+        {apiError && <div className="mb-4 text-red-600">{apiError}</div>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Código *</label>
             <input
-              type="text"
-              value={newValue}
-              onChange={e => setNewValue(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded mb-4"
-              placeholder={`Nombre del ${modal.type}`}
+              name="codigo"
+              value={form.codigo}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              min="0"
             />
-            <div className="flex justify-end gap-2">
-              <button onClick={closeModal} type="button" className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Cancelar</button>
-              <button onClick={handleAdd} type="button" className="px-3 py-1 bg-black text-white rounded hover:bg-gray-800">Agregar</button>
+            {form.codigo && isNaN(Number(form.codigo)) && (
+              <div className="mb-2 text-red-600">El código debe ser un número entero.</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Razón Social *</label>
+            <input name="razon" value={form.razon} onChange={handleChange} required className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Domicilio *</label>
+            <input name="domicilio" value={form.domicilio} onChange={handleChange} required className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Línea de Crédito *</label>
+            <input
+              name="lineacred"
+              value={form.lineacred}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Importe Saldo Cta. *</label>
+            <input
+              name="impsalcta"
+              value={form.impsalcta}
+              onChange={handleChange}
+              required
+              className="w-full border rounded px-3 py-2"
+              type="number"
+              step="any"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Fecha Saldo Cta. *</label>
+            <input name="fecsalcta" value={form.fecsalcta} onChange={handleChange} required type="date" className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Zona *</label>
+            <input name="zona" value={form.zona} onChange={handleChange} required maxLength={10} className="w-full border rounded px-3 py-2" />
+            {form.zona && form.zona.length > 10 && (
+              <div className="mt-1 text-xs text-red-600">La zona no debe exceder los 10 caracteres.</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Nombre Comercial</label>
+            <input name="fantasia" value={form.fantasia} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">CUIT</label>
+            <input name="cuit" value={form.cuit} onChange={handleChange} maxLength={11} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">IB</label>
+            <input name="ib" value={form.ib} onChange={handleChange} maxLength={10} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Código Postal</label>
+            <input name="cpostal" value={form.cpostal} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 1</label>
+            <input name="tel1" value={form.tel1} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 2</label>
+            <input name="tel2" value={form.tel2} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono 3</label>
+            <input name="tel3" value={form.tel3} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
+            <input name="email" value={form.email} onChange={handleChange} type="email" className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Contacto</label>
+            <input name="contacto" value={form.contacto} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Comentario</label>
+            <input name="comentario" value={form.comentario} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Barrio"
+              name="barrio"
+              options={barrios}
+              value={form.barrio}
+              onChange={handleChange}
+              onAdd={() => openAddModal('barrio')}
+              placeholder="Buscar barrio..."
+              addLabel="Agregar Barrio"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Localidad"
+              name="localidad"
+              options={localidades}
+              value={form.localidad}
+              onChange={handleChange}
+              onAdd={() => openAddModal('localidad')}
+              placeholder="Buscar localidad..."
+              addLabel="Agregar Localidad"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Provincia"
+              name="provincia"
+              options={provincias}
+              value={form.provincia}
+              onChange={handleChange}
+              onAdd={() => openAddModal('provincia')}
+              placeholder="Buscar provincia..."
+              addLabel="Agregar Provincia"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Tipo de IVA"
+              name="iva"
+              options={categorias}
+              value={form.iva}
+              onChange={handleChange}
+              onAdd={() => openAddModal('categoria')}
+              placeholder="Buscar tipo de IVA..."
+              addLabel="Agregar Tipo de IVA"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Transporte"
+              name="transporte"
+              options={transportes}
+              value={form.transporte}
+              onChange={handleChange}
+              onAdd={() => openAddModal('transporte')}
+              placeholder="Buscar transporte..."
+              addLabel="Agregar Transporte"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Vendedor"
+              name="vendedor"
+              options={vendedores}
+              value={form.vendedor}
+              onChange={handleChange}
+              onAdd={() => openAddModal('vendedor')}
+              placeholder="Buscar vendedor..."
+              addLabel="Agregar Vendedor"
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Plazo"
+              name="plazo"
+              options={plazos}
+              value={form.plazo}
+              onChange={handleChange}
+              placeholder="Buscar plazo..."
+            />
+          </div>
+          <div>
+            <FilterableSelect
+              label="Categoría"
+              name="categoria"
+              options={categorias}
+              value={form.categoria}
+              onChange={handleChange}
+              onAdd={() => openAddModal('categoria')}
+              placeholder="Buscar categoría..."
+              addLabel="Agregar Categoría"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
+            <select name="activo" value={form.activo} onChange={handleChange} className="w-full border rounded px-3 py-2">
+              <option value="A">Activo</option>
+              <option value="I">Inactivo</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Cancela</label>
+            <input name="cancela" value={form.cancela} onChange={handleChange} maxLength={1} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 1</label>
+            <input name="descu1" value={form.descu1} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 2</label>
+            <input name="descu2" value={form.descu2} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Descuento 3</label>
+            <input name="descu3" value={form.descu3} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <button type="submit" className="bg-black text-white px-4 py-2 rounded">Guardar</button>
+          <button type="button" className="bg-gray-300 px-4 py-2 rounded" onClick={onCancel}>Cancelar</button>
+        </div>
+      </form>
+      {/* Modal para alta de entidades relacionales */}
+      {modal?.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative">
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-red-500" onClick={closeModal}>×</button>
+            <h4 className="text-lg font-bold mb-4">Agregar {modal.type.charAt(0).toUpperCase() + modal.type.slice(1)}</h4>
+            {error && <div className="mb-2 text-red-600">{error}</div>}
+            {renderModalForm()}
+            <div className="flex gap-2 mt-4">
+              <button className="bg-black text-white px-4 py-2 rounded" onClick={handleAddModalSave} disabled={modalLoading}>Guardar</button>
+              <button className="bg-gray-300 px-4 py-2 rounded" onClick={closeModal}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
-      <div className="mt-8 flex justify-end space-x-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          {initialData ? 'Guardar Cambios' : 'Crear Cliente'}
-        </button>
-      </div>
-    </form>
+    </>
   );
 };
 
-export default function ClientesManager() {
+const ClientesManager = () => {
+  useEffect(() => {
+    document.title = "Clientes FerreDesk";
+  }, []);
+
   const {
     clientes,
+    loading,
+    error,
+    fetchClientes,
     addCliente,
     updateCliente,
     deleteCliente,
-  } = useClientesService(initialClientes);
+  } = useClientesAPI();
 
   const [search, setSearch] = useState('');
-  // Sistema de tabs tipo browser
-  const [tabs, setTabs] = useState([
-    { key: 'lista', label: 'Lista de Clientes', closable: false }
-  ]);
-  const [activeTab, setActiveTab] = useState('lista');
+  
+  // Cargar estado de pestañas desde localStorage
+  const [tabs, setTabs] = useState(() => {
+    const savedTabs = localStorage.getItem('clientesTabs');
+    return savedTabs ? JSON.parse(savedTabs) : [
+      { key: 'lista', label: 'Lista de Clientes', closable: false }
+    ];
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedActiveTab = localStorage.getItem('clientesActiveTab');
+    return savedActiveTab || 'lista';
+  });
+
   const [editCliente, setEditCliente] = useState(null);
   const [expandedClientId, setExpandedClientId] = useState(null);
   const [user, setUser] = useState(null);
+
+  // Guardar estado de pestañas en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem('clientesTabs', JSON.stringify(tabs));
+    localStorage.setItem('clientesActiveTab', activeTab);
+  }, [tabs, activeTab]);
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -665,6 +889,16 @@ export default function ClientesManager() {
     openTab('nuevo', 'Nuevo Cliente', cliente);
   };
 
+  // Reemplazo los estados y fetchs directos por hooks personalizados
+  const { barrios, setBarrios } = useBarriosAPI();
+  const { localidades, setLocalidades } = useLocalidadesAPI();
+  const { provincias, setProvincias } = useProvinciasAPI();
+  const { tiposIVA, setTiposIVA } = useTiposIVAAPI();
+  const { transportes, setTransportes } = useTransportesAPI();
+  const { vendedores, setVendedores } = useVendedoresAPI();
+  const { plazos, setPlazos } = usePlazosAPI();
+  const { categorias, setCategorias } = useCategoriasAPI();
+
   return (
     <div className="h-full flex flex-col">
       <Navbar user={user} onLogout={handleLogout} />
@@ -696,12 +930,12 @@ export default function ClientesManager() {
             ))}
             {/* Botón Nuevo Cliente solo en la tab de lista */}
             {activeTab === 'lista' && (
-              <div className="flex-1 flex justify-end">
+              <div className="flex-1 flex justify-end mb-2">
                 <button
                   onClick={() => openTab('nuevo', 'Nuevo Cliente')}
-                  className="bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-xl font-semibold flex items-center gap-2 transition-colors"
+                  className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
                 >
-                  <span className="text-xl">+</span> Nuevo Cliente
+                  <span className="text-lg">+</span> Nuevo Cliente
                 </button>
               </div>
             )}
@@ -716,6 +950,14 @@ export default function ClientesManager() {
                 setSearch={setSearch}
                 expandedClientId={expandedClientId}
                 setExpandedClientId={setExpandedClientId}
+                barrios={barrios}
+                localidades={localidades}
+                provincias={provincias}
+                tiposIVA={tiposIVA}
+                transportes={transportes}
+                vendedores={vendedores}
+                plazos={plazos}
+                categorias={categorias}
               />
             )}
             {activeTab === 'nuevo' && (
@@ -724,18 +966,37 @@ export default function ClientesManager() {
                   onSave={handleSaveCliente}
                   onCancel={() => closeTab('nuevo')}
                   initialData={editCliente}
+                  barrios={barrios}
+                  localidades={localidades}
+                  provincias={provincias}
+                  transportes={transportes}
+                  vendedores={vendedores}
+                  plazos={plazos}
+                  categorias={categorias}
+                  setBarrios={setBarrios}
+                  setLocalidades={setLocalidades}
+                  setProvincias={setProvincias}
+                  setTransportes={setTransportes}
+                  setVendedores={setVendedores}
+                  setPlazos={setPlazos}
+                  setCategorias={setCategorias}
+                  apiError={error}
                 />
               </div>
             )}
           </div>
         </div>
       </div>
+      {loading && <div className="p-4 text-center text-gray-500">Cargando clientes...</div>}
+      {error && <div className="p-4 text-center text-red-600">{error}</div>}
     </div>
   );
-}
+};
 
 // Modificar ClientesTable para alinear acciones correctamente
 ClientesTable.defaultProps = {
   expandedClientId: null,
   setExpandedClientId: () => {},
-}; 
+};
+
+export default ClientesManager; 

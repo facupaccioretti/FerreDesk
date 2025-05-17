@@ -68,8 +68,32 @@ class Vendedor(models.Model):
 class Plazo(models.Model):
     id = models.AutoField(primary_key=True, db_column='PLA_ID')
     nombre = models.CharField(max_length=30, db_column='PLA_DENO')
-    activo = models.CharField(max_length=1, db_column='PLA_ACTI')
-    # Puedes agregar los campos PLA_PLA1, PLA_POR1, etc. si los necesitas
+    # Plazos y porcentajes
+    pla_pla1 = models.SmallIntegerField(db_column='PLA_PLA1', default=0)
+    pla_por1 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR1', default=0)
+    pla_pla2 = models.SmallIntegerField(db_column='PLA_PLA2', default=0)
+    pla_por2 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR2', default=0)
+    pla_pla3 = models.SmallIntegerField(db_column='PLA_PLA3', default=0)
+    pla_por3 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR3', default=0)
+    pla_pla4 = models.SmallIntegerField(db_column='PLA_PLA4', default=0)
+    pla_por4 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR4', default=0)
+    pla_pla5 = models.SmallIntegerField(db_column='PLA_PLA5', default=0)
+    pla_por5 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR5', default=0)
+    pla_pla6 = models.SmallIntegerField(db_column='PLA_PLA6', default=0)
+    pla_por6 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR6', default=0)
+    pla_pla7 = models.SmallIntegerField(db_column='PLA_PLA7', default=0)
+    pla_por7 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR7', default=0)
+    pla_pla8 = models.SmallIntegerField(db_column='PLA_PLA8', default=0)
+    pla_por8 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR8', default=0)
+    pla_pla9 = models.SmallIntegerField(db_column='PLA_PLA9', default=0)
+    pla_por9 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR9', default=0)
+    pla_pla10 = models.SmallIntegerField(db_column='PLA_PLA10', default=0)
+    pla_por10 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR10', default=0)
+    pla_pla11 = models.SmallIntegerField(db_column='PLA_PLA11', default=0)
+    pla_por11 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR11', default=0)
+    pla_pla12 = models.SmallIntegerField(db_column='PLA_PLA12', default=0)
+    pla_por12 = models.DecimalField(max_digits=6, decimal_places=2, db_column='PLA_POR12', default=0)
+    activo = models.CharField(max_length=1, db_column='PLA_ACTI', default='S')
 
     class Meta:
         db_table = 'PLAZOS'
