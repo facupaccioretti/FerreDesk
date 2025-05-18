@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DashboardBackground from './DashboardBackground';
+import AnimatedBackground from './AnimatedBackground';
 import Navbar from './Navbar';
 
 const cards = [
@@ -22,10 +22,10 @@ const cards = [
     ),
   },
   {
-    label: 'Presupuestos',
+    label: 'Presupuestos y Ventas',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-14 h-14 text-black">
-        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
       </svg>
     ),
   },
@@ -38,10 +38,10 @@ const cards = [
     ),
   },
   {
-    label: 'Ventas',
+    label: 'Proveedores',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-14 h-14 text-black">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
       </svg>
     ),
   },
@@ -59,7 +59,19 @@ const getInitialDarkMode = () => {
 
 const Home = () => {
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
-  const [user, setUser] = useState({ username: "ferreadmin" });
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    document.title = "Panel Principal FerreDesk";
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/user/", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") setUser(data.user);
+      });
+  }, []);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -82,6 +94,12 @@ const Home = () => {
     if (label === 'Productos') {
       window.open('/dashboard/productos', '_blank');
     }
+    if (label === 'Proveedores') {
+      window.open('/dashboard/proveedores', '_blank');
+    }
+    if (label === 'Presupuestos y Ventas') {
+      window.open('/dashboard/presupuestos', '_blank');
+    }
     // Puedes agregar navegación para otras tarjetas aquí
   };
 
@@ -92,7 +110,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen relative">
-      <DashboardBackground dark={darkMode} />
+      <AnimatedBackground />
       <Navbar user={user} onLogout={handleLogout} />
       <div className="flex flex-col items-center justify-center py-12 px-4">
         <button
