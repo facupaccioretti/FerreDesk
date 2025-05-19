@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Reglas y aclaraciones para Presupuestos y Ventas (FerreDesk)
+Presupuestos:
+Se pueden crear, editar y borrar libremente mientras no hayan sido convertidos a venta.
+No descuentan stock.
+Pueden convertirse en ventas.
+Al convertirse en venta, se realiza la resta de stock según la lógica de ventas.
+Ventas:
+Se crean a partir de un presupuesto o directamente.
+Descuentan stock por proveedor.
+NO se pueden editar ni borrar, solo anular (cambiar estado).
+Las ventas anuladas deben mostrarse en una sección especial (“Ventas anuladas”).
+Stock y Proveedores:
+Cada producto tiene stock por proveedor (StockProve).
+Siempre se usa primero el stock del proveedor habitual.
+Si el stock del proveedor habitual se agota, se debe notificar al usuario y permitir elegir otro proveedor.
+Si el stock total (sumando todos los proveedores) se agota, se notifica al usuario y, si continúa, el stock puede pasar a negativo.
+El sistema debe mantener el conteo de stock por proveedor y notificar cada vez que se cambia de proveedor o se agota el stock.
+Stock Negativo:
+El checkbox “Permitir stock negativo” solo aparece cuando el stock total se agota.
+Si el usuario acepta, se permite continuar y el stock puede quedar negativo.
+El backend debe validar y notificar si se está por pasar a stock negativo.
+Concurrencia y multiusuario:
+Todas las operaciones críticas (creación de ventas, conversión de presupuestos, descuento de stock) deben ser atómicas y seguras para múltiples usuarios simultáneos.
+Usar transacciones atomicas y locks (select_for_update) en backend.
+El frontend debe mostrar mensajes claros si ocurre un conflicto de concurrencia o stock.
+Flujo de conversión:
+Al convertir un presupuesto a venta, se descuenta el stock según la lógica de ventas.
+Si hay problemas de stock, se debe permitir al usuario elegir proveedor o aceptar stock negativo.
+Formularios:
+Los formularios de Presupuesto y Venta deben ser consistentes en la lógica de selección de proveedor y manejo de stock.
+En Presupuesto, solo se selecciona proveedor (no descuenta stock).
+
+En Venta, se descuenta stock y se valida toda la lógica de stock/proveedor/negativo.

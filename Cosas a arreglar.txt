@@ -47,3 +47,8 @@ Que la vista traiga los datos enteros
 Anulacion de venta y pagina de ventas anuladas
 Sacar barras amarillas feardas
 Sistema de bonificacion particular y general
+
+Revisar modelos en general
+pasaje presupuesto a venta editable, seleccionar items.
+
+presupuesto autoguardado

@@ -37,6 +37,16 @@ const getDefaultPlazoId = (plazos) => {
   return contado ? contado.id : '';
 };
 
+const getStockProveedoresMap = (productos) => {
+  const map = {};
+  productos.forEach(p => {
+    if (p.stock_proveedores) {
+      map[p.id] = p.stock_proveedores;
+    }
+  });
+  return map;
+};
+
 const VentaForm = ({
   onSave,
   onCancel,
@@ -96,6 +106,8 @@ const VentaForm = ({
   const [selectedProducto, setSelectedProducto] = useState(null);
   const codigoInputRef = useRef();
   const itemsGridRef = useRef();
+
+  const stockProveedores = getStockProveedoresMap(productos);
 
   useEffect(() => {
     if (!initialData) {
@@ -171,6 +183,8 @@ const VentaForm = ({
     e.preventDefault();
     localStorage.removeItem('ventaFormDraft');
     // Fuerza estado y tipo
+    const items = itemsGridRef.current.getItems();
+    const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
     const payload = {
       ...form,
       estado: 'Cerrado',
@@ -180,28 +194,23 @@ const VentaForm = ({
       ven_numero: form.numero,
       ven_sucursal: form.sucursalId || 1,
       ven_fecha: form.fecha,
-      ven_punto: form.puntoVentaId || 1,
-      ven_impneto: (parseFloat(form.total) || 0).toFixed(2),
-      ven_descu1: (form.descu1 || 0).toFixed(2),
-      ven_descu2: (form.descu2 || 0).toFixed(2),
-      ven_descu3: (form.descu3 || 0).toFixed(2),
-      ven_total: Math.round(form.total) || 0,
-      ven_vdocomvta: form.vdocomvta || 0,
-      ven_vdocomcob: form.vdocomcob || 0,
-      ven_idcli: form.clienteId,
-      ven_idpla: form.plazoId,
-      ven_idvdo: form.vendedorId,
-      ven_copia: form.copia || 1,
-      ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
+      items,
+      permitir_stock_negativo
     };
-    const items = itemsGridRef.current.getItems();
-    await onSave({ ...payload, items });
+    await onSave(payload);
   };
 
   const handleCancel = () => {
     if (window.confirm('¿Está seguro que desea cancelar? Se perderán los cambios no guardados.')) {
       localStorage.removeItem('ventaFormDraft');
       onCancel();
+    }
+  };
+
+  // Función para agregar producto a la grilla desde el buscador
+  const handleAddItemToGrid = (producto) => {
+    if (itemsGridRef.current && itemsGridRef.current.handleAddItem) {
+      itemsGridRef.current.handleAddItem(producto);
     }
   };
 
@@ -338,8 +347,21 @@ const VentaForm = ({
         </div>
       )}
 
+      <div className="mb-4 flex gap-4 items-center">
+        <label className="text-sm font-medium text-gray-700">Acción por defecto al cargar ítem duplicado:</label>
+        <select value={autoSumarDuplicados} onChange={e => setAutoSumarDuplicados(e.target.value)} className="px-2 py-1 border rounded">
+          <option value="sumar">Sumar cantidades</option>
+          <option value="duplicar">Crear duplicado</option>
+        </select>
+        <span className="text-xs text-gray-500 ml-2">Se resaltarán en rojo los duplicados.</span>
+      </div>
+
       <div className="mb-8">
         <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems de la Venta</h4>
+        <BuscadorProducto
+          productos={productos}
+          onSelect={handleAddItemToGrid}
+        />
         {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
@@ -354,10 +376,13 @@ const VentaForm = ({
           <ItemsGrid
             ref={itemsGridRef}
             productosDisponibles={productos}
+            proveedores={proveedores}
+            stockProveedores={stockProveedores}
             autoSumarDuplicados={autoSumarDuplicados}
             setAutoSumarDuplicados={setAutoSumarDuplicados}
             bonificacionGeneral={form.bonificacionGeneral}
-            setBonificacionGeneral={v => setForm(f => ({ ...f, bonificacionGeneral: v }))}
+            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
+            modo="venta"
           />
         )}
       </div>

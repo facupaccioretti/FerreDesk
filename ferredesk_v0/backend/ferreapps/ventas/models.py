@@ -55,6 +55,7 @@ class VentaDetalleItem(models.Model):
     vdi_idve = models.IntegerField(db_column='VDI_IDVE')
     vdi_orden = models.SmallIntegerField(db_column='VDI_ORDEN')
     vdi_idsto = models.IntegerField(db_column='VDI_IDSTO')
+    vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2, db_column='VDI_CANTIDAD')
     vdi_importe = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_IMPORTE')
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_BONIFICA')

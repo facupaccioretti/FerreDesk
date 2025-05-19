@@ -2,6 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import BuscadorProducto from './BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 
+const getStockProveedoresMap = (productos) => {
+  const map = {};
+  productos.forEach(p => {
+    if (p.stock_proveedores) {
+      map[p.id] = p.stock_proveedores;
+    }
+  });
+  return map;
+};
+
 const PresupuestoForm = ({
   onSave,
   onCancel,
@@ -178,7 +188,19 @@ const PresupuestoForm = ({
     return (comprobantes[0][tipo.campo] || 0) + 1;
   })();
 
+  const stockProveedores = getStockProveedoresMap(productos);
+
   const itemsGridRef = useRef();
+
+  // Función para agregar producto a la grilla desde el buscador
+  const handleAddItemToGrid = (producto) => {
+    if (itemsGridRef.current && typeof itemsGridRef.current.handleAddItem === 'function') {
+      itemsGridRef.current.handleAddItem(producto);
+    } else if (itemsGridRef.current && typeof itemsGridRef.current.getItems === 'function') {
+      // fallback: fuerza un rerender para que la grilla reciba el producto
+      itemsGridRef.current.getItems();
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -189,6 +211,7 @@ const PresupuestoForm = ({
     let total = Math.round(impneto);
     const clienteId = form.clienteId || 0;
     const items = itemsGridRef.current.getItems();
+    const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
     const payload = {
       ...form,
       estado: 'Abierto',
@@ -212,6 +235,7 @@ const PresupuestoForm = ({
       ven_copia: form.copia || 1,
       ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
       items,
+      permitir_stock_negativo
     };
     await onSave(payload);
   };
@@ -357,8 +381,21 @@ const PresupuestoForm = ({
         </div>
       )}
 
+      <div className="mb-4 flex gap-4 items-center">
+        <label className="text-sm font-medium text-gray-700">Acción por defecto al cargar ítem duplicado:</label>
+        <select value={autoSumarDuplicados} onChange={e => setAutoSumarDuplicados(e.target.value)} className="px-2 py-1 border rounded">
+          <option value="sumar">Sumar cantidades</option>
+          <option value="duplicar">Crear duplicado</option>
+        </select>
+        <span className="text-xs text-gray-500 ml-2">Se resaltarán en rojo los duplicados.</span>
+      </div>
+
       <div className="mb-8">
         <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems del Presupuesto</h4>
+        <BuscadorProducto
+          productos={productos}
+          onSelect={handleAddItemToGrid}
+        />
         {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
@@ -370,29 +407,17 @@ const PresupuestoForm = ({
         ) : errorAlicuotas ? (
           <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
         ) : (
-          <>
-            <BuscadorProducto
-              productos={productos}
-              onSelect={producto => {
-                setEditRow({
-                  codigo: producto.codvta || producto.codigo || '',
-                  cantidad: 1,
-                  costo: producto.precio || producto.preciovta || producto.preciounitario || '',
-                  bonificacion: 0
-                });
-                setSelectedProducto(producto);
-                setTimeout(() => codigoInputRef.current?.focus(), 100);
-              }}
-            />
-            <ItemsGrid
-              ref={itemsGridRef}
-              productosDisponibles={productos}
-              autoSumarDuplicados={autoSumarDuplicados}
-              setAutoSumarDuplicados={isReadOnly ? () => {} : setAutoSumarDuplicados}
-              bonificacionGeneral={form.bonificacionGeneral}
-              setBonificacionGeneral={isReadOnly ? () => {} : val => setForm(f => ({ ...f, bonificacionGeneral: val }))}
-            />
-          </>
+          <ItemsGrid
+            ref={itemsGridRef}
+            productosDisponibles={productos}
+            proveedores={proveedores}
+            stockProveedores={stockProveedores}
+            autoSumarDuplicados={autoSumarDuplicados}
+            setAutoSumarDuplicados={setAutoSumarDuplicados}
+            bonificacionGeneral={form.bonificacionGeneral}
+            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
+            modo="presupuesto"
+          />
         )}
       </div>
 
