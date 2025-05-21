@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import BuscadorProducto from './BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
+import ComprobanteDropdown from './ComprobanteDropdown';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -130,26 +131,57 @@ const PresupuestoForm = ({
     }
   }, [form, initialData]);
 
+  // Estado para descuentos
+  const [descu1, setDescu1] = useState(form.descu1 || 0);
+  const [descu2, setDescu2] = useState(form.descu2 || 0);
+
   // Efecto para recalcular totales y aplicar bonificación general
   useEffect(() => {
-    let newTotal = 0;
+    let subtotalSinIva = 0;
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
     const updatedItems = form.items.map(item => {
-      // Calcular subtotal solo con bonificación particular
       const bonifParticular = parseFloat(item.bonificacion) || 0;
-      const subtotal = (parseFloat(item.precio) * parseInt(item.cantidad)) * (1 - bonifParticular / 100);
-      newTotal += subtotal;
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio) || 0;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
       return { ...item, subtotal };
     });
-    // Solo actualizar si los items o el total realmente cambiaron
-    const itemsChanged = JSON.stringify(form.items) !== JSON.stringify(updatedItems);
-    if (itemsChanged || form.total !== newTotal) {
-      setForm(prevForm => ({
-        ...prevForm,
-        items: updatedItems,
-        total: newTotal * (1 - (parseFloat(form.bonificacionGeneral) || 0) / 100)
-      }));
+    // Aplicar descuentos sucesivos al subtotal global
+    let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+    // Calcular IVA y total sumando ítem por ítem
+    let ivaTotal = 0;
+    let totalConIva = 0;
+    updatedItems.forEach(item => {
+      const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (alicuotaIva / 100);
+      ivaTotal += iva;
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    setForm(prevForm => ({
+      ...prevForm,
+      items: updatedItems,
+      ven_impneto: Math.round(subtotalConDescuentos * 100) / 100,
+      ven_total: Math.round(totalConIva * 100) / 100,
+      descu1,
+      descu2
+    }));
+  }, [form.bonificacionGeneral, form.items, descu1, descu2]);
+
+  // Inicializar autoSumarDuplicados a 'sumar' por defecto
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados('sumar');
     }
-  }, [form.bonificacionGeneral, form.items]);
+  }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleChange = e => {
     const { name, value, type } = e.target;
@@ -181,12 +213,8 @@ const PresupuestoForm = ({
     }));
   };
 
-  const numeroComprobante = (() => {
-    if (!comprobantes.length) return 1;
-    const tipo = tiposComprobante.find(t => t.value === tipoComprobante);
-    if (!tipo) return 1;
-    return (comprobantes[0][tipo.campo] || 0) + 1;
-  })();
+  // Forzar comprobante 9997 para presupuesto
+  const comprobanteId = 9997;
 
   const stockProveedores = getStockProveedoresMap(productos);
 
@@ -194,50 +222,53 @@ const PresupuestoForm = ({
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
-    if (itemsGridRef.current && typeof itemsGridRef.current.handleAddItem === 'function') {
+    if (itemsGridRef.current) {
       itemsGridRef.current.handleAddItem(producto);
-    } else if (itemsGridRef.current && typeof itemsGridRef.current.getItems === 'function') {
-      // fallback: fuerza un rerender para que la grilla reciba el producto
-      itemsGridRef.current.getItems();
     }
   };
 
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    localStorage.removeItem('presupuestoFormDraft');
-    // Fuerza estado y tipo
-    let impneto = parseFloat(form.total) || 0;
-    impneto = Number(impneto.toFixed(2));
-    let total = Math.round(impneto);
-    const clienteId = form.clienteId || 0;
+    if (!itemsGridRef.current) {
+      setError('Error al acceder a la grilla de items');
+      return;
+    }
     const items = itemsGridRef.current.getItems();
-    const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
-    const payload = {
-      ...form,
-      estado: 'Abierto',
-      tipo: 'Presupuesto',
-      ven_estado: 'AB',
-      ven_codcomprob: 4,
-      ven_numero: numeroComprobante,
-      ven_sucursal: form.sucursalId || 1,
-      ven_fecha: form.fecha,
-      ven_punto: form.puntoVentaId || 1,
-      ven_impneto: impneto,
-      ven_descu1: form.descu1 || 0,
-      ven_descu2: form.descu2 || 0,
-      ven_descu3: form.descu3 || 0,
-      ven_total: total,
-      ven_vdocomvta: form.vdocomvta || 0,
-      ven_vdocomcob: form.vdocomcob || 0,
-      ven_idcli: clienteId,
-      ven_idpla: form.plazoId,
-      ven_idvdo: form.vendedorId,
-      ven_copia: form.copia || 1,
-      ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
-      items,
-      permitir_stock_negativo
-    };
-    await onSave(payload);
+    if (!items || items.length === 0) {
+      setError('Debe agregar al menos un ítem al presupuesto');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError(null);
+      localStorage.removeItem('presupuestoFormDraft');
+      const clienteId = form.clienteId || 0;
+      const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
+      const payload = {
+        ...form,
+        estado: 'Abierto',
+        tipo: 'Presupuesto',
+        ven_impneto: form.ven_impneto || 0,
+        ven_total: form.ven_total || 0,
+        comprobante: comprobanteId,
+        ven_sucursal: form.sucursalId || 1,
+        ven_fecha: form.fecha,
+        ven_punto: form.puntoVentaId || 1,
+        ven_idcli: clienteId,
+        items,
+        permitir_stock_negativo,
+        tipo_comprobante: 'presupuesto'
+      };
+      await onSave(payload);
+      onCancel();
+    } catch (err) {
+      setError(err.message || 'Error al guardar el presupuesto');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -251,8 +282,15 @@ const PresupuestoForm = ({
   const [selectedProducto, setSelectedProducto] = useState(null);
   const codigoInputRef = useRef();
 
+  // Función para calcular el total c/IVA en tiempo real desde la grilla
+  const getTotalConIvaEnTiempoReal = () => {
+    if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
+    const items = itemsGridRef.current.getItems();
+    return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
+  };
+
   return (
-    <form className="w-full max-w-6xl mx-auto py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
       <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? (isReadOnly ? 'Ver Presupuesto' : 'Editar Presupuesto') : 'Nuevo Presupuesto'}</h3>
       {isReadOnly && (
         <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
@@ -260,11 +298,6 @@ const PresupuestoForm = ({
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Eliminar campo N° Presupuesto si no es editable */}
-        {/* <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">N° Presupuesto</label>
-          <input name="numero" value={form.numero} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required readOnly />
-        </div> */}
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Cliente *</label>
           <select
@@ -353,19 +386,13 @@ const PresupuestoForm = ({
       {errorComprobantes && <div className="mb-2 text-red-600">{errorComprobantes}</div>}
 
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Comprobante *</label>
-        <select
-          name="tipoComprobante"
-          value={tipoComprobante}
-          onChange={e => setTipoComprobante(Number(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-          required
-          disabled={isReadOnly}
-        >
-          {tiposComprobante.map(tc => (
-            <option key={tc.value} value={tc.value}>{tc.label}</option>
-          ))}
-        </select>
+        <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Comprobante</label>
+        <ComprobanteDropdown
+          opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
+          value={'presupuesto'}
+          onChange={() => {}}
+          disabled={true}
+        />
       </div>
 
       {comprobantes.length > 0 && (
@@ -388,6 +415,14 @@ const PresupuestoForm = ({
           <option value="duplicar">Crear duplicado</option>
         </select>
         <span className="text-xs text-gray-500 ml-2">Se resaltarán en rojo los duplicados.</span>
+      </div>
+
+      <div className="mb-4 flex gap-4 items-center">
+        <label className="text-sm font-medium text-gray-700">Descuento 1 (%)</label>
+        <input type="number" min="0" max="100" step="0.01" value={descu1} onChange={e => setDescu1(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <label className="text-sm font-medium text-gray-700">Descuento 2 (%)</label>
+        <input type="number" min="0" max="100" step="0.01" value={descu2} onChange={e => setDescu2(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <span className="text-xs text-gray-500 ml-2">Los descuentos se aplican de manera sucesiva sobre el subtotal neto.</span>
       </div>
 
       <div className="mb-8">
@@ -419,6 +454,27 @@ const PresupuestoForm = ({
             modo="presupuesto"
           />
         )}
+      </div>
+
+      <div className="mt-8 text-right font-bold text-lg">
+        <div>Subtotal s/IVA: ${form.items.reduce((sum, i) => sum + (i.subtotal || 0), 0).toFixed(2)}</div>
+        <div>Descuento 1: {descu1}%</div>
+        <div>Descuento 2: {descu2}%</div>
+        <div>Subtotal c/Descuentos: ${(form.ven_impneto || 0).toFixed(2)}</div>
+        <div>IVA: {(() => {
+          let subtotalSinIva = form.items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+          let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+          subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+          let ivaTotal = 0;
+          form.items.forEach(item => {
+            const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+            const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+            const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+            ivaTotal += itemSubtotalConDescuentos * (alicuotaIva / 100);
+          });
+          return ivaTotal.toFixed(2);
+        })()}</div>
+        <div>Total c/IVA: {(form.ven_total || 0).toFixed(2)}</div>
       </div>
 
       <div className="mt-8 flex justify-end space-x-3">

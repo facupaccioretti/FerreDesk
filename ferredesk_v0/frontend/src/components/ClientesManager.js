@@ -263,7 +263,8 @@ const NuevoClienteForm = ({
   onSave, onCancel, initialData,
   barrios, localidades, provincias, transportes, vendedores, plazos, categorias,
   setBarrios, setLocalidades, setProvincias, setTransportes, setVendedores, setPlazos, setCategorias,
-  apiError
+  apiError,
+  tiposIVA
 }) => {
   const [form, setForm] = useState({
     codigo: initialData?.codigo || '',
@@ -331,37 +332,37 @@ const NuevoClienteForm = ({
       let setList = null;
       switch (modal.type) {
         case 'barrio':
-          url = '/api/barrios/';
+          url = '/api/clientes/barrios/';
           body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
           setList = setBarrios;
           break;
         case 'localidad':
-          url = '/api/localidades/';
+          url = '/api/clientes/localidades/';
           body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
           setList = setLocalidades;
           break;
         case 'provincia':
-          url = '/api/provincias/';
+          url = '/api/clientes/provincias/';
           body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
           setList = setProvincias;
           break;
         case 'transporte':
-          url = '/api/transportes/';
+          url = '/api/clientes/transportes/';
           body = { nombre: modalForm.nombre, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
           setList = setTransportes;
           break;
         case 'vendedor':
-          url = '/api/vendedores/';
+          url = '/api/clientes/vendedores/';
           body = { nombre: modalForm.nombre, dni: modalForm.dni, comivta: modalForm.comivta, liquivta: modalForm.liquivta, comicob: modalForm.comicob, liquicob: modalForm.liquicob, localidad: modalForm.localidad, activo: modalForm.activo || 'S' };
           setList = setVendedores;
           break;
         case 'plazo':
-          url = '/api/plazos/';
+          url = '/api/clientes/plazos/';
           body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
           setList = setPlazos;
           break;
         case 'categoria':
-          url = '/api/categorias/';
+          url = '/api/clientes/categorias/';
           body = { nombre: modalForm.nombre, activo: modalForm.activo || 'S' };
           setList = setCategorias;
           break;
@@ -693,12 +694,10 @@ const NuevoClienteForm = ({
             <FilterableSelect
               label="Tipo de IVA"
               name="iva"
-              options={categorias}
+              options={tiposIVA}
               value={form.iva}
               onChange={handleChange}
-              onAdd={() => openAddModal('categoria')}
               placeholder="Buscar tipo de IVA..."
-              addLabel="Agregar Tipo de IVA"
             />
           </div>
           <div>
@@ -981,6 +980,7 @@ const ClientesManager = () => {
                   setPlazos={setPlazos}
                   setCategorias={setCategorias}
                   apiError={error}
+                  tiposIVA={tiposIVA}
                 />
               </div>
             )}

@@ -13,6 +13,10 @@ from .serializers import (
 )
 from django.db import transaction
 from ferreapps.productos.models import Stock, StockProve
+from decimal import Decimal
+from ferreapps.productos.models import Ferreteria
+from ferreapps.clientes.models import Cliente, TipoIVA
+from django.db import IntegrityError
 
 # Create your views here.
 
@@ -28,13 +32,16 @@ class VentaViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         items = data.get('items', [])
+        if not items:
+            return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
+
         permitir_stock_negativo = data.get('permitir_stock_negativo', False)
         errores_stock = []
         stock_actualizado = []
         for item in items:
             id_stock = item.get('vdi_idsto')
             id_proveedor = item.get('vdi_idpro')
-            cantidad = float(item.get('vdi_cantidad', 0))
+            cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
             if not id_stock or not id_proveedor:
                 errores_stock.append(f"Falta stock o proveedor en item: {item}")
                 continue
@@ -51,16 +58,61 @@ class VentaViewSet(viewsets.ModelViewSet):
             stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
         if errores_stock:
             return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
-        response = super().create(request, *args, **kwargs)
-        response.data['stock_actualizado'] = stock_actualizado
-        return response
+
+        # --- Lógica de comprobante automático ---
+        ferreteria = Ferreteria.objects.first()
+        cliente_id = data.get('ven_idcli')
+        tipo_comprobante = data.get('tipo_comprobante')
+        comprobante_id = None
+        if tipo_comprobante == 'presupuesto':
+            comprobante = Comprobante.objects.filter(codigo_afip='9997').first()
+        elif tipo_comprobante == 'venta':
+            comprobante = Comprobante.objects.filter(codigo_afip='9999').first()
+        else:
+            cliente = Cliente.objects.filter(id=cliente_id).first()
+            tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+            letra = 'C'
+            if ferreteria and ferreteria.situacion_iva == 'RI':
+                if tipo_iva_cliente == 'consumidor final':
+                    letra = 'B'
+                else:
+                    letra = 'A'
+            comprobante = Comprobante.objects.filter(tipo__iexact=tipo_comprobante, letra=letra, activo=True).first()
+            if not comprobante:
+                return Response({'detail': f'No se encontró comprobante para tipo {tipo_comprobante} y letra {letra}.'}, status=status.HTTP_400_BAD_REQUEST)
+        data['comprobante'] = comprobante.id if comprobante else None
+
+        # --- Lógica de numeración robusta ---
+        punto_venta = data.get('ven_punto')
+        if not punto_venta:
+            return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        intentos = 0
+        max_intentos = 10
+        while intentos < max_intentos:
+            ultima_venta = Venta.objects.filter(
+                ven_punto=punto_venta,
+                comprobante=comprobante
+            ).order_by('-ven_numero').first()
+            nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
+            data['ven_numero'] = nuevo_numero
+            try:
+                response = super().create(request, *args, **kwargs)
+                response.data['stock_actualizado'] = stock_actualizado
+                return response
+            except IntegrityError as e:
+                if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                    intentos += 1
+                    continue  # Reintentar con el siguiente número
+                else:
+                    raise
+        return Response({'detail': 'No se pudo asignar un número único de venta tras varios intentos.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     @transaction.atomic
     def convertir_a_venta(self, request, pk=None):
         venta = get_object_or_404(Venta, pk=pk)
         try:
-            if venta.ven_codcomprob == 4: # 4 = Presupuesto
+            if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
                 # Descontar stock por proveedor para cada item
                 items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
                 permitir_stock_negativo = request.data.get('permitir_stock_negativo', False)
@@ -69,7 +121,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 for item in items:
                     id_stock = item.vdi_idsto
                     id_proveedor = item.vdi_idpro
-                    cantidad = float(item.vdi_cantidad)
+                    cantidad = Decimal(str(item.vdi_cantidad))
                     if not id_stock or not id_proveedor:
                         errores_stock.append(f"Falta stock o proveedor en item: {item.id}")
                         continue
@@ -86,7 +138,11 @@ class VentaViewSet(viewsets.ModelViewSet):
                     stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
                 if errores_stock:
                     return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
-                venta.ven_codcomprob = 1  # 1 = Venta
+                # Buscar el comprobante de tipo 'factura' o el que corresponda para la conversión
+                comprobante_venta = Comprobante.objects.filter(tipo='factura', activo=True).order_by('codigo_afip').first()
+                if not comprobante_venta:
+                    return Response({'detail': 'No se encontró comprobante de tipo factura para la conversión.'}, status=status.HTTP_400_BAD_REQUEST)
+                venta.comprobante = comprobante_venta
                 venta.ven_estado = 'CE'
                 venta.save()
                 serializer = self.get_serializer(venta)

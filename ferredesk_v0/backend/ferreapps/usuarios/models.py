@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.contrib.sessions.models import Session
+from django.utils import timezone
 
 class Usuario(AbstractUser):
     TIPO_CHOICES = [
@@ -39,3 +41,21 @@ class CliUsuario(models.Model):
     class Meta:
         verbose_name = "Usuario Cliente"
         verbose_name_plural = "Usuarios Clientes"
+
+class Auditoria(models.Model):
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    accion = models.CharField(max_length=100)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    objeto_afectado = models.CharField(max_length=200, blank=True, null=True)
+    detalles = models.TextField(blank=True, null=True)
+    session_key = models.CharField(max_length=40, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.timestamp} - {self.usuario} - {self.accion}"
+
+    class Meta:
+        verbose_name = "Auditoría"
+        verbose_name_plural = "Auditorías"
+
+# Utilidad para tracking de sesiones activas
+# Puedes usar Session.objects.filter(expire_date__gte=timezone.now()) para ver sesiones activas

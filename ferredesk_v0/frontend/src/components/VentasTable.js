@@ -89,7 +89,7 @@ const VentasTable = ({
         <tbody className="bg-white divide-y divide-gray-200">
           {ventas.map((venta) => (
             <tr key={venta.id} className="hover:bg-gray-50">
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{venta.numero}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{venta.numero_formateado || venta.numero}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{venta.cliente?.razon || venta.cliente?.nombre || '-'}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {venta.fecha ? format(new Date(venta.fecha), 'dd/MM/yyyy') : '-'}

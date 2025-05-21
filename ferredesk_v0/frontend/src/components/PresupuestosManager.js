@@ -83,14 +83,15 @@ const PresupuestosManager = () => {
   const { localidades } = useLocalidadesAPI();
   const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false);
   const [draggedTabKey, setDraggedTabKey] = useState(null);
-  const tiposComprobante = [
-    { value: 4, label: 'Presupuesto', campo: 'cbt_presupuesto' },
-    { value: 1, label: 'Venta', campo: 'cbt_pedidovta' }
-  ];
+  const tiposComprobante = comprobantes.map(c => ({ value: c.id, label: c.nombre, campo: c.codigo_afip, tipo: c.tipo }));
+  const presupuestoComprobanteIds = comprobantes.filter(c => (c.tipo || '').toLowerCase() === 'presupuesto').map(c => c.id);
+  const ventaComprobanteIds = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto').map(c => c.id);
   const [tipoComprobante, setTipoComprobante] = useState(1); // 1=Factura A por defecto
   const [searchVendedor, setSearchVendedor] = useState('');
   const [editVendedorData, setEditVendedorData] = useState(null);
   const [busquedaProducto, setBusquedaProducto] = useState('');
+  const [filtroAlicuota, setFiltroAlicuota] = useState('');
+  const [filtroTipoComprobante, setFiltroTipoComprobante] = useState('');
 
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
@@ -109,15 +110,25 @@ const PresupuestosManager = () => {
 
   // Filtros
   const filtrar = (lista) => {
+    let res = lista;
     switch (filtro) {
       case 'presupuestos':
-        return lista.filter(p => p.tipo === 'Presupuesto' && p.estado === 'Abierto');
+        res = res.filter(p => p.tipo === 'Presupuesto' && p.estado === 'Abierto');
+        break;
       case 'ventas':
-        return lista.filter(p => p.tipo === 'Venta' && p.estado === 'Cerrado');
+        res = res.filter(p => p.tipo === 'Venta' && p.estado === 'Cerrado');
+        break;
       case 'todos':
       default:
-        return lista;
+        break;
     }
+    if (filtroAlicuota) {
+      res = res.filter(p => p.iva_desglose && Object.keys(p.iva_desglose).includes(filtroAlicuota));
+    }
+    if (filtroTipoComprobante) {
+      res = res.filter(p => String(p.comprobante) === filtroTipoComprobante);
+    }
+    return res;
   };
 
   // Funciones para tabs
@@ -247,16 +258,57 @@ const PresupuestosManager = () => {
 
   // Normalizar datos de ventas/presupuestos para la grilla
   const normalizarVenta = (venta) => {
+    let tipo = '';
+    if (venta.comprobante && typeof venta.comprobante === 'object') {
+      tipo = venta.comprobante.tipo ? venta.comprobante.tipo.charAt(0).toUpperCase() + venta.comprobante.tipo.slice(1) : '';
+    } else if (venta.comprobante && presupuestoComprobanteIds.includes(venta.comprobante)) {
+      tipo = 'Presupuesto';
+    } else if (venta.comprobante && ventaComprobanteIds.includes(venta.comprobante)) {
+      tipo = 'Venta';
+    } else {
+      tipo = venta.tipo || '';
+    }
+    const estado = venta.estado || (venta.ven_estado === 'AB' ? 'Abierto' : venta.ven_estado === 'CE' ? 'Cerrado' : '');
+    // Enriquecer ítems con datos de producto y calcular subtotales y totales con IVA
+    const items = (venta.items || venta.detalle || venta.productos || []).map(item => {
+      const producto = productos.find(p => p.id === (item.vdi_idsto || item.producto?.id));
+      const cantidad = parseFloat(item.vdi_cantidad || item.cantidad || 0);
+      const costo = parseFloat(item.vdi_importe || item.precio || item.costo || 0);
+      const bonificacion = parseFloat(item.vdi_bonifica || item.bonificacion || 0);
+      const subtotalSinIva = (costo * cantidad) * (1 - bonificacion / 100);
+      const alicuotaIva = producto ? (parseFloat(producto.aliiva?.porce || producto.aliiva || 0) || 0) : 0;
+      const iva = subtotalSinIva * (alicuotaIva / 100);
+      const totalConIva = subtotalSinIva + iva;
+      return {
+        ...item,
+        producto,
+        codigo: producto?.codvta || producto?.codigo || item.codigo || item.codvta || item.id || '-',
+        denominacion: producto?.deno || producto?.nombre || item.denominacion || item.nombre || '',
+        unidad: producto?.unidad || producto?.unidadmedida || item.unidad || item.unidadmedida || '-',
+        cantidad,
+        precio: costo,
+        bonificacion,
+        subtotalSinIva,
+        alicuotaIva,
+        iva,
+        totalConIva
+      };
+    });
+    const subtotalSinIva = items.reduce((sum, i) => sum + (i.subtotalSinIva || 0), 0);
+    const ivaTotal = items.reduce((sum, i) => sum + (i.iva || 0), 0);
+    const totalConIva = items.reduce((sum, i) => sum + (i.totalConIva || 0), 0);
     return {
       ...venta,
-      tipo: venta.tipo || (venta.ven_codcomprob === 4 ? 'Presupuesto' : venta.ven_codcomprob === 1 ? 'Venta' : ''),
-      estado: venta.estado || (venta.ven_estado === 'AB' ? 'Abierto' : venta.ven_estado === 'CE' ? 'Cerrado' : ''),
-      numero: venta.ven_numero || venta.numero || '',
+      tipo,
+      estado,
+      numero: venta.numero_formateado || venta.ven_numero || venta.numero || '',
       cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
-      total: venta.ven_total || venta.total || 0,
+      subtotalSinIva: venta.ven_impneto || 0,
+      ivaTotal,
+      total: venta.ven_total || 0,
       id: venta.id || venta.ven_id || venta.pk,
-      items: venta.items || [],
+      items,
       plazoId: venta.ven_idpla || venta.plazoId || '',
       vendedorId: venta.ven_idvdo || venta.vendedorId || '',
       sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
@@ -267,6 +319,7 @@ const PresupuestosManager = () => {
       descu3: venta.ven_descu3 || venta.descu3 || 0,
       copia: venta.ven_copia || venta.copia || 1,
       cae: venta.ven_cae || venta.cae || '',
+      comprobante: venta.comprobante && typeof venta.comprobante === 'object' ? venta.comprobante.id : venta.comprobante,
     };
   };
 
@@ -358,6 +411,24 @@ const PresupuestosManager = () => {
                       <span className="text-lg">+</span> Nueva Venta
                     </button>
                   ) : null}
+                </div>
+                {/* Filtros adicionales */}
+                <div className="flex gap-2 items-center mb-2">
+                  <label className="text-sm">Filtrar por alícuota:</label>
+                  <select value={filtroAlicuota} onChange={e => setFiltroAlicuota(e.target.value)} className="px-2 py-1 border rounded">
+                    <option value="">Todas</option>
+                    <option value="21">21%</option>
+                    <option value="10.5">10.5%</option>
+                    <option value="27">27%</option>
+                    <option value="0">Exento</option>
+                  </select>
+                  <label className="text-sm ml-4">Filtrar por comprobante:</label>
+                  <select value={filtroTipoComprobante} onChange={e => setFiltroTipoComprobante(e.target.value)} className="px-2 py-1 border rounded">
+                    <option value="">Todos</option>
+                    {comprobantes.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                    ))}
+                  </select>
                 </div>
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -459,8 +530,8 @@ const PresupuestosManager = () => {
              !activeTab.startsWith('nuevo-vendedor') && !activeTab.startsWith('editar-vendedor') && (
               activeTab.startsWith('nueva-venta-') ? (
                 <VentaForm
-                  onSave={async (payload, items) => {
-                    await addVenta({ ...payload, tipo: 'Venta', estado: 'Cerrado', items });
+                  onSave={async (payload) => {
+                    await addVenta({ ...payload, tipo: 'Venta', estado: 'Cerrado' });
                     closeTab(activeTab);
                   }}
                   onCancel={() => closeTab(activeTab)}

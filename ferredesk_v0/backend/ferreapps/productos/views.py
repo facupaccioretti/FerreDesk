@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID
-from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria
+from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -14,6 +14,7 @@ import os
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import JSONParser
 from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
 # Create your views here.
 
@@ -353,3 +354,25 @@ def crear_producto_con_relaciones(request):
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
+
+class FerreteriaAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
+        ferreteria = Ferreteria.objects.first()
+        if not ferreteria:
+            return Response({'detail': 'No existe ferretería configurada.'}, status=404)
+        return Response(FerreteriaSerializer(ferreteria).data)
+
+    def patch(self, request):
+        ferreteria = Ferreteria.objects.first()
+        if not ferreteria:
+            return Response({'detail': 'No existe ferretería configurada.'}, status=404)
+        if not request.user.is_staff:
+            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
+        serializer = FerreteriaSerializer(ferreteria, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)

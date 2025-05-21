@@ -1,16 +1,25 @@
 Actualizar el sistema para que trabaje con transacciones atomicas (Mejor pasarse a POSTGRESQL)
 
-
+Verificar formulario Clientes y el resto de formularios tambien (clientes se rompio :())
 Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo)
 
 En Productos
   Compaginacion de la tabla para cuando haya muchos Productos
   En el modal asociar codigo proveedor mejorar como se muestran los codigos
   
- 
-   
+    
 El enter en ningun formulario deberia completar el formulario (es molesto ya que si queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
+  
 
+botonera de acciones (presupuestos y capaz otras pantallas)
+cambiar zona horaria django
+Es posible que falten errores de enlistar.
+
+
+
+
+Falta hacer una pantalla de 'Datos de Ferretería' en el 
+frontend para cargar y editar los datos de la ferretería (nombre, dirección, situación fiscal, etc.). 
 
 
 Presupuestos anda para la bosta 
@@ -19,36 +28,29 @@ Presupuestos anda para la bosta
   
      Los presupuestos son abiertos porque se pueden seguir editando
      Las ventas y facturas son cerradas
-     El presupuesto se puede convertir a venta  cierra
-     Agregar el uso de Cuenta Corriente a cliente por defecto
-     Crear un Presupuesto se pone en Todos pero no en la vista de Presupuestos
-     El boton de ver mas no se asigna a las acciones por algun motivo
-     Tampoco el boton de convertir para hacer las conversiones de Presupuesto a Venta
+     Agregar el uso de Consumidor Final a cliente por defecto
      Boton de imprimir no anda
-     Nueva Venta no anda
-
-
-libro anotaciones 
-
-botonera de acciones (presupuestos y capaz otras pantallas)
-cambiar zona horaria django
-Es posible que falten errores de enlistar.
-
-
-Agregar los datos de TIPOSIVA
-
-
-
-
-
-En los formularios la opcion de Sumar cantidades, Duplicar item, Borrar
-Checkbox sumar automaticamente
-Que la vista traiga los datos enteros
-Anulacion de venta y pagina de ventas anuladas
-Sacar barras amarillas feardas
-Sistema de bonificacion particular y general
-
+     Que la vista traiga los datos enteros
+     Anulacion de venta y pagina de ventas anuladas
+     Arreglar grillas 
 Revisar modelos en general
+
 pasaje presupuesto a venta editable, seleccionar items.
 
-presupuesto autoguardado
+presupuesto autoguardado chiche
+
+iva de clientes TIPOSIVA aplicable
+iva de productos ALICUOTAS aplicable
+
+anden bien las vistas
+desconteo de items en el stock total
+manejo multiples usuarios
+conversion presupuesto a venta editable etc etc lo que hablaste con el don
+
+- Revisar y garantizar que el descuento de stock y la creación de los ítems de detalle de la venta estén dentro de la misma transacción atómica. Si falla la creación de los ítems, el stock no debe descontarse (atomicidad total en ventas).
+
+- Modificar la vista de detalle de ventas en el frontend para mostrar el desglose de IVA por alícuota.
+- Modificar el reporte de libro de IVA para sumar y mostrar el desglose por alícuota.
+- Exportar el libro de IVA a Excel o PDF.
+- Filtrar ventas por alícuota o por tipo de comprobante.
+- Ver totales acumulados por alícuota en el reporte.

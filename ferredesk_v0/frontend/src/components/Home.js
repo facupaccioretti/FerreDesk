@@ -47,6 +47,11 @@ const cards = [
   },
 ];
 
+const SITUACION_IVA_LABELS = {
+  'RI': 'Responsable Inscripto',
+  'MO': 'Monotributista',
+};
+
 const getInitialDarkMode = () => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('darkMode');
@@ -57,9 +62,30 @@ const getInitialDarkMode = () => {
   return false;
 };
 
+// Función para obtener el valor de una cookie por nombre
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
 const Home = () => {
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [user, setUser] = useState(null);
+  const [ferreteria, setFerreteria] = useState(null);
+  const [editIva, setEditIva] = useState(false);
+  const [newIva, setNewIva] = useState('RI');
+  const [loadingIva, setLoadingIva] = useState(false);
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     document.title = "Panel Principal FerreDesk";
@@ -70,6 +96,14 @@ const Home = () => {
       .then(res => res.json())
       .then(data => {
         if (data.status === "success") setUser(data.user);
+      });
+    fetch("/api/ferreteria/", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.situacion_iva) {
+          setFerreteria(data);
+          setNewIva(data.situacion_iva);
+        }
       });
   }, []);
 
@@ -108,6 +142,36 @@ const Home = () => {
     window.location.href = "/login";
   };
 
+  const handleIvaChange = async () => {
+    if (!window.confirm('¿Estás seguro de cambiar la situación fiscal del negocio? Esto afectará la emisión de comprobantes.')) return;
+    setLoadingIva(true);
+    setFeedback('');
+    try {
+      const csrftoken = getCookie('csrftoken');
+      const res = await fetch('/api/ferreteria/', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ situacion_iva: newIva })
+      });
+      if (!res.ok) throw new Error('Error al actualizar situación fiscal');
+      const data = await res.json();
+      setFerreteria(data);
+      setEditIva(false);
+      setFeedback('Situación fiscal actualizada correctamente.');
+    } catch (e) {
+      setFeedback('Error al actualizar situación fiscal.');
+    } finally {
+      setLoadingIva(false);
+    }
+  };
+
+  console.log('user:', user);
+  console.log('ferreteria:', ferreteria);
+
   return (
     <div className="min-h-screen relative">
       <AnimatedBackground />
@@ -121,6 +185,54 @@ const Home = () => {
           {darkMode ? '🌙' : '☀️'}
         </button>
         <h2 className="mb-10 text-4xl font-extrabold text-red dark:text-black text-center">Panel Principal</h2>
+        {/* Bloque de situación fiscal - ahora widget fijo abajo a la izquierda */}
+        {user && user.is_staff && ferreteria && (
+          <div className="fixed bottom-6 left-6 z-40 bg-white rounded-lg shadow border border-gray-200 p-3 text-xs w-60 flex flex-col items-start">
+            <div className="mb-1 font-semibold text-gray-800 text-xs">Situación Fiscal del Negocio</div>
+            <div className="mb-2 text-gray-700 text-xs">
+              Actual: <span className="font-bold">{SITUACION_IVA_LABELS[ferreteria.situacion_iva] || ferreteria.situacion_iva}</span>
+            </div>
+            {editIva ? (
+              <div className="flex flex-col items-start gap-1 w-full">
+                <select
+                  className="px-2 py-1 border border-gray-300 rounded w-full text-xs"
+                  value={newIva}
+                  onChange={e => setNewIva(e.target.value)}
+                  disabled={loadingIva}
+                >
+                  <option value="RI">Responsable Inscripto</option>
+                  <option value="MO">Monotributista</option>
+                </select>
+                <div className="flex gap-1 mt-1">
+                  <button
+                    className="px-2 py-1 bg-black text-white rounded hover:bg-gray-800 text-xs"
+                    onClick={handleIvaChange}
+                    disabled={loadingIva}
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    className="px-2 py-1 bg-gray-200 text-black rounded hover:bg-gray-300 text-xs"
+                    onClick={() => { setEditIva(false); setNewIva(ferreteria.situacion_iva); }}
+                    disabled={loadingIva}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {feedback && <div className="mt-1 text-green-700 text-xs">{feedback}</div>}
+              </div>
+            ) : (
+              <button
+                className="px-2 py-1 bg-black text-white rounded hover:bg-gray-800 text-xs"
+                onClick={() => setEditIva(true)}
+              >
+                Cambiar Situación Fiscal
+              </button>
+            )}
+            {!editIva && feedback && <div className="mt-1 text-green-700 text-xs">{feedback}</div>}
+          </div>
+        )}
+        {/* Fin bloque situación fiscal */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
           {cards.map((card) => (
             <div
