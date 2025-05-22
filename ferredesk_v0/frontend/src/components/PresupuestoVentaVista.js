@@ -16,7 +16,7 @@ const PresupuestoVista = ({
   <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
     <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
       <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-        Presupuesto N° <span className="ml-2 text-emerald-600">{data.numero_formateado || data.numero}</span>
+        Presupuesto N° <span className="ml-2 text-emerald-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
         <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
           {data.estado}
         </span>
@@ -59,7 +59,7 @@ const VentaVista = ({
   <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
     <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
       <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-        Venta N° <span className="ml-2 text-purple-600">{data.numero_formateado || data.numero}</span>
+        Venta N° <span className="ml-2 text-purple-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
         <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
           {data.estado}
         </span>

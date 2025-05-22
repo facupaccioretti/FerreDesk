@@ -286,6 +286,7 @@ const ItemsGridPresupuesto = forwardRef(({
       const costo = parseFloat(row.costo) || 0;
       const bonif = parseFloat(row.bonificacion) || 0;
       const importeTotal = (costo * cantidad) * (1 - bonif / 100);
+      const alicuotaIva = row.producto?.idaliiva ? (typeof row.producto.idaliiva === 'number' ? Number(ALICUOTAS[row.producto.idaliiva]) : parseFloat(ALICUOTAS[row.producto.idaliiva] || 0)) : 0;
       return {
         vdi_orden: idx + 1,
         vdi_idsto: row.producto.id,
@@ -295,7 +296,8 @@ const ItemsGridPresupuesto = forwardRef(({
         vdi_bonifica: bonif,
         vdi_detalle1: row.denominacion || '',
         vdi_detalle2: row.unidad || '',
-        vdi_idaliiva: row.producto.idaliiva || 0
+        vdi_idaliiva: row.producto.idaliiva || 0,
+        alicuotaIva: alicuotaIva
       };
     }),
     getStockNegativo: () => stockNegativo,

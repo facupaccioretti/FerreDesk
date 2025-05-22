@@ -59,28 +59,36 @@ class VentaViewSet(viewsets.ModelViewSet):
         if errores_stock:
             return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
 
-        # --- Lógica de comprobante automático ---
+        # --- Lógica de comprobante robusta y validación AFIP ---
         ferreteria = Ferreteria.objects.first()
         cliente_id = data.get('ven_idcli')
         tipo_comprobante = data.get('tipo_comprobante')
-        comprobante_id = None
+        comprobante = None
+        letra = None
+        cliente = Cliente.objects.filter(id=cliente_id).first()
+        tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
         if tipo_comprobante == 'presupuesto':
             comprobante = Comprobante.objects.filter(codigo_afip='9997').first()
         elif tipo_comprobante == 'venta':
             comprobante = Comprobante.objects.filter(codigo_afip='9999').first()
-        else:
-            cliente = Cliente.objects.filter(id=cliente_id).first()
-            tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
-            letra = 'C'
+        elif tipo_comprobante in ['factura', 'nota_credito', 'nota_debito', 'recibo']:
+            # Determinar letra según situación de la ferretería y el cliente
             if ferreteria and ferreteria.situacion_iva == 'RI':
-                if tipo_iva_cliente == 'consumidor final':
+                if tipo_iva_cliente == 'consumidor final' or tipo_iva_cliente == 'monotributista':
                     letra = 'B'
                 else:
                     letra = 'A'
+            elif ferreteria and ferreteria.situacion_iva == 'MO':
+                letra = 'C'
+            else:
+                letra = 'B'  # fallback
             comprobante = Comprobante.objects.filter(tipo__iexact=tipo_comprobante, letra=letra, activo=True).first()
-            if not comprobante:
-                return Response({'detail': f'No se encontró comprobante para tipo {tipo_comprobante} y letra {letra}.'}, status=status.HTTP_400_BAD_REQUEST)
-        data['comprobante'] = comprobante.id if comprobante else None
+        else:
+            # fallback genérico
+            comprobante = Comprobante.objects.filter(tipo__iexact=tipo_comprobante, activo=True).first()
+        if not comprobante:
+            return Response({'detail': 'No se encontró comprobante válido para la venta. Verifique la configuración de comprobantes y letras.'}, status=status.HTTP_400_BAD_REQUEST)
+        data['comprobante'] = comprobante.id
 
         # --- Lógica de numeración robusta ---
         punto_venta = data.get('ven_punto')

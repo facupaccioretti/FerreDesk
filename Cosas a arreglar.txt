@@ -39,8 +39,6 @@ pasaje presupuesto a venta editable, seleccionar items.
 
 presupuesto autoguardado chiche
 
-iva de clientes TIPOSIVA aplicable
-iva de productos ALICUOTAS aplicable
 
 anden bien las vistas
 desconteo de items en el stock total

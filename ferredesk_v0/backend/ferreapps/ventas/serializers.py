@@ -54,6 +54,9 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def get_numero_formateado(self, obj):
         if obj.ven_punto is not None and obj.ven_numero is not None:
+            letra = getattr(obj.comprobante, 'letra', None)
+            if letra:
+                return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}"
             return f"{obj.ven_punto:04d}-{obj.ven_numero:08d}"
         return None
 
@@ -99,11 +102,19 @@ class VentaSerializer(serializers.ModelSerializer):
                     iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
                 iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
                 iva_desglose[ali_key]['iva'] += iva
+            elif comprobante_id == 9997:
+                if ali_key not in iva_desglose:
+                    iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
+                iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
+                iva_desglose[ali_key]['iva'] += iva
         validated_data['ven_impneto'] = Decimal(str(round(subtotal_con_descuentos, 2)))
         validated_data['ven_total'] = int(round(total_con_iva, 2))
         validated_data['ven_descu1'] = descu1
         validated_data['ven_descu2'] = descu2
-        validated_data['iva_desglose'] = iva_desglose if comprobante_id not in [9998, 9999] else {}
+        if comprobante_id == 9997:
+            validated_data['iva_desglose'] = iva_desglose
+        else:
+            validated_data['iva_desglose'] = iva_desglose if comprobante_id not in [9998, 9999] else {}
         venta = Venta.objects.create(**validated_data)
         for item_data in items_data:
             item_data['vdi_idve'] = venta

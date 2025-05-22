@@ -301,6 +301,7 @@ const PresupuestosManager = () => {
       ...venta,
       tipo,
       estado,
+      letra: (venta.comprobante && typeof venta.comprobante === 'object' && venta.comprobante.letra) ? venta.comprobante.letra : venta.letra || '',
       numero: venta.numero_formateado || venta.ven_numero || venta.numero || '',
       cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],

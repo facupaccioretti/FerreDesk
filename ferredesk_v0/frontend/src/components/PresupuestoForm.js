@@ -135,7 +135,7 @@ const PresupuestoForm = ({
   const [descu1, setDescu1] = useState(form.descu1 || 0);
   const [descu2, setDescu2] = useState(form.descu2 || 0);
 
-  // Efecto para recalcular totales y aplicar bonificación general
+  // Efecto para recalcular totales y aplicar bonificación general (idéntico a VentaForm)
   useEffect(() => {
     let subtotalSinIva = 0;
     const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
@@ -236,9 +236,12 @@ const PresupuestoForm = ({
       setError('Error al acceder a la grilla de items');
       return;
     }
-    const items = itemsGridRef.current.getItems();
+    // Filtrar ítems vacíos o incompletos antes de enviar
+    const items = itemsGridRef.current.getItems().filter(
+      item => item.codigo && Number(item.cantidad) > 0 && Number(item.precio) > 0
+    );
     if (!items || items.length === 0) {
-      setError('Debe agregar al menos un ítem al presupuesto');
+      setError('Debe agregar al menos un ítem válido al presupuesto');
       return;
     }
     try {
@@ -287,6 +290,19 @@ const PresupuestoForm = ({
     if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
     const items = itemsGridRef.current.getItems();
     return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
+  };
+
+  // Handler para sincronizar los ítems de la grilla con el form
+  const handleRowsChange = (rows) => {
+    // Solo tomar los ítems válidos (con producto y código) y normalizar campos
+    const items = rows.filter(r => r.producto && r.codigo).map(r => ({
+      ...r,
+      precio: r.costo ?? r.precio ?? r.vdi_importe ?? 0,
+      cantidad: r.cantidad ?? r.vdi_cantidad ?? 0,
+      bonificacion: r.bonificacion ?? r.vdi_bonifica ?? 0,
+      alicuotaIva: r.alicuotaIva ?? 0
+    }));
+    setForm(prev => ({ ...prev, items }));
   };
 
   return (
@@ -452,29 +468,66 @@ const PresupuestoForm = ({
             bonificacionGeneral={form.bonificacionGeneral}
             setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
             modo="presupuesto"
+            onRowsChange={handleRowsChange}
           />
         )}
       </div>
 
       <div className="mt-8 text-right font-bold text-lg">
-        <div>Subtotal s/IVA: ${form.items.reduce((sum, i) => sum + (i.subtotal || 0), 0).toFixed(2)}</div>
-        <div>Descuento 1: {descu1}%</div>
-        <div>Descuento 2: {descu2}%</div>
-        <div>Subtotal c/Descuentos: ${(form.ven_impneto || 0).toFixed(2)}</div>
-        <div>IVA: {(() => {
-          let subtotalSinIva = form.items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
-          let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
-          subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-          let ivaTotal = 0;
-          form.items.forEach(item => {
-            const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
-            const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
-            const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-            ivaTotal += itemSubtotalConDescuentos * (alicuotaIva / 100);
-          });
-          return ivaTotal.toFixed(2);
-        })()}</div>
-        <div>Total c/IVA: {(form.ven_total || 0).toFixed(2)}</div>
+        <div className="inline-block bg-gray-50 rounded-lg shadow px-8 py-4 text-right">
+          <div className="flex flex-col gap-2 text-lg font-semibold text-gray-800">
+            <div className="flex gap-6 items-center">
+              <span>Subtotal s/IVA:</span>
+              <span className="text-black">${form.items.reduce((sum, i) => sum + (i.subtotal || 0), 0).toFixed(2)}</span>
+              <span className="ml-8">Bonificación general:</span>
+              <span className="text-black">{form.bonificacionGeneral}%</span>
+              <span className="ml-8">Descuento 1:</span>
+              <span className="text-black">{descu1}%</span>
+              <span className="ml-8">Descuento 2:</span>
+              <span className="text-black">{descu2}%</span>
+            </div>
+            <div className="flex gap-6 items-center">
+              <span>Subtotal c/Descuentos:</span>
+              <span className="text-black">{(() => {
+                const items = form.items;
+                const subtotalSinIva = items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                return subtotalConDescuentos.toFixed(2);
+              })()}</span>
+              <span className="ml-8">IVA:</span>
+              <span className="text-black">{(() => {
+                const items = form.items;
+                const subtotalSinIva = items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+                  const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (alicuotaIva / 100);
+                });
+                return ivaTotal.toFixed(2);
+              })()}</span>
+              <span className="ml-8">Total c/IVA:</span>
+              <span className="text-black">{(() => {
+                const items = form.items;
+                const subtotalSinIva = items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+                  const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (alicuotaIva / 100);
+                });
+                return (subtotalConDescuentos + ivaTotal).toFixed(2);
+              })()}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="mt-8 flex justify-end space-x-3">
