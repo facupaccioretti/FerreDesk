@@ -300,7 +300,9 @@ const ItemsGridPresupuesto = forwardRef(({
         vdi_detalle2: row.unidad || '',
         vdi_idaliiva: row.producto.idaliiva || row.idaliiva || 0,
         alicuotaIva: undefined,
-        codigo: row.codigo || String(row.producto.id)
+        codigo: row.codigo || String(row.producto.id),
+        producto: row.producto,
+        proveedorId: row.proveedorId
       };
     }),
     getRows: () => rows,
@@ -796,6 +798,11 @@ const ItemsGridEdicion = forwardRef(({
   onRowsChange,
   initialItems
 }, ref) => {
+  const autoSumarDuplicadosRef = useRef(autoSumarDuplicados);
+  useEffect(() => {
+    autoSumarDuplicadosRef.current = autoSumarDuplicados;
+  }, [autoSumarDuplicados]);
+
   const [rows, setRows] = useState(() => {
     if (!Array.isArray(initialItems) || initialItems.length === 0) {
       return [getEmptyRow()];
@@ -816,6 +823,61 @@ const ItemsGridEdicion = forwardRef(({
       };
     });
   });
+
+  const addItemWithDuplicado = (producto, proveedorId, cantidad = 1) => {
+    const idxExistente = rows.findIndex(r => r.producto && r.producto.id === producto.id && r.proveedorId === proveedorId);
+    const modoDuplicado = autoSumarDuplicadosRef.current;
+    if (idxExistente !== -1) {
+      if (modoDuplicado === 'sumar') {
+        setRows(rows => rows.map((row, i) => i === idxExistente ? { ...row, cantidad: Number(row.cantidad) + cantidad } : row));
+        return;
+      }
+      if (modoDuplicado === 'eliminar') {
+        setRows(rows => rows.filter((_, i) => i !== idxExistente));
+        return;
+      }
+      if (modoDuplicado === 'duplicar') {
+        setRows(prevRows => {
+          const lastRow = prevRows[prevRows.length - 1];
+          const nuevoItem = {
+            ...lastRow,
+            codigo: producto.codvta || producto.codigo || '',
+            denominacion: producto.deno || producto.nombre || '',
+            unidad: producto.unidad || producto.unidadmedida || '-',
+            costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+            cantidad,
+            bonificacion: 0,
+            producto: producto,
+            proveedorId: proveedorId
+          };
+          return [...prevRows, nuevoItem, getEmptyRow()];
+        });
+        return;
+      }
+      // Si no hay acción válida, no hacer nada
+      return;
+    }
+    setRows(prevRows => {
+      const lastRow = prevRows[prevRows.length - 1];
+      const nuevoItem = {
+        ...lastRow,
+        codigo: producto.codvta || producto.codigo || '',
+        denominacion: producto.deno || producto.nombre || '',
+        unidad: producto.unidad || producto.unidadmedida || '-',
+        costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+        cantidad,
+        bonificacion: 0,
+        producto: producto,
+        proveedorId: proveedorId
+      };
+      if (!lastRow.producto && !lastRow.codigo) {
+        return [...prevRows.slice(0, -1), nuevoItem, getEmptyRow()];
+      } else {
+        return [...prevRows, nuevoItem, getEmptyRow()];
+      }
+    });
+  };
+
   const [duplicadoModal, setDuplicadoModal] = useState({ open: false, idx: null, producto: null, proveedor: null, action: null });
   const [ultimoIdxAutocompletado, setUltimoIdxAutocompletado] = useState(null);
   const codigoRefs = useRef([]);
@@ -823,53 +885,13 @@ const ItemsGridEdicion = forwardRef(({
 
   // Mejorar handleAddItem: reemplaza el primer renglón vacío, si no hay, agrega uno nuevo
   const handleAddItem = (producto) => {
+    console.log('[ItemsGridEdicion] handleAddItem llamado con:', producto);
     if (!producto) return;
     const proveedores = getProveedoresProducto(producto.id);
     const proveedorHabitual = proveedores.find(p => p.esHabitual) || proveedores[0];
     const proveedorId = proveedorHabitual ? proveedorHabitual.id : '';
     const cantidad = 1;
-    setRows(prevRows => {
-      // Buscar primer renglón vacío
-      const idxVacio = prevRows.findIndex(r => !r.producto && (!r.codigo || r.codigo.trim() === ''));
-      if (idxVacio !== -1) {
-        // Reemplazar ese renglón
-        const newRows = [...prevRows];
-        newRows[idxVacio] = {
-          ...getEmptyRow(),
-          id: newRows[idxVacio].id || Date.now() + Math.random(),
-          codigo: producto.codvta || producto.codigo || '',
-          denominacion: producto.deno || producto.nombre || '',
-          unidad: producto.unidad || producto.unidadmedida || '-',
-          costo: proveedorHabitual?.costo || 0,
-          cantidad,
-          bonificacion: 0,
-          producto: producto,
-          proveedorId: proveedorId,
-          idaliiva: producto.idaliiva || null
-        };
-        // Si todos los renglones quedan llenos, agregar uno vacío
-        if (newRows.every(isRowLleno)) {
-          newRows.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
-        }
-        return ensureSoloUnEditable(newRows);
-      } else {
-        // Si no hay vacíos, agregar al final
-        const lastRow = prevRows[prevRows.length - 1];
-        const nuevoItem = {
-          ...lastRow,
-          codigo: producto.codvta || producto.codigo || '',
-          denominacion: producto.deno || producto.nombre || '',
-          unidad: producto.unidad || producto.unidadmedida || '-',
-          costo: proveedorHabitual?.costo || 0,
-          cantidad,
-          bonificacion: 0,
-          producto: producto,
-          proveedorId: proveedorId,
-          idaliiva: producto.idaliiva || null
-        };
-        return [...prevRows, nuevoItem, { ...getEmptyRow(), id: Date.now() + Math.random() }];
-      }
-    });
+    addItemWithDuplicado(producto, proveedorId, cantidad);
   };
 
   // Handlers de edición, duplicados, enter, foco, etc. igual que ItemsGridPresupuesto
@@ -1103,6 +1125,30 @@ const ItemsGridEdicion = forwardRef(({
       return newRows;
     });
   };
+
+  useImperativeHandle(ref, () => ({
+    handleAddItem,
+    getItems: () => rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
+      const cantidad = parseFloat(row.cantidad) || 0;
+      const costo = parseFloat(row.costo) || 0;
+      const bonif = parseFloat(row.bonificacion) || 0;
+      return {
+        vdi_orden: idx + 1,
+        vdi_idsto: row.producto.id,
+        vdi_idpro: row.proveedorId,
+        vdi_cantidad: cantidad,
+        vdi_importe: costo,
+        vdi_bonifica: bonif,
+        vdi_detalle1: row.denominacion || '',
+        vdi_detalle2: row.unidad || '',
+        vdi_idaliiva: row.producto.idaliiva || row.idaliiva || 0,
+        alicuotaIva: undefined,
+        codigo: row.codigo || String(row.producto.id),
+        producto: row.producto,
+        proveedorId: row.proveedorId
+      };
+    }),
+  }), [rows]);
 
   // Render igual que ItemsGridPresupuesto
   return (

@@ -154,33 +154,10 @@ const EditarPresupuestoForm = ({
 
   // Handler para cambios en la grilla
   const handleRowsChange = (rows) => {
-    setItems(rows.filter(r => r.producto && (r.codigo || r.producto.id)));
+    setItems(rows);
   };
 
-  // handleAddItem y handleEditItem igual a VentaForm
-  const handleAddItem = (item) => {
-    setForm(prev => ({
-      ...prev,
-      items: [...prev.items, { ...item, precio: item.costo, bonificacion: item.bonificacion || 0 }],
-    }));
-    setItemsVersion(v => v + 1);
-  };
-
-  const handleEditItem = (id, updatedItem) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.map(item => item.id === id ? { ...updatedItem, precio: updatedItem.costo, bonificacion: updatedItem.bonificacion || 0 } : item),
-    }));
-    setItemsVersion(v => v + 1);
-  };
-
-  const handleDeleteItem = (id) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.filter(item => item.id !== id),
-    }));
-    setItemsVersion(v => v + 1);
-  };
+  // handleAddItem y handleEditItem ya no son necesarios aquí
 
   // Forzar comprobante 9997 para presupuesto
   const comprobanteId = 9997;
@@ -191,9 +168,12 @@ const EditarPresupuestoForm = ({
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
-    if (itemsGridRef.current) {
+    console.log('[EditarPresupuestoForm] handleAddItemToGrid llamado con:', producto);
+    if (itemsGridRef.current && typeof itemsGridRef.current.handleAddItem === 'function') {
       itemsGridRef.current.handleAddItem(producto);
-      setItemsVersion(v => v + 1);
+      console.log('[EditarPresupuestoForm] handleAddItem ejecutado en ref');
+    } else {
+      console.error('[EditarPresupuestoForm] itemsGridRef.current o handleAddItem no está disponible', itemsGridRef.current);
     }
   };
 
@@ -223,28 +203,36 @@ const EditarPresupuestoForm = ({
   const handleSubmit = async (e) => {
     console.log('handleSubmit: inicio');
     e.preventDefault();
-    // Usar items del estado del padre
+    // Obtengo los items actuales desde el ref
+    const items = itemsGridRef.current ? itemsGridRef.current.getItems() : [];
+    console.log('handleSubmit: items obtenidos para guardar:', items.map(item => ({
+      vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
+      vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
+      cantidad: item.cantidad,
+      costo: item.costo,
+      bonificacion: item.bonificacion,
+      codigo: item.codigo,
+      producto: item.producto,
+      proveedorId: item.proveedorId
+    })));
     if (!items || items.length === 0) {
       console.error('handleSubmit: Debe agregar al menos un ítem válido al presupuesto');
       setError('Debe agregar al menos un ítem válido al presupuesto');
       return;
     }
+    for (const item of items) {
+      if (!item.vdi_idsto && !(item.producto && item.producto.id)) {
+        setError('Todos los ítems deben tener producto y proveedor válidos.');
+        console.error('handleSubmit: item inválido', item);
+        return;
+      }
+    }
     try {
       setIsLoading(true);
       setError(null);
-      // Validar estructura mínima de cada ítem
-      for (const item of items) {
-        if (!item.producto?.id && !item.vdi_idsto) {
-          console.error('handleSubmit: Todos los ítems deben tener producto y proveedor válidos.', item);
-          setError('Todos los ítems deben tener producto y proveedor válidos.');
-          return;
-        }
-      }
-      // Si es edición, asegurar tipos y mapeo correcto
       let payload;
       if (initialData && initialData.id) {
-        // Edición
-        console.log('handleSubmit: valor de form.numero antes de armar payload', form.numero, typeof form.numero);
+        const mappedItems = items.map(mapItemFields);
         payload = {
           ven_id: parseInt(initialData.id),
           ven_estado: 'AB',
@@ -255,26 +243,25 @@ const EditarPresupuestoForm = ({
           ven_sucursal: parseInt(form.sucursalId, 10) || 1,
           ven_fecha: form.fecha,
           ven_punto: parseInt(form.puntoVentaId, 10) || 1,
-          ven_impneto: parseInt(form.ven_impneto) || 0,
-          ven_descu1: parseInt(descu1) || 0,
-          ven_descu2: parseInt(descu2) || 0,
-          ven_descu3: parseInt(form.descu3) || 0,
-          bonificacionGeneral: parseInt(form.bonificacionGeneral) || 0,
-          ven_bonificacion_general: parseInt(form.bonificacionGeneral) || 0,
-          ven_total: parseInt(form.ven_total) || 0,
-          ven_vdocomvta: parseInt(form.ven_vdocomvta) || 0,
-          ven_vdocomcob: parseInt(form.ven_vdocomcob) || 0,
+          ven_impneto: parseFloat(form.ven_impneto) || 0,
+          ven_descu1: parseFloat(descu1) || 0,
+          ven_descu2: parseFloat(descu2) || 0,
+          ven_descu3: parseFloat(form.descu3) || 0,
+          bonificacionGeneral: parseFloat(form.bonificacionGeneral) || 0,
+          ven_bonificacion_general: parseFloat(form.bonificacionGeneral) || 0,
+          ven_total: parseFloat(form.ven_total) || 0,
+          ven_vdocomvta: parseFloat(form.ven_vdocomvta) || 0,
+          ven_vdocomcob: parseFloat(form.ven_vdocomcob) || 0,
           ven_idcli: parseInt(form.clienteId) || '',
           ven_idpla: parseInt(form.plazoId) || '',
           ven_idvdo: parseInt(form.vendedorId) || '',
           ven_copia: parseInt(form.copia, 10) || 1,
-          items: items.map(mapItemFields),
-          permitir_stock_negativo: true
+          items: mappedItems,
+          permitir_stock_negativo: true,
+          update_atomic: true
         };
         console.log('handleSubmit: payload de edición', payload);
-        console.log('handleSubmit: ven_punto, ven_numero, comprobante', payload.ven_punto, payload.ven_numero, payload.comprobante);
       } else {
-        // Nuevo presupuesto (no modificar)
         payload = {
           ven_estado: 'AB',
           ven_tipo: 'Presupuesto',
@@ -298,9 +285,9 @@ const EditarPresupuestoForm = ({
           ven_idvdo: form.vendedorId,
           ven_copia: form.copia || 1,
           items: items.map(mapItemFields),
-          permitir_stock_negativo: true
+          permitir_stock_negativo: true,
+          update_atomic: true
         };
-        console.log('handleSubmit: payload de nuevo', payload);
       }
       console.log('handleSubmit: llamando a onSave');
       const onSaveResult = await onSave(payload);
@@ -549,10 +536,6 @@ const EditarPresupuestoForm = ({
 
       <div className="mb-8">
         <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems del Presupuesto</h4>
-        <BuscadorProducto
-          productos={productos}
-          onSelect={handleAddItemToGrid}
-        />
         {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
@@ -564,19 +547,25 @@ const EditarPresupuestoForm = ({
         ) : errorAlicuotas ? (
           <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
         ) : (
-          <ItemsGridEdicion
-            ref={itemsGridRef}
-            productosDisponibles={productos}
-            proveedores={proveedores}
-            stockProveedores={stockProveedores}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={form.bonificacionGeneral}
-            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
-            modo="edicion"
-            onRowsChange={handleRowsChange}
-            initialItems={items}
-          />
+          <>
+            <BuscadorProducto
+              productos={productos}
+              onSelect={handleAddItemToGrid}
+            />
+            <ItemsGridEdicion
+              ref={itemsGridRef}
+              productosDisponibles={productos}
+              proveedores={proveedores}
+              stockProveedores={stockProveedores}
+              autoSumarDuplicados={autoSumarDuplicados}
+              setAutoSumarDuplicados={setAutoSumarDuplicados}
+              bonificacionGeneral={form.bonificacionGeneral}
+              setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
+              modo="edicion"
+              onRowsChange={handleRowsChange}
+              initialItems={items}
+            />
+          </>
         )}
       </div>
 

@@ -19,6 +19,69 @@ from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
 import logging
 
+# Diccionario de alícuotas (igual que en el frontend)
+ALICUOTAS = {
+    1: Decimal('0'),  # NO GRAVADO
+    2: Decimal('0'),  # EXENTO
+    3: Decimal('0'),  # 0%
+    4: Decimal('10.5'),
+    5: Decimal('21'),
+    6: Decimal('27')
+}
+
+def calcular_totales(items, bonificacion_general, descu1, descu2):
+    """
+    Calcula los totales de la venta/presupuesto usando la misma lógica que el frontend.
+    """
+    subtotal_sin_iva = Decimal('0')
+    items_con_subtotal = []
+    
+    # Calcular subtotal sin IVA y aplicar bonificaciones
+    for item in items:
+        bonif_particular = Decimal(str(item.get('vdi_bonifica', 0)))
+        cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+        precio = Decimal(str(item.get('vdi_importe', 0)))
+        
+        if bonif_particular > 0:
+            subtotal = (precio * cantidad) * (1 - bonif_particular / Decimal('100'))
+        else:
+            subtotal = (precio * cantidad) * (1 - Decimal(str(bonificacion_general)) / Decimal('100'))
+        
+        subtotal_sin_iva += subtotal
+        items_con_subtotal.append({
+            'item': item,
+            'subtotal': subtotal
+        })
+    
+    # Aplicar descuentos sucesivos
+    subtotal_con_descuentos = subtotal_sin_iva * (1 - Decimal(str(descu1)) / Decimal('100'))
+    subtotal_con_descuentos = subtotal_con_descuentos * (1 - Decimal(str(descu2)) / Decimal('100'))
+    
+    # Calcular IVA y total
+    iva_total = Decimal('0')
+    total_con_iva = Decimal('0')
+    
+    for item_data in items_con_subtotal:
+        item = item_data['item']
+        ali_id = item.get('vdi_idaliiva')
+        ali_porc = Decimal(str(ALICUOTAS.get(ali_id, Decimal('0'))))
+        
+        # Calcular proporción del descuento global
+        proporcion = item_data['subtotal'] / subtotal_sin_iva if subtotal_sin_iva else Decimal('0')
+        item_subtotal_con_descuentos = subtotal_con_descuentos * proporcion
+        
+        # Calcular IVA
+        iva = item_subtotal_con_descuentos * (ali_porc / Decimal('100'))
+        iva_total += iva
+        total_con_iva += item_subtotal_con_descuentos + iva
+    
+    return {
+        'subtotal_sin_iva': round(subtotal_sin_iva, 2),
+        'subtotal_con_descuentos': round(subtotal_con_descuentos, 2),
+        'iva_total': round(iva_total, 2),
+        'total_con_iva': round(total_con_iva, 2)
+    }
+
 # Create your views here.
 
 class ComprobanteViewSet(viewsets.ModelViewSet):
@@ -191,15 +254,63 @@ class VentaViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+        
+        # Si es una actualización atómica, procesar todo en una sola transacción
+        if request.data.get('update_atomic', False):
+            try:
+                # Obtener los datos de los items antes de actualizar
+                items_data = request.data.pop('items', None)
+                
+                # Calcular los totales antes de actualizar
+                if items_data is not None:
+                    bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
+                    descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
+                    descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
+                    
+                    totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
+                    
+                    # Actualizar los campos calculados
+                    request.data['ven_impneto'] = totales['subtotal_con_descuentos']
+                    request.data['ven_total'] = totales['total_con_iva']
+                
+                # Actualizar los campos principales
+                serializer = self.get_serializer(instance, data=request.data, partial=partial)
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                
+                # Actualizar los items en la misma transacción
+                if items_data is not None:
+                    instance.items.all().delete()
+                    for item_data in items_data:
+                        item_data['vdi_idve'] = instance
+                        VentaDetalleItem.objects.create(**item_data)
+                
+                return Response(serializer.data)
+            except Exception as e:
+                logging.error(f"Error en actualización atómica de venta: {e}")
+                raise
+        
+        # Si no es atómica, mantener el comportamiento anterior
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        # Actualizar los campos principales
         self.perform_update(serializer)
-        # Actualizar los ítems relacionados si vienen en el request
+        
         items_data = request.data.get('items', None)
         if items_data is not None:
-            # Borrar los ítems existentes y crear los nuevos de forma atómica
             try:
+                # Calcular los totales
+                bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
+                descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
+                descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
+                
+                totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
+                
+                # Actualizar los campos calculados
+                instance.ven_impneto = totales['subtotal_con_descuentos']
+                instance.ven_total = totales['total_con_iva']
+                instance.save()
+                
+                # Actualizar los items
                 instance.items.all().delete()
                 for item_data in items_data:
                     item_data['vdi_idve'] = instance
@@ -207,6 +318,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 logging.error(f"Error actualizando ítems de venta: {e}")
                 raise
+        
         return Response(serializer.data)
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
