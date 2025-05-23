@@ -17,6 +17,7 @@ from decimal import Decimal
 from ferreapps.productos.models import Ferreteria
 from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
+import logging
 
 # Create your views here.
 
@@ -36,37 +37,40 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
         permitir_stock_negativo = data.get('permitir_stock_negativo', False)
+        tipo_comprobante = data.get('tipo_comprobante')
+        # Si es presupuesto, NO descontar stock
+        es_presupuesto = (tipo_comprobante == 'presupuesto')
         errores_stock = []
         stock_actualizado = []
-        for item in items:
-            id_stock = item.get('vdi_idsto')
-            id_proveedor = item.get('vdi_idpro')
-            cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
-            if not id_stock or not id_proveedor:
-                errores_stock.append(f"Falta stock o proveedor en item: {item}")
-                continue
-            try:
-                stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-            except StockProve.DoesNotExist:
-                errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
-                continue
-            if stockprove.cantidad < cantidad and not permitir_stock_negativo:
-                errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
-                continue
-            stockprove.cantidad -= cantidad
-            stockprove.save()
-            stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
-        if errores_stock:
-            return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
+        if not es_presupuesto:
+            for item in items:
+                id_stock = item.get('vdi_idsto')
+                id_proveedor = item.get('vdi_idpro')
+                cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+                if not id_stock or not id_proveedor:
+                    errores_stock.append(f"Falta stock o proveedor en item: {item}")
+                    continue
+                try:
+                    stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                except StockProve.DoesNotExist:
+                    errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
+                    continue
+                if stockprove.cantidad < cantidad and not permitir_stock_negativo:
+                    errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
+                    continue
+                stockprove.cantidad -= cantidad
+                stockprove.save()
+                stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+            if errores_stock:
+                return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
 
         # --- Lógica de comprobante robusta y validación AFIP ---
         ferreteria = Ferreteria.objects.first()
         cliente_id = data.get('ven_idcli')
-        tipo_comprobante = data.get('tipo_comprobante')
-        comprobante = None
-        letra = None
         cliente = Cliente.objects.filter(id=cliente_id).first()
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+        comprobante = None
+        letra = None
         if tipo_comprobante == 'presupuesto':
             comprobante = Comprobante.objects.filter(codigo_afip='9997').first()
         elif tipo_comprobante == 'venta':
@@ -182,6 +186,28 @@ class VentaViewSet(viewsets.ModelViewSet):
             return HttpResponse(response_content, content_type='text/html') # Cambiar a application/pdf para PDF real
         else:
             raise Http404
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        # Actualizar los campos principales
+        self.perform_update(serializer)
+        # Actualizar los ítems relacionados si vienen en el request
+        items_data = request.data.get('items', None)
+        if items_data is not None:
+            # Borrar los ítems existentes y crear los nuevos de forma atómica
+            try:
+                instance.items.all().delete()
+                for item_data in items_data:
+                    item_data['vdi_idve'] = instance
+                    VentaDetalleItem.objects.create(**item_data)
+            except Exception as e:
+                logging.error(f"Error actualizando ítems de venta: {e}")
+                raise
+        return Response(serializer.data)
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleItem.objects.all()

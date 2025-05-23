@@ -1,6 +1,7 @@
 "use client"
 import React from 'react';
 import { BotonImprimir, BotonEliminar } from './Botones';
+import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
 
 const PresupuestoVista = ({
   data,
@@ -12,38 +13,61 @@ const PresupuestoVista = ({
   plazos,
   sucursales,
   puntosVenta,
-}) => (
-  <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
-    <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
-      <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-        Presupuesto N° <span className="ml-2 text-emerald-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
-        <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-          {data.estado}
-        </span>
-      </h3>
-      <div className="flex gap-3">
-        <BotonImprimir onClick={() => onImprimir(data)} />
-        <BotonEliminar onClick={() => onEliminar(data.id)} />
-        <button
-          onClick={onCerrar}
-          className="px-3 py-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200"
-        >
-          Cerrar
-        </button>
+  comprobantes = []
+}) => {
+  // Obtener comprobante
+  let comprobanteObj = null;
+  if (typeof data.comprobante === 'object' && data.comprobante !== null) {
+    comprobanteObj = data.comprobante;
+  } else if (data.comprobante) {
+    comprobanteObj = comprobantes.find(c => c.id === data.comprobante) || null;
+  }
+  const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
+  const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
+  const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
+  const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre, comprobanteLetra);
+
+  return (
+    <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
+      <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
+        <div className="flex items-center gap-4">
+          <h3 className="text-2xl font-bold text-gray-800 flex items-center">
+            Presupuesto N° <span className="ml-2 text-emerald-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
+            <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+              {data.estado}
+            </span>
+          </h3>
+          <div className="flex gap-2 ml-6">
+            <BotonImprimir onClick={() => onImprimir(data)} />
+            <BotonEliminar onClick={() => onEliminar(data.id)} />
+            <button
+              onClick={onCerrar}
+              className="px-3 py-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col items-end">
+          {icon}
+          <span className="mt-1 text-base font-semibold text-gray-800">
+            {label}{comprobanteLetra && (label.startsWith('Factura') || label.startsWith('N. Cred') || label.startsWith('N. Deb')) ? ' ' + comprobanteLetra : ''}
+          </span>
+        </div>
       </div>
+      <DatosGenerales
+        data={data}
+        clientes={clientes}
+        vendedores={vendedores}
+        plazos={plazos}
+        sucursales={sucursales}
+        puntosVenta={puntosVenta}
+      />
+      <TablaItems data={data} />
+      <Totales data={data} />
     </div>
-    <DatosGenerales
-      data={data}
-      clientes={clientes}
-      vendedores={vendedores}
-      plazos={plazos}
-      sucursales={sucursales}
-      puntosVenta={puntosVenta}
-    />
-    <TablaItems data={data} />
-    <Totales data={data} />
-  </div>
-);
+  );
+};
 
 const VentaVista = ({
   data,
@@ -55,39 +79,62 @@ const VentaVista = ({
   plazos,
   sucursales,
   puntosVenta,
-}) => (
-  <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
-    <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
-      <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-        Venta N° <span className="ml-2 text-purple-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
-        <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
-          {data.estado}
-        </span>
-      </h3>
-      <div className="flex gap-3">
-        <BotonImprimir onClick={() => onImprimir(data)} />
-        <BotonEliminar onClick={() => onEliminar(data.id)} />
-        <button
-          onClick={onCerrar}
-          className="px-3 py-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200"
-        >
-          Cerrar
-        </button>
+  comprobantes = []
+}) => {
+  // Obtener comprobante
+  let comprobanteObj = null;
+  if (typeof data.comprobante === 'object' && data.comprobante !== null) {
+    comprobanteObj = data.comprobante;
+  } else if (data.comprobante) {
+    comprobanteObj = comprobantes.find(c => c.id === data.comprobante) || null;
+  }
+  const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
+  const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
+  const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
+  const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre, comprobanteLetra);
+
+  return (
+    <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
+      <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
+        <div className="flex items-center gap-4">
+          <h3 className="text-2xl font-bold text-gray-800 flex items-center">
+            Venta N° <span className="ml-2 text-purple-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
+            <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+              {data.estado}
+            </span>
+          </h3>
+          <div className="flex gap-2 ml-6">
+            <BotonImprimir onClick={() => onImprimir(data)} />
+            <BotonEliminar onClick={() => onEliminar(data.id)} />
+            <button
+              onClick={onCerrar}
+              className="px-3 py-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col items-end">
+          {icon}
+          <span className="mt-1 text-base font-semibold text-gray-800">
+            {label}{comprobanteLetra && (label.startsWith('Factura') || label.startsWith('N. Cred') || label.startsWith('N. Deb')) ? ' ' + comprobanteLetra : ''}
+          </span>
+        </div>
       </div>
+      <DatosGenerales
+        data={data}
+        clientes={clientes}
+        vendedores={vendedores}
+        plazos={plazos}
+        sucursales={sucursales}
+        puntosVenta={puntosVenta}
+      />
+      <TablaItems data={data} />
+      <Totales data={data} />
+      {data.iva_desglose && Object.keys(data.iva_desglose).length > 0 && <DesgloseIVA ivaDesglose={data.iva_desglose} />}
     </div>
-    <DatosGenerales
-      data={data}
-      clientes={clientes}
-      vendedores={vendedores}
-      plazos={plazos}
-      sucursales={sucursales}
-      puntosVenta={puntosVenta}
-    />
-    <TablaItems data={data} />
-    <Totales data={data} />
-    {data.iva_desglose && Object.keys(data.iva_desglose).length > 0 && <DesgloseIVA ivaDesglose={data.iva_desglose} />}
-  </div>
-);
+  );
+};
 
 const ALICUOTAS = {
   1: 0, // NO GRAVADO
@@ -137,25 +184,19 @@ const DatosGenerales = ({ data, clientes = [], vendedores = [], plazos = [], suc
   );
 };
 
-const TablaItems = ({ data, proveedores = [] }) => {
+const TablaItems = ({ data }) => {
   const items = data.items || [];
-  // Helper para mapear ID a nombre si es necesario
-  const getProveedorNombre = (item) => {
-    if (item.proveedor_usado) return item.proveedor_usado;
-    if (item.proveedor_nombre) return item.proveedor_nombre;
-    if (item.proveedor) return item.proveedor;
-    if (item.proveedorId && Array.isArray(proveedores)) {
-      const prov = proveedores.find(p => p.id === item.proveedorId);
-      return prov ? prov.nombre : item.proveedorId;
-    }
-    return "-";
-  };
   // Helper para mostrar alícuota
   const getAlicuota = (item) => {
+    const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : undefined;
+    if (ali !== undefined && ALICUOTAS[ali] !== undefined) return ALICUOTAS[ali] + '%';
+    // Si ali es porcentaje, buscar la clave cuyo valor es igual a ali
+    const aliKey = Object.keys(ALICUOTAS).find(k => Number(ALICUOTAS[k]) === ali);
+    if (aliKey) return ALICUOTAS[aliKey] + '%';
     if (item.alicuota) return item.alicuota + '%';
     if (item.iva) return item.iva + '%';
     if (item.iva_porcentaje) return item.iva_porcentaje + '%';
-    if (item.vdi_idaliiva && ALICUOTAS[item.vdi_idaliiva] !== undefined) return ALICUOTAS[item.vdi_idaliiva] + '%';
+    if (item.vdi_idaliiva !== undefined) return String(item.vdi_idaliiva);
     return '-';
   };
   return (
@@ -176,7 +217,6 @@ const TablaItems = ({ data, proveedores = [] }) => {
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Costo</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">IVA %</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Proveedor</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -188,7 +228,6 @@ const TablaItems = ({ data, proveedores = [] }) => {
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${item.precio?.toFixed(2)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.bonificacion}%</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getAlicuota(item)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getProveedorNombre(item)}</td>
               </tr>
             ))}
           </tbody>
@@ -275,6 +314,19 @@ const DesgloseIVA = ({ ivaDesglose }) => {
       </div>
     </div>
   );
+};
+
+// Utilidad para icono y nombre corto
+const getComprobanteIconAndLabel = (tipo, nombre = '', letra = '') => {
+  const n = String(nombre || '').toLowerCase();
+  if (n.includes('presupuesto')) return { icon: <IconPresupuesto className="w-10 h-10 text-blue-500" />, label: 'Presupuesto' };
+  if (n.includes('venta')) return { icon: <IconVenta className="w-10 h-10 text-green-500" />, label: 'Venta' };
+  if (n.includes('factura')) return { icon: <IconFactura className="w-10 h-10 text-purple-500" />, label: 'Factura' };
+  if (n.includes('nota de crédito interna')) return { icon: <IconCredito className="w-10 h-10 text-pink-500" />, label: 'N. Cred. Int.' };
+  if (n.includes('nota de crédito')) return { icon: <IconCredito className="w-10 h-10 text-pink-500" />, label: 'N. Cred.' };
+  if (n.includes('nota de débito')) return { icon: <IconCredito className="w-10 h-10 text-yellow-500" />, label: 'N. Deb.' };
+  if (n.includes('recibo')) return { icon: <IconRecibo className="w-10 h-10 text-orange-500" />, label: 'Recibo' };
+  return { icon: <IconFactura className="w-10 h-10 text-gray-400" />, label: String(nombre) };
 };
 
 const PresupuestoVentaVista = (props) => {

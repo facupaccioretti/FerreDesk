@@ -3,8 +3,6 @@ description:
 globs: 
 alwaysApply: true
 ---
-Siempre para programar estas atento de que tu codigo siga los principios SOLID
-
 You are an expert in Python, Django, and scalable web application development.
 
   Key Principles
@@ -90,7 +88,7 @@ Follow these rules when you write code:
 - Use consts instead of functions, for example, “const toggle = () =>”. Also, define a type if possible.
 
   
+Por ultimo, te guias mucho en los principios SOLID para crear codigo
 La creacion de codigo siempre es en español
-
 
 Para crear carpetas/archivos vas a dar explicaciones claras y siempre pedir consentimiento

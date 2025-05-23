@@ -237,6 +237,7 @@ const VentaForm = ({
       ven_descu2: descu2 || 0,
       ven_descu3: form.descu3 || 0,
       bonificacionGeneral: form.bonificacionGeneral || 0,
+      ven_bonificacion_general: form.bonificacionGeneral || 0,
       ven_total: form.ven_total || 0,
       ven_vdocomvta: form.vdocomvta || 0,
       ven_vdocomcob: form.vdocomcob || 0,
@@ -310,7 +311,7 @@ const VentaForm = ({
     return form.items;
   };
 
-  // Copio el diccionario de alícuotas del ItemsGrid
+  // Diccionario de alícuotas
   const ALICUOTAS = {
     1: 0, // NO GRAVADO
     2: 0, // EXENTO
@@ -319,6 +320,55 @@ const VentaForm = ({
     5: 21,
     6: 27
   };
+
+  // Función auxiliar para calcular el subtotal de línea
+  function calcularSubtotalLinea(item, bonifGeneral) {
+    const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
+    const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
+    const bonif = item.bonificacion !== undefined ? parseFloat(item.bonificacion) || 0 : bonifGeneral;
+    return (precio * cantidad) * (1 - bonif / 100);
+  }
+
+  // Cálculos de totales centralizados y robustos
+  function calcularTotales() {
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+    const desc1 = parseFloat(descu1) || 0;
+    const desc2 = parseFloat(descu2) || 0;
+    let subtotalSinIva = 0;
+    const itemsConSubtotal = form.items.map(item => {
+      const bonifParticular = parseFloat(item.bonificacion) || 0;
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio) || 0;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
+      return { ...item, subtotal };
+    });
+    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
+    let ivaTotal = 0;
+    let totalConIva = 0;
+    itemsConSubtotal.forEach(item => {
+      const aliId = item.alicuotaIva || item.vdi_idaliiva;
+      const aliPorc = ALICUOTAS[aliId] || 0;
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
+      ivaTotal += iva;
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    return {
+      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
+      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
+      ivaTotal: Math.round(ivaTotal * 100) / 100,
+      totalConIva: Math.round(totalConIva * 100) / 100,
+      items: itemsConSubtotal
+    };
+  }
 
   return (
     <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
@@ -482,7 +532,11 @@ const VentaForm = ({
               <span>Subtotal s/IVA:</span>
               <span className="text-black">${(() => {
                 const items = getCurrentItems();
-                return items.reduce((sum, i) => sum + (i.vdi_importe || 0), 0).toFixed(2);
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotal = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                return Number(subtotal).toFixed(2);
               })()}</span>
               <span className="ml-8">Bonificación general:</span>
               <span className="text-black">{form.bonificacionGeneral}%</span>
@@ -495,37 +549,50 @@ const VentaForm = ({
               <span>Subtotal c/Descuentos:</span>
               <span className="text-black">{(() => {
                 const items = getCurrentItems();
-                const subtotalSinIva = items.reduce((sum, i) => sum + (i.vdi_importe || 0), 0);
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
                 let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
                 subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-                return subtotalConDescuentos.toFixed(2);
+                return Number(subtotalConDescuentos).toFixed(2);
               })()}</span>
               <span className="ml-8">IVA:</span>
               <span className="text-black">{(() => {
                 const items = getCurrentItems();
-                const subtotalSinIva = items.reduce((sum, i) => sum + (i.vdi_importe || 0), 0);
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
                 let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
                 subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
                 let ivaTotal = 0;
                 items.forEach(item => {
-                  const proporcion = (item.vdi_importe || 0) / (subtotalSinIva || 1);
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
                   const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-                  const aliPorc = ALICUOTAS[item.vdi_idaliiva] ?? 0;
                   ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
                 });
-                return ivaTotal.toFixed(2);
+                return Number(ivaTotal).toFixed(2);
               })()}</span>
               <span className="ml-8">Total c/IVA:</span>
               <span className="text-black">{(() => {
                 const items = getCurrentItems();
-                const subtotalSinIva = items.reduce((sum, i) => sum + (i.vdi_importe || 0), 0);
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
                 let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
                 subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
                 let ivaTotal = 0;
                 items.forEach(item => {
-                  const proporcion = (item.vdi_importe || 0) / (subtotalSinIva || 1);
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
                   const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-                  const aliPorc = ALICUOTAS[item.vdi_idaliiva] ?? 0;
                   ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
                 });
                 return (subtotalConDescuentos + ivaTotal).toFixed(2);

@@ -52,7 +52,7 @@ class Venta(models.Model):
     ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU1')
     ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU2')
     ven_descu3 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU3')
-    ven_total = models.BigIntegerField(db_column='VEN_TOTAL', null=True, blank=True)
+    ven_total = models.DecimalField(max_digits=15, decimal_places=2, db_column='VEN_TOTAL', null=True, blank=True)
     ven_vdocomvta = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMVTA')
     ven_vdocomcob = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMCOB')
     ven_estado = models.CharField(max_length=2, db_column='VEN_ESTADO', null=True, blank=True)
@@ -65,6 +65,7 @@ class Venta(models.Model):
     ven_caevencimiento = models.DateField(db_column='VEN_CAEVENCIMIENTO', null=True, blank=True)
     ven_qr = models.BinaryField(db_column='VEN_QR', null=True, blank=True)
     iva_desglose = JSONField(null=True, blank=True, db_column='VEN_IVA_DESGLOSE')
+    ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
     class Meta:
         db_table = 'VENTA'

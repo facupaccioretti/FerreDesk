@@ -5,12 +5,12 @@ const MIN_ROWS = 5;
 
 // Diccionario de alícuotas según la tabla proporcionada
 const ALICUOTAS = {
-  1: '0', // NO GRAVADO
-  2: '0', // EXENTO
-  3: '0', // 0%
-  4: '10.5',
-  5: '21',
-  6: '27'
+  1: 0, // NO GRAVADO
+  2: 0, // EXENTO
+  3: 0, // 0%
+  4: 10.5,
+  5: 21,
+  6: 27
 };
 
 function getEmptyRow() {
@@ -118,10 +118,11 @@ const ItemsGridPresupuesto = forwardRef(({
   bonificacionGeneral,
   setBonificacionGeneral,
   modo = 'presupuesto', // por defecto, para distinguir entre venta y presupuesto
-  onRowsChange
+  onRowsChange,
+  initialItems
 }, ref) => {
   const esPresupuesto = modo === 'presupuesto';
-  const [rows, setRows] = useState([getEmptyRow()]);
+  const [rows, setRows] = useState(() => (Array.isArray(initialItems) && initialItems.length > 0 ? initialItems : [getEmptyRow()]));
   const [stockNegativo, setStockNegativo] = useState(false);
   const [stockAlert, setStockAlert] = useState("");
   const [duplicadoModal, setDuplicadoModal] = useState({ open: false, idx: null, producto: null, proveedor: null, action: null });
@@ -159,10 +160,8 @@ const ItemsGridPresupuesto = forwardRef(({
         result.splice(i, 1);
       }
     }
-    // Si hay más de un renglón sin producto, eliminar el último
     const sinProducto = result.filter(row => !isRowLleno(row));
     if (sinProducto.length > 1) {
-      // Eliminar el último sin producto
       const lastIdx = result.map(row => !isRowLleno(row)).lastIndexOf(true);
       if (lastIdx !== -1) {
         result.splice(lastIdx, 1);
@@ -170,10 +169,15 @@ const ItemsGridPresupuesto = forwardRef(({
     }
     // Si hay algún renglón sin producto, no agrego otro vacío
     if (result.some(row => !isRowLleno(row))) {
+      // Si el último renglón no tiene id, asignar uno único
+      const last = result[result.length - 1];
+      if (last && !last.id) {
+        last.id = Date.now() + Math.random();
+      }
       return result;
     }
     // Solo agrego un vacío si todos los renglones tienen producto
-    result.push(getEmptyRow());
+    result.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
     return result;
   }
 
@@ -279,30 +283,30 @@ const ItemsGridPresupuesto = forwardRef(({
     });
   };
 
-  // Exponer método para obtener los ítems cargados y si se permite stock negativo
+  // En useImperativeHandle, expongo también getRows para acceder siempre al array actualizado
   useImperativeHandle(ref, () => ({
-    getItems: () => rows.filter(r => r.producto && r.codigo).map((row, idx) => {
+    getItems: () => rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
       const cantidad = parseFloat(row.cantidad) || 0;
       const costo = parseFloat(row.costo) || 0;
       const bonif = parseFloat(row.bonificacion) || 0;
-      const importeTotal = (costo * cantidad) * (1 - bonif / 100);
-      const alicuotaIva = row.producto?.idaliiva ? (typeof row.producto.idaliiva === 'number' ? Number(ALICUOTAS[row.producto.idaliiva]) : parseFloat(ALICUOTAS[row.producto.idaliiva] || 0)) : 0;
       return {
         vdi_orden: idx + 1,
         vdi_idsto: row.producto.id,
         vdi_idpro: row.proveedorId,
         vdi_cantidad: cantidad,
-        vdi_importe: importeTotal,
+        vdi_importe: costo,
         vdi_bonifica: bonif,
         vdi_detalle1: row.denominacion || '',
         vdi_detalle2: row.unidad || '',
-        vdi_idaliiva: row.producto.idaliiva || 0,
-        alicuotaIva: alicuotaIva
+        vdi_idaliiva: row.producto.idaliiva || row.idaliiva || 0,
+        alicuotaIva: undefined,
+        codigo: row.codigo || String(row.producto.id)
       };
     }),
-    getStockNegativo: () => stockNegativo,
+    getRows: () => rows,
     handleAddItem,
-  }), [rows, stockNegativo, handleAddItem]);
+    getStockNegativo: () => stockNegativo,
+  }), [rows, handleAddItem, stockNegativo]);
 
   // Helper para obtener proveedores y stock de un producto
   const getProveedoresProducto = (productoId) => {
@@ -599,6 +603,14 @@ const ItemsGridPresupuesto = forwardRef(({
     if (onRowsChange) onRowsChange(rows);
   }, [rows]);
 
+  // Función auxiliar para calcular subtotal de línea
+  function calcularSubtotalLinea(row) {
+    const cantidad = parseFloat(row.cantidad) || 0;
+    const costo = parseFloat(row.costo) || 0;
+    const bonif = parseFloat(row.bonificacion) || 0;
+    return (costo * cantidad) * (1 - bonif / 100);
+  }
+
   return (
     <div className="space-y-4 w-full">
       {esPresupuesto && (
@@ -715,7 +727,7 @@ const ItemsGridPresupuesto = forwardRef(({
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap">
                   {row.producto ? (
-                    <span>{ALICUOTAS[row.producto.idaliiva] ? ALICUOTAS[row.producto.idaliiva] + '%' : '-'}</span>
+                    <span>{ALICUOTAS[row.producto.idaliiva] !== undefined ? ALICUOTAS[row.producto.idaliiva] + '%' : '-'}</span>
                   ) : '-'}
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap">
@@ -771,8 +783,488 @@ const ItemsGridPresupuesto = forwardRef(({
   );
 });
 
+// NUEVO: Grilla para edición de productos existentes
+const ItemsGridEdicion = forwardRef(({
+  productosDisponibles,
+  proveedores,
+  stockProveedores,
+  autoSumarDuplicados,
+  setAutoSumarDuplicados,
+  bonificacionGeneral,
+  setBonificacionGeneral,
+  modo = 'edicion',
+  onRowsChange,
+  initialItems
+}, ref) => {
+  const [rows, setRows] = useState(() => {
+    if (!Array.isArray(initialItems) || initialItems.length === 0) {
+      return [getEmptyRow()];
+    }
+    return initialItems.map((item, idx) => {
+      const producto = item.producto || productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id));
+      return {
+        id: item.id || Date.now() + idx,
+        codigo: item.codigo || producto?.codvta || producto?.codigo || '',
+        denominacion: item.denominacion || producto?.deno || producto?.nombre || '',
+        unidad: item.unidad || producto?.unidad || producto?.unidadmedida || '-',
+        cantidad: item.cantidad || item.vdi_cantidad || 1,
+        costo: item.costo || item.precio || item.vdi_importe || 0,
+        bonificacion: item.bonificacion || item.vdi_bonifica || 0,
+        producto: producto,
+        proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
+        idaliiva: producto?.idaliiva || item.vdi_idaliiva || null
+      };
+    });
+  });
+  const [duplicadoModal, setDuplicadoModal] = useState({ open: false, idx: null, producto: null, proveedor: null, action: null });
+  const [ultimoIdxAutocompletado, setUltimoIdxAutocompletado] = useState(null);
+  const codigoRefs = useRef([]);
+  const cantidadRefs = useRef([]);
+
+  // Mejorar handleAddItem: reemplaza el primer renglón vacío, si no hay, agrega uno nuevo
+  const handleAddItem = (producto) => {
+    if (!producto) return;
+    const proveedores = getProveedoresProducto(producto.id);
+    const proveedorHabitual = proveedores.find(p => p.esHabitual) || proveedores[0];
+    const proveedorId = proveedorHabitual ? proveedorHabitual.id : '';
+    const cantidad = 1;
+    setRows(prevRows => {
+      // Buscar primer renglón vacío
+      const idxVacio = prevRows.findIndex(r => !r.producto && (!r.codigo || r.codigo.trim() === ''));
+      if (idxVacio !== -1) {
+        // Reemplazar ese renglón
+        const newRows = [...prevRows];
+        newRows[idxVacio] = {
+          ...getEmptyRow(),
+          id: newRows[idxVacio].id || Date.now() + Math.random(),
+          codigo: producto.codvta || producto.codigo || '',
+          denominacion: producto.deno || producto.nombre || '',
+          unidad: producto.unidad || producto.unidadmedida || '-',
+          costo: proveedorHabitual?.costo || 0,
+          cantidad,
+          bonificacion: 0,
+          producto: producto,
+          proveedorId: proveedorId,
+          idaliiva: producto.idaliiva || null
+        };
+        // Si todos los renglones quedan llenos, agregar uno vacío
+        if (newRows.every(isRowLleno)) {
+          newRows.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
+        }
+        return ensureSoloUnEditable(newRows);
+      } else {
+        // Si no hay vacíos, agregar al final
+        const lastRow = prevRows[prevRows.length - 1];
+        const nuevoItem = {
+          ...lastRow,
+          codigo: producto.codvta || producto.codigo || '',
+          denominacion: producto.deno || producto.nombre || '',
+          unidad: producto.unidad || producto.unidadmedida || '-',
+          costo: proveedorHabitual?.costo || 0,
+          cantidad,
+          bonificacion: 0,
+          producto: producto,
+          proveedorId: proveedorId,
+          idaliiva: producto.idaliiva || null
+        };
+        return [...prevRows, nuevoItem, { ...getEmptyRow(), id: Date.now() + Math.random() }];
+      }
+    });
+  };
+
+  // Handlers de edición, duplicados, enter, foco, etc. igual que ItemsGridPresupuesto
+  const handleRowChange = (idx, field, value) => {
+    setRows(prevRows => {
+      let rows = [...prevRows];
+      if (field === 'codigo') {
+        rows[idx] = {
+          ...rows[idx],
+          codigo: value,
+          ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', costo: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
+        };
+        return ensureSoloUnEditable(rows);
+      } else if (field === 'costo' || field === 'bonificacion') {
+        rows[idx] = {
+          ...rows[idx],
+          [field]: value
+        };
+        return ensureSoloUnEditable(rows);
+      }
+      return rows;
+    });
+  };
+
+  const handleCantidadChange = (idx, cantidad) => {
+    setRows(rows => rows.map((row, i) => i === idx ? { ...row, cantidad } : row));
+  };
+
+  const handleRowKeyDown = (e, idx, field) => {
+    if ((e.key === 'Enter' || (e.key === 'Tab' && field === 'bonificacion'))) {
+      const row = rows[idx];
+      if (field === 'codigo' && row.codigo) {
+        let prod = productosDisponibles.find(p => (p.codvta || p.codigo)?.toString().toLowerCase() === row.codigo.toLowerCase());
+        if (prod) {
+          const proveedores = getProveedoresProducto(prod.id);
+          const proveedorHabitual = proveedores.find(p => p.esHabitual) || proveedores[0];
+          const proveedorId = proveedorHabitual ? proveedorHabitual.id : '';
+          const idxExistente = rows.findIndex((r, i) =>
+            i !== idx &&
+            r.producto &&
+            r.producto.id === prod.id &&
+            r.proveedorId === proveedorId
+          );
+          if (idxExistente !== -1) {
+            if (autoSumarDuplicados === 'sumar') {
+              setRows(rows => {
+                const newRows = rows.map((r, i) => i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + Number(row.cantidad) } : r);
+                newRows[idx] = getEmptyRow();
+                return ensureSoloUnEditable(newRows);
+              });
+              setUltimoIdxAutocompletado(idxExistente);
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            if (autoSumarDuplicados === 'duplicar') {
+              setRows(prevRows => {
+                const lastRow = prevRows[prevRows.length - 1];
+                const nuevoItem = {
+                  ...lastRow,
+                  codigo: prod.codvta || prod.codigo || '',
+                  denominacion: prod.deno || prod.nombre || '',
+                  unidad: prod.unidad || prod.unidadmedida || '-',
+                  costo: proveedorHabitual?.costo || 0,
+                  cantidad: row.cantidad || 1,
+                  bonificacion: 0,
+                  producto: prod,
+                  proveedorId: proveedorId
+                };
+                return [...prevRows, nuevoItem, getEmptyRow()];
+              });
+              setUltimoIdxAutocompletado(rows.length);
+              setRows(rows => {
+                const newRows = [...rows];
+                newRows[idx] = getEmptyRow();
+                return ensureSoloUnEditable(newRows);
+              });
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          // Si no es duplicado, autocompletar datos y agregar ítem
+          setRows(prevRows => {
+            const newRows = [...prevRows];
+            newRows[idx] = {
+              ...newRows[idx],
+              codigo: prod.codvta || prod.codigo || '',
+              denominacion: prod.deno || prod.nombre || '',
+              unidad: prod.unidad || prod.unidadmedida || '-',
+              costo: proveedorHabitual?.costo || 0,
+              cantidad: row.cantidad || 1,
+              bonificacion: 0,
+              producto: prod,
+              proveedorId: proveedorId
+            };
+            if (newRows.every(isRowLleno)) {
+              newRows.push(getEmptyRow());
+            }
+            return ensureSoloUnEditable(newRows);
+          });
+          setUltimoIdxAutocompletado(idx);
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        } else {
+          setRows(prevRows => {
+            const newRows = [...prevRows];
+            newRows[idx] = { ...getEmptyRow(), id: newRows[idx].id };
+            return ensureSoloUnEditable(newRows);
+          });
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      }
+      if (field === 'cantidad') {
+        if (rows[idx].producto && rows[idx].codigo && idx === rows.length - 1) {
+          setTimeout(() => {
+            if (codigoRefs.current[idx + 1]) codigoRefs.current[idx + 1].focus();
+          }, 0);
+        }
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  useEffect(() => {
+    if (ultimoIdxAutocompletado !== null) {
+      if (cantidadRefs.current[ultimoIdxAutocompletado]) {
+        cantidadRefs.current[ultimoIdxAutocompletado].focus();
+      }
+      setUltimoIdxAutocompletado(null);
+    }
+  }, [rows, ultimoIdxAutocompletado]);
+
+  useEffect(() => {
+    if (onRowsChange) onRowsChange(rows);
+  }, [rows]);
+
+  // Helpers duplicados, vacíos, etc.
+  function isRowLleno(row) {
+    return !!row.producto;
+  }
+  function isRowVacio(row) {
+    return !row.producto && (!row.codigo || row.codigo.trim() === '') && (!row.denominacion || row.denominacion.trim() === '');
+  }
+  function ensureSoloUnEditable(rows) {
+    let result = rows.slice();
+    // Eliminar vacíos intermedios
+    for (let i = result.length - 2; i >= 0; i--) {
+      if (isRowVacio(result[i])) {
+        result.splice(i, 1);
+      }
+    }
+    const sinProducto = result.filter(row => !isRowLleno(row));
+    if (sinProducto.length > 1) {
+      const lastIdx = result.map(row => !isRowLleno(row)).lastIndexOf(true);
+      if (lastIdx !== -1) {
+        result.splice(lastIdx, 1);
+      }
+    }
+    // Si hay algún renglón sin producto, no agrego otro vacío
+    if (result.some(row => !isRowLleno(row))) {
+      // Si el último renglón no tiene id, asignar uno único
+      const last = result[result.length - 1];
+      if (last && !last.id) {
+        last.id = Date.now() + Math.random();
+      }
+      return result;
+    }
+    // Solo agrego un vacío si todos los renglones tienen producto
+    result.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
+    return result;
+  }
+  function getProveedoresProducto(productoId) {
+    if (!stockProveedores || !productoId) return [];
+    return (stockProveedores[productoId] || []).map(sp => ({
+      id: sp.proveedor.id,
+      nombre: sp.proveedor.razon,
+      stock: sp.cantidad,
+      costo: sp.costo,
+      esHabitual: !!(sp.proveedor_habitual || sp.habitual || sp.es_habitual)
+    }));
+  }
+  function getDuplicadoMap() {
+    const map = {};
+    rows.forEach((row, idx) => {
+      if (!row.producto || !row.proveedorId) return;
+      const key = `${row.producto.id}_${row.proveedorId}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(idx);
+    });
+    return map;
+  }
+  const duplicadoMap = getDuplicadoMap();
+  function isDuplicado(row, idx) {
+    if (!row.producto || !row.proveedorId) return false;
+    const key = `${row.producto.id}_${row.proveedorId}`;
+    return duplicadoMap[key] && duplicadoMap[key].length > 1 && duplicadoMap[key].indexOf(idx) !== 0;
+  }
+
+  // Add missing handlers
+  const handleProveedorChange = (idx, proveedorId) => {
+    setRows(rows => rows.map((row, i) => {
+      if (i !== idx) return row;
+      const productoId = row.producto?.id;
+      const proveedores = getProveedoresProducto(productoId);
+      const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
+      let nuevoCosto = proveedor ? proveedor.costo : 0;
+      return { ...row, proveedorId, costo: nuevoCosto };
+    }));
+  };
+
+  const handleDeleteRow = (idx) => {
+    setRows(rows => {
+      const newRows = rows.filter((_, i) => i !== idx);
+      if (newRows.filter(r => r.producto && r.codigo).length === 0) {
+        return [getEmptyRow()];
+      }
+      const last = newRows[newRows.length - 1];
+      if (last && last.producto) {
+        return [...newRows, getEmptyRow()];
+      }
+      return newRows;
+    });
+  };
+
+  // Render igual que ItemsGridPresupuesto
+  return (
+    <div className="space-y-4 w-full">
+      <div className="flex items-center gap-4 mb-2">
+        <div className="flex items-center gap-4 mb-2">
+          <label className="text-sm font-medium text-gray-700">Bonificación general (%)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={bonificacionGeneral}
+            onChange={e => {
+              const value = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), 100);
+              setBonificacionGeneral(value);
+            }}
+            className="w-24 px-2 py-1 border border-gray-300 rounded"
+          />
+        </div>
+        <span className="ml-4 text-gray-500" tabIndex="0" aria-label="Ayuda bonificación general">
+          <svg className="inline w-4 h-4 mr-1 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+          <span className="text-xs">La bonificación general solo se aplica a ítems sin bonificación particular.</span>
+        </span>
+      </div>
+      <div className="overflow-x-auto w-full">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Código</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Denominación</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Unidad</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Cantidad</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Costo</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Bonif. %</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">IVA %</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Proveedor usado</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {rows.map((row, idx) => (
+              <tr key={row.id}
+                className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <input
+                    type="text"
+                    value={row.codigo}
+                    onChange={e => handleRowChange(idx, 'codigo', e.target.value)}
+                    onKeyDown={e => handleRowKeyDown(e, idx, 'codigo')}
+                    className="w-full px-2 py-1 border border-gray-300 rounded"
+                    placeholder="Código"
+                    aria-label="Código producto"
+                    tabIndex={0}
+                    ref={el => codigoRefs.current[idx] = el}
+                  />
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  {/* Denominación solo lectura */}
+                  <div className="w-full px-2 py-1 bg-gray-50 rounded border border-gray-200 text-gray-700 min-h-[38px] flex items-center">
+                    {row.denominacion || ''}
+                  </div>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">{row.unidad || '-'}</td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <input
+                    type="number"
+                    value={row.cantidad}
+                    onChange={e => handleCantidadChange(idx, e.target.value)}
+                    onKeyDown={e => handleRowKeyDown(e, idx, 'cantidad')}
+                    min="1"
+                    className="w-full px-2 py-1 border rounded border-gray-300"
+                    aria-label="Cantidad"
+                    tabIndex={0}
+                    ref={el => cantidadRefs.current[idx] = el}
+                  />
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <input
+                    type="number"
+                    value={row.costo}
+                    onChange={e => handleRowChange(idx, 'costo', e.target.value)}
+                    onKeyDown={e => handleRowKeyDown(e, idx, 'costo')}
+                    className="w-full px-2 py-1 border border-gray-300 rounded"
+                    aria-label="Costo"
+                    tabIndex={0}
+                  />
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <input
+                    type="number"
+                    value={row.bonificacion}
+                    onChange={e => handleRowChange(idx, 'bonificacion', e.target.value)}
+                    onKeyDown={e => handleRowKeyDown(e, idx, 'bonificacion')}
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    className="w-full px-2 py-1 border border-gray-300 rounded"
+                    aria-label="Bonificación particular"
+                    tabIndex={0}
+                  />
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  {row.producto ? (
+                    <span>{ALICUOTAS[row.producto.idaliiva] !== undefined ? ALICUOTAS[row.producto.idaliiva] + '%' : '-'}</span>
+                  ) : '-'}
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  {/* Proveedor usado (editable) */}
+                  {row.producto ? (
+                    <select
+                      value={row.proveedorId || getProveedoresProducto(row.producto.id)[0]?.id || ''}
+                      onChange={e => handleProveedorChange(idx, e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded"
+                      aria-label="Proveedor"
+                      tabIndex={0}
+                    >
+                      {getProveedoresProducto(row.producto.id).map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock})</option>
+                      ))}
+                    </select>
+                  ) : null}
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-center flex gap-2 justify-center">
+                  {row.producto && (
+                    <>
+                      <button
+                        onClick={() => handleDeleteRow(idx)}
+                        className="text-red-600 hover:text-red-800"
+                        title="Eliminar"
+                        aria-label="Eliminar fila"
+                        tabIndex={0}
+                        type="button"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                      <BotonDuplicar
+                        onClick={() => {
+                          setRows(prevRows => {
+                            const nuevoItem = { ...row, id: undefined };
+                            return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)];
+                          });
+                        }}
+                        tabIndex={0}
+                      />
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});
+
 export function ItemsGridVenta(props, ref) {
   return <ItemsGridPresupuesto {...props} ref={ref} />;
 }
 
 export default ItemsGridPresupuesto; 
+export { ItemsGridEdicion };

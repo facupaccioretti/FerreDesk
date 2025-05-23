@@ -18,6 +18,8 @@ import ItemsGrid from './ItemsGrid';
 import { BotonEditar, BotonEliminar, BotonImprimir, BotonExpandir, BotonConvertir, BotonVerDetalle } from './Botones';
 import PresupuestoVentaVista from './PresupuestoVentaVista';
 import { getCookie } from '../utils/csrf';
+import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
+import EditarPresupuestoForm from './EditarPresupuestoForm';
 
 const filtros = [
   { key: 'todos', label: 'Todos' },
@@ -29,8 +31,8 @@ const filtros = [
 const EstadoBadge = ({ estado }) => {
   if (estado === 'Cerrado') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
         </svg>
         Cerrado
@@ -38,8 +40,8 @@ const EstadoBadge = ({ estado }) => {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
         <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
       </svg>
       Abierto
@@ -52,7 +54,35 @@ const mainTabs = [
   { key: 'vendedores', label: 'Vendedores', closable: false }
 ];
 
+const getComprobanteIconAndLabel = (tipo, nombre = '') => {
+  const n = String(nombre || '').toLowerCase();
+  if (n.includes('presupuesto')) return { icon: <IconPresupuesto />, label: 'Presupuesto' };
+  if (n.includes('venta')) return { icon: <IconVenta />, label: 'Venta' };
+  if (n.includes('factura')) return { icon: <IconFactura />, label: 'Factura' };
+  if (n.includes('nota de crédito interna')) return { icon: <IconCredito />, label: 'N. Cred. Int.' };
+  if (n.includes('nota de crédito')) return { icon: <IconCredito />, label: 'N. Cred.' };
+  if (n.includes('nota de débito')) return { icon: <IconCredito />, label: 'N. Deb.' };
+  if (n.includes('recibo')) return { icon: <IconRecibo />, label: 'Recibo' };
+  return { icon: <IconFactura />, label: String(nombre) };
+};
+
 const PresupuestosManager = () => {
+  // Estado y fetch para el usuario
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/user/", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") setUser(data.user);
+      });
+  }, []);
+
+  const handleLogout = () => {
+    setUser(null);
+    window.location.href = "/login";
+  };
+
   useEffect(() => {
     document.title = "Presupuestos y Ventas FerreDesk";
   }, []);
@@ -314,7 +344,7 @@ const PresupuestosManager = () => {
       vendedorId: venta.ven_idvdo || venta.vendedorId || '',
       sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
       puntoVentaId: venta.ven_punto || venta.puntoVentaId || 1,
-      bonificacionGeneral: venta.bonificacionGeneral || 0,
+      bonificacionGeneral: venta.ven_bonificacion_general ?? venta.bonificacionGeneral ?? 0,
       descu1: venta.ven_descu1 || venta.descu1 || 0,
       descu2: venta.ven_descu2 || venta.descu2 || 0,
       descu3: venta.ven_descu3 || venta.descu3 || 0,
@@ -328,51 +358,87 @@ const PresupuestosManager = () => {
   const ventasNormalizadas = ventas.map(normalizarVenta);
 
   return (
-    <div className="h-full flex flex-col">
-      <Navbar onLogout={() => {}} />
-      <div className="flex justify-between items-center px-6 py-4">
-        <h2 className="text-2xl font-bold text-gray-800">Gestión de Presupuestos y Ventas</h2>
-      </div>
-      {error && (
-        <div className="mx-6 mb-2 p-3 bg-red-100 text-red-800 rounded border border-red-300">
-          {error}
+    <div className="min-h-screen bg-white flex flex-col">
+      <Navbar user={user} onLogout={handleLogout} />
+      <div className="container mx-auto px-6 py-8 flex-1 flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">Gestión de Presupuestos y Ventas</h2>
         </div>
-      )}
-      <div className="flex flex-1 px-6 gap-4 min-h-0">
-        <div className="flex-1 flex flex-col">
-          {/* Tabs tipo browser, todas al mismo nivel */}
-          <div className="flex items-center border-b border-gray-200 bg-white rounded-t-xl px-4 pt-2">
-            {tabs.map((tab, idx) => (
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
+            <div className="flex items-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 mr-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              {error}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
+          {/* Tabs tipo browser */}
+          <div className="flex items-center border-b border-gray-200 px-6 pt-3">
+            {tabs.map((tab) => (
               <div
                 key={tab.key}
-                className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${activeTab === tab.key ? 'bg-white border border-b-0 border-gray-200 font-semibold text-gray-900' : 'bg-gray-100 text-gray-500'}`}
+                className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
+                  activeTab === tab.key
+                    ? "bg-white border border-b-0 border-gray-200 font-semibold text-gray-900"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
                 onClick={() => setActiveTab(tab.key)}
-                style={{ position: 'relative', zIndex: 1 }}
+                style={{ position: "relative", zIndex: 1 }}
                 draggable={tab.closable}
-                onDragStart={tab.closable ? (e) => { setDraggedTabKey(tab.key); e.dataTransfer.effectAllowed = 'move'; } : undefined}
-                onDrop={tab.closable ? (e) => {
-                  e.preventDefault();
-                  if (draggedTabKey && draggedTabKey !== tab.key) {
-                    const dynamicTabs = tabs.filter(t => t.closable);
-                    const fixedTabs = tabs.filter(t => !t.closable);
-                    const draggedIdx = dynamicTabs.findIndex(t => t.key === draggedTabKey);
-                    const dropIdx = dynamicTabs.findIndex(t => t.key === tab.key);
-                    if (draggedIdx !== -1 && dropIdx !== -1) {
-                      const newDynamicTabs = [...dynamicTabs];
-                      const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1);
-                      newDynamicTabs.splice(dropIdx, 0, draggedTab);
-                      setTabs([...fixedTabs, ...newDynamicTabs]);
-                    }
-                  }
-                  setDraggedTabKey(null);
-                } : undefined}
-                onDragEnd={() => { setDraggedTabKey(null); }}
+                onDragStart={
+                  tab.closable
+                    ? (e) => {
+                        setDraggedTabKey(tab.key)
+                        e.dataTransfer.effectAllowed = "move"
+                      }
+                    : undefined
+                }
+                onDrop={
+                  tab.closable
+                    ? (e) => {
+                        e.preventDefault()
+                        if (draggedTabKey && draggedTabKey !== tab.key) {
+                          const dynamicTabs = tabs.filter((t) => t.closable)
+                          const fixedTabs = tabs.filter((t) => !t.closable)
+                          const draggedIdx = dynamicTabs.findIndex((t) => t.key === draggedTabKey)
+                          const dropIdx = dynamicTabs.findIndex((t) => t.key === tab.key)
+                          if (draggedIdx !== -1 && dropIdx !== -1) {
+                            const newDynamicTabs = [...dynamicTabs]
+                            const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1)
+                            newDynamicTabs.splice(dropIdx, 0, draggedTab)
+                            setTabs([...fixedTabs, ...newDynamicTabs])
+                          }
+                        }
+                        setDraggedTabKey(null)
+                      }
+                    : undefined
+                }
+                onDragEnd={() => {
+                  setDraggedTabKey(null)
+                }}
               >
                 {tab.label}
                 {tab.closable && (
                   <button
-                    onClick={e => { e.stopPropagation(); closeTab(tab.key); }}
-                    className="ml-2 text-lg font-bold text-gray-400 hover:text-red-400 focus:outline-none"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeTab(tab.key)
+                    }}
+                    className="ml-3 text-lg font-bold text-gray-400 hover:text-red-500 focus:outline-none transition-colors"
                     title="Cerrar"
                   >
                     ×
@@ -381,7 +447,7 @@ const PresupuestosManager = () => {
               </div>
             ))}
           </div>
-          <div className="flex-1 bg-white rounded-b-xl shadow-sm min-h-0 p-6">
+          <div className="flex-1 p-6">
             {/* Presupuestos y Ventas */}
             {activeTab === 'presupuestos' && (
               <>
@@ -438,19 +504,28 @@ const PresupuestosManager = () => {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprobante</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filtrar(ventasNormalizadas).map(p => {
-                      // <-- CONSOLE LOG 3
-                      console.log('[PresupuestosManager] Rendering row, item p:', p, 'Estado:', p.estado, 'Tipo:', p.tipo);
+                      let comprobanteObj = null;
+                      if (typeof p.comprobante === 'object' && p.comprobante !== null) {
+                        comprobanteObj = p.comprobante;
+                      } else if (p.comprobante) {
+                        comprobanteObj = comprobantes.find(c => c.id === p.comprobante) || null;
+                      }
+                      const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
+                      const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
+                      const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
+                      const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre);
                       return (
                         <tr key={p.id} className="hover:bg-gray-50">
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center">{icon}</span>
                               {p.numero}
                               <EstadoBadge estado={p.estado} />
                             </div>
@@ -458,7 +533,12 @@ const PresupuestosManager = () => {
                           <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{p.fecha}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{p.estado}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{p.tipo}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {label}
+                              {comprobanteLetra && (label.startsWith('Factura') || label.startsWith('N. Cred') || label.startsWith('N. Deb')) ? ' ' + comprobanteLetra : ''}
+                            </div>
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex gap-2">
@@ -573,6 +653,7 @@ const PresupuestosManager = () => {
                   plazos={plazos}
                   sucursales={sucursales}
                   puntosVenta={puntosVenta}
+                  comprobantes={comprobantes}
                   onImprimir={handleImprimir}
                   onEliminar={async (id) => {
                     await handleDelete(id);
@@ -581,45 +662,67 @@ const PresupuestosManager = () => {
                   onCerrar={() => closeTab(activeTab)}
                 />
               ) : (
-                <PresupuestoForm
-                  onSave={async (payload, items) => {
-                    if (editPresupuesto && editPresupuesto.id) {
-                      await updateVenta(editPresupuesto.id, { ...payload, tipoOriginal: editPresupuesto.tipo, estadoOriginal: editPresupuesto.estado, items });
-                    } else {
-                      await addVenta({ ...payload, tipo: 'Presupuesto', estado: 'Abierto', items });
-                    }
-                    closeTab(activeTab);
-                  }}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
-                  readOnlyOverride={false}
-                  comprobantes={comprobantes}
-                  tiposComprobante={tiposComprobante}
-                  tipoComprobante={tipoComprobante}
-                  setTipoComprobante={setTipoComprobante}
-                  clientes={clientes}
-                  plazos={plazos}
-                  vendedores={vendedores}
-                  sucursales={sucursales}
-                  puntosVenta={puntosVenta}
-                  loadingComprobantes={loadingComprobantes}
-                  errorComprobantes={errorComprobantes}
-                  productos={productos}
-                  loadingProductos={loadingProductos}
-                  familias={familias}
-                  loadingFamilias={loadingFamilias}
-                  proveedores={proveedores}
-                  loadingProveedores={loadingProveedores}
-                  alicuotas={alicuotas}
-                  loadingAlicuotas={loadingAlicuotas}
-                  errorProductos={errorProductos}
-                  errorFamilias={errorFamilias}
-                  errorProveedores={errorProveedores}
-                  errorAlicuotas={errorAlicuotas}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  ItemsGrid={ItemsGrid}
-                />
+                activeTab.startsWith('editar') ? (
+                  <EditarPresupuestoForm
+                    onSave={async (payload) => {
+                      await updateVenta(editPresupuesto.id, { ...payload, tipoOriginal: editPresupuesto.tipo, estadoOriginal: editPresupuesto.estado });
+                      closeTab(activeTab);
+                    }}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
+                    comprobantes={comprobantes}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
+                    clientes={clientes}
+                    plazos={plazos}
+                    vendedores={vendedores}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    productos={productos}
+                    proveedores={proveedores}
+                    alicuotas={alicuotas}
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    ItemsGrid={ItemsGrid}
+                  />
+                ) : (
+                  <PresupuestoForm
+                    onSave={async (payload) => {
+                      await addVenta({ ...payload, tipo: 'Presupuesto', estado: 'Abierto' });
+                      closeTab(activeTab);
+                    }}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={tabs.find(t => t.key === activeTab)?.data || editPresupuesto}
+                    readOnlyOverride={false}
+                    comprobantes={comprobantes}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
+                    clientes={clientes}
+                    plazos={plazos}
+                    vendedores={vendedores}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    loadingComprobantes={loadingComprobantes}
+                    errorComprobantes={errorComprobantes}
+                    productos={productos}
+                    loadingProductos={loadingProductos}
+                    familias={familias}
+                    loadingFamilias={loadingFamilias}
+                    proveedores={proveedores}
+                    loadingProveedores={loadingProveedores}
+                    alicuotas={alicuotas}
+                    loadingAlicuotas={loadingAlicuotas}
+                    errorProductos={errorProductos}
+                    errorFamilias={errorFamilias}
+                    errorProveedores={errorProveedores}
+                    errorAlicuotas={errorAlicuotas}
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    ItemsGrid={ItemsGrid}
+                  />
+                )
               )
             )}
           </div>

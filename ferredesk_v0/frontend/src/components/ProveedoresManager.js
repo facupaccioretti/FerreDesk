@@ -4,6 +4,7 @@ import ListaPreciosModal from "./ListaPreciosModal";
 import HistorialListasModal from "./HistorialListasModal";
 import ProveedorForm from "./ProveedorForm";
 import { useProveedoresAPI } from '../utils/useProveedoresAPI';
+import { BotonEditar, BotonEliminar, BotonExpandir, BotonHistorial, BotonCargarLista } from "./Botones";
 
 const mockHistorial = [
   { fecha: '2024-06-01', archivo: 'macons_junio.xlsx', usuario: 'ferreadmin', productosActualizados: 120 },
@@ -103,19 +104,19 @@ const ProveedoresManager = () => {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <Navbar user={{ username: "ferreadmin" }} />
-      <div className="flex justify-between items-center px-6 py-4">
-        <h2 className="text-2xl font-bold text-gray-800">Gestión de Proveedores</h2>
-      </div>
-      <div className="flex flex-1 px-6 gap-4 min-h-0">
-        <div className="flex-1 flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col">
+      <Navbar />
+      <div className="container mx-auto px-6 py-8 flex-1 flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">Gestión de Proveedores</h2>
+        </div>
+        <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
           {/* Tabs tipo browser */}
-          <div className="flex items-center border-b border-gray-200 bg-white rounded-t-xl px-4 pt-2">
+          <div className="flex items-center border-b border-gray-200 px-6 pt-3">
             {tabs.map(tab => (
               <div
                 key={tab.key}
-                className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${activeTab === tab.key ? 'bg-white border border-b-0 border-gray-200 font-semibold text-gray-900' : 'bg-gray-100 text-gray-500'}`}
+                className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key ? 'bg-white border border-b-0 border-gray-200 font-semibold text-gray-900' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                 onClick={() => setActiveTab(tab.key)}
                 style={{ position: 'relative' }}
               >
@@ -123,7 +124,7 @@ const ProveedoresManager = () => {
                 {tab.closable && (
                   <button
                     onClick={e => { e.stopPropagation(); closeTab(tab.key); }}
-                    className="ml-2 text-lg font-bold text-gray-400 hover:text-red-400 focus:outline-none"
+                    className="ml-3 text-lg font-bold text-gray-400 hover:text-red-500 focus:outline-none transition-colors"
                     title="Cerrar"
                   >
                     ×
@@ -133,155 +134,186 @@ const ProveedoresManager = () => {
             ))}
             {/* Botón Nuevo Proveedor solo en la tab de lista */}
             {activeTab === 'lista' && (
-              <div className="flex-1 flex justify-end mb-2">
+              <div className="flex-1 flex justify-end mb-1">
                 <button
                   onClick={() => openTab('nuevo', 'Nuevo Proveedor')}
-                  className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                  className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm shadow-sm"
                 >
                   <span className="text-lg">+</span> Nuevo Proveedor
                 </button>
               </div>
             )}
           </div>
-          <div className="flex-1 bg-white rounded-b-xl shadow-sm min-h-0 p-6">
+          <div className="flex-1 p-6">
             {activeTab === 'lista' && (
               <>
-                <div className="mb-4">
-                  <input
-                    type="text"
-                    className="pl-4 pr-4 py-2 w-full rounded-lg border border-gray-200 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Buscar proveedor..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
+                <div className="mb-6">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="pl-10 pr-4 py-3 w-full rounded-lg border border-gray-200 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all"
+                      placeholder="Buscar proveedor por nombre, fantasía o CUIT..."
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                    />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                      className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                      />
+                    </svg>
+                  </div>
                 </div>
-                {loading && <div className="text-gray-500 mb-2">Cargando proveedores...</div>}
-                {error && <div className="text-red-600 mb-2">{error}</div>}
-                <div className="overflow-auto rounded-xl shadow bg-white">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className="bg-white border-b">
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">RAZÓN SOCIAL</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">FANTASIA</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">DOMICILIO</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">TELÉFONO</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">CUIT</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">SIGLA</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider">ACCIONES</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {proveedoresFiltrados.map(p => (
-                        <React.Fragment key={p.id}>
-                          <tr className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
-                              <div className="flex items-center">
-                                <button
-                                  onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
-                                  className={`flex items-center justify-center w-6 h-6 mr-2 text-gray-700 transition-transform duration-200 ${expandedId === p.id ? 'rotate-90' : 'rotate-0'}`}
-                                  aria-label={expandedId === p.id ? 'Ocultar detalles' : 'Mostrar detalles'}
-                                  style={{ padding: 0 }}
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" className="block m-auto">
-                                    <polygon points="5,3 15,10 5,17" />
-                                  </svg>
-                                </button>
-                                <span>{p.razon}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.fantasia}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.domicilio}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.tel1}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.cuit}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.sigla}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex gap-2 items-center">
-                                <button
-                                  onClick={() => handleEditProveedor(p)}
-                                  title="Editar"
-                                  className="transition-colors px-1 py-1 text-blue-500 hover:text-blue-700"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(p.id)}
-                                  title="Eliminar"
-                                  className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleOpenListaModal(p)}
-                                  title="Cargar Lista"
-                                  className="transition-colors px-1 py-1 text-green-600 hover:text-green-800"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v7.5m2.25-6.466a9.016 9.016 0 0 0-3.461-.203c-.536.072-.974.478-1.021 1.017a4.559 4.559 0 0 0-.018.402c0 .464.336.844.775.994l2.95 1.012c.44.15.775.53.775.994 0 .136-.006.27-.018.402-.047.539-.485.945-1.021 1.017a9.077 9.077 0 0 1-3.461-.203M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleOpenHistorialModal(p)}
-                                  title="Historial"
-                                  className="transition-colors px-1 py-1 text-gray-800 hover:text-black"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                                    <path d="M3 3v5h5"></path>
-                                    <path d="M12 7v5l4 2"></path>
-                                  </svg>
-                                </button>
-                              </div>
+                {loading && (
+                  <div className="text-gray-500 mb-4 flex items-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-500"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Cargando proveedores...
+                  </div>
+                )}
+                {error && (
+                  <div className="text-red-600 mb-4 p-3 bg-red-50 rounded-lg border border-red-200">{error}</div>
+                )}
+                <div className="overflow-hidden rounded-xl shadow-sm border border-gray-200">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">RAZÓN SOCIAL</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">FANTASIA</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">DOMICILIO</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">TELÉFONO</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">CUIT</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SIGLA</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ACCIONES</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {proveedoresFiltrados.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                              {search
+                                ? "No se encontraron proveedores con ese criterio de búsqueda"
+                                : "No hay proveedores registrados"}
                             </td>
                           </tr>
-                          {expandedId === p.id && (
-                            <tr className="bg-gray-50">
-                              <td colSpan={7} className="px-6 py-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">Razón Social</span>
-                                    <span className="block text-gray-700 mt-1">{p.razon}</span>
+                        ) : (
+                          proveedoresFiltrados.map((p) => (
+                            <React.Fragment key={p.id}>
+                              <tr className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                                  <div className="flex items-center">
+                                    <BotonExpandir
+                                      expanded={expandedId === p.id}
+                                      onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                                      title={expandedId === p.id ? "Ocultar detalles" : "Mostrar detalles"}
+                                    />
+                                    <span>{p.razon}</span>
                                   </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">Nombre de Fantasía</span>
-                                    <span className="block text-gray-700 mt-1">{p.fantasia}</span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.fantasia}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.domicilio}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.tel1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.cuit}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-600">{p.sigla}</td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex gap-3 items-center">
+                                    <BotonEditar onClick={() => handleEditProveedor(p)} title="Editar proveedor" />
+                                    <BotonEliminar onClick={() => handleDelete(p.id)} title="Eliminar proveedor" />
+                                    <BotonCargarLista
+                                      onClick={() => handleOpenListaModal(p)}
+                                      title="Cargar lista de precios"
+                                    />
+                                    <BotonHistorial
+                                      onClick={() => handleOpenHistorialModal(p)}
+                                      title="Ver historial de listas"
+                                    />
                                   </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">Domicilio</span>
-                                    <span className="block text-gray-700 mt-1">{p.domicilio}</span>
-                                  </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">Teléfono</span>
-                                    <span className="block text-gray-700 mt-1">{p.tel1}</span>
-                                  </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">CUIT</span>
-                                    <span className="block text-gray-700 mt-1">{p.cuit}</span>
-                                  </div>
-                                  <div>
-                                    <span className="block text-gray-400 font-medium">Sigla</span>
-                                    <span className="block text-gray-700 mt-1">{p.sigla}</span>
-                                  </div>
-                                  <div className="col-span-2 mt-4">
-                                    <button onClick={() => handleOpenListaModal(p)} className="bg-green-700 text-white px-4 py-2 rounded mr-2 hover:bg-green-800">Cargar Lista de Precios</button>
-                                    <button onClick={() => handleOpenHistorialModal(p)} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800">Ver Historial</button>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                                </td>
+                              </tr>
+                              {expandedId === p.id && (
+                                <tr className="bg-gray-50">
+                                  <td colSpan={7} className="px-6 py-5">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">Razón Social</span>
+                                        <span className="block text-gray-800 font-medium">{p.razon}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">Nombre de Fantasía</span>
+                                        <span className="block text-gray-800 font-medium">{p.fantasia}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">Domicilio</span>
+                                        <span className="block text-gray-800 font-medium">{p.domicilio}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">Teléfono</span>
+                                        <span className="block text-gray-800 font-medium">{p.tel1}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">CUIT</span>
+                                        <span className="block text-gray-800 font-medium">{p.cuit}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-gray-500 font-medium mb-1">Sigla</span>
+                                        <span className="block text-gray-800 font-medium">{p.sigla}</span>
+                                      </div>
+                                      <div className="col-span-2 mt-4 flex gap-3">
+                                        <button
+                                          onClick={() => handleOpenListaModal(p)}
+                                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm font-medium"
+                                        >
+                                          Cargar Lista de Precios
+                                        </button>
+                                        <button
+                                          onClick={() => handleOpenHistorialModal(p)}
+                                          className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg transition-colors shadow-sm font-medium"
+                                        >
+                                          Ver Historial
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </>
             )}
             {activeTab === 'nuevo' && (
-              <div className="flex justify-center items-center min-h-[60vh]">
+              <div className="flex justify-center items-start py-4">
                 <ProveedorForm
                   onSave={handleSaveProveedor}
                   onCancel={() => closeTab('nuevo')}
