@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
-from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet
+from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, FerreteriaAPIView
 
 router = DefaultRouter()
 router.register(r'productos/stock', StockViewSet, basename='stock')
@@ -33,5 +33,6 @@ urlpatterns = [
     path('api/clientes/', include('ferreapps.clientes.urls')),
     path('api/productos/', include('ferreapps.productos.urls')),
     path('api/', include('ferreapps.ventas.urls')),
+    path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     path('', include('ferreapps.login.urls')),
 ]

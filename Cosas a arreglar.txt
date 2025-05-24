@@ -1,49 +1,35 @@
 Actualizar el sistema para que trabaje con transacciones atomicas (Mejor pasarse a POSTGRESQL)
-
-
 Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo)
 
-En Productos
-  Compaginacion de la tabla para cuando haya muchos Productos
-  En el modal asociar codigo proveedor mejorar como se muestran los codigos
+
+Compaginacion de las tablas para cuando haya muchos 
+
+n el modal asociar codigo proveedor mejorar como se muestran los codigos
   
- 
-   
-El enter en ningun formulario deberia completar el formulario (es molesto ya que si queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
-
-
-
-Presupuestos anda para la bosta 
-
-   Verificar que si los items se agregaron a una venta o factura se resten de la cantidad total
-  
-     Los presupuestos son abiertos porque se pueden seguir editando
-     Las ventas y facturas son cerradas
-     El presupuesto se puede convertir a venta  cierra
-     Agregar el uso de Cuenta Corriente a cliente por defecto
-     Crear un Presupuesto se pone en Todos pero no en la vista de Presupuestos
-     El boton de ver mas no se asigna a las acciones por algun motivo
-     Tampoco el boton de convertir para hacer las conversiones de Presupuesto a Venta
-     Boton de imprimir no anda
-     Nueva Venta no anda
-
-
-libro anotaciones 
-
-botonera de acciones (presupuestos y capaz otras pantallas)
+    
 cambiar zona horaria django
-Es posible que falten errores de enlistar.
+
+El enter en ningun formulario deberia completar el formulario (es molesto ya que si
+ queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
+
+- Revisar y garantizar que el descuento de stock y la creación de los ítems de detalle de la venta
+ estén dentro de la misma transacción atómica. Si falla la creación de los ítems, el stock no debe descontarse (atomicidad total en ventas).
+
+-Exportar el libro de IVA a Excel o PDF.
+-Ver totales acumulados por alícuota en el reporte.
+
+Buscador de productos en Presupuestos y Ventas genera dos renglones vacios al cargar duplicados
+
+El cliente no se debe poder borrar si tiene algun movimiento
+
+Aplicar logica nota de credito
+
+Mejores buscadores en presupuesto y venta
+
+conversion presupuesto a venta editable 
+
+Falta hacer una pantalla de 'Datos de Ferretería' en el 
+frontend para cargar y editar los datos de la ferretería (nombre, dirección, situación fiscal, etc.). 
 
 
-Agregar los datos de TIPOSIVA
-
-
-
-
-
-En los formularios la opcion de Sumar cantidades, Duplicar item, Borrar
-Checkbox sumar automaticamente
-Que la vista traiga los datos enteros
-Anulacion de venta y pagina de ventas anuladas
-Sacar barras amarillas feardas
-Sistema de bonificacion particular y general
+manejo multiples usuarios presupuesto y venta!!!!!!!!!!!!

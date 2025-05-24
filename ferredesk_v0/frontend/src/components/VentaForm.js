@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
+import ComprobanteDropdown from './ComprobanteDropdown';
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: '',
@@ -37,15 +38,23 @@ const getDefaultPlazoId = (plazos) => {
   return contado ? contado.id : '';
 };
 
+const getStockProveedoresMap = (productos) => {
+  const map = {};
+  productos.forEach(p => {
+    if (p.stock_proveedores) {
+      map[p.id] = p.stock_proveedores;
+    }
+  });
+  return map;
+};
+
 const VentaForm = ({
   onSave,
   onCancel,
   initialData,
   readOnlyOverride,
   comprobantes,
-  tiposComprobante,
-  tipoComprobante,
-  setTipoComprobante,
+  ferreteria,
   clientes,
   plazos,
   vendedores,
@@ -96,6 +105,30 @@ const VentaForm = ({
   const [selectedProducto, setSelectedProducto] = useState(null);
   const codigoInputRef = useRef();
   const itemsGridRef = useRef();
+  const [itemsVersion, setItemsVersion] = useState(0);
+
+  const stockProveedores = getStockProveedoresMap(productos);
+
+  // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
+  const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
+
+  // Nuevo: id del comprobante seleccionado
+  const [comprobanteId, setComprobanteId] = useState(() => {
+    if (comprobantesVenta.length > 0) return comprobantesVenta[0].id;
+    return '';
+  });
+  useEffect(() => {
+    if (comprobantesVenta.length > 0 && !comprobanteId) {
+      setComprobanteId(comprobantesVenta[0].id);
+    }
+  }, [comprobantesVenta, comprobanteId]);
+
+  // Nuevo: calcular número de comprobante según comprobante seleccionado
+  const numeroComprobante = (() => {
+    const comp = comprobantesVenta.find(c => c.id === comprobanteId);
+    if (!comp) return 1;
+    return (comp.ultimo_numero || 0) + 1;
+  })();
 
   useEffect(() => {
     if (!initialData) {
@@ -103,31 +136,56 @@ const VentaForm = ({
     }
   }, [form, initialData]);
 
+  // Estado para descuentos
+  const [descu1, setDescu1] = useState(form.descu1 || 0);
+  const [descu2, setDescu2] = useState(form.descu2 || 0);
+
   useEffect(() => {
-    let newTotal = 0;
+    let subtotalSinIva = 0;
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
     const updatedItems = form.items.map(item => {
       const bonifParticular = parseFloat(item.bonificacion) || 0;
-      const cantidad = parseInt(item.cantidad) || 0;
+      const cantidad = parseFloat(item.cantidad) || 0;
       const precio = parseFloat(item.precio) || 0;
-      const subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
-      newTotal += subtotal;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
       return { ...item, subtotal };
     });
+    // Aplicar descuentos sucesivos al subtotal global
+    let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+    // Calcular IVA y total sumando ítem por ítem
+    let ivaTotal = 0;
+    let totalConIva = 0;
+    updatedItems.forEach(item => {
+      const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+      // Proporción del descuento global que corresponde a este ítem
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (alicuotaIva / 100);
+      ivaTotal += iva;
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    setForm(prevForm => ({
+      ...prevForm,
+      items: updatedItems,
+      ven_impneto: Math.round(subtotalConDescuentos * 100) / 100,
+      ven_total: Math.round(totalConIva * 100) / 100,
+      descu1,
+      descu2
+    }));
+  }, [form.bonificacionGeneral, form.items, descu1, descu2]);
 
-    const itemsChanged = JSON.stringify(form.items) !== JSON.stringify(updatedItems);
-    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-    const totalConBonif = Math.round((newTotal * (1 - bonifGeneral / 100)) * 100) / 100;
-
-    if (itemsChanged || form.total !== totalConBonif) {
-      setForm(prevForm => ({
-        ...prevForm,
-        items: updatedItems,
-        total: totalConBonif,
-        ven_impneto: totalConBonif.toFixed(2), // Asegurar 2 decimales
-        ven_total: Math.round(totalConBonif) // Redondear a entero para ven_total
-      }));
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados('sumar');
     }
-  }, [form.bonificacionGeneral, form.items]);
+  }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleChange = e => {
     const { name, value, type } = e.target;
@@ -158,44 +216,39 @@ const VentaForm = ({
     }));
   };
 
-  const numeroComprobante = (() => {
-    if (!comprobantes.length) return 1;
-    const tipo = tiposComprobante.find(t => t.value === tipoComprobante);
-    if (!tipo) return 1;
-    return (comprobantes[0][tipo.campo] || 0) + 1;
-  })();
-
   const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     localStorage.removeItem('ventaFormDraft');
-    // Fuerza estado y tipo
+    const items = itemsGridRef.current.getItems();
+    const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
     const payload = {
-      ...form,
-      estado: 'Cerrado',
-      tipo: 'Venta',
       ven_estado: 'CE',
-      ven_codcomprob: 1,
-      ven_numero: form.numero,
+      ven_tipo: 'Venta',
+      tipo_comprobante: tipoComprobante,
+      comprobante: comprobanteId,
+      ven_numero: form.numero || numeroComprobante,
       ven_sucursal: form.sucursalId || 1,
       ven_fecha: form.fecha,
       ven_punto: form.puntoVentaId || 1,
-      ven_impneto: (parseFloat(form.total) || 0).toFixed(2),
-      ven_descu1: (form.descu1 || 0).toFixed(2),
-      ven_descu2: (form.descu2 || 0).toFixed(2),
-      ven_descu3: (form.descu3 || 0).toFixed(2),
-      ven_total: Math.round(form.total) || 0,
+      ven_impneto: form.ven_impneto || 0,
+      ven_descu1: descu1 || 0,
+      ven_descu2: descu2 || 0,
+      ven_descu3: form.descu3 || 0,
+      bonificacionGeneral: form.bonificacionGeneral || 0,
+      ven_bonificacion_general: form.bonificacionGeneral || 0,
+      ven_total: form.ven_total || 0,
       ven_vdocomvta: form.vdocomvta || 0,
       ven_vdocomcob: form.vdocomcob || 0,
       ven_idcli: form.clienteId,
       ven_idpla: form.plazoId,
       ven_idvdo: form.vendedorId,
       ven_copia: form.copia || 1,
-      ven_cae: form.cae && form.cae.trim() ? form.cae : '00000000000000',
+      items,
+      permitir_stock_negativo
     };
-    const items = itemsGridRef.current.getItems();
-    await onSave({ ...payload, items });
+    await onSave(payload);
   };
 
   const handleCancel = () => {
@@ -205,8 +258,120 @@ const VentaForm = ({
     }
   };
 
+  // Función para agregar producto a la grilla desde el buscador
+  const handleAddItemToGrid = (producto) => {
+    if (itemsGridRef.current) {
+      itemsGridRef.current.handleAddItem(producto);
+    }
+  };
+
+  // Opciones de tipo de comprobante con íconos
+  const tiposComprobante = [
+    { value: 'factura', label: 'Factura', icon: 'invoice' },
+    { value: 'venta', label: 'Venta', icon: 'document', codigo_afip: '9999' },
+    { value: 'nota_credito', label: 'Nota de Crédito', icon: 'credit' },
+    { value: 'nota_credito_interna', label: 'Nota de Crédito Interna', icon: 'credit' },
+    { value: 'nota_debito', label: 'Nota de Débito', icon: 'debit' },
+    { value: 'recibo', label: 'Recibo', icon: 'receipt' },
+  ];
+  const [tipoComprobante, setTipoComprobante] = useState(
+    tiposComprobante.find(tc => tc.value === 'presupuesto')?.value || tiposComprobante[0].value
+  );
+
+  // Calcular letra/comprobante real
+  const getLetraComprobante = () => {
+    if (tipoComprobante === 'nota_credito_interna') return 'Nota de Crédito Interna (comprobante interno, no AFIP)';
+    if (tipoComprobante === 'presupuesto') return 'Presupuesto (comprobante interno, no AFIP)';
+    if (tipoComprobante === 'factura' || tipoComprobante === 'nota_credito' || tipoComprobante === 'nota_debito' || tipoComprobante === 'recibo') {
+      // Lógica de letra automática
+      if (!ferreteria || !form.clienteId) return '';
+      const cliente = clientes.find(c => c.id === form.clienteId);
+      const tipoIva = (cliente && cliente.iva && cliente.iva.nombre) ? cliente.iva.nombre.trim().toLowerCase() : '';
+      if (ferreteria.situacion_iva === 'MO') return `${tiposComprobante.find(t => t.value === tipoComprobante).label} C`;
+      if (ferreteria.situacion_iva === 'RI') {
+        if (tipoIva === 'consumidor final') return `${tiposComprobante.find(t => t.value === tipoComprobante).label} B`;
+        return `${tiposComprobante.find(t => t.value === tipoComprobante).label} A`;
+      }
+    }
+    return '';
+  };
+
+  // Función para calcular el total c/IVA en tiempo real desde la grilla
+  const getTotalConIvaEnTiempoReal = () => {
+    if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
+    const items = itemsGridRef.current.getItems();
+    return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
+  };
+
+  // Función auxiliar para obtener los ítems actuales del grid
+  const getCurrentItems = () => {
+    if (itemsGridRef.current && itemsGridRef.current.getItems) {
+      return itemsGridRef.current.getItems();
+    }
+    return form.items;
+  };
+
+  // Diccionario de alícuotas
+  const ALICUOTAS = {
+    1: 0, // NO GRAVADO
+    2: 0, // EXENTO
+    3: 0, // 0%
+    4: 10.5,
+    5: 21,
+    6: 27
+  };
+
+  // Función auxiliar para calcular el subtotal de línea
+  function calcularSubtotalLinea(item, bonifGeneral) {
+    const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
+    const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
+    const bonif = item.bonificacion !== undefined ? parseFloat(item.bonificacion) || 0 : bonifGeneral;
+    return (precio * cantidad) * (1 - bonif / 100);
+  }
+
+  // Cálculos de totales centralizados y robustos
+  function calcularTotales() {
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+    const desc1 = parseFloat(descu1) || 0;
+    const desc2 = parseFloat(descu2) || 0;
+    let subtotalSinIva = 0;
+    const itemsConSubtotal = form.items.map(item => {
+      const bonifParticular = parseFloat(item.bonificacion) || 0;
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio) || 0;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
+      return { ...item, subtotal };
+    });
+    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
+    let ivaTotal = 0;
+    let totalConIva = 0;
+    itemsConSubtotal.forEach(item => {
+      const aliId = item.alicuotaIva || item.vdi_idaliiva;
+      const aliPorc = ALICUOTAS[aliId] || 0;
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
+      ivaTotal += iva;
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    return {
+      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
+      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
+      ivaTotal: Math.round(ivaTotal * 100) / 100,
+      totalConIva: Math.round(totalConIva * 100) / 100,
+      items: itemsConSubtotal
+    };
+  }
+
   return (
-    <form className="w-full max-w-6xl mx-auto py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
       <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? (isReadOnly ? 'Ver Venta' : 'Editar Venta') : 'Nueva Venta'}</h3>
       {isReadOnly && (
         <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
@@ -214,10 +379,6 @@ const VentaForm = ({
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">N° Venta</label>
-          <input name="numero" value={form.numero} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required readOnly={isReadOnly} />
-        </div>
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Cliente *</label>
           <select
@@ -237,10 +398,6 @@ const VentaForm = ({
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Fecha</label>
           <input name="fecha" type="date" value={form.fecha} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required readOnly={isReadOnly} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Total</label>
-          <input type="text" value={`$${(form.total || 0).toFixed(2)}`} className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50" readOnly />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Plazo *</label>
@@ -311,35 +468,37 @@ const VentaForm = ({
 
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Comprobante *</label>
-        <select
-          name="tipoComprobante"
+        <ComprobanteDropdown
+          opciones={tiposComprobante}
           value={tipoComprobante}
-          onChange={e => setTipoComprobante(Number(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-          required
+          onChange={setTipoComprobante}
           disabled={isReadOnly}
-        >
-          {tiposComprobante.map(tc => (
-            <option key={tc.value} value={tc.value}>{tc.label}</option>
-          ))}
-        </select>
+        />
       </div>
 
-      {comprobantes.length > 0 && (
-        <div className="mb-4">
-          Próximo número:&nbsp;
-          {
-            (() => {
-              const tipo = tiposComprobante.find(t => t.value === tipoComprobante);
-              if (!tipo) return 1;
-              return (comprobantes[0][tipo.campo] || 0) + 1;
-            })()
-          }
-        </div>
-      )}
+      <div className="mb-4 flex gap-4 items-center">
+        <label className="text-sm font-medium text-gray-700">Acción por defecto al cargar ítem duplicado:</label>
+        <select value={autoSumarDuplicados} onChange={e => setAutoSumarDuplicados(e.target.value)} className="px-2 py-1 border rounded">
+          <option value="sumar">Sumar cantidades</option>
+          <option value="duplicar">Crear duplicado</option>
+        </select>
+        <span className="text-xs text-gray-500 ml-2">Se resaltarán en rojo los duplicados.</span>
+      </div>
+
+      <div className="mb-4 flex gap-4 items-center">
+        <label className="text-sm font-medium text-gray-700">Descuento 1 (%)</label>
+        <input type="number" min="0" max="100" step="0.01" value={descu1} onChange={e => setDescu1(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <label className="text-sm font-medium text-gray-700">Descuento 2 (%)</label>
+        <input type="number" min="0" max="100" step="0.01" value={descu2} onChange={e => setDescu2(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <span className="text-xs text-gray-500 ml-2">Los descuentos se aplican de manera sucesiva sobre el subtotal neto.</span>
+      </div>
 
       <div className="mb-8">
         <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems de la Venta</h4>
+        <BuscadorProducto
+          productos={productos}
+          onSelect={handleAddItemToGrid}
+        />
         {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
@@ -354,12 +513,93 @@ const VentaForm = ({
           <ItemsGrid
             ref={itemsGridRef}
             productosDisponibles={productos}
+            proveedores={proveedores}
+            stockProveedores={stockProveedores}
             autoSumarDuplicados={autoSumarDuplicados}
             setAutoSumarDuplicados={setAutoSumarDuplicados}
             bonificacionGeneral={form.bonificacionGeneral}
-            setBonificacionGeneral={v => setForm(f => ({ ...f, bonificacionGeneral: v }))}
+            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
+            modo="venta"
+            onRowsChange={() => setItemsVersion(v => v + 1)}
           />
         )}
+      </div>
+
+      <div className="mt-8 flex justify-end">
+        <div className="inline-block bg-gray-50 rounded-lg shadow px-8 py-4 text-right">
+          <div className="flex flex-col gap-2 text-lg font-semibold text-gray-800">
+            <div className="flex gap-6 items-center">
+              <span>Subtotal s/IVA:</span>
+              <span className="text-black">${(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotal = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                return Number(subtotal).toFixed(2);
+              })()}</span>
+              <span className="ml-8">Bonificación general:</span>
+              <span className="text-black">{form.bonificacionGeneral}%</span>
+              <span className="ml-8">Descuento 1:</span>
+              <span className="text-black">{descu1}%</span>
+              <span className="ml-8">Descuento 2:</span>
+              <span className="text-black">{descu2}%</span>
+            </div>
+            <div className="flex gap-6 items-center">
+              <span>Subtotal c/Descuentos:</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                return Number(subtotalConDescuentos).toFixed(2);
+              })()}</span>
+              <span className="ml-8">IVA:</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
+                });
+                return Number(ivaTotal).toFixed(2);
+              })()}</span>
+              <span className="ml-8">Total c/IVA:</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
+                });
+                return (subtotalConDescuentos + ivaTotal).toFixed(2);
+              })()}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="mt-8 flex justify-end space-x-3">

@@ -8,6 +8,17 @@ class Ferreteria(models.Model):
     activa = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     
+    SITUACION_IVA_CHOICES = [
+        ('RI', 'Responsable Inscripto'),
+        ('MO', 'Monotributista'),
+    ]
+    situacion_iva = models.CharField(
+        max_length=2,
+        choices=SITUACION_IVA_CHOICES,
+        default='RI',
+        help_text='Condición fiscal del negocio/emisor para comprobantes.'
+    )
+    
     def __str__(self):
         return self.nombre
 

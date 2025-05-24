@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'ferreapps.login',
     'ferreapps.clientes',
     'ferreapps.ventas',
+    'ferreapps.reservas',
     'rest_framework',
     'django_filters',
     'django_extensions',
