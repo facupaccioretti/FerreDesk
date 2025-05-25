@@ -15,7 +15,7 @@ import VendedoresTable from './VendedoresTable';
 import PresupuestoForm from './PresupuestoForm';
 import VentaForm from './VentaForm';
 import ItemsGrid from './ItemsGrid';
-import { BotonEditar, BotonEliminar, BotonImprimir, BotonExpandir, BotonConvertir, BotonVerDetalle } from './Botones';
+import { BotonEditar, BotonEliminar, BotonImprimir, BotonConvertir, BotonVerDetalle } from './Botones';
 import PresupuestoVentaVista from './PresupuestoVentaVista';
 import { getCookie } from '../utils/csrf';
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
@@ -87,7 +87,7 @@ const PresupuestosManager = () => {
     document.title = "Presupuestos y Ventas FerreDesk";
   }, []);
 
-  const { ventas, loading, error, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
+  const { ventas, error, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
   const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI();
   const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI();
   const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI();
@@ -119,7 +119,6 @@ const PresupuestosManager = () => {
   const [tipoComprobante, setTipoComprobante] = useState(1); // 1=Factura A por defecto
   const [searchVendedor, setSearchVendedor] = useState('');
   const [editVendedorData, setEditVendedorData] = useState(null);
-  const [busquedaProducto, setBusquedaProducto] = useState('');
   const [filtroAlicuota, setFiltroAlicuota] = useState('');
   const [filtroTipoComprobante, setFiltroTipoComprobante] = useState('');
 
@@ -299,7 +298,6 @@ const PresupuestosManager = () => {
       tipo = venta.tipo || '';
     }
     const estado = venta.estado || (venta.ven_estado === 'AB' ? 'Abierto' : venta.ven_estado === 'CE' ? 'Cerrado' : '');
-    // Enriquecer ítems con datos de producto y calcular subtotales y totales con IVA
     const items = (venta.items || venta.detalle || venta.productos || []).map(item => {
       const producto = productos.find(p => p.id === (item.vdi_idsto || item.producto?.id));
       const cantidad = parseFloat(item.vdi_cantidad || item.cantidad || 0);
@@ -308,7 +306,6 @@ const PresupuestosManager = () => {
       const subtotalSinIva = (costo * cantidad) * (1 - bonificacion / 100);
       const alicuotaIva = producto ? (parseFloat(producto.aliiva?.porce || producto.aliiva || 0) || 0) : 0;
       const iva = subtotalSinIva * (alicuotaIva / 100);
-      const totalConIva = subtotalSinIva + iva;
       return {
         ...item,
         producto,
@@ -318,15 +315,10 @@ const PresupuestosManager = () => {
         cantidad,
         precio: costo,
         bonificacion,
-        subtotalSinIva,
         alicuotaIva,
         iva,
-        totalConIva
       };
     });
-    const subtotalSinIva = items.reduce((sum, i) => sum + (i.subtotalSinIva || 0), 0);
-    const ivaTotal = items.reduce((sum, i) => sum + (i.iva || 0), 0);
-    const totalConIva = items.reduce((sum, i) => sum + (i.totalConIva || 0), 0);
     return {
       ...venta,
       tipo,
@@ -335,9 +327,6 @@ const PresupuestosManager = () => {
       numero: venta.numero_formateado || venta.ven_numero || venta.numero || '',
       cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
-      subtotalSinIva: venta.ven_impneto || 0,
-      ivaTotal,
-      total: venta.ven_total || 0,
       id: venta.id || venta.ven_id || venta.pk,
       items,
       plazoId: venta.ven_idpla || venta.plazoId || '',
@@ -351,6 +340,7 @@ const PresupuestosManager = () => {
       copia: venta.ven_copia || venta.copia || 1,
       cae: venta.ven_cae || venta.cae || '',
       comprobante: venta.comprobante && typeof venta.comprobante === 'object' ? venta.comprobante.id : venta.comprobante,
+      total: venta.total || venta.ven_total || venta.importe_total || 0
     };
   };
 

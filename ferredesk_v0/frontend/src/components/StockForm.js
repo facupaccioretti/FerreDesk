@@ -3,18 +3,6 @@ import { useStockProveAPI, useStockProveEditAPI } from '../utils/useStockProveAP
 import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
 import AsociarCodigoProveedorModal from './AsociarCodigoProveedorModal';
 
-const fetchPrecioProveedor = async (proveedorId, codigoProducto) => {
-  if (!proveedorId || !codigoProducto) return null;
-  try {
-    const res = await fetch(`/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProducto)}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.precio || null;
-  } catch {
-    return null;
-  }
-};
-
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
   let cookieValue = null;
@@ -68,20 +56,15 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     stockProve,
     addStockProve,
     updateStockProve,
-    deleteStockProve,
     fetchStockProve
   } = isEdicion ? stockProveEditAPI : stockProveAPI;
 
   const { alicuotas } = useAlicuotasIVAAPI();
 
-  const [editingStockProveId, setEditingStockProveId] = useState(null);
-  const [editStockProve, setEditStockProve] = useState({ cantidad: '', costo: '' });
   const [formError, setFormError] = useState(null);
   const [permitirCostoManual, setPermitirCostoManual] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const [showAsociarModal, setShowAsociarModal] = useState(false);
   const [cargarPrecioManual, setCargarPrecioManual] = useState(false);
-  const [ajustandoCantidadId, setAjustandoCantidadId] = useState(null);
   const [editandoCantidadId, setEditandoCantidadId] = useState(null);
   const [nuevaCantidad, setNuevaCantidad] = useState('');
 
@@ -284,28 +267,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         });
       }
       if (typeof fetchStockProve === 'function') fetchStockProve();
-      setRefresh(r => r + 1);
       setNewStockProve({ stock: currentStockId, proveedor: '', cantidad: '', costo: '' });
     } catch (err) {
       alert('Error al procesar stock de proveedor: ' + (err.response?.data?.non_field_errors?.[0] || err.message || 'Error desconocido'));
     }
-  };
-
-  const removeStockProveHandler = async (id) => {
-    const sp = stockProve.find(sp => sp.id === id);
-    const habitualId = form.proveedor_habitual_id;
-    await deleteStockProve(id);
-    if (sp && String(sp.proveedor?.id || sp.proveedor) === String(habitualId)) {
-      const restantes = stockProve.filter(sp2 => sp2.id !== id);
-      if (restantes.length > 0) {
-        const nuevoHabitual = restantes[0].proveedor?.id || restantes[0].proveedor;
-        setForm(prev => ({ ...prev, proveedor_habitual_id: String(nuevoHabitual) }));
-      } else {
-        setForm(prev => ({ ...prev, proveedor_habitual_id: '' }));
-      }
-    }
-    if (typeof fetchStockProve === 'function') fetchStockProve();
-    setRefresh(r => r + 1);
   };
 
   // Handler para asociar código de proveedor (ahora solo modifica el estado local en edición)
@@ -439,7 +404,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       let productoGuardado = null;
       if (!isEdicion) {
         // NUEVO FLUJO ATÓMICO: enviar todo junto
-        // Armar stock_proveedores con códigos pendientes
         const stockProveedores = stockProvePendientes.map(sp => {
           const codigoPendiente = codigosPendientes.find(
             c => String(c.proveedor_id) === String(sp.proveedor)
@@ -451,7 +415,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
             codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : ''
           };
         });
-        // Llamar endpoint atómico
         const res = await fetch('/api/productos/crear-producto-con-relaciones/', {
           method: 'POST',
           headers: {
@@ -473,39 +436,44 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         setStockProvePendientes([]);
         setCodigosPendientes([]);
         if (typeof fetchStockProve === 'function') fetchStockProve();
-        // Llamar a onSave para cerrar la pestaña de Nuevo Producto
         await onSave(productoGuardado);
       } else {
-        // EDICIÓN: igual que antes
-        productoGuardado = { ...stock, ...formToSave };
-        await onSave(formToSave);
-      }
-      // En edición, aplicar los códigos pendientes
-      const productoId = productoGuardado?.id || stock?.id || form.id;
-      if (isEdicion && codigosPendientesEdicion.length > 0 && productoId) {
-        for (const codigo of codigosPendientesEdicion) {
-          const res = await fetch('/api/productos/asociar-codigo-proveedor/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-              stock_id: productoId,
-              proveedor_id: codigo.proveedor_id,
-              codigo_producto_proveedor: codigo.codigo_producto_proveedor,
-              costo: codigo.costo
-            })
+        // EDICIÓN ATÓMICA: enviar todo junto
+        // Construir stock_proveedores a partir de stockProve (los reales) y codigosPendientesEdicion (los editados)
+        const stockProveedores = stockProve
+          .filter(sp => sp.stock === stock.id)
+          .map(sp => {
+            // Si hay un pendiente de edición para este proveedor, usar su código/costo
+            const pendiente = codigosPendientesEdicion.find(c => String(c.proveedor_id) === String(sp.proveedor?.id || sp.proveedor));
+            return {
+              proveedor_id: sp.proveedor?.id || sp.proveedor,
+              cantidad: sp.cantidad,
+              costo: pendiente && pendiente.costo !== undefined ? pendiente.costo : sp.costo,
+              codigo_producto_proveedor: pendiente ? pendiente.codigo_producto_proveedor : sp.codigo_producto_proveedor || ''
+            };
           });
-          if (!res.ok) {
-            const data = await res.json();
-            setFormError(data.detail || 'Este código ya se encuentra asociado a otro producto.');
-            return;
-          }
+        const res = await fetch('/api/productos/editar-producto-con-relaciones/', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            producto: formToSave,
+            stock_proveedores: stockProveedores
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setFormError(data.detail || 'Error al actualizar el producto.');
+          return;
         }
+        productoGuardado = { ...formToSave, id: data.producto_id || stock.id };
+        setCodigosPendientesEdicion([]);
+        if (typeof fetchStockProve === 'function') fetchStockProve();
+        await onSave(productoGuardado);
       }
-      setCodigosPendientesEdicion([]); // Limpiar pendientes de edición
     } catch (err) {
       setFormError('Error al guardar el producto o sus relaciones.');
       return;
@@ -520,34 +488,52 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const stockProveForThisStock = stockProve.filter(sp => sp.stock === stock?.id);
 
   const handleEditStockProve = (sp) => {
-    setEditingStockProveId(sp.id);
-    setEditStockProve({ cantidad: sp.cantidad, costo: sp.costo });
+    setEditandoCantidadId(sp.id);
+    setNuevaCantidad(sp.cantidad);
   };
 
   const handleEditStockProveCancel = () => {
-    setEditingStockProveId(null);
-    setEditStockProve({ cantidad: '', costo: '' });
+    setEditandoCantidadId(null);
+    setNuevaCantidad('');
   };
 
   const handleEditStockProveSave = async (id) => {
-    // Buscar el registro original para obtener los IDs
     const sp = stockProve.find(sp => sp.id === id);
     if (!sp) return;
+    // Validar y convertir cantidad a entero
+    const cantidadNum = parseInt(String(nuevaCantidad).replace(',', '.'), 10);
+    if (isNaN(cantidadNum) || cantidadNum < 0) {
+      setFormError('Ingrese una cantidad válida (entera)');
+      return;
+    }
+    // Validar cantidad original para evitar división por cero
+    const cantidadOriginal = parseFloat(sp.cantidad);
+    if (!cantidadOriginal) {
+      setFormError('La cantidad original es inválida');
+      return;
+    }
+    const costoUnitario = sp.costo / cantidadOriginal;
+    let nuevoCosto = cantidadNum * costoUnitario;
+    // Redondear costo a 2 decimales
+    nuevoCosto = Math.round((nuevoCosto + Number.EPSILON) * 100) / 100;
+    if (isNaN(nuevoCosto) || !isFinite(nuevoCosto)) {
+      setFormError('El costo calculado no es válido');
+      return;
+    }
     await updateStockProve(id, {
       stockId: sp.stock,
       proveedorId: sp.proveedor?.id || sp.proveedor,
-      cantidad: parseFloat(editStockProve.cantidad),
-      costo: parseFloat(editStockProve.costo),
+      cantidad: cantidadNum,
+      costo: nuevoCosto,
     });
-    setEditingStockProveId(null);
-    setEditStockProve({ cantidad: '', costo: '' });
+    setEditandoCantidadId(null);
+    setNuevaCantidad('');
     if (typeof fetchStockProve === 'function') fetchStockProve();
   };
 
   const handleCloseAsociarModal = () => {
     setShowAsociarModal(false);
     if (typeof fetchStockProve === 'function') fetchStockProve();
-    setRefresh(r => r + 1);
   };
 
   console.log('form state:', JSON.stringify(form));
@@ -560,7 +546,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const proveedoresAsociados = stock?.id
     ? stockProveForThisStock.map(sp => (typeof sp.proveedor === 'object' ? sp.proveedor : proveedores.find(p => p.id === sp.proveedor))).filter(Boolean)
     : stockProvePendientes.map(sp => (typeof sp.proveedor === 'object' ? sp.proveedor : proveedores.find(p => p.id === sp.proveedor))).filter(Boolean);
-  const variosProveedores = proveedoresAsociados.length > 1;
   const unProveedor = proveedoresAsociados.length === 1;
 
   // Si hay un solo proveedor, autocompletar y deshabilitar
@@ -624,31 +609,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       setForm(prev => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }));
     }
   }, [proveedoresAsociados, form.proveedor_habitual_id]);
-
-  // 2. Handler para guardar la nueva cantidad
-  const handleGuardarCantidad = async (sp) => {
-    if (isEdicion) {
-      await updateStockProve(sp.id, {
-        stockId: sp.stock,
-        proveedorId: sp.proveedor?.id || sp.proveedor,
-        cantidad: parseFloat(nuevaCantidad),
-        costo: sp.costo,
-        codigo_producto_proveedor: sp.codigo_producto_proveedor
-      });
-      setEditandoCantidadId(null);
-      setNuevaCantidad('');
-      if (typeof fetchStockProve === 'function') fetchStockProve();
-      setRefresh(r => r + 1);
-    } else {
-      setStockProvePendientes(prev => prev.map(item =>
-        item.proveedor === (sp.proveedor?.id || sp.proveedor)
-          ? { ...item, cantidad: parseFloat(nuevaCantidad) }
-          : item
-      ));
-      setEditandoCantidadId(null);
-      setNuevaCantidad('');
-    }
-  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -906,14 +866,14 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                               <button
                                 type="button"
                                 className="ml-1 px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
-                                onClick={() => handleGuardarCantidad(sp)}
+                                onClick={() => handleEditStockProveSave(sp.id)}
                               >
                                 Guardar
                               </button>
                               <button
                                 type="button"
                                 className="ml-1 px-2 py-0.5 bg-gray-300 text-black rounded hover:bg-gray-400 text-xs"
-                                onClick={() => { setEditandoCantidadId(null); setNuevaCantidad(''); }}
+                                onClick={handleEditStockProveCancel}
                               >
                                 Cancelar
                               </button>
@@ -924,7 +884,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                               <button
                                 type="button"
                                 className="ml-2 px-2 py-0.5 bg-yellow-400 text-black rounded hover:bg-yellow-500 text-xs"
-                                onClick={() => { setEditandoCantidadId(sp.id); setNuevaCantidad(sp.cantidad); }}
+                                onClick={() => handleEditStockProve(sp)}
                               >
                                 Editar
                               </button>
