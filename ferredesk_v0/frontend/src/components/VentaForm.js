@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
 import ComprobanteDropdown from './ComprobanteDropdown';
+import ItemsGrid from './ItemsGrid';
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: '',
@@ -76,7 +76,6 @@ const VentaForm = ({
   errorAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
-  ItemsGrid
 }) => {
   const [form, setForm] = useState(() => {
     const savedForm = localStorage.getItem('ventaFormDraft');
@@ -101,11 +100,7 @@ const VentaForm = ({
     }, sucursales, puntosVenta);
   });
 
-  const [editRow, setEditRow] = useState({ codigo: '', cantidad: 1, costo: '', bonificacion: 0 });
-  const [selectedProducto, setSelectedProducto] = useState(null);
-  const codigoInputRef = useRef();
   const itemsGridRef = useRef();
-  const [itemsVersion, setItemsVersion] = useState(0);
 
   const stockProveedores = getStockProveedoresMap(productos);
 
@@ -195,29 +190,6 @@ const VentaForm = ({
     }));
   };
 
-  const handleAddItem = (item) => {
-    setForm(prev => ({
-      ...prev,
-      items: [...prev.items, { ...item, precio: item.costo, bonificacion: item.bonificacion || 0 }],
-    }));
-  };
-
-  const handleEditItem = (id, updatedItem) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.map(item => item.id === id ? { ...updatedItem, precio: updatedItem.costo, bonificacion: updatedItem.bonificacion || 0 } : item),
-    }));
-  };
-
-  const handleDeleteItem = (id) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.filter(item => item.id !== id),
-    }));
-  };
-
-  const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     localStorage.removeItem('ventaFormDraft');
@@ -278,39 +250,6 @@ const VentaForm = ({
     tiposComprobante.find(tc => tc.value === 'presupuesto')?.value || tiposComprobante[0].value
   );
 
-  // Calcular letra/comprobante real
-  const getLetraComprobante = () => {
-    if (tipoComprobante === 'nota_credito_interna') return 'Nota de Crédito Interna (comprobante interno, no AFIP)';
-    if (tipoComprobante === 'presupuesto') return 'Presupuesto (comprobante interno, no AFIP)';
-    if (tipoComprobante === 'factura' || tipoComprobante === 'nota_credito' || tipoComprobante === 'nota_debito' || tipoComprobante === 'recibo') {
-      // Lógica de letra automática
-      if (!ferreteria || !form.clienteId) return '';
-      const cliente = clientes.find(c => c.id === form.clienteId);
-      const tipoIva = (cliente && cliente.iva && cliente.iva.nombre) ? cliente.iva.nombre.trim().toLowerCase() : '';
-      if (ferreteria.situacion_iva === 'MO') return `${tiposComprobante.find(t => t.value === tipoComprobante).label} C`;
-      if (ferreteria.situacion_iva === 'RI') {
-        if (tipoIva === 'consumidor final') return `${tiposComprobante.find(t => t.value === tipoComprobante).label} B`;
-        return `${tiposComprobante.find(t => t.value === tipoComprobante).label} A`;
-      }
-    }
-    return '';
-  };
-
-  // Función para calcular el total c/IVA en tiempo real desde la grilla
-  const getTotalConIvaEnTiempoReal = () => {
-    if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
-    const items = itemsGridRef.current.getItems();
-    return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
-  };
-
-  // Función auxiliar para obtener los ítems actuales del grid
-  const getCurrentItems = () => {
-    if (itemsGridRef.current && itemsGridRef.current.getItems) {
-      return itemsGridRef.current.getItems();
-    }
-    return form.items;
-  };
-
   // Diccionario de alícuotas
   const ALICUOTAS = {
     1: 0, // NO GRAVADO
@@ -329,46 +268,14 @@ const VentaForm = ({
     return (precio * cantidad) * (1 - bonif / 100);
   }
 
-  // Cálculos de totales centralizados y robustos
-  function calcularTotales() {
-    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-    const desc1 = parseFloat(descu1) || 0;
-    const desc2 = parseFloat(descu2) || 0;
-    let subtotalSinIva = 0;
-    const itemsConSubtotal = form.items.map(item => {
-      const bonifParticular = parseFloat(item.bonificacion) || 0;
-      const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.precio) || 0;
-      let subtotal = 0;
-      if (bonifParticular > 0) {
-        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
-      } else {
-        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
-      }
-      subtotalSinIva += subtotal;
-      return { ...item, subtotal };
-    });
-    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
-    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
-    let ivaTotal = 0;
-    let totalConIva = 0;
-    itemsConSubtotal.forEach(item => {
-      const aliId = item.alicuotaIva || item.vdi_idaliiva;
-      const aliPorc = ALICUOTAS[aliId] || 0;
-      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
-      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
-      ivaTotal += iva;
-      totalConIva += itemSubtotalConDescuentos + iva;
-    });
-    return {
-      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
-      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
-      ivaTotal: Math.round(ivaTotal * 100) / 100,
-      totalConIva: Math.round(totalConIva * 100) / 100,
-      items: itemsConSubtotal
-    };
-  }
+  const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
+
+  const getCurrentItems = () => {
+    if (itemsGridRef.current && itemsGridRef.current.getItems) {
+      return itemsGridRef.current.getItems();
+    }
+    return form.items;
+  };
 
   return (
     <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
@@ -520,7 +427,6 @@ const VentaForm = ({
             bonificacionGeneral={form.bonificacionGeneral}
             setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
             modo="venta"
-            onRowsChange={() => setItemsVersion(v => v + 1)}
           />
         )}
       </div>

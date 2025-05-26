@@ -12,9 +12,11 @@ import { useCategoriasAPI } from '../utils/useCategoriasAPI';
 import { useClientesAPI } from '../utils/useClientesAPI';
 
 const ClientesTable = ({ clientes, onEdit, onDelete, search, setSearch, expandedClientId, setExpandedClientId, barrios, localidades, provincias, tiposIVA, transportes, vendedores, plazos, categorias }) => {
-  const filtered = clientes.filter((cli) =>
-    cli.razon.toLowerCase().includes(search.toLowerCase()) ||
-    cli.fantasia.toLowerCase().includes(search.toLowerCase())
+  const filtered = (clientes || []).filter(cli =>
+    cli && (
+      (cli.razon ? cli.razon.toLowerCase() : '').includes(search.toLowerCase()) ||
+      (cli.fantasia ? cli.fantasia.toLowerCase() : '').includes(search.toLowerCase())
+    )
   );
 
   return (
@@ -219,7 +221,9 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
     <div className="mb-2 relative">
       <label className="block text-sm font-medium text-gray-500 mb-1 flex items-center justify-between">
         {label}
-        <button type="button" onClick={onAdd} className="ml-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">{addLabel}</button>
+        {onAdd && (
+          <button type="button" onClick={onAdd} className="ml-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">{addLabel}</button>
+        )}
       </label>
       <div className="relative">
         <input
@@ -263,8 +267,8 @@ const NuevoClienteForm = ({
   onSave, onCancel, initialData,
   barrios, localidades, provincias, transportes, vendedores, plazos, categorias,
   setBarrios, setLocalidades, setProvincias, setTransportes, setVendedores, setPlazos, setCategorias,
+  tiposIVA,
   apiError,
-  tiposIVA
 }) => {
   const [form, setForm] = useState({
     codigo: initialData?.codigo || '',
@@ -803,7 +807,6 @@ const ClientesManager = () => {
     clientes,
     loading,
     error,
-    fetchClientes,
     addCliente,
     updateCliente,
     deleteCliente,
@@ -892,11 +895,11 @@ const ClientesManager = () => {
   const { barrios, setBarrios } = useBarriosAPI();
   const { localidades, setLocalidades } = useLocalidadesAPI();
   const { provincias, setProvincias } = useProvinciasAPI();
-  const { tiposIVA, setTiposIVA } = useTiposIVAAPI();
   const { transportes, setTransportes } = useTransportesAPI();
   const { vendedores, setVendedores } = useVendedoresAPI();
   const { plazos, setPlazos } = usePlazosAPI();
   const { categorias, setCategorias } = useCategoriasAPI();
+  const { tiposIVA } = useTiposIVAAPI();
 
   return (
     <div className="h-full flex flex-col">
@@ -979,8 +982,8 @@ const ClientesManager = () => {
                   setVendedores={setVendedores}
                   setPlazos={setPlazos}
                   setCategorias={setCategorias}
-                  apiError={error}
                   tiposIVA={tiposIVA}
+                  apiError={error}
                 />
               </div>
             )}

@@ -33,3 +33,27 @@ frontend para cargar y editar los datos de la ferretería (nombre, dirección, s
 
 
 manejo multiples usuarios presupuesto y venta!!!!!!!!!!!!
+
+
+El buscador de productos llama al modal de stock negativo 
+
+En venta el modal solo deberia aparecer una unica vez cuando se termina el stock de cada proveedor.
+
+Arreglar el modal directamente
+
+
+
+
+Verificacion de Paginas
+
+
+
+Clientes todo ok agregar compaginacion y trans atomicas
+Productos todo ok pero agregar compaginacion y sistema bajo stock (cant minima)
+Proveedores Todo ok pero agregar compaginacion
+Presupuestos y Ventas
+
+
+Cosas hechas:
+ Limpieza codigo
+ Transacciones atomicas en creacion/edicion de productos

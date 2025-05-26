@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import BuscadorProducto from './BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
+import BuscadorProducto from './BuscadorProducto';
 import ComprobanteDropdown from './ComprobanteDropdown';
 
 const getStockProveedoresMap = (productos) => {
@@ -78,7 +78,6 @@ const PresupuestoForm = ({
   errorAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
-  ItemsGrid
 }) => {
   const getDefaultClienteId = (clientes) => {
     const cc = clientes.find(c => (c.razon || c.nombre)?.toLowerCase().includes('cuenta corriente'));
@@ -188,14 +187,12 @@ const PresupuestoForm = ({
     let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
     subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
     // Calcular IVA y total sumando ítem por ítem
-    let ivaTotal = 0;
     let totalConIva = 0;
     updatedItems.forEach(item => {
       const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
       const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
       const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
       const iva = itemSubtotalConDescuentos * (alicuotaIva / 100);
-      ivaTotal += iva;
       totalConIva += itemSubtotalConDescuentos + iva;
     });
     setForm(prevForm => ({
@@ -213,31 +210,6 @@ const PresupuestoForm = ({
     setItemsVersion(v => v + 1);
   };
 
-  // handleAddItem y handleEditItem igual a VentaForm
-  const handleAddItem = (item) => {
-    setForm(prev => ({
-      ...prev,
-      items: [...prev.items, { ...item, precio: item.costo, bonificacion: item.bonificacion || 0 }],
-    }));
-    setItemsVersion(v => v + 1);
-  };
-
-  const handleEditItem = (id, updatedItem) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.map(item => item.id === id ? { ...updatedItem, precio: updatedItem.costo, bonificacion: updatedItem.bonificacion || 0 } : item),
-    }));
-    setItemsVersion(v => v + 1);
-  };
-
-  const handleDeleteItem = (id) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.filter(item => item.id !== id),
-    }));
-    setItemsVersion(v => v + 1);
-  };
-
   // Forzar comprobante 9997 para presupuesto
   const comprobanteId = 9997;
 
@@ -251,9 +223,6 @@ const PresupuestoForm = ({
       itemsGridRef.current.handleAddItem(producto);
     }
   };
-
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   // Copio la función de mapeo de campos de items de Venta
   const mapItemFields = (item, idx) => {
@@ -288,64 +257,18 @@ const PresupuestoForm = ({
     return (precio * cantidad) * (1 - bonif / 100);
   }
 
-  // Cálculos de totales centralizados y robustos
-  function calcularTotales() {
-    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-    const desc1 = parseFloat(descu1) || 0;
-    const desc2 = parseFloat(descu2) || 0;
-    let subtotalSinIva = 0;
-    const itemsConSubtotal = form.items.map(item => {
-      const bonifParticular = parseFloat(item.bonificacion) || 0;
-      const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.precio) || 0;
-      let subtotal = 0;
-      if (bonifParticular > 0) {
-        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
-      } else {
-        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
-      }
-      subtotalSinIva += subtotal;
-      return { ...item, subtotal };
-    });
-    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
-    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
-    let ivaTotal = 0;
-    let totalConIva = 0;
-    itemsConSubtotal.forEach(item => {
-      const aliId = item.alicuotaIva || item.vdi_idaliiva;
-      const aliPorc = ALICUOTAS[aliId] || 0;
-      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
-      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
-      ivaTotal += iva;
-      totalConIva += itemSubtotalConDescuentos + iva;
-    });
-    return {
-      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
-      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
-      ivaTotal: Math.round(ivaTotal * 100) / 100,
-      totalConIva: Math.round(totalConIva * 100) / 100,
-      items: itemsConSubtotal
-    };
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!itemsGridRef.current) {
-      setError('Error al acceder a la grilla de items');
       return;
     }
 
     try {
-      setIsLoading(true);
-      setError(null);
-
       const items = itemsGridRef.current.getItems();
       // LOG: Mostrar los items obtenidos de la grilla
       console.log('[PresupuestoForm] Items obtenidos de la grilla:', items);
       if (!items || items.length === 0) {
         console.error('[PresupuestoForm] ERROR: El array de items está vacío antes de armar el payload');
-        setError('Debe agregar al menos un ítem válido al presupuesto');
         return;
       }
 
@@ -420,10 +343,7 @@ const PresupuestoForm = ({
       await onSave(payload);
       onCancel();
     } catch (err) {
-      setError(err.message || 'Error al guardar el presupuesto');
       console.error('[PresupuestoForm] ERROR al guardar el presupuesto:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -433,17 +353,6 @@ const PresupuestoForm = ({
   };
 
   const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
-
-  const [editRow, setEditRow] = useState({ codigo: '', cantidad: 1, costo: '', bonificacion: 0 });
-  const [selectedProducto, setSelectedProducto] = useState(null);
-  const codigoInputRef = useRef();
-
-  // Función para calcular el total c/IVA en tiempo real desde la grilla
-  const getTotalConIvaEnTiempoReal = () => {
-    if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
-    const items = itemsGridRef.current.getItems();
-    return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
-  };
 
   // Copio handleChange de VentaForm
   const handleChange = e => {

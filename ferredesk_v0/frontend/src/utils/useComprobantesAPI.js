@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getCookie } from './csrf';
 
 export function useComprobantesAPI() {
   const [comprobantes, setComprobantes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const csrftoken = getCookie('csrftoken');
 
   const fetchComprobantes = async () => {
     setLoading(true);

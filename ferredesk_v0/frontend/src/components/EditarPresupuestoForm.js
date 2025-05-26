@@ -136,7 +136,6 @@ const EditarPresupuestoForm = ({
   // Estado para descuentos
   const [descu1, setDescu1] = useState(form.descu1 || 0);
   const [descu2, setDescu2] = useState(form.descu2 || 0);
-  const [itemsVersion, setItemsVersion] = useState(0);
 
   // Estado de los ítems vive en el padre
   const [items, setItems] = useState(() => {
@@ -177,9 +176,6 @@ const EditarPresupuestoForm = ({
     }
   };
 
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-
   // Copio la función de mapeo de campos de items de Venta
   const mapItemFields = (item, idx) => {
     return {
@@ -217,19 +213,15 @@ const EditarPresupuestoForm = ({
     })));
     if (!items || items.length === 0) {
       console.error('handleSubmit: Debe agregar al menos un ítem válido al presupuesto');
-      setError('Debe agregar al menos un ítem válido al presupuesto');
       return;
     }
     for (const item of items) {
       if (!item.vdi_idsto && !(item.producto && item.producto.id)) {
-        setError('Todos los ítems deben tener producto y proveedor válidos.');
         console.error('handleSubmit: item inválido', item);
         return;
       }
     }
     try {
-      setIsLoading(true);
-      setError(null);
       let payload;
       if (initialData && initialData.id) {
         const mappedItems = items.map(mapItemFields);
@@ -296,11 +288,7 @@ const EditarPresupuestoForm = ({
       onCancel();
       console.log('handleSubmit: onCancel ejecutado');
     } catch (err) {
-      setError(err.message || 'Error al guardar el presupuesto');
       console.error('handleSubmit: ERROR al guardar el presupuesto:', err);
-    } finally {
-      setIsLoading(false);
-      console.log('handleSubmit: setIsLoading(false)');
     }
   };
 
@@ -309,17 +297,6 @@ const EditarPresupuestoForm = ({
   };
 
   const isReadOnly = form.estado === 'Cerrado';
-
-  const [editRow, setEditRow] = useState({ codigo: '', cantidad: 1, costo: '', bonificacion: 0 });
-  const [selectedProducto, setSelectedProducto] = useState(null);
-  const codigoInputRef = useRef();
-
-  // Función para calcular el total c/IVA en tiempo real desde la grilla
-  const getTotalConIvaEnTiempoReal = () => {
-    if (!itemsGridRef.current || !itemsGridRef.current.getItems) return 0;
-    const items = itemsGridRef.current.getItems();
-    return items.reduce((sum, item) => sum + (item.vdi_importe || 0) * (1 + (parseFloat(item.vdi_idaliiva || 0) / 100)), 0);
-  };
 
   // Copio handleChange de VentaForm
   const handleChange = e => {
@@ -339,14 +316,6 @@ const EditarPresupuestoForm = ({
     5: 21,
     6: 27
   };
-
-  // Función auxiliar para calcular subtotal de línea
-  function calcularSubtotalLinea(item) {
-    const cantidad = parseFloat(item.cantidad) || 0;
-    const costo = parseFloat(item.costo) || 0;
-    const bonif = parseFloat(item.bonificacion) || 0;
-    return (costo * cantidad) * (1 - bonif / 100);
-  }
 
   // Cálculos de totales centralizados y robustos
   function calcularTotales() {

@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import PrecioExcelItem from './PrecioExcelItem';
 
-const getStockTotal = (stock_proveedores) =>
-  stock_proveedores.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0);
-
 function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
   const [form, setForm] = useState({ razon: '', fantasia: '', domicilio: '', tel1: '', cuit: '' });
   const [editId, setEditId] = useState(null);

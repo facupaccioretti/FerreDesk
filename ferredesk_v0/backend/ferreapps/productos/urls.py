@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from .views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, UploadListaPreciosProveedor, PrecioProductoProveedorAPIView, HistorialListasProveedorAPIView, asociar_codigo_proveedor, codigos_lista_proveedor, obtener_nuevo_id_temporal, crear_producto_con_relaciones, FerreteriaAPIView
+from .views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, UploadListaPreciosProveedor, PrecioProductoProveedorAPIView, HistorialListasProveedorAPIView, asociar_codigo_proveedor, codigos_lista_proveedor, obtener_nuevo_id_temporal, crear_producto_con_relaciones, FerreteriaAPIView, editar_producto_con_relaciones
 from django.urls import path
 
 router = DefaultRouter()
@@ -18,4 +18,5 @@ urlpatterns = router.urls + [
     path('obtener-nuevo-id-temporal/', obtener_nuevo_id_temporal, name='obtener_nuevo_id_temporal'),
     path('crear-producto-con-relaciones/', crear_producto_con_relaciones, name='crear_producto_con_relaciones'),
     path('ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
+    path('editar-producto-con-relaciones/', editar_producto_con_relaciones, name='editar_producto_con_relaciones'),
 ] 
