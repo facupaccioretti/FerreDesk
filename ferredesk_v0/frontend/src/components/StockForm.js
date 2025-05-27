@@ -73,6 +73,21 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
 
   useEffect(() => {
     if (stock) {
+      // Construir stock_proveedores para edición con solo proveedor_id
+      const stockProveedores = stock.stock_proveedores && stock.stock_proveedores.length > 0
+        ? stock.stock_proveedores.map(sp => ({
+            ...sp,
+            proveedor_id: sp.proveedor_id || (sp.proveedor && (sp.proveedor.id || sp.proveedor))
+          }))
+        : stockProve
+            .filter(sp => sp.stock === stock.id)
+            .map(sp => ({
+              proveedor_id: sp.proveedor?.id || sp.proveedor,
+              cantidad: sp.cantidad,
+              costo: sp.costo,
+              codigo_producto_proveedor: sp.codigo_producto_proveedor || ''
+            }));
+
       setForm({
         codvta: stock.codvta || '',
         codcom: stock.codcom || '',
@@ -97,11 +112,12 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         idaliiva: stock.idaliiva && typeof stock.idaliiva === 'object'
           ? stock.idaliiva.id
           : stock.idaliiva ?? '',
-        id: stock.id // <-- Aseguro que el id esté siempre presente
+        id: stock.id,
+        stock_proveedores: stockProveedores // Agregamos stock_proveedores al form
       });
       setNewStockProve(prev => ({ ...prev, stock: stock.id }));
     }
-  }, [stock]);
+  }, [stock, stockProve]);
 
   useEffect(() => {
     if (modo === 'nuevo' && !stock) {
@@ -129,17 +145,13 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   useEffect(() => {
     const proveedorId = newStockProve.proveedor;
     let codigoProveedor = '';
-
-    // Buscar código asociado (pendiente o real) para el proveedor seleccionado
     if (proveedorId) {
-      // 1. Buscar en pendientes
       const codigoPendiente = codigosPendientes.find(
         c => String(c.proveedor_id) === String(proveedorId)
       );
       if (codigoPendiente) {
         codigoProveedor = codigoPendiente.codigo_producto_proveedor;
       }
-      // 2. Buscar en reales si no hay pendiente
       if (!codigoProveedor && stock?.id) {
         const sp = stockProve.find(
           sp => (sp.proveedor?.id || sp.proveedor) === Number(proveedorId)
@@ -149,29 +161,27 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         }
       }
     }
-
     if (proveedorId && codigoProveedor) {
-      // Buscar precio de lista para ese proveedor y código
       fetch(`/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProveedor)}`)
         .then(res => res.json())
         .then(data => {
           if (data && data.precio) {
             setNewStockProve(prev => ({ ...prev, costo: String(data.precio) }));
-            setPermitirCostoManual(false);
+            setPermitirCostoManual(true);
             setCargarPrecioManual(false);
           } else {
             setNewStockProve(prev => ({ ...prev, costo: '' }));
-            setPermitirCostoManual(true);
-            setCargarPrecioManual(true);
+            setPermitirCostoManual(false);
+            setCargarPrecioManual(false);
           }
         })
         .catch(() => {
-          setPermitirCostoManual(true);
-          setCargarPrecioManual(true);
+          setPermitirCostoManual(false);
+          setCargarPrecioManual(false);
         });
     } else if (proveedorId) {
-      setPermitirCostoManual(true);
-      setCargarPrecioManual(true);
+      setPermitirCostoManual(false);
+      setCargarPrecioManual(false);
       setNewStockProve(prev => ({ ...prev, costo: '' }));
     }
   }, [newStockProve.proveedor, stock?.id, stockProve, codigosPendientes]);
@@ -190,6 +200,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
 
   const handleNewStockProveChange = (e) => {
     const { name, value } = e.target;
+    console.log('[handleNewStockProveChange] Cambio:', name, value);
     setNewStockProve(prev => ({
       ...prev,
       [name]: name === "proveedor" ? String(value) : value
@@ -332,6 +343,21 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           { proveedor_id, codigo_producto_proveedor, costo }
         ];
       });
+      // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
+      setForm(prevForm => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm;
+        const actualizado = prevForm.stock_proveedores.map(sp =>
+          String(sp.proveedor_id) === String(proveedor_id)
+            ? { ...sp, codigo_producto_proveedor, costo }
+            : sp
+        );
+        // Si no existe, agregarlo
+        const existe = actualizado.some(sp => String(sp.proveedor_id) === String(proveedor_id));
+        return {
+          ...prevForm,
+          stock_proveedores: existe ? actualizado : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo }]
+        };
+      });
       return { ok: true };
     }
 
@@ -454,26 +480,26 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           });
         const res = await fetch('/api/productos/editar-producto-con-relaciones/', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
-          },
-          credentials: 'include',
-          body: JSON.stringify({
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
+            },
+            credentials: 'include',
+            body: JSON.stringify({
             producto: formToSave,
             stock_proveedores: stockProveedores
-          })
-        });
-        const data = await res.json();
+            })
+          });
+            const data = await res.json();
         if (!res.ok) {
           setFormError(data.detail || 'Error al actualizar el producto.');
-          return;
-        }
+            return;
+          }
         productoGuardado = { ...formToSave, id: data.producto_id || stock.id };
         setCodigosPendientesEdicion([]);
         if (typeof fetchStockProve === 'function') fetchStockProve();
         await onSave(productoGuardado);
-      }
+        }
     } catch (err) {
       setFormError('Error al guardar el producto o sus relaciones.');
       return;
@@ -500,21 +526,16 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const handleEditStockProveSave = async (id) => {
     const sp = stockProve.find(sp => sp.id === id);
     if (!sp) return;
-    // Validar y convertir cantidad a entero
-    const cantidadNum = parseInt(String(nuevaCantidad).replace(',', '.'), 10);
-    if (isNaN(cantidadNum) || cantidadNum < 0) {
-      setFormError('Ingrese una cantidad válida (entera)');
+    // Permitir negativos y decimales
+    const cantidadNum = parseFloat(String(nuevaCantidad).replace(',', '.'));
+    if (isNaN(cantidadNum)) {
+      setFormError('Ingrese una cantidad válida');
       return;
     }
-    // Validar cantidad original para evitar división por cero
+    // Calcular nuevo costo proporcional si corresponde
     const cantidadOriginal = parseFloat(sp.cantidad);
-    if (!cantidadOriginal) {
-      setFormError('La cantidad original es inválida');
-      return;
-    }
-    const costoUnitario = sp.costo / cantidadOriginal;
+    const costoUnitario = cantidadOriginal !== 0 ? sp.costo / cantidadOriginal : 0;
     let nuevoCosto = cantidadNum * costoUnitario;
-    // Redondear costo a 2 decimales
     nuevoCosto = Math.round((nuevoCosto + Number.EPSILON) * 100) / 100;
     if (isNaN(nuevoCosto) || !isFinite(nuevoCosto)) {
       setFormError('El costo calculado no es válido');
@@ -609,6 +630,44 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       setForm(prev => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }));
     }
   }, [proveedoresAsociados, form.proveedor_habitual_id]);
+
+  // useEffect para autocompletar costo y controlar la checkbox (idéntico a Nuevo Producto, solo adaptando la ID real)
+  useEffect(() => {
+    const proveedorId = newStockProve.proveedor;
+    let codigoProveedor = '';
+    if (proveedorId && form && Array.isArray(form.stock_proveedores)) {
+      const relacion = form.stock_proveedores.find(
+        sp => String(sp.proveedor_id) === String(proveedorId)
+      );
+      if (relacion && relacion.codigo_producto_proveedor) {
+        codigoProveedor = relacion.codigo_producto_proveedor;
+      }
+    }
+    if (proveedorId && codigoProveedor) {
+      fetch(`/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProveedor)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data.precio === 'number' && data.precio > 0) {
+            setNewStockProve(prev => ({ ...prev, costo: String(data.precio) }));
+            setPermitirCostoManual(true);
+            setCargarPrecioManual(false);
+          } else {
+            setNewStockProve(prev => ({ ...prev, costo: '' }));
+            setPermitirCostoManual(false);
+            setCargarPrecioManual(false);
+          }
+        })
+        .catch(() => {
+          setNewStockProve(prev => ({ ...prev, costo: '' }));
+          setPermitirCostoManual(false);
+          setCargarPrecioManual(false);
+        });
+    } else if (proveedorId) {
+      setPermitirCostoManual(false);
+      setCargarPrecioManual(false);
+      setNewStockProve(prev => ({ ...prev, costo: '' }));
+    }
+  }, [newStockProve.proveedor, form.stock_proveedores]);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -801,10 +860,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                 value={newStockProve.costo}
                 onChange={handleNewStockProveChange}
                 placeholder="Costo"
-                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 w-full pr-10"
-                disabled={!permitirCostoManual && !cargarPrecioManual}
+                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                disabled={permitirCostoManual && !cargarPrecioManual}
+                required
               />
-              {!permitirCostoManual && (
+              {permitirCostoManual && (
                 <label className="ml-2 flex items-center text-xs">
                   <input
                     type="checkbox"

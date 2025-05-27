@@ -15,9 +15,14 @@ function getEmptyRow() {
   return { id: Date.now() + Math.random(), codigo: '', denominacion: '', unidad: '', cantidad: 1, costo: '', bonificacion: 0, producto: null };
 }
 
-const ProveedorCambioModal = ({ open, proveedores, onSelect, onClose, cantidadExtra, proveedorActual, nombreProveedorActual }) => {
+const ProveedorCambioModal = ({ open, proveedores, onSelect, onClose, cantidadExtra, proveedorActual, nombreProveedorActual, producto, denominacion, cantidadSolicitada, stockActual, productosDisponibles }) => {
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState('');
   if (!open) return null;
+  // Buscar el producto completo si solo se tiene la id
+  let productoCompleto = producto;
+  if (producto && typeof producto === 'number' && Array.isArray(productosDisponibles)) {
+    productoCompleto = productosDisponibles.find(p => p.id === producto) || {};
+  }
   return (
     <div className="fixed inset-0 bg-gray-100/50 flex items-center justify-center z-50">
       <div className="w-full max-w-md mx-auto bg-white rounded-xl overflow-hidden shadow-lg border border-gray-200">
@@ -29,6 +34,10 @@ const ProveedorCambioModal = ({ open, proveedores, onSelect, onClose, cantidadEx
             <div>
               <h2 className="text-xl font-semibold text-black">Stock insuficiente</h2>
               <p className="text-gray-700 mt-2">
+                <span className="font-semibold">Producto:</span> {denominacion || '-'}<br/>
+                <span className="font-semibold">Código:</span> {productoCompleto?.codvta || productoCompleto?.codigo || '-'}<br/>
+                <span className="font-semibold">Cantidad solicitada:</span> {cantidadSolicitada} <br/>
+                <span className="font-semibold">Stock actual:</span> {stockActual} <br/>
                 La cantidad supera el stock del proveedor seleccionado. Selecciona un nuevo proveedor para los <span className="font-semibold">{cantidadExtra} items</span> extra, o continúa con el mismo proveedor (el stock quedará negativo).
               </p>
             </div>
@@ -212,25 +221,30 @@ const ItemsGridPresupuesto = forwardRef(({
   }
 
   const handleRowChange = (idx, field, value) => {
+    console.log(`[ItemsGrid] handleRowChange - idx: ${idx}, field: ${field}, value:`, value);
     setRows(prevRows => {
-      let rows = [...prevRows];
+      const newRows = [...prevRows];
       if (field === 'codigo') {
-        // Solo actualizar el valor del input, sin buscar ni autocompletar
-        rows[idx] = {
-          ...rows[idx],
+        newRows[idx] = {
+          ...newRows[idx],
           codigo: value,
-          // Limpiar datos autocompletados si el usuario borra el código
           ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', costo: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
         };
-        return ensureSoloUnEditable(rows);
+        const updatedRows = ensureSoloUnEditable(newRows);
+        console.log('[ItemsGrid] handleRowChange (código) - rows actualizadas:', updatedRows);
+        onRowsChange?.(updatedRows);
+        return updatedRows;
       } else if (field === 'costo' || field === 'bonificacion') {
-        rows[idx] = {
-          ...rows[idx],
+        newRows[idx] = {
+          ...newRows[idx],
           [field]: value
         };
-        return ensureSoloUnEditable(rows);
+        const updatedRows = ensureSoloUnEditable(newRows);
+        console.log(`[ItemsGrid] handleRowChange (${field}) - rows actualizadas:`, updatedRows);
+        onRowsChange?.(updatedRows);
+        return updatedRows;
       }
-      return rows;
+      return newRows;
     });
   };
 
@@ -249,6 +263,7 @@ const ItemsGridPresupuesto = forwardRef(({
         cantidadExtra: cantidad - totalStock,
         proveedores: proveedores.filter(p => p.id !== proveedorId && p.stock > 0),
         producto,
+        denominacion: producto.deno || producto.nombre || '',
         proveedorActual: proveedorId,
         nombreProveedorActual: proveedor?.nombre || ''
       });
@@ -292,14 +307,21 @@ const ItemsGridPresupuesto = forwardRef(({
 
   // Actualizar costo automáticamente al cambiar proveedor
   const handleProveedorChange = (idx, proveedorId) => {
-    setRows(rows => rows.map((row, i) => {
-      if (i !== idx) return row;
-      const productoId = row.producto?.id;
-      const proveedores = getProveedoresProducto(productoId);
-      const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-      let nuevoCosto = proveedor ? proveedor.costo : 0;
-      return { ...row, proveedorId, costo: nuevoCosto };
-    }));
+    console.log(`[ItemsGrid] handleProveedorChange - idx: ${idx}, proveedorId:`, proveedorId);
+    setRows(prevRows => {
+      const newRows = prevRows.map((row, i) => {
+        if (i !== idx) return row;
+        const productoId = row.producto?.id;
+        const proveedores = getProveedoresProducto(productoId);
+        const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
+        let nuevoCosto = proveedor ? proveedor.costo : 0;
+        console.log(`[ItemsGrid] handleProveedorChange - nuevo costo para item ${idx}:`, nuevoCosto);
+        return { ...row, proveedorId, costo: nuevoCosto };
+      });
+      console.log('[ItemsGrid] handleProveedorChange - rows actualizadas:', newRows);
+      onRowsChange?.(newRows);
+      return newRows;
+    });
     const row = rows[idx];
     const productoId = row.producto?.id;
     const proveedores = getProveedoresProducto(productoId);
@@ -314,7 +336,7 @@ const ItemsGridPresupuesto = forwardRef(({
     if (totalCantidad > totalStock && !proveedoresIgnorados.includes(proveedorId)) {
       const cantidadExtra = totalCantidad - totalStock;
       const otrosProveedores = proveedores.filter(p => String(p.id) !== String(proveedorId) && p.stock > 0);
-      setProveedorCambio({ open: true, idx, cantidadExtra, proveedores: otrosProveedores, producto: row.producto, proveedorActual: row.proveedorId, nombreProveedorActual: proveedor?.nombre || '' });
+      setProveedorCambio({ open: true, idx, cantidadExtra, proveedores: otrosProveedores, producto: row.producto, denominacion: row.denominacion, proveedorActual: row.proveedorId, nombreProveedorActual: proveedor?.nombre || '' });
     }
     if (totalCantidad > totalStock) {
       setStockNegativo(true);
@@ -325,11 +347,22 @@ const ItemsGridPresupuesto = forwardRef(({
 
   // handleCantidadChange: Si es presupuesto, solo setea cantidad, sin alertas ni modales
   const handleCantidadChange = (idx, cantidad) => {
+    console.log(`[ItemsGrid] handleCantidadChange - idx: ${idx}, cantidad:`, cantidad);
     if (esPresupuesto) {
-      setRows(rows => rows.map((row, i) => i === idx ? { ...row, cantidad } : row));
+      setRows(prevRows => {
+        const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
+        console.log('[ItemsGrid] handleCantidadChange (presupuesto) - rows actualizadas:', newRows);
+        onRowsChange?.(newRows);
+        return newRows;
+      });
       return;
     }
-    setRows(rows => rows.map((row, i) => i === idx ? { ...row, cantidad } : row));
+    setRows(prevRows => {
+      const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
+      console.log('[ItemsGrid] handleCantidadChange - rows actualizadas:', newRows);
+      onRowsChange?.(newRows);
+      return newRows;
+    });
     const row = rows[idx];
     const proveedores = getProveedoresProducto(row.producto?.id);
     const proveedor = proveedores.find(p => String(p.id) === String(row.proveedorId));
@@ -343,7 +376,7 @@ const ItemsGridPresupuesto = forwardRef(({
     if (totalCantidad > totalStock && !proveedoresIgnorados.includes(row.proveedorId)) {
       const cantidadExtra = totalCantidad - totalStock;
       const otrosProveedores = proveedores.filter(p => String(p.id) !== String(row.proveedorId) && p.stock > 0);
-      setProveedorCambio({ open: true, idx, cantidadExtra, proveedores: otrosProveedores, producto: row.producto, proveedorActual: row.proveedorId, nombreProveedorActual: proveedor?.nombre || '' });
+      setProveedorCambio({ open: true, idx, cantidadExtra, proveedores: otrosProveedores, producto: row.producto, denominacion: row.denominacion, proveedorActual: row.proveedorId, nombreProveedorActual: proveedor?.nombre || '' });
       setStockNegativo(true);
     } else {
       if (totalCantidad > totalStock) {
@@ -361,6 +394,17 @@ const ItemsGridPresupuesto = forwardRef(({
       addItemWithDuplicado(producto, proveedorId, cantidad);
       setPendingAddItem(null);
     }
+    // NUEVO: actualizar la fila si el modal se disparó por edición de una fila existente
+    if (proveedorCambio.idx !== null && proveedorId) {
+      setRows(rows => rows.map((row, i) => {
+        if (i !== proveedorCambio.idx) return row;
+        const productoId = row.producto?.id;
+        const proveedores = getProveedoresProducto(productoId);
+        const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
+        let nuevoCosto = proveedor ? proveedor.costo : 0;
+        return { ...row, proveedorId, costo: nuevoCosto };
+      }));
+    }
     setProveedorCambio({ open: false, idx: null, cantidadExtra: 0, proveedores: [], producto: null, proveedorActual: null, nombreProveedorActual: '' });
     if (permitirNegativo) setStockNegativo(true);
     setProveedoresIgnorados(prev => [...prev, proveedorId]);
@@ -370,11 +414,10 @@ const ItemsGridPresupuesto = forwardRef(({
   const handleDeleteRow = (idx) => {
     setRows(rows => {
       const newRows = rows.filter((_, i) => i !== idx);
-      // Si no quedan ítems, dejar solo un renglón vacío
+      onRowsChange?.(newRows);
       if (newRows.filter(r => r.producto && r.codigo).length === 0) {
         return [getEmptyRow()];
       }
-      // Si el último renglón no está vacío, aseguramos uno vacío al final
       const last = newRows[newRows.length - 1];
       if (last && last.producto) {
         return [...newRows, getEmptyRow()];
@@ -523,7 +566,10 @@ const ItemsGridPresupuesto = forwardRef(({
 
   // Notificar al padre cuando cambian los rows
   useEffect(() => {
-    if (onRowsChange) onRowsChange(rows);
+    if (onRowsChange) {
+      console.log('[ItemsGrid] Notificando cambio de rows al padre:', rows);
+      onRowsChange(rows);
+    }
   }, [rows, onRowsChange]);
 
   // Render igual que ItemsGridPresupuesto
@@ -563,6 +609,11 @@ const ItemsGridPresupuesto = forwardRef(({
         onClose={() => setProveedorCambio({ open: false, idx: null, cantidadExtra: 0, proveedores: [], producto: null, proveedorActual: null, nombreProveedorActual: '' })}
         proveedorActual={proveedorCambio.proveedorActual}
         nombreProveedorActual={proveedorCambio.nombreProveedorActual}
+        producto={proveedorCambio.producto}
+        denominacion={proveedorCambio.denominacion}
+        cantidadSolicitada={proveedorCambio.cantidadExtra}
+        stockActual={proveedorCambio.proveedores.find(p => p.id === proveedorCambio.proveedorActual)?.stock || 0}
+        productosDisponibles={productosDisponibles}
       />
       <div className="overflow-x-auto w-full">
         <table className="min-w-full divide-y divide-gray-200">
@@ -708,7 +759,7 @@ const ItemsGridEdicion = forwardRef(({
   setAutoSumarDuplicados,
   bonificacionGeneral,
   setBonificacionGeneral,
-  modo = 'edicion',
+  modo = 'presupuesto', // solo 'presupuesto' o 'venta'
   onRowsChange,
   initialItems
 }, ref) => {
@@ -729,7 +780,7 @@ const ItemsGridEdicion = forwardRef(({
         denominacion: item.denominacion || producto?.deno || producto?.nombre || '',
         unidad: item.unidad || producto?.unidad || producto?.unidadmedida || '-',
         cantidad: item.cantidad || item.vdi_cantidad || 1,
-        costo: item.costo || item.precio || item.vdi_importe || 0,
+        costo: item.costo || item.precio || (item.vdi_importe !== undefined ? parseFloat(item.vdi_importe) : 0) || 0,
         bonificacion: item.bonificacion || item.vdi_bonifica || 0,
         producto: producto,
         proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
@@ -741,6 +792,9 @@ const ItemsGridEdicion = forwardRef(({
   const [ultimoIdxAutocompletado, setUltimoIdxAutocompletado] = useState(null);
   const codigoRefs = useRef([]);
   const cantidadRefs = useRef([]);
+  const [proveedoresIgnorados, setProveedoresIgnorados] = useState([]);
+  const [proveedorCambio, setProveedorCambio] = useState({ open: false, idx: null, cantidadExtra: 0, proveedores: [], producto: null, proveedorActual: null, nombreProveedorActual: '' });
+  const [stockNegativo, setStockNegativo] = useState(false);
 
   const getProveedoresProducto = useCallback((productoId) => {
     if (!stockProveedores || !productoId) return [];
@@ -818,28 +872,72 @@ const ItemsGridEdicion = forwardRef(({
 
   // Handlers de edición, duplicados, enter, foco, etc. igual que ItemsGridPresupuesto
   const handleRowChange = (idx, field, value) => {
+    console.log(`[ItemsGrid] handleRowChange - idx: ${idx}, field: ${field}, value:`, value);
     setRows(prevRows => {
-      let rows = [...prevRows];
+      const newRows = [...prevRows];
       if (field === 'codigo') {
-        rows[idx] = {
-          ...rows[idx],
+        newRows[idx] = {
+          ...newRows[idx],
           codigo: value,
           ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', costo: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
         };
-        return ensureSoloUnEditable(rows);
+        const updatedRows = ensureSoloUnEditable(newRows);
+        console.log('[ItemsGrid] handleRowChange (código) - rows actualizadas:', updatedRows);
+        onRowsChange?.(updatedRows);
+        return updatedRows;
       } else if (field === 'costo' || field === 'bonificacion') {
-        rows[idx] = {
-          ...rows[idx],
+        newRows[idx] = {
+          ...newRows[idx],
           [field]: value
         };
-        return ensureSoloUnEditable(rows);
+        const updatedRows = ensureSoloUnEditable(newRows);
+        console.log(`[ItemsGrid] handleRowChange (${field}) - rows actualizadas:`, updatedRows);
+        onRowsChange?.(updatedRows);
+        return updatedRows;
       }
-      return rows;
+      return newRows;
     });
   };
 
   const handleCantidadChange = (idx, cantidad) => {
-    setRows(rows => rows.map((row, i) => i === idx ? { ...row, cantidad } : row));
+    console.log(`[ItemsGrid] handleCantidadChange - idx: ${idx}, cantidad:`, cantidad);
+    if (modo === 'presupuesto') {
+      setRows(prevRows => {
+        const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
+        console.log('[ItemsGrid] handleCantidadChange (presupuesto) - rows actualizadas:', newRows);
+        onRowsChange?.(newRows);
+        return newRows;
+      });
+      return;
+    }
+    setRows(prevRows => {
+      const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
+      console.log('[ItemsGrid] handleCantidadChange - rows actualizadas:', newRows);
+      onRowsChange?.(newRows);
+      return newRows;
+    });
+    const row = rows[idx];
+    const proveedores = getProveedoresProducto(row.producto?.id);
+    const proveedor = proveedores.find(p => String(p.id) === String(row.proveedorId));
+    let totalStock = proveedor ? Number(proveedor.stock) : 0;
+    const totalCantidad = rows.reduce((sum, r, i) => {
+      if (r.producto && r.producto.id === row.producto?.id && String(r.proveedorId) === String(row.proveedorId)) {
+        return sum + (i === idx ? Number(cantidad) : Number(r.cantidad));
+      }
+      return sum;
+    }, 0);
+    if (totalCantidad > totalStock && !proveedoresIgnorados.includes(row.proveedorId)) {
+      const cantidadExtra = totalCantidad - totalStock;
+      const otrosProveedores = proveedores.filter(p => String(p.id) !== String(row.proveedorId) && p.stock > 0);
+      setProveedorCambio({ open: true, idx, cantidadExtra, proveedores: otrosProveedores, producto: row.producto, denominacion: row.denominacion, proveedorActual: row.proveedorId, nombreProveedorActual: proveedor?.nombre || '' });
+      setStockNegativo(true);
+    } else {
+      if (totalCantidad > totalStock) {
+        setStockNegativo(true);
+      } else {
+        setStockNegativo(false);
+      }
+    }
   };
 
   const handleRowKeyDown = (e, idx, field) => {
@@ -957,7 +1055,10 @@ const ItemsGridEdicion = forwardRef(({
   }, [rows, ultimoIdxAutocompletado]);
 
   useEffect(() => {
-    if (onRowsChange) onRowsChange(rows);
+    if (onRowsChange) {
+      console.log('[ItemsGrid] Notificando cambio de rows al padre:', rows);
+      onRowsChange(rows);
+    }
   }, [rows, onRowsChange]);
 
   // Helpers duplicados, vacíos, etc.
@@ -1014,19 +1115,27 @@ const ItemsGridEdicion = forwardRef(({
 
   // Add missing handlers
   const handleProveedorChange = (idx, proveedorId) => {
-    setRows(rows => rows.map((row, i) => {
-      if (i !== idx) return row;
-      const productoId = row.producto?.id;
-      const proveedores = getProveedoresProducto(productoId);
-      const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-      let nuevoCosto = proveedor ? proveedor.costo : 0;
-      return { ...row, proveedorId, costo: nuevoCosto };
-    }));
+    console.log(`[ItemsGrid] handleProveedorChange - idx: ${idx}, proveedorId:`, proveedorId);
+    setRows(prevRows => {
+      const newRows = prevRows.map((row, i) => {
+        if (i !== idx) return row;
+        const productoId = row.producto?.id;
+        const proveedores = getProveedoresProducto(productoId);
+        const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
+        let nuevoCosto = proveedor ? proveedor.costo : 0;
+        console.log(`[ItemsGrid] handleProveedorChange - nuevo costo para item ${idx}:`, nuevoCosto);
+        return { ...row, proveedorId, costo: nuevoCosto };
+      });
+      console.log('[ItemsGrid] handleProveedorChange - rows actualizadas:', newRows);
+      onRowsChange?.(newRows);
+      return newRows;
+    });
   };
 
   const handleDeleteRow = (idx) => {
     setRows(rows => {
       const newRows = rows.filter((_, i) => i !== idx);
+      onRowsChange?.(newRows);
       if (newRows.filter(r => r.producto && r.codigo).length === 0) {
         return [getEmptyRow()];
       }

@@ -6,6 +6,8 @@ from .views import (
     VentaDetalleManViewSet,
     VentaRemPedViewSet
 )
+from django.urls import path
+from . import views
 
 router = DefaultRouter()
 router.register(r'comprobantes', ComprobanteViewSet)
@@ -14,4 +16,6 @@ router.register(r'venta-detalle-item', VentaDetalleItemViewSet)
 router.register(r'venta-detalle-man', VentaDetalleManViewSet)
 router.register(r'venta-remped', VentaRemPedViewSet)
 
-urlpatterns = router.urls 
+urlpatterns = router.urls + [
+    path('convertir-presupuesto/', views.convertir_presupuesto_a_venta, name='convertir_presupuesto_a_venta'),
+] 

@@ -20,6 +20,8 @@ import PresupuestoVentaVista from './PresupuestoVentaVista';
 import { getCookie } from '../utils/csrf';
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
 import EditarPresupuestoForm from './EditarPresupuestoForm';
+import ConversionModal from './ConversionModal';
+import ConVentaForm from './ConVentaForm';
 
 const filtros = [
   { key: 'todos', label: 'Todos' },
@@ -88,6 +90,7 @@ const PresupuestosManager = () => {
   }, []);
 
   const { ventas, error, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
+  const fetchPresupuestos = fetchVentas;
   const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI();
   const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI();
   const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI();
@@ -121,6 +124,7 @@ const PresupuestosManager = () => {
   const [editVendedorData, setEditVendedorData] = useState(null);
   const [filtroAlicuota, setFiltroAlicuota] = useState('');
   const [filtroTipoComprobante, setFiltroTipoComprobante] = useState('');
+  const [conversionModal, setConversionModal] = useState({ open: false, presupuesto: null });
 
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
@@ -211,13 +215,44 @@ const PresupuestosManager = () => {
   };
 
   const handleConvertir = async (presupuesto) => {
+    setConversionModal({ open: true, presupuesto });
+  };
+
+  const handleConversionConfirm = (selectedItems) => {
+    const presupuesto = conversionModal.presupuesto;
+    const itemsSeleccionadosObjs = (presupuesto.items || []).filter(item => selectedItems.includes(item.id));
+    const tabKey = `conventa-${presupuesto.id}-${Date.now()}`;
+    setTabs(prev => [
+      ...prev,
+      {
+        key: tabKey,
+        label: `Conversión a Venta #${presupuesto.numero || presupuesto.id}`,
+        closable: true,
+        data: {
+          presupuestoOrigen: presupuesto,
+          itemsSeleccionados: itemsSeleccionadosObjs,
+          itemsSeleccionadosIds: selectedItems
+        },
+        tipo: 'conventa'
+      }
+    ]);
+    setActiveTab(tabKey);
+    setConversionModal({ open: false, presupuesto: null });
+  };
+
+  const handleConVentaFormSave = async (payload, tabKey) => {
     try {
       const csrftoken = getCookie('csrftoken');
-      const response = await fetch(`/api/ventas/${presupuesto.id}/convertir-a-venta/`, {
+      const response = await fetch('/api/convertir-presupuesto/', {
         method: 'POST',
-        headers: { 'X-CSRFToken': csrftoken },
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
+      
       if (!response.ok) {
         let msg = 'No se pudo convertir';
         try {
@@ -226,13 +261,27 @@ const PresupuestosManager = () => {
         } catch {}
         throw new Error(msg);
       }
+
+      const data = await response.json();
+      
+      // Actualizar la lista de ventas y presupuestos
       await fetchVentas();
-      const ventaConvertida = ventas.find(v => v.id === presupuesto.id);
-      if (ventaConvertida) openVistaTab(ventaConvertida);
-      else window.location.reload();
+      await fetchPresupuestos();
+      // Cerrar la tab de conversión
+      closeTab(tabKey);
+      // Mostrar mensaje de éxito
+      if (data.presupuesto === null) {
+        alert('Venta creada correctamente. El presupuesto fue eliminado por no tener items restantes.');
+      } else {
+        alert('Venta creada correctamente. El presupuesto fue actualizado con los items restantes.');
+      }
     } catch (err) {
       alert('Error al convertir: ' + (err.message || ''));
     }
+  };
+
+  const handleConVentaFormCancel = (tabKey) => {
+    closeTab(tabKey);
   };
 
   const handleDelete = async (id) => {
@@ -537,9 +586,7 @@ const PresupuestosManager = () => {
                                   <BotonEditar onClick={() => handleEdit(p)} />
                                   <BotonImprimir onClick={() => handleImprimir(p)} />
                                   <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                  <BotonConvertir onClick={() => {
-                                    if (window.confirm('¿Seguro que deseas convertir este presupuesto a venta?')) handleConvertir(p);
-                                  }} />
+                                  <BotonConvertir onClick={() => handleConvertir(p)} />
                                   <BotonEliminar onClick={() => handleDelete(p.id)} />
                                 </>
                               ) : p.tipo === 'Venta' && p.estado === 'Cerrado' ? (
@@ -715,9 +762,60 @@ const PresupuestosManager = () => {
                 )
               )
             )}
+            {tabs.map(tab => (
+              activeTab === tab.key && tab.tipo === 'conventa' && (
+                <ConVentaForm
+                  key={tab.key}
+                  presupuestoOrigen={tab.data.presupuestoOrigen}
+                  itemsSeleccionados={tab.data.itemsSeleccionados}
+                  onSave={(payload, tk) => {
+                    console.info('[PresupuestosManager] onSave de ConVentaForm, tabKey:', tk);
+                    handleConVentaFormSave(payload, tk);
+                  }}
+                  onCancel={() => handleConVentaFormCancel(tab.key)}
+                  comprobantes={comprobantes}
+                  ferreteria={null}
+                  clientes={clientes}
+                  plazos={plazos}
+                  vendedores={vendedores}
+                  sucursales={sucursales}
+                  puntosVenta={puntosVenta}
+                  loadingComprobantes={loadingComprobantes}
+                  errorComprobantes={errorComprobantes}
+                  productos={productos}
+                  loadingProductos={loadingProductos}
+                  familias={familias}
+                  loadingFamilias={loadingFamilias}
+                  proveedores={proveedores}
+                  loadingProveedores={loadingProveedores}
+                  alicuotas={alicuotas}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProductos={errorProductos}
+                  errorFamilias={errorFamilias}
+                  errorProveedores={errorProveedores}
+                  errorAlicuotas={errorAlicuotas}
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  tabKey={tab.key}
+                />
+              )
+            ))}
           </div>
         </div>
       </div>
+      
+      <ConversionModal
+        open={conversionModal.open}
+        presupuesto={conversionModal.presupuesto}
+        onClose={() => setConversionModal({ open: false, presupuesto: null })}
+        onConvertir={handleConversionConfirm}
+        clientes={clientes}
+        vendedores={vendedores}
+        plazos={plazos}
+        sucursales={sucursales}
+        puntosVenta={puntosVenta}
+        comprobantes={comprobantes}
+      />
     </div>
   );
 };
