@@ -261,9 +261,10 @@ export default function ProductosTable({
   };
 
   // Función auxiliar para obtener el nombre de familia por id
-  const getFamiliaNombre = (id) => {
-    const fam = familias.find(f => f.id === id);
-    return fam ? fam.deno : 'Sin asignar';
+  const getFamiliaNombre = (famObj) => {
+    if (!famObj) return 'Sin asignar';
+    if (typeof famObj === 'object' && famObj.deno) return famObj.deno;
+    return 'Sin asignar';
   };
 
   const handleDeleteProducto = (id) => {
@@ -418,32 +419,43 @@ export default function ProductosTable({
                             </tr>
                             {expandedRows.has(product.id) && (
                               <tr>
-                                <td colSpan="6" className="px-3 py-2 bg-gray-50">
+                                <td colSpan="8" className="px-3 py-2 bg-gray-50">
                                   <div className="p-4">
-                                    <h4 className="font-medium mb-2">Detalles del Producto</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                       <div>
-                                        <p><span className="font-medium">Código de Compra:</span> {product.codcom}</p>
-                                        <p><span className="font-medium">Unidad:</span> {product.unidad}</p>
-                                        <p><span className="font-medium">Cantidad Mínima:</span> {product.cantmin}</p>
-                                        <p><span className="font-medium">Proveedor Habitual:</span> {product.proveedor_habitual?.razon || 'No asignado'}</p>
-                                        {product.proveedor_habitual?.id && (product.codcom || product.codvta) && (
-                                          <p><span className="font-medium">Precio Excel (Habitual):</span> <PrecioExcelItem proveedorId={product.proveedor_habitual.id} codigoProducto={product.codcom || product.codvta} /></p>
-                                        )}
+                                        <h4 className="font-medium mb-2">Información General</h4>
+                                        <p><span className="font-medium">Orden:</span> {product.orden ?? 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Unidad:</span> {product.unidad ?? 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Margen:</span> {product.margen ?? 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Cantidad Mínima:</span> {product.cantmin ?? 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Alícuota de IVA:</span> {product.idaliiva ? `${product.idaliiva.deno} (${product.idaliiva.porce}%)` : 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Activo:</span> {product.acti === 'S' ? 'Activo' : product.acti === 'N' ? 'Inactivo' : 'Sin asignar'}</p>
+                                        <p><span className="font-medium">Familia:</span> {getFamiliaNombre(product.idfam1)}</p>
+                                        <p><span className="font-medium">Subfamilia:</span> {getFamiliaNombre(product.idfam2)}</p>
+                                        <p><span className="font-medium">Sub-subfamilia:</span> {getFamiliaNombre(product.idfam3)}</p>
+                                        <p><span className="font-medium">Proveedor Habitual:</span> {product.proveedor_habitual?.razon || 'Sin asignar'}</p>
                                       </div>
                                       <div>
-                                        <h5 className="font-medium mb-2">Stock por Proveedor:</h5>
-                                        {(product.stock_proveedores || []).map((sp, index) => (
-                                          <div key={index} className="text-sm mb-1">
-                                            {sp.proveedor?.razon || '-'}
-                                          </div>
-                                        ))}
+                                        <h4 className="font-medium mb-2">Stock por Proveedor</h4>
+                                        <table className="min-w-full text-sm">
+                                          <thead>
+                                            <tr className="bg-gray-100">
+                                              <th className="px-2 py-1 text-left">Proveedor</th>
+                                              <th className="px-2 py-1 text-left">Cantidad</th>
+                                              <th className="px-2 py-1 text-left">Costo</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {(product.stock_proveedores || []).map((sp, index) => (
+                                              <tr key={index}>
+                                                <td className="px-2 py-1">{sp.proveedor?.razon || '-'}</td>
+                                                <td className="px-2 py-1">{sp.cantidad}</td>
+                                                <td className="px-2 py-1">${sp.costo}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
                                       </div>
-                                    </div>
-                                    <div>
-                                      <p><span className="font-medium">Familia:</span> {getFamiliaNombre(product.idfam1)}</p>
-                                      <p><span className="font-medium">Subfamilia:</span> {getFamiliaNombre(product.idfam2)}</p>
-                                      <p><span className="font-medium">Sub-subfamilia:</span> {getFamiliaNombre(product.idfam3)}</p>
                                     </div>
                                   </div>
                                 </td>
@@ -542,12 +554,16 @@ export default function ProductosTable({
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <h4 className="font-medium mb-2">Información General</h4>
+                                <p><span className="font-medium">Orden:</span> {product.orden ?? 'Sin asignar'}</p>
+                                <p><span className="font-medium">Unidad:</span> {product.unidad ?? 'Sin asignar'}</p>
+                                <p><span className="font-medium">Margen:</span> {product.margen ?? 'Sin asignar'}</p>
+                                <p><span className="font-medium">Cantidad Mínima:</span> {product.cantmin ?? 'Sin asignar'}</p>
+                                <p><span className="font-medium">Alícuota de IVA:</span> {product.idaliiva ? `${product.idaliiva.deno} (${product.idaliiva.porce}%)` : 'Sin asignar'}</p>
+                                <p><span className="font-medium">Activo:</span> {product.acti === 'S' ? 'Activo' : product.acti === 'N' ? 'Inactivo' : 'Sin asignar'}</p>
                                 <p><span className="font-medium">Familia:</span> {getFamiliaNombre(product.idfam1)}</p>
                                 <p><span className="font-medium">Subfamilia:</span> {getFamiliaNombre(product.idfam2)}</p>
                                 <p><span className="font-medium">Sub-subfamilia:</span> {getFamiliaNombre(product.idfam3)}</p>
-                                <p><span className="font-medium">Unidad:</span> {product.unidad}</p>
-                                <p><span className="font-medium">Cantidad Mínima:</span> {product.cantmin}</p>
-                                <p><span className="font-medium">Proveedor Habitual:</span> {product.proveedor_habitual?.razon || 'No asignado'}</p>
+                                <p><span className="font-medium">Proveedor Habitual:</span> {product.proveedor_habitual?.razon || 'Sin asignar'}</p>
                               </div>
                               <div>
                                 <h4 className="font-medium mb-2">Stock por Proveedor</h4>
@@ -557,7 +573,6 @@ export default function ProductosTable({
                                       <th className="px-2 py-1 text-left">Proveedor</th>
                                       <th className="px-2 py-1 text-left">Cantidad</th>
                                       <th className="px-2 py-1 text-left">Costo</th>
-                                      <th className="px-2 py-1 text-left">Acciones</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -566,14 +581,6 @@ export default function ProductosTable({
                                         <td className="px-2 py-1">{sp.proveedor?.razon || '-'}</td>
                                         <td className="px-2 py-1">{sp.cantidad}</td>
                                         <td className="px-2 py-1">${sp.costo}</td>
-                                        <td className="px-2 py-1">
-                                          <button
-                                            onClick={() => onUpdateStock(product.id, sp.proveedor?.id)}
-                                            className="text-blue-600 hover:text-blue-900 text-xs"
-                                          >
-                                            Actualizar
-                                          </button>
-                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>

@@ -121,7 +121,7 @@ const PresupuestoForm = ({
         unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ''),
         cantidad: item.cantidad || 1,
         costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
-        bonificacion: item.bonificacion || 0,
+        bonificacion: item.vdi_bonifica || 0,
         subtotal: item.subtotal || 0
       };
     });
@@ -136,7 +136,6 @@ const PresupuestoForm = ({
         const parsed = JSON.parse(savedForm);
         return mergeWithDefaults({ ...parsed }, sucursales, puntosVenta);
       } catch (e) {
-        console.error('Error al cargar formulario guardado:', e);
         return getInitialFormState(sucursales, puntosVenta);
       }
     }
@@ -164,14 +163,13 @@ const PresupuestoForm = ({
   // Estado para descuentos
   const [descu1, setDescu1] = useState(form.descu1 || 0);
   const [descu2, setDescu2] = useState(form.descu2 || 0);
-  const [itemsVersion, setItemsVersion] = useState(0);
 
   // Copio la lógica de recalculo de VentaForm
   useEffect(() => {
     let subtotalSinIva = 0;
     const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
     const updatedItems = form.items.map(item => {
-      const bonifParticular = parseFloat(item.bonificacion) || 0;
+      const bonifParticular = parseFloat(item.vdi_bonifica) || 0;
       const cantidad = parseFloat(item.cantidad) || 0;
       const precio = parseFloat(item.precio) || 0;
       let subtotal = 0;
@@ -203,11 +201,14 @@ const PresupuestoForm = ({
       descu1,
       descu2
     }));
-  }, [form.bonificacionGeneral, form.items, descu1, descu2, itemsVersion]);
+  }, [form.bonificacionGeneral, form.items, descu1, descu2]);
 
-  // handleRowsChange igual a VentaForm para trigger de recalculo
-  const handleRowsChange = () => {
-    setItemsVersion(v => v + 1);
+  // handleRowsChange ahora actualiza los ítems en el estado del padre
+  const handleRowsChange = (rows) => {
+    setForm(prevForm => ({
+      ...prevForm,
+      items: rows
+    }));
   };
 
   // Forzar comprobante 9997 para presupuesto
@@ -226,6 +227,10 @@ const PresupuestoForm = ({
 
   // Copio la función de mapeo de campos de items de Venta
   const mapItemFields = (item, idx) => {
+    let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
+    if (idaliiva && typeof idaliiva === 'object') {
+      idaliiva = idaliiva.id;
+    }
     return {
       vdi_orden: idx + 1,
       vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
@@ -235,7 +240,7 @@ const PresupuestoForm = ({
       vdi_bonifica: item.bonificacion ?? item.bonifica ?? item.vdi_bonifica ?? 0,
       vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
       vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
-      vdi_idaliiva: item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null,
+      vdi_idaliiva: idaliiva,
     };
   };
 
@@ -249,11 +254,13 @@ const PresupuestoForm = ({
     6: 27
   };
 
-  // Función auxiliar para calcular el subtotal de línea
   function calcularSubtotalLinea(item, bonifGeneral) {
+    const bonifParticular = parseFloat(item.vdi_bonifica);
+    const bonif = (!isNaN(bonifParticular) && bonifParticular > 0) 
+      ? bonifParticular 
+      : bonifGeneral;
     const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
     const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
-    const bonif = item.bonificacion !== undefined ? parseFloat(item.bonificacion) || 0 : bonifGeneral;
     return (precio * cantidad) * (1 - bonif / 100);
   }
 
@@ -265,13 +272,6 @@ const PresupuestoForm = ({
 
     try {
       const items = itemsGridRef.current.getItems();
-      // LOG: Mostrar los items obtenidos de la grilla
-      console.log('[PresupuestoForm] Items obtenidos de la grilla:', items);
-      if (!items || items.length === 0) {
-        console.error('[PresupuestoForm] ERROR: El array de items está vacío antes de armar el payload');
-        return;
-      }
-
       localStorage.removeItem('presupuestoFormDraft');
 
       // Si es edición, asegurar tipos y mapeo correcto
@@ -332,18 +332,9 @@ const PresupuestoForm = ({
         };
       }
 
-      // LOG: Mostrar el payload completo antes de enviar
-      console.log('[PresupuestoForm] Payload a enviar:', payload);
-      if (!payload.items || payload.items.length === 0) {
-        console.error('[PresupuestoForm] ERROR: El campo items está vacío en el payload');
-      } else {
-        console.log('[PresupuestoForm] Primer ítem del array items:', payload.items[0]);
-      }
-
       await onSave(payload);
       onCancel();
     } catch (err) {
-      console.error('[PresupuestoForm] ERROR al guardar el presupuesto:', err);
     }
   };
 

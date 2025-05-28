@@ -12,7 +12,7 @@ const ALICUOTAS = {
 };
 
 function getEmptyRow() {
-  return { id: Date.now() + Math.random(), codigo: '', denominacion: '', unidad: '', cantidad: 1, costo: '', bonificacion: 0, producto: null };
+  return { id: Date.now() + Math.random(), codigo: '', denominacion: '', unidad: '', cantidad: 1, precio: '', bonificacion: 0, producto: null };
 }
 
 const ProveedorCambioModal = ({ open, proveedores, onSelect, onClose, cantidadExtra, proveedorActual, nombreProveedorActual, producto, denominacion, cantidadSolicitada, stockActual, productosDisponibles }) => {
@@ -52,7 +52,7 @@ const ProveedorCambioModal = ({ open, proveedores, onSelect, onClose, cantidadEx
               >
                 <option value="">Seleccionar otro proveedor</option>
                 {proveedores.map(p => (
-                  <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock}, Costo: {p.costo})</option>
+                  <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock}, Costo: {p.precio})</option>
                 ))}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3">
@@ -116,7 +116,7 @@ const ItemsGridPresupuesto = forwardRef(({
       id: sp.proveedor.id,
       nombre: sp.proveedor.razon,
       stock: sp.cantidad,
-      costo: sp.costo,
+      precio: sp.precio_venta,
       esHabitual: !!(sp.proveedor_habitual || sp.habitual || sp.es_habitual)
     }));
   }, [stockProveedores]);
@@ -140,7 +140,7 @@ const ItemsGridPresupuesto = forwardRef(({
             codigo: producto.codvta || producto.codigo || '',
             denominacion: producto.deno || producto.nombre || '',
             unidad: producto.unidad || producto.unidadmedida || '-',
-            costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+            precio: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.precio || 0,
             cantidad,
             bonificacion: 0,
             producto: producto,
@@ -160,7 +160,7 @@ const ItemsGridPresupuesto = forwardRef(({
         codigo: producto.codvta || producto.codigo || '',
         denominacion: producto.deno || producto.nombre || '',
         unidad: producto.unidad || producto.unidadmedida || '-',
-        costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+        precio: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.precio || 0,
         cantidad,
         bonificacion: 0,
         producto: producto,
@@ -221,26 +221,23 @@ const ItemsGridPresupuesto = forwardRef(({
   }
 
   const handleRowChange = (idx, field, value) => {
-    console.log(`[ItemsGrid] handleRowChange - idx: ${idx}, field: ${field}, value:`, value);
     setRows(prevRows => {
       const newRows = [...prevRows];
       if (field === 'codigo') {
         newRows[idx] = {
           ...newRows[idx],
           codigo: value,
-          ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', costo: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
+          ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', precio: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
         };
         const updatedRows = ensureSoloUnEditable(newRows);
-        console.log('[ItemsGrid] handleRowChange (código) - rows actualizadas:', updatedRows);
         onRowsChange?.(updatedRows);
         return updatedRows;
-      } else if (field === 'costo' || field === 'bonificacion') {
+      } else if (field === 'precio' || field === 'bonificacion') {
         newRows[idx] = {
           ...newRows[idx],
           [field]: value
         };
         const updatedRows = ensureSoloUnEditable(newRows);
-        console.log(`[ItemsGrid] handleRowChange (${field}) - rows actualizadas:`, updatedRows);
         onRowsChange?.(updatedRows);
         return updatedRows;
       }
@@ -279,18 +276,23 @@ const ItemsGridPresupuesto = forwardRef(({
     getItems: () => {
       const items = rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
         const cantidad = parseFloat(row.cantidad) || 0;
-        const costo = parseFloat(row.costo) || 0;
+        const precio = parseFloat(row.precio) || 0;
         const bonif = parseFloat(row.bonificacion) || 0;
+        const idaliiva = (row.producto.idaliiva && row.producto.idaliiva.id)
+          ? row.producto.idaliiva.id
+          : (typeof row.producto.idaliiva === 'number'
+              ? row.producto.idaliiva
+              : row.idaliiva || 0);
         const item = {
           vdi_orden: idx + 1,
           vdi_idsto: row.producto.id,
           vdi_idpro: row.proveedorId,
           vdi_cantidad: cantidad,
-          vdi_importe: costo,
+          vdi_importe: precio,
           vdi_bonifica: bonif,
           vdi_detalle1: row.denominacion || '',
           vdi_detalle2: row.unidad || '',
-          vdi_idaliiva: row.producto.idaliiva || row.idaliiva || 0,
+          vdi_idaliiva: idaliiva,
           alicuotaIva: undefined,
           codigo: row.codigo || String(row.producto.id),
           producto: row.producto,
@@ -305,20 +307,17 @@ const ItemsGridPresupuesto = forwardRef(({
     getStockNegativo: () => stockNegativo,
   }), [rows, handleAddItem, stockNegativo]);
 
-  // Actualizar costo automáticamente al cambiar proveedor
+  // Actualizar precio automáticamente al cambiar proveedor
   const handleProveedorChange = (idx, proveedorId) => {
-    console.log(`[ItemsGrid] handleProveedorChange - idx: ${idx}, proveedorId:`, proveedorId);
     setRows(prevRows => {
       const newRows = prevRows.map((row, i) => {
         if (i !== idx) return row;
         const productoId = row.producto?.id;
         const proveedores = getProveedoresProducto(productoId);
         const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-        let nuevoCosto = proveedor ? proveedor.costo : 0;
-        console.log(`[ItemsGrid] handleProveedorChange - nuevo costo para item ${idx}:`, nuevoCosto);
-        return { ...row, proveedorId, costo: nuevoCosto };
+        let nuevoPrecio = proveedor ? proveedor.precio : 0;
+        return { ...row, proveedorId, precio: nuevoPrecio };
       });
-      console.log('[ItemsGrid] handleProveedorChange - rows actualizadas:', newRows);
       onRowsChange?.(newRows);
       return newRows;
     });
@@ -347,11 +346,9 @@ const ItemsGridPresupuesto = forwardRef(({
 
   // handleCantidadChange: Si es presupuesto, solo setea cantidad, sin alertas ni modales
   const handleCantidadChange = (idx, cantidad) => {
-    console.log(`[ItemsGrid] handleCantidadChange - idx: ${idx}, cantidad:`, cantidad);
     if (esPresupuesto) {
       setRows(prevRows => {
         const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
-        console.log('[ItemsGrid] handleCantidadChange (presupuesto) - rows actualizadas:', newRows);
         onRowsChange?.(newRows);
         return newRows;
       });
@@ -359,7 +356,6 @@ const ItemsGridPresupuesto = forwardRef(({
     }
     setRows(prevRows => {
       const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
-      console.log('[ItemsGrid] handleCantidadChange - rows actualizadas:', newRows);
       onRowsChange?.(newRows);
       return newRows;
     });
@@ -401,8 +397,8 @@ const ItemsGridPresupuesto = forwardRef(({
         const productoId = row.producto?.id;
         const proveedores = getProveedoresProducto(productoId);
         const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-        let nuevoCosto = proveedor ? proveedor.costo : 0;
-        return { ...row, proveedorId, costo: nuevoCosto };
+        let nuevoPrecio = proveedor ? proveedor.precio : 0;
+        return { ...row, proveedorId, precio: nuevoPrecio };
       }));
     }
     setProveedorCambio({ open: false, idx: null, cantidadExtra: 0, proveedores: [], producto: null, proveedorActual: null, nombreProveedorActual: '' });
@@ -467,7 +463,6 @@ const ItemsGridPresupuesto = forwardRef(({
                 newRows[idx] = getEmptyRow();
                 return ensureSoloUnEditable(newRows);
               });
-              setUltimoIdxAutocompletado(idxExistente);
               e.preventDefault();
               e.stopPropagation();
               return;
@@ -480,19 +475,13 @@ const ItemsGridPresupuesto = forwardRef(({
                   codigo: prod.codvta || prod.codigo || '',
                   denominacion: prod.deno || prod.nombre || '',
                   unidad: prod.unidad || prod.unidadmedida || '-',
-                  costo: proveedorHabitual?.costo || 0,
+                  precio: proveedorHabitual?.precio || 0,
                   cantidad: row.cantidad || 1,
                   bonificacion: 0,
                   producto: prod,
                   proveedorId: proveedorId
                 };
                 return [...prevRows, nuevoItem, getEmptyRow()];
-              });
-              setUltimoIdxAutocompletado(rows.length);
-              setRows(rows => {
-                const newRows = [...rows];
-                newRows[idx] = getEmptyRow();
-                return ensureSoloUnEditable(newRows);
               });
               e.preventDefault();
               e.stopPropagation();
@@ -511,7 +500,7 @@ const ItemsGridPresupuesto = forwardRef(({
               codigo: prod.codvta || prod.codigo || '',
               denominacion: prod.deno || prod.nombre || '',
               unidad: prod.unidad || prod.unidadmedida || '-',
-              costo: proveedorHabitual?.costo || 0,
+              precio: proveedorHabitual?.precio || 0,
               cantidad: row.cantidad || 1,
               bonificacion: 0,
               producto: prod,
@@ -523,7 +512,6 @@ const ItemsGridPresupuesto = forwardRef(({
             }
             return ensureSoloUnEditable(newRows);
           });
-          setUltimoIdxAutocompletado(idx);
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -567,7 +555,6 @@ const ItemsGridPresupuesto = forwardRef(({
   // Notificar al padre cuando cambian los rows
   useEffect(() => {
     if (onRowsChange) {
-      console.log('[ItemsGrid] Notificando cambio de rows al padre:', rows);
       onRowsChange(rows);
     }
   }, [rows, onRowsChange]);
@@ -623,7 +610,7 @@ const ItemsGridPresupuesto = forwardRef(({
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Denominación</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Unidad</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Cantidad</th>
-              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Costo</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Precio</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Bonif. %</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">IVA %</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Proveedor usado</th>
@@ -631,118 +618,125 @@ const ItemsGridPresupuesto = forwardRef(({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {rows.map((row, idx) => (
-              <tr key={row.id}
-                className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="text"
-                    value={row.codigo}
-                    onChange={e => handleRowChange(idx, 'codigo', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'codigo')}
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    placeholder="Código"
-                    aria-label="Código producto"
-                    tabIndex={0}
-                    ref={el => codigoRefs.current[idx] = el}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {/* Denominación solo lectura */}
-                  <div className="w-full px-2 py-1 bg-gray-50 rounded border border-gray-200 text-gray-700 min-h-[38px] flex items-center">
-                    {row.denominacion || ''}
-                  </div>
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">{row.unidad || '-'}</td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.cantidad}
-                    onChange={e => handleCantidadChange(idx, e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'cantidad')}
-                    min="1"
-                    className="w-full px-2 py-1 border rounded border-gray-300"
-                    aria-label="Cantidad"
-                    tabIndex={0}
-                    ref={el => cantidadRefs.current[idx] = el}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.costo}
-                    onChange={e => handleRowChange(idx, 'costo', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'costo')}
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    aria-label="Costo"
-                    tabIndex={0}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.bonificacion}
-                    onChange={e => handleRowChange(idx, 'bonificacion', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'bonificacion')}
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    aria-label="Bonificación particular"
-                    tabIndex={0}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {row.producto ? (
-                    <span>{ALICUOTAS[row.producto.idaliiva] !== undefined ? ALICUOTAS[row.producto.idaliiva] + '%' : '-'}</span>
-                  ) : '-'}
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {/* Proveedor usado (editable) */}
-                  {row.producto ? (
-                    <select
-                      value={row.proveedorId || getProveedoresProducto(row.producto.id)[0]?.id || ''}
-                      onChange={e => handleProveedorChange(idx, e.target.value)}
+            {rows.map((row, idx) => {
+              // LOG: Depuración de IVA en la grilla
+              console.log(`[ItemsGrid] Fila ${idx}: idaliiva=`, row.idaliiva, 'producto.idaliiva=', row.producto?.idaliiva, 'producto=', row.producto);
+              return (
+                <tr key={row.id}
+                  className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="text"
+                      value={row.codigo}
+                      onChange={e => handleRowChange(idx, 'codigo', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'codigo')}
                       className="w-full px-2 py-1 border border-gray-300 rounded"
-                      aria-label="Proveedor"
+                      placeholder="Código"
+                      aria-label="Código producto"
                       tabIndex={0}
-                    >
-                      {getProveedoresProducto(row.producto.id).map(p => (
-                        <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock})</option>
-                      ))}
-                    </select>
-                  ) : null}
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap text-center flex gap-2 justify-center">
-                  {row.producto && (
-                    <>
-                      <button
-                        onClick={() => handleDeleteRow(idx)}
-                        className="text-red-600 hover:text-red-800"
-                        title="Eliminar"
-                        aria-label="Eliminar fila"
+                      ref={el => codigoRefs.current[idx] = el}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {/* Denominación solo lectura */}
+                    <div className="w-full px-2 py-1 bg-gray-50 rounded border border-gray-200 text-gray-700 min-h-[38px] flex items-center">
+                      {row.denominacion || ''}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">{row.unidad || '-'}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.cantidad}
+                      onChange={e => handleCantidadChange(idx, e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'cantidad')}
+                      min="1"
+                      className="w-full px-2 py-1 border rounded border-gray-300"
+                      aria-label="Cantidad"
+                      tabIndex={0}
+                      ref={el => cantidadRefs.current[idx] = el}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.precio}
+                      onChange={e => handleRowChange(idx, 'precio', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'precio')}
+                      className="w-full px-2 py-1 border border-gray-300 rounded"
+                      aria-label="Precio"
+                      tabIndex={0}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.bonificacion}
+                      onChange={e => handleRowChange(idx, 'bonificacion', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'bonificacion')}
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full px-2 py-1 border border-gray-300 rounded"
+                      aria-label="Bonificación particular"
+                      tabIndex={0}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {(() => {
+                      const idaliiva = typeof row.idaliiva === 'number' 
+                        ? row.idaliiva 
+                        : (row.producto?.idaliiva?.id || 0);
+                      return ALICUOTAS[idaliiva] !== undefined ? ALICUOTAS[idaliiva] + '%' : '-';
+                    })()}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {/* Proveedor usado (editable) */}
+                    {row.producto ? (
+                      <select
+                        value={row.proveedorId || getProveedoresProducto(row.producto.id)[0]?.id || ''}
+                        onChange={e => handleProveedorChange(idx, e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded"
+                        aria-label="Proveedor"
                         tabIndex={0}
-                        type="button"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                      </button>
-                      <BotonDuplicar
-                        onClick={() => {
-                          // Duplicar la fila
-                          setRows(prevRows => {
-                            const nuevoItem = { ...row, id: undefined };
-                            return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)];
-                          });
-                        }}
-                        tabIndex={0}
-                      />
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+                        {getProveedoresProducto(row.producto.id).map(p => (
+                          <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock})</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-center flex gap-2 justify-center">
+                    {row.producto && (
+                      <>
+                        <button
+                          onClick={() => handleDeleteRow(idx)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Eliminar"
+                          aria-label="Eliminar fila"
+                          tabIndex={0}
+                          type="button"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                        </button>
+                        <BotonDuplicar
+                          onClick={() => {
+                            // Duplicar la fila
+                            setRows(prevRows => {
+                              const nuevoItem = { ...row, id: undefined };
+                              return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)];
+                            });
+                          }}
+                          tabIndex={0}
+                        />
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -780,7 +774,7 @@ const ItemsGridEdicion = forwardRef(({
         denominacion: item.denominacion || producto?.deno || producto?.nombre || '',
         unidad: item.unidad || producto?.unidad || producto?.unidadmedida || '-',
         cantidad: item.cantidad || item.vdi_cantidad || 1,
-        costo: item.costo || item.precio || (item.vdi_importe !== undefined ? parseFloat(item.vdi_importe) : 0) || 0,
+        precio: item.precio || item.vdi_importe !== undefined ? parseFloat(item.vdi_importe) : 0,
         bonificacion: item.bonificacion || item.vdi_bonifica || 0,
         producto: producto,
         proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
@@ -802,7 +796,7 @@ const ItemsGridEdicion = forwardRef(({
       id: sp.proveedor.id,
       nombre: sp.proveedor.razon,
       stock: sp.cantidad,
-      costo: sp.costo,
+      precio: sp.precio_venta,
       esHabitual: !!(sp.proveedor_habitual || sp.habitual || sp.es_habitual)
     }));
   }, [stockProveedores]);
@@ -827,7 +821,7 @@ const ItemsGridEdicion = forwardRef(({
             codigo: producto.codvta || producto.codigo || '',
             denominacion: producto.deno || producto.nombre || '',
             unidad: producto.unidad || producto.unidadmedida || '-',
-            costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+            precio: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.precio || 0,
             cantidad,
             bonificacion: 0,
             producto: producto,
@@ -847,7 +841,7 @@ const ItemsGridEdicion = forwardRef(({
         codigo: producto.codvta || producto.codigo || '',
         denominacion: producto.deno || producto.nombre || '',
         unidad: producto.unidad || producto.unidadmedida || '-',
-        costo: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.costo || 0,
+        precio: getProveedoresProducto(producto.id).find(p => p.id === proveedorId)?.precio || 0,
         cantidad,
         bonificacion: 0,
         producto: producto,
@@ -872,26 +866,23 @@ const ItemsGridEdicion = forwardRef(({
 
   // Handlers de edición, duplicados, enter, foco, etc. igual que ItemsGridPresupuesto
   const handleRowChange = (idx, field, value) => {
-    console.log(`[ItemsGrid] handleRowChange - idx: ${idx}, field: ${field}, value:`, value);
     setRows(prevRows => {
       const newRows = [...prevRows];
       if (field === 'codigo') {
         newRows[idx] = {
           ...newRows[idx],
           codigo: value,
-          ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', costo: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
+          ...(value.trim() === '' ? { producto: null, denominacion: '', unidad: '', precio: '', cantidad: 1, bonificacion: 0, proveedorId: '' } : {})
         };
         const updatedRows = ensureSoloUnEditable(newRows);
-        console.log('[ItemsGrid] handleRowChange (código) - rows actualizadas:', updatedRows);
         onRowsChange?.(updatedRows);
         return updatedRows;
-      } else if (field === 'costo' || field === 'bonificacion') {
+      } else if (field === 'precio' || field === 'bonificacion') {
         newRows[idx] = {
           ...newRows[idx],
           [field]: value
         };
         const updatedRows = ensureSoloUnEditable(newRows);
-        console.log(`[ItemsGrid] handleRowChange (${field}) - rows actualizadas:`, updatedRows);
         onRowsChange?.(updatedRows);
         return updatedRows;
       }
@@ -900,11 +891,9 @@ const ItemsGridEdicion = forwardRef(({
   };
 
   const handleCantidadChange = (idx, cantidad) => {
-    console.log(`[ItemsGrid] handleCantidadChange - idx: ${idx}, cantidad:`, cantidad);
     if (modo === 'presupuesto') {
       setRows(prevRows => {
         const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
-        console.log('[ItemsGrid] handleCantidadChange (presupuesto) - rows actualizadas:', newRows);
         onRowsChange?.(newRows);
         return newRows;
       });
@@ -912,7 +901,6 @@ const ItemsGridEdicion = forwardRef(({
     }
     setRows(prevRows => {
       const newRows = prevRows.map((row, i) => i === idx ? { ...row, cantidad } : row);
-      console.log('[ItemsGrid] handleCantidadChange - rows actualizadas:', newRows);
       onRowsChange?.(newRows);
       return newRows;
     });
@@ -962,7 +950,6 @@ const ItemsGridEdicion = forwardRef(({
                 newRows[idx] = getEmptyRow();
                 return ensureSoloUnEditable(newRows);
               });
-              setUltimoIdxAutocompletado(idxExistente);
               e.preventDefault();
               e.stopPropagation();
               return;
@@ -975,19 +962,13 @@ const ItemsGridEdicion = forwardRef(({
                   codigo: prod.codvta || prod.codigo || '',
                   denominacion: prod.deno || prod.nombre || '',
                   unidad: prod.unidad || prod.unidadmedida || '-',
-                  costo: proveedorHabitual?.costo || 0,
+                  precio: proveedorHabitual?.precio || 0,
                   cantidad: row.cantidad || 1,
                   bonificacion: 0,
                   producto: prod,
                   proveedorId: proveedorId
                 };
                 return [...prevRows, nuevoItem, getEmptyRow()];
-              });
-              setUltimoIdxAutocompletado(rows.length);
-              setRows(rows => {
-                const newRows = [...rows];
-                newRows[idx] = getEmptyRow();
-                return ensureSoloUnEditable(newRows);
               });
               e.preventDefault();
               e.stopPropagation();
@@ -1005,7 +986,7 @@ const ItemsGridEdicion = forwardRef(({
               codigo: prod.codvta || prod.codigo || '',
               denominacion: prod.deno || prod.nombre || '',
               unidad: prod.unidad || prod.unidadmedida || '-',
-              costo: proveedorHabitual?.costo || 0,
+              precio: proveedorHabitual?.precio || 0,
               cantidad: row.cantidad || 1,
               bonificacion: 0,
               producto: prod,
@@ -1016,7 +997,6 @@ const ItemsGridEdicion = forwardRef(({
             }
             return ensureSoloUnEditable(newRows);
           });
-          setUltimoIdxAutocompletado(idx);
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -1056,7 +1036,6 @@ const ItemsGridEdicion = forwardRef(({
 
   useEffect(() => {
     if (onRowsChange) {
-      console.log('[ItemsGrid] Notificando cambio de rows al padre:', rows);
       onRowsChange(rows);
     }
   }, [rows, onRowsChange]);
@@ -1115,18 +1094,15 @@ const ItemsGridEdicion = forwardRef(({
 
   // Add missing handlers
   const handleProveedorChange = (idx, proveedorId) => {
-    console.log(`[ItemsGrid] handleProveedorChange - idx: ${idx}, proveedorId:`, proveedorId);
     setRows(prevRows => {
       const newRows = prevRows.map((row, i) => {
         if (i !== idx) return row;
         const productoId = row.producto?.id;
         const proveedores = getProveedoresProducto(productoId);
         const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-        let nuevoCosto = proveedor ? proveedor.costo : 0;
-        console.log(`[ItemsGrid] handleProveedorChange - nuevo costo para item ${idx}:`, nuevoCosto);
-        return { ...row, proveedorId, costo: nuevoCosto };
+        let nuevoPrecio = proveedor ? proveedor.precio : 0;
+        return { ...row, proveedorId, precio: nuevoPrecio };
       });
-      console.log('[ItemsGrid] handleProveedorChange - rows actualizadas:', newRows);
       onRowsChange?.(newRows);
       return newRows;
     });
@@ -1151,18 +1127,23 @@ const ItemsGridEdicion = forwardRef(({
     handleAddItem,
     getItems: () => rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
       const cantidad = parseFloat(row.cantidad) || 0;
-      const costo = parseFloat(row.costo) || 0;
+      const precio = parseFloat(row.precio) || 0;
       const bonif = parseFloat(row.bonificacion) || 0;
+      const idaliiva = (row.producto.idaliiva && row.producto.idaliiva.id)
+        ? row.producto.idaliiva.id
+        : (typeof row.producto.idaliiva === 'number'
+            ? row.producto.idaliiva
+            : row.idaliiva || 0);
       const item = {
         vdi_orden: idx + 1,
         vdi_idsto: row.producto.id,
         vdi_idpro: row.proveedorId,
         vdi_cantidad: cantidad,
-        vdi_importe: costo,
+        vdi_importe: precio,
         vdi_bonifica: bonif,
         vdi_detalle1: row.denominacion || '',
         vdi_detalle2: row.unidad || '',
-        vdi_idaliiva: row.producto.idaliiva || row.idaliiva || 0,
+        vdi_idaliiva: idaliiva,
         alicuotaIva: undefined,
         codigo: row.codigo || String(row.producto.id),
         producto: row.producto,
@@ -1204,7 +1185,7 @@ const ItemsGridEdicion = forwardRef(({
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Denominación</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Unidad</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Cantidad</th>
-              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Costo</th>
+              <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Precio</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Bonif. %</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">IVA %</th>
               <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Proveedor usado</th>
@@ -1212,117 +1193,124 @@ const ItemsGridEdicion = forwardRef(({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {rows.map((row, idx) => (
-              <tr key={row.id}
-                className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="text"
-                    value={row.codigo}
-                    onChange={e => handleRowChange(idx, 'codigo', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'codigo')}
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    placeholder="Código"
-                    aria-label="Código producto"
-                    tabIndex={0}
-                    ref={el => codigoRefs.current[idx] = el}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {/* Denominación solo lectura */}
-                  <div className="w-full px-2 py-1 bg-gray-50 rounded border border-gray-200 text-gray-700 min-h-[38px] flex items-center">
-                    {row.denominacion || ''}
-                  </div>
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">{row.unidad || '-'}</td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.cantidad}
-                    onChange={e => handleCantidadChange(idx, e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'cantidad')}
-                    min="1"
-                    className="w-full px-2 py-1 border rounded border-gray-300"
-                    aria-label="Cantidad"
-                    tabIndex={0}
-                    ref={el => cantidadRefs.current[idx] = el}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.costo}
-                    onChange={e => handleRowChange(idx, 'costo', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'costo')}
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    aria-label="Costo"
-                    tabIndex={0}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={row.bonificacion}
-                    onChange={e => handleRowChange(idx, 'bonificacion', e.target.value)}
-                    onKeyDown={e => handleRowKeyDown(e, idx, 'bonificacion')}
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    className="w-full px-2 py-1 border border-gray-300 rounded"
-                    aria-label="Bonificación particular"
-                    tabIndex={0}
-                  />
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {row.producto ? (
-                    <span>{ALICUOTAS[row.producto.idaliiva] !== undefined ? ALICUOTAS[row.producto.idaliiva] + '%' : '-'}</span>
-                  ) : '-'}
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  {/* Proveedor usado (editable) */}
-                  {row.producto ? (
-                    <select
-                      value={row.proveedorId || getProveedoresProducto(row.producto.id)[0]?.id || ''}
-                      onChange={e => handleProveedorChange(idx, e.target.value)}
+            {rows.map((row, idx) => {
+              // LOG: Depuración de IVA en la grilla
+              console.log(`[ItemsGrid] Fila ${idx}: idaliiva=`, row.idaliiva, 'producto.idaliiva=', row.producto?.idaliiva, 'producto=', row.producto);
+              return (
+                <tr key={row.id}
+                  className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="text"
+                      value={row.codigo}
+                      onChange={e => handleRowChange(idx, 'codigo', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'codigo')}
                       className="w-full px-2 py-1 border border-gray-300 rounded"
-                      aria-label="Proveedor"
+                      placeholder="Código"
+                      aria-label="Código producto"
                       tabIndex={0}
-                    >
-                      {getProveedoresProducto(row.producto.id).map(p => (
-                        <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock})</option>
-                      ))}
-                    </select>
-                  ) : null}
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap text-center flex gap-2 justify-center">
-                  {row.producto && (
-                    <>
-                      <button
-                        onClick={() => handleDeleteRow(idx)}
-                        className="text-red-600 hover:text-red-800"
-                        title="Eliminar"
-                        aria-label="Eliminar fila"
+                      ref={el => codigoRefs.current[idx] = el}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {/* Denominación solo lectura */}
+                    <div className="w-full px-2 py-1 bg-gray-50 rounded border border-gray-200 text-gray-700 min-h-[38px] flex items-center">
+                      {row.denominacion || ''}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">{row.unidad || '-'}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.cantidad}
+                      onChange={e => handleCantidadChange(idx, e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'cantidad')}
+                      min="1"
+                      className="w-full px-2 py-1 border rounded border-gray-300"
+                      aria-label="Cantidad"
+                      tabIndex={0}
+                      ref={el => cantidadRefs.current[idx] = el}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.precio}
+                      onChange={e => handleRowChange(idx, 'precio', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'precio')}
+                      className="w-full px-2 py-1 border border-gray-300 rounded"
+                      aria-label="Precio"
+                      tabIndex={0}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <input
+                      type="number"
+                      value={row.bonificacion}
+                      onChange={e => handleRowChange(idx, 'bonificacion', e.target.value)}
+                      onKeyDown={e => handleRowKeyDown(e, idx, 'bonificacion')}
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full px-2 py-1 border border-gray-300 rounded"
+                      aria-label="Bonificación particular"
+                      tabIndex={0}
+                    />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {(() => {
+                      const idaliiva = typeof row.idaliiva === 'number' 
+                        ? row.idaliiva 
+                        : (row.producto?.idaliiva?.id || 0);
+                      return ALICUOTAS[idaliiva] !== undefined ? ALICUOTAS[idaliiva] + '%' : '-';
+                    })()}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {/* Proveedor usado (editable) */}
+                    {row.producto ? (
+                      <select
+                        value={row.proveedorId || getProveedoresProducto(row.producto.id)[0]?.id || ''}
+                        onChange={e => handleProveedorChange(idx, e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded"
+                        aria-label="Proveedor"
                         tabIndex={0}
-                        type="button"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                      </button>
-                      <BotonDuplicar
-                        onClick={() => {
-                          setRows(prevRows => {
-                            const nuevoItem = { ...row, id: undefined };
-                            return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)];
-                          });
-                        }}
-                        tabIndex={0}
-                      />
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+                        {getProveedoresProducto(row.producto.id).map(p => (
+                          <option key={p.id} value={p.id}>{p.nombre} (Stock: {p.stock})</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-center flex gap-2 justify-center">
+                    {row.producto && (
+                      <>
+                        <button
+                          onClick={() => handleDeleteRow(idx)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Eliminar"
+                          aria-label="Eliminar fila"
+                          tabIndex={0}
+                          type="button"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                        </button>
+                        <BotonDuplicar
+                          onClick={() => {
+                            setRows(prevRows => {
+                              const nuevoItem = { ...row, id: undefined };
+                              return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)];
+                            });
+                          }}
+                          tabIndex={0}
+                        />
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

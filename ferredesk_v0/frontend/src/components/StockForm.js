@@ -114,6 +114,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         idaliiva: stock.idaliiva && typeof stock.idaliiva === 'object'
           ? stock.idaliiva.id
           : stock.idaliiva ?? '',
+        margen: stock.margen !== undefined && stock.margen !== null ? String(stock.margen) : '',
+        acti: stock.acti !== undefined && stock.acti !== null ? String(stock.acti) : '',
         id: stock.id,
         stock_proveedores: stockProveedores
       });
@@ -736,6 +738,42 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Margen (%)</label>
+            <input
+              type="number"
+              name="margen"
+              value={form.margen ?? ''}
+              onChange={handleChange}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              step="0.01"
+              min="0"
+              placeholder="Porcentaje de ganancia"
+            />
+            {form.margen && newStockProve.costo && !isNaN(Number(form.margen)) && !isNaN(Number(newStockProve.costo)) && (
+              <div className="mt-1 text-xs text-green-700">
+                Precio de venta sugerido: ${(Number(newStockProve.costo) * (1 + Number(form.margen) / 100)).toFixed(2)}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Activo</label>
+            <select
+              name="acti"
+              value={form.acti ?? ''}
+              onChange={handleChange}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
+            >
+              <option value="">Sin asignar</option>
+              <option value="S">Activo</option>
+              <option value="N">Inactivo</option>
+            </select>
+            <span className="text-xs text-gray-500">Indica si el producto está activo en el sistema.</span>
           </div>
         </div>
 

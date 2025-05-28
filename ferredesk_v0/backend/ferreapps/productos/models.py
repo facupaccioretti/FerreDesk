@@ -79,7 +79,7 @@ class Stock(models.Model):
     deno = models.CharField(max_length=50, db_column='STO_DENO')
     orden = models.SmallIntegerField(null=True, blank=True, db_column='STO_ORDEN')
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
-    margen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, db_column='STO_MARGEN')
+    margen = models.DecimalField(max_digits=5, decimal_places=2, null=False, blank=False, db_column='STO_MARGEN')
     cantmin = models.IntegerField(null=True, blank=True, db_column='STO_CANTMIN')
     idaliiva = models.ForeignKey(
         'AlicuotaIVA', db_column='STO_IDALIIVA', on_delete=models.PROTECT, related_name='stocks'
@@ -96,7 +96,17 @@ class Stock(models.Model):
     proveedor_habitual = models.ForeignKey(
         'Proveedor', null=False, blank=False, db_column='STO_IDPRO', on_delete=models.PROTECT, related_name='productos_habituales'
     )
-    acti = models.CharField(max_length=1, null=True, blank=True, db_column='STO_ACTI')
+    ACTIVO_CHOICES = [
+        ('S', 'Activo'),
+        ('N', 'Inactivo'),
+    ]
+    acti = models.CharField(
+        max_length=1,
+        choices=ACTIVO_CHOICES,
+        null=False,
+        blank=False,
+        db_column='STO_ACTI'
+    )
 
     class Meta:
         db_table = 'STOCK'

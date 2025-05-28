@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BuscadorProducto from './BuscadorProducto';
 import { ItemsGridEdicion } from './ItemsGrid';
 import ComprobanteDropdown from './ComprobanteDropdown';
@@ -46,6 +46,16 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta);
   return { ...defaults, ...data };
+};
+
+// Diccionario de alícuotas según la tabla proporcionada
+const ALICUOTAS = {
+  1: 0, // NO GRAVADO
+  2: 0, // EXENTO
+  3: 0, // 0%
+  4: 10.5,
+  5: 21,
+  6: 27
 };
 
 const EditarPresupuestoForm = ({
@@ -156,6 +166,57 @@ const EditarPresupuestoForm = ({
     setItems(rows);
   };
 
+  // Cálculos de totales centralizados y robustos
+  const calcularTotales = useCallback(() => {
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+    const desc1 = parseFloat(descu1) || 0;
+    const desc2 = parseFloat(descu2) || 0;
+    let subtotalSinIva = 0;
+    const itemsConSubtotal = items.map(item => {
+      const bonifParticular = parseFloat(item.bonificacion) || 0;
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio) || 0;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
+      return { ...item, subtotal };
+    });
+    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
+    let ivaTotal = 0;
+    let totalConIva = 0;
+    itemsConSubtotal.forEach(item => {
+      let aliId = item.producto?.idaliiva ?? item.vdi_idaliiva ?? null;
+      if (aliId && typeof aliId === 'object') aliId = aliId.id;
+      const aliPorc = ALICUOTAS[aliId] || 0;
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
+      ivaTotal += iva;
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    return {
+      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
+      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
+      ivaTotal: Math.round(ivaTotal * 100) / 100,
+      totalConIva: Math.round(totalConIva * 100) / 100,
+      items: itemsConSubtotal
+    };
+  }, [items, form.bonificacionGeneral, descu1, descu2]);
+
+  useEffect(() => {
+    const totales = calcularTotales();
+    setForm(prevForm => ({
+      ...prevForm,
+      ven_impneto: totales.subtotalConDescuentos,
+      ven_total: totales.totalConIva
+    }));
+  }, [items, form.bonificacionGeneral, descu1, descu2, calcularTotales]);
+
   // handleAddItem y handleEditItem ya no son necesarios aquí
 
   // Forzar comprobante 9997 para presupuesto
@@ -178,16 +239,20 @@ const EditarPresupuestoForm = ({
 
   // Copio la función de mapeo de campos de items de Venta
   const mapItemFields = (item, idx) => {
+    let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
+    if (idaliiva && typeof idaliiva === 'object') {
+      idaliiva = idaliiva.id;
+    }
     return {
       vdi_orden: idx + 1,
       vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
       vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
       vdi_cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
-      vdi_importe: item.costo ?? item.precio ?? item.importe ?? item.vdi_importe ?? 0,
+      vdi_importe: item.precio ?? item.costo ?? item.importe ?? item.vdi_importe ?? 0,
       vdi_bonifica: item.bonificacion ?? item.bonifica ?? item.vdi_bonifica ?? 0,
       vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
       vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
-      vdi_idaliiva: item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null,
+      vdi_idaliiva: idaliiva,
     };
   };
 
@@ -306,57 +371,6 @@ const EditarPresupuestoForm = ({
       [name]: type === 'number' ? parseFloat(value) : value
     }));
   };
-
-  // Copio el diccionario de alícuotas de VentaForm
-  const ALICUOTAS = {
-    1: 0, // NO GRAVADO
-    2: 0, // EXENTO
-    3: 0, // 0%
-    4: 10.5,
-    5: 21,
-    6: 27
-  };
-
-  // Cálculos de totales centralizados y robustos
-  function calcularTotales() {
-    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-    const desc1 = parseFloat(descu1) || 0;
-    const desc2 = parseFloat(descu2) || 0;
-    let subtotalSinIva = 0;
-    const itemsConSubtotal = items.map(item => {
-      const bonifParticular = parseFloat(item.bonificacion) || 0;
-      const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.costo) || 0;
-      let subtotal = 0;
-      if (bonifParticular > 0) {
-        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
-      } else {
-        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
-      }
-      subtotalSinIva += subtotal;
-      return { ...item, subtotal };
-    });
-    let subtotalConDescuentos = subtotalSinIva * (1 - desc1 / 100);
-    subtotalConDescuentos = subtotalConDescuentos * (1 - desc2 / 100);
-    let ivaTotal = 0;
-    let totalConIva = 0;
-    itemsConSubtotal.forEach(item => {
-      const aliId = item.producto?.idaliiva || item.vdi_idaliiva;
-      const aliPorc = ALICUOTAS[aliId] || 0;
-      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
-      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-      const iva = itemSubtotalConDescuentos * (aliPorc / 100);
-      ivaTotal += iva;
-      totalConIva += itemSubtotalConDescuentos + iva;
-    });
-    return {
-      subtotalSinIva: Math.round(subtotalSinIva * 100) / 100,
-      subtotalConDescuentos: Math.round(subtotalConDescuentos * 100) / 100,
-      ivaTotal: Math.round(ivaTotal * 100) / 100,
-      totalConIva: Math.round(totalConIva * 100) / 100,
-      items: itemsConSubtotal
-    };
-  }
 
   return (
     <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>

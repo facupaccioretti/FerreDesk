@@ -83,7 +83,7 @@ const VentaForm = ({
       try {
         const parsed = JSON.parse(savedForm);
         const items = parsed.items.map(item => {
-          const bonifParticular = parseFloat(item.bonificacion) || 0;
+          const bonifParticular = parseFloat(item.vdi_bonifica) || 0;
           const subtotal = (parseFloat(item.precio) * parseInt(item.cantidad)) * (1 - bonifParticular / 100);
           return { ...item, subtotal };
         });
@@ -139,9 +139,11 @@ const VentaForm = ({
     let subtotalSinIva = 0;
     const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
     const updatedItems = form.items.map(item => {
-      const bonifParticular = parseFloat(item.bonificacion) || 0;
+      const bonifParticular = item.vdi_bonifica !== undefined
+        ? parseFloat(item.vdi_bonifica) || 0
+        : (parseFloat(item.vdi_bonifica) || 0);
       const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.precio) || 0;
+      const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
       let subtotal = 0;
       if (bonifParticular > 0) {
         subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
@@ -195,6 +197,26 @@ const VentaForm = ({
     localStorage.removeItem('ventaFormDraft');
     const items = itemsGridRef.current.getItems();
     const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
+    const itemsMapped = items.map((i, idx) => {
+      let idaliiva = i.vdi_idaliiva || i.producto?.idaliiva || 0;
+      if (idaliiva && typeof idaliiva === 'object') {
+        idaliiva = idaliiva.id;
+      }
+      // Si la bonificación particular es 0, usar la general
+      const bonifParticular = parseFloat(i.bonificacion) || parseFloat(i.vdi_bonifica) || 0;
+      const bonificacionFinal = bonifParticular > 0 ? bonifParticular : form.bonificacionGeneral;
+      return {
+        vdi_orden: idx + 1,
+        vdi_idsto: i.vdi_idsto || i.producto?.id,
+        vdi_idpro: i.vdi_idpro || i.proveedorId,
+        vdi_cantidad: parseFloat(i.vdi_cantidad) || 0,
+        vdi_importe: parseFloat(i.vdi_importe) || 0,
+        vdi_bonifica: bonificacionFinal,
+        vdi_detalle1: i.vdi_detalle1 || i.denominacion || '',
+        vdi_detalle2: i.vdi_detalle2 || i.unidad || '',
+        vdi_idaliiva: idaliiva,
+      };
+    });
     const payload = {
       ven_estado: 'CE',
       ven_tipo: 'Venta',
@@ -217,7 +239,7 @@ const VentaForm = ({
       ven_idpla: form.plazoId,
       ven_idvdo: form.vendedorId,
       ven_copia: form.copia || 1,
-      items,
+      items: itemsMapped,
       permitir_stock_negativo
     };
     await onSave(payload);
@@ -260,11 +282,13 @@ const VentaForm = ({
     6: 27
   };
 
-  // Función auxiliar para calcular el subtotal de línea
   function calcularSubtotalLinea(item, bonifGeneral) {
+    const bonifParticular = parseFloat(item.vdi_bonifica);
+    const bonif = (!isNaN(bonifParticular) && bonifParticular > 0) 
+      ? bonifParticular 
+      : bonifGeneral;
     const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
     const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
-    const bonif = item.bonificacion !== undefined ? parseFloat(item.bonificacion) || 0 : bonifGeneral;
     return (precio * cantidad) * (1 - bonif / 100);
   }
 
@@ -275,6 +299,14 @@ const VentaForm = ({
       return itemsGridRef.current.getItems();
     }
     return form.items;
+  };
+
+  // Función para actualizar los ítems en tiempo real desde ItemsGrid
+  const handleRowsChange = (rows) => {
+    setForm(prevForm => ({
+      ...prevForm,
+      items: rows
+    }));
   };
 
   return (
@@ -427,6 +459,7 @@ const VentaForm = ({
             bonificacionGeneral={form.bonificacionGeneral}
             setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
             modo="venta"
+            onRowsChange={handleRowsChange}
           />
         )}
       </div>

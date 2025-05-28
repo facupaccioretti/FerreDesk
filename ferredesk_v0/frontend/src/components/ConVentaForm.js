@@ -58,7 +58,7 @@ function normalizarItems(itemsSeleccionados, productosDisponibles = []) {
       denominacion: item.denominacion || prod?.deno || prod?.nombre || '',
       unidad: item.unidad || prod?.unidad || prod?.unidadmedida || '-',
       cantidad: item.cantidad || item.vdi_cantidad || 1,
-      costo: item.costo || item.precio || item.vdi_importe || 0,
+      precio: item.precio || item.costo || item.vdi_importe || 0,
       bonificacion: item.bonificacion || item.vdi_bonifica || 0,
       proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
     };
@@ -157,7 +157,7 @@ const ConVentaForm = ({
     const itemsConSubtotal = items.map(item => {
       const bonifParticular = parseFloat(item.bonificacion) || 0;
       const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.costo) || 0;
+      const precio = parseFloat(item.precio) || 0;
       let subtotal = 0;
       if (bonifParticular > 0) {
         subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
@@ -172,7 +172,8 @@ const ConVentaForm = ({
     let ivaTotal = 0;
     let totalConIva = 0;
     itemsConSubtotal.forEach(item => {
-      const aliId = item.producto?.idaliiva || item.vdi_idaliiva;
+      let aliId = item.producto?.idaliiva || item.vdi_idaliiva;
+      if (aliId && typeof aliId === 'object') aliId = aliId.id;
       const aliPorc = ALICUOTAS[aliId] || 0;
       const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
       const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
@@ -223,7 +224,10 @@ const ConVentaForm = ({
       const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
       let ven_numero = numeroComprobante;
       const itemsMapped = items.map((i, idx) => {
-        const alicuotaIva = i.producto?.aliiva?.id || i.alicuotaIva || i.vdi_idaliiva;
+        let alicuotaIva = i.producto?.aliiva?.id || i.alicuotaIva || i.vdi_idaliiva;
+        if (alicuotaIva && typeof alicuotaIva === 'object') {
+          alicuotaIva = alicuotaIva.id;
+        }
         if (!alicuotaIva) {
           throw new Error(`El producto ${i.denominacion || i.codigo || i.vdi_detalle1} no tiene alícuota de IVA asignada`);
         }
@@ -232,7 +236,7 @@ const ConVentaForm = ({
           vdi_idsto: i.producto?.id || i.idSto || i.idsto || i.vdi_idsto || i.id,
           vdi_idpro: i.proveedorId || i.vdi_idpro || null,
           vdi_cantidad: parseFloat(i.vdi_cantidad) || 0,
-          vdi_importe: parseFloat(i.vdi_importe) || 0,
+          vdi_importe: parseFloat(i.precio) || 0,
           vdi_bonifica: parseFloat(i.vdi_bonifica) || 0,
           vdi_detalle1: i.vdi_detalle1 || '',
           vdi_detalle2: i.vdi_detalle2 || '',
