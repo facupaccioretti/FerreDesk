@@ -4,7 +4,7 @@ Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo
 
 Compaginacion de las tablas para cuando haya muchos 
 
-n el modal asociar codigo proveedor mejorar como se muestran los codigos
+En el modal asociar codigo proveedor mejorar como se muestran los codigos
   
     
 cambiar zona horaria django
@@ -36,24 +36,18 @@ manejo multiples usuarios presupuesto y venta!!!!!!!!!!!!
 
 
 El buscador de productos llama al modal de stock negativo 
-
 En venta el modal solo deberia aparecer una unica vez cuando se termina el stock de cada proveedor.
-
 Arreglar el modal directamente
-
 
 
 
 Verificacion de Paginas
 
 
-
 Clientes todo ok agregar compaginacion y trans atomicas
-Productos todo ok pero agregar compaginacion y sistema bajo stock (cant minima)
+Productos todo ok pero agregar compaginacion y sistema bajo stock (cant minima), agregar costo en edicion de productos
 Proveedores Todo ok pero agregar compaginacion
 Presupuestos y Ventas
 
 
-Cosas hechas:
- Limpieza codigo
- Transacciones atomicas en creacion/edicion de productos
+Bonificaciones particulare sy revisar calculos en la grilla (venta andaba mal y conversion tambien)
