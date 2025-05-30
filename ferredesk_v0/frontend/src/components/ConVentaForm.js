@@ -104,6 +104,19 @@ const ConVentaForm = ({
     return map;
   }, {}) : {};
 
+  // Declaración de tiposComprobante y tipoComprobante antes de su uso
+  const tiposComprobante = [
+    { value: 'factura', label: 'Factura', icon: 'invoice' },
+    { value: 'venta', label: 'Venta', icon: 'document', codigo_afip: '9999' },
+    { value: 'nota_credito', label: 'Nota de Crédito', icon: 'credit' },
+    { value: 'nota_credito_interna', label: 'Nota de Crédito Interna', icon: 'credit' },
+    { value: 'nota_debito', label: 'Nota de Débito', icon: 'debit' },
+    { value: 'recibo', label: 'Recibo', icon: 'receipt' },
+  ];
+  const [tipoComprobante, setTipoComprobante] = useState(
+    tiposComprobante.find(tc => tc.value === 'venta')?.value || tiposComprobante[0].value
+  );
+
   // Comprobantes de venta
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
   const [comprobanteId, setComprobanteId] = useState(() => {
@@ -115,6 +128,15 @@ const ConVentaForm = ({
       setComprobanteId(comprobantesVenta[0].id);
     }
   }, [comprobantesVenta, comprobanteId]);
+
+  // Sincronizar comprobanteId con tipoComprobante
+  useEffect(() => {
+    // Buscar el comprobante cuyo tipo o value coincida con tipoComprobante
+    const comp = comprobantesVenta.find(c => (c.tipo || c.value) === tipoComprobante);
+    if (comp && comp.id !== comprobanteId) {
+      setComprobanteId(comp.id);
+    }
+  }, [tipoComprobante, comprobantesVenta]);
 
   const numeroComprobante = (() => {
     const comp = comprobantesVenta.find(c => c.id === comprobanteId);
@@ -212,43 +234,16 @@ const ConVentaForm = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) {
-      console.warn("[ConVentaForm] Submit ignorado: loading=true");
-      return;
-    }
+    if (loading) return;
+
     setLoading(true);
     try {
-      // Log inicio
-      console.info("[ConVentaForm] Submit iniciado");
-      const items = itemsGridRef.current.getItems();
-      const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
-      let ven_numero = numeroComprobante;
-      const itemsMapped = items.map((i, idx) => {
-        let alicuotaIva = i.producto?.aliiva?.id || i.alicuotaIva || i.vdi_idaliiva;
-        if (alicuotaIva && typeof alicuotaIva === 'object') {
-          alicuotaIva = alicuotaIva.id;
-        }
-        if (!alicuotaIva) {
-          throw new Error(`El producto ${i.denominacion || i.codigo || i.vdi_detalle1} no tiene alícuota de IVA asignada`);
-        }
-        return {
-          vdi_orden: i.orden || i.index || i.vdi_orden || idx + 1,
-          vdi_idsto: i.producto?.id || i.idSto || i.idsto || i.vdi_idsto || i.id,
-          vdi_idpro: i.proveedorId || i.vdi_idpro || null,
-          vdi_cantidad: parseFloat(i.vdi_cantidad) || 0,
-          vdi_importe: parseFloat(i.precio) || 0,
-          vdi_bonifica: parseFloat(i.vdi_bonifica) || 0,
-          vdi_detalle1: i.vdi_detalle1 || '',
-          vdi_detalle2: i.vdi_detalle2 || '',
-          vdi_idaliiva: alicuotaIva,
-        };
-      });
+      const items = getCurrentItems();
       const payload = {
         ven_estado: 'CE',
         ven_tipo: 'Venta',
-        tipo_comprobante: 'venta',
-        comprobante: comprobanteId,
-        ven_numero: ven_numero,
+        tipo_comprobante: tipoComprobante,
+        ven_numero: numeroComprobante,
         ven_sucursal: form.sucursalId || 1,
         ven_fecha: form.fecha,
         ven_punto: form.puntoVentaId || 1,
@@ -265,37 +260,24 @@ const ConVentaForm = ({
         ven_idpla: form.plazoId,
         ven_idvdo: form.vendedorId,
         ven_copia: form.copia || 1,
-        items: itemsMapped,
-        permitir_stock_negativo,
-        presupuesto_origen: presupuestoOrigen?.ven_id || presupuestoOrigen?.id || null,
+        items: items,
+        presupuesto_origen: presupuestoOrigen.id,
         items_seleccionados: idsSeleccionados,
+        permitir_stock_negativo: false
       };
-      console.info("[ConVentaForm] Payload enviado a onSave:", payload, "tabKey:", tabKey);
+      // Log del payload antes de enviar
+      console.log('[ConVentaForm] Payload enviado a onSave:', payload, 'tabKey:', tabKey);
       await onSave(payload, tabKey);
     } catch (err) {
-      console.error('[ConVentaForm] Error en handleSubmit:', err);
       alert('Error: ' + (err.message || 'No se pudo convertir el presupuesto a venta.'));
     } finally {
       setLoading(false);
-      console.info("[ConVentaForm] Submit finalizado");
     }
   };
 
   const handleCancel = () => {
     onCancel();
   };
-
-  const tiposComprobante = [
-    { value: 'factura', label: 'Factura', icon: 'invoice' },
-    { value: 'venta', label: 'Venta', icon: 'document', codigo_afip: '9999' },
-    { value: 'nota_credito', label: 'Nota de Crédito', icon: 'credit' },
-    { value: 'nota_credito_interna', label: 'Nota de Crédito Interna', icon: 'credit' },
-    { value: 'nota_debito', label: 'Nota de Débito', icon: 'debit' },
-    { value: 'recibo', label: 'Recibo', icon: 'receipt' },
-  ];
-  const [tipoComprobante, setTipoComprobante] = useState(
-    tiposComprobante.find(tc => tc.value === 'venta')?.value || tiposComprobante[0].value
-  );
 
   function calcularSubtotalLinea(item, bonifGeneral) {
     const cantidad = parseFloat(item.cantidad) || 0;
@@ -307,20 +289,35 @@ const ConVentaForm = ({
   const isReadOnly = form.estado === 'Cerrado';
 
   const getCurrentItems = () => {
-    if (itemsGridRef.current && itemsGridRef.current.getItems) {
-      return itemsGridRef.current.getItems();
-    }
-    return form.items;
+    const items = itemsGridRef.current.getItems();
+    return items.map((i, idx) => {
+      let alicuotaIva = i.producto?.aliiva?.id || i.alicuotaIva || i.vdi_idaliiva;
+      if (alicuotaIva && typeof alicuotaIva === 'object') {
+        alicuotaIva = alicuotaIva.id;
+      }
+      if (!alicuotaIva) {
+        throw new Error(`El producto ${i.denominacion || i.codigo || i.vdi_detalle1} no tiene alícuota de IVA asignada`);
+      }
+      return {
+        vdi_orden: i.orden || i.index || i.vdi_orden || idx + 1,
+        vdi_idsto: i.producto?.id || i.idSto || i.idsto || i.vdi_idsto || i.id,
+        vdi_idpro: i.proveedorId || i.vdi_idpro || null,
+        vdi_cantidad: parseFloat(i.cantidad || i.vdi_cantidad) || 0,
+        vdi_importe: parseFloat(i.precio || i.vdi_importe) || 0,
+        vdi_bonifica: parseFloat(i.bonificacion || i.vdi_bonifica) || 0,
+        vdi_detalle1: i.vdi_detalle1 || '',
+        vdi_detalle2: i.vdi_detalle2 || '',
+        vdi_idaliiva: alicuotaIva,
+      };
+    });
   };
 
   const handleRowsChange = (rows) => {
-    console.log('[ConVentaForm] handleRowsChange recibió:', rows);
     setForm(prevForm => {
       const newForm = {
         ...prevForm,
         items: rows,
       };
-      console.log('[ConVentaForm] Nuevo estado del form:', newForm);
       return newForm;
     });
   };

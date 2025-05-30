@@ -16,23 +16,42 @@ const PresupuestoVista = ({
   comprobantes = []
 }) => {
   // Obtener comprobante
-  let comprobanteObj = null;
-  if (typeof data.comprobante === 'object' && data.comprobante !== null) {
-    comprobanteObj = data.comprobante;
-  } else if (data.comprobante) {
-    comprobanteObj = comprobantes.find(c => c.id === data.comprobante) || null;
+  const comprobanteObj = (data.comprobante && typeof data.comprobante === 'object') ? data.comprobante : null;
+  if (!comprobanteObj) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">No hay comprobante asociado.</div>;
+  const comprobanteNombre = comprobanteObj.nombre || '';
+  const comprobanteLetra = comprobanteObj.letra || '';
+  const comprobanteTipo = comprobanteObj.tipo || '';
+
+  // Determinar tipo SOLO por comprobante
+  let tipo = '';
+  if ((comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === 'presupuesto') || comprobanteObj.codigo_afip === '9997') {
+    tipo = 'Presupuesto';
+  } else {
+    tipo = 'Venta';
   }
-  const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
-  const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
-  const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
   const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre, comprobanteLetra);
+
+  // Función para mapear tipo de comprobante a nombre amigable
+  const mapearTipoComprobante = (tipo) => {
+    if (!tipo) return '';
+    const t = tipo.toLowerCase();
+    if (t === 'factura') return 'Factura';
+    if (t === 'recibo') return 'Recibo';
+    if (t === 'nota de crédito interna') return 'Nota de Crédito Interna';
+    if (t === 'nota de crédito') return 'Nota de Crédito';
+    if (t === 'nota de débito') return 'Nota de Débito';
+    if (t === 'presupuesto') return 'Presupuesto';
+    return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  };
+
+  const tipoAmigable = mapearTipoComprobante(comprobanteTipo);
 
   return (
     <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
       <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
         <div className="flex items-center gap-4">
           <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-            Presupuesto N° <span className="ml-2 text-emerald-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
+            {tipoAmigable} N° <span className="ml-2 text-emerald-600">{data.numero_formateado || (comprobanteLetra ? comprobanteLetra + ' ' : '') + (data.numero || '')}</span>
             <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
               {data.estado}
             </span>
@@ -82,23 +101,42 @@ const VentaVista = ({
   comprobantes = []
 }) => {
   // Obtener comprobante
-  let comprobanteObj = null;
-  if (typeof data.comprobante === 'object' && data.comprobante !== null) {
-    comprobanteObj = data.comprobante;
-  } else if (data.comprobante) {
-    comprobanteObj = comprobantes.find(c => c.id === data.comprobante) || null;
+  const comprobanteObj = (data.comprobante && typeof data.comprobante === 'object') ? data.comprobante : null;
+  if (!comprobanteObj) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">No hay comprobante asociado.</div>;
+  const comprobanteNombre = comprobanteObj.nombre || '';
+  const comprobanteLetra = comprobanteObj.letra || '';
+  const comprobanteTipo = comprobanteObj.tipo || '';
+
+  // Determinar tipo SOLO por comprobante
+  let tipo = '';
+  if ((comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === 'presupuesto') || comprobanteObj.codigo_afip === '9997') {
+    tipo = 'Presupuesto';
+  } else {
+    tipo = 'Venta';
   }
-  const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
-  const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
-  const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
   const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre, comprobanteLetra);
+
+  // Función para mapear tipo de comprobante a nombre amigable
+  const mapearTipoComprobante = (tipo) => {
+    if (!tipo) return '';
+    const t = tipo.toLowerCase();
+    if (t === 'factura') return 'Factura';
+    if (t === 'recibo') return 'Recibo';
+    if (t === 'nota de crédito interna') return 'Nota de Crédito Interna';
+    if (t === 'nota de crédito') return 'Nota de Crédito';
+    if (t === 'nota de débito') return 'Nota de Débito';
+    if (t === 'presupuesto') return 'Presupuesto';
+    return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  };
+
+  const tipoAmigable = mapearTipoComprobante(comprobanteTipo);
 
   return (
     <div className="max-w-4xl w-full mx-auto py-8 px-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
       <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
         <div className="flex items-center gap-4">
           <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-            Venta N° <span className="ml-2 text-purple-600">{(data.letra ? data.letra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
+            {tipoAmigable} N° <span className="ml-2 text-purple-600">{(comprobanteLetra ? comprobanteLetra + ' ' : '') + (data.numero_formateado || data.numero)}</span>
             <span className="ml-3 text-sm font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
               {data.estado}
             </span>

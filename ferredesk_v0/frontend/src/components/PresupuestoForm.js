@@ -282,7 +282,7 @@ const PresupuestoForm = ({
           ven_estado: form.estado || 'AB',
           ven_tipo: form.tipo || 'Presupuesto',
           tipo_comprobante: 'presupuesto',
-          comprobante: Number(form.comprobante) || Number(form.comprobanteId) || '',
+          comprobante_id: form.comprobanteId || '',
           ven_numero: parseInt(form.numero, 10) || 1,
           ven_sucursal: parseInt(form.sucursalId, 10) || 1,
           ven_fecha: form.fecha,
@@ -305,11 +305,13 @@ const PresupuestoForm = ({
         };
       } else {
         // Nuevo presupuesto (no modificar)
+        const compPresupuesto = comprobantes.find(c => c.codigo_afip === '9997');
+        const comprobanteCodigoAfip = compPresupuesto ? compPresupuesto.codigo_afip : '9997';
         payload = {
           ven_estado: 'AB',
           ven_tipo: 'Presupuesto',
           tipo_comprobante: 'presupuesto',
-          comprobante: comprobanteId,
+          comprobante_id: comprobanteCodigoAfip,
           ven_numero: form.numero || 1,
           ven_sucursal: form.sucursalId || 1,
           ven_fecha: form.fecha,

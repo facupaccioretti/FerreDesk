@@ -45,7 +45,14 @@ class Venta(models.Model):
     ven_id = models.AutoField(primary_key=True, db_column='VEN_ID')
     ven_sucursal = models.SmallIntegerField(db_column='VEN_SUCURSAL')
     ven_fecha = models.DateField(db_column='VEN_FECHA')
-    comprobante = models.ForeignKey(Comprobante, on_delete=models.PROTECT, db_column='VEN_CODCOMPROB', null=True, blank=True)
+    comprobante = models.ForeignKey(
+        Comprobante,
+        to_field='codigo_afip',
+        db_column='VEN_CODCOMPROB',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
     ven_punto = models.SmallIntegerField(db_column='VEN_PUNTO')
     ven_numero = models.IntegerField(db_column='VEN_NUMERO')
     ven_impneto = models.DecimalField(max_digits=15, decimal_places=2, db_column='VEN_IMPNETO')

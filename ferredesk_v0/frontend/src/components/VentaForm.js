@@ -89,7 +89,6 @@ const VentaForm = ({
         });
         return mergeWithDefaults({ ...parsed, items }, sucursales, puntosVenta);
       } catch (e) {
-        console.error('Error al cargar formulario guardado:', e);
         return getInitialFormState(sucursales, puntosVenta);
       }
     }
@@ -217,11 +216,13 @@ const VentaForm = ({
         vdi_idaliiva: idaliiva,
       };
     });
+    const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+    const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
     const payload = {
       ven_estado: 'CE',
       ven_tipo: 'Venta',
       tipo_comprobante: tipoComprobante,
-      comprobante: comprobanteId,
+      comprobante_id: comprobanteCodigoAfip,
       ven_numero: form.numero || numeroComprobante,
       ven_sucursal: form.sucursalId || 1,
       ven_fecha: form.fecha,
@@ -242,6 +243,8 @@ const VentaForm = ({
       items: itemsMapped,
       permitir_stock_negativo
     };
+    // Log del payload antes de enviar
+    console.log('[VentaForm] Payload enviado a onSave:', payload);
     await onSave(payload);
   };
 

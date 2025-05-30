@@ -619,8 +619,6 @@ const ItemsGridPresupuesto = forwardRef(({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {rows.map((row, idx) => {
-              // LOG: Depuración de IVA en la grilla
-              console.log(`[ItemsGrid] Fila ${idx}: idaliiva=`, row.idaliiva, 'producto.idaliiva=', row.producto?.idaliiva, 'producto=', row.producto);
               return (
                 <tr key={row.id}
                   className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>
@@ -1194,8 +1192,6 @@ const ItemsGridEdicion = forwardRef(({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {rows.map((row, idx) => {
-              // LOG: Depuración de IVA en la grilla
-              console.log(`[ItemsGrid] Fila ${idx}: idaliiva=`, row.idaliiva, 'producto.idaliiva=', row.producto?.idaliiva, 'producto=', row.producto);
               return (
                 <tr key={row.id}
                   className={isDuplicado(row, idx) ? 'bg-red-50' : ''}>

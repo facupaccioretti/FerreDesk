@@ -117,7 +117,6 @@ const EditarPresupuestoForm = ({
 
   // Actualizar el estado inicial del form
   const [form, setForm] = useState(() => {
-    console.log('EditarPresupuestoForm: initialData al cargar', initialData);
     let normalized = mergeWithDefaults(normalizeInitialData(initialData, clientes, productos), sucursales, puntosVenta);
     // Usar solo el valor entero de ven_numero
     let numero = initialData?.ven_numero;
@@ -228,12 +227,8 @@ const EditarPresupuestoForm = ({
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
-    console.log('[EditarPresupuestoForm] handleAddItemToGrid llamado con:', producto);
     if (itemsGridRef.current && typeof itemsGridRef.current.handleAddItem === 'function') {
       itemsGridRef.current.handleAddItem(producto);
-      console.log('[EditarPresupuestoForm] handleAddItem ejecutado en ref');
-    } else {
-      console.error('[EditarPresupuestoForm] itemsGridRef.current o handleAddItem no está disponible', itemsGridRef.current);
     }
   };
 
@@ -262,27 +257,14 @@ const EditarPresupuestoForm = ({
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleSubmit = async (e) => {
-    console.log('handleSubmit: inicio');
     e.preventDefault();
     // Obtengo los items actuales desde el ref
     const items = itemsGridRef.current ? itemsGridRef.current.getItems() : [];
-    console.log('handleSubmit: items obtenidos para guardar:', items.map(item => ({
-      vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
-      vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
-      cantidad: item.cantidad,
-      costo: item.costo,
-      bonificacion: item.bonificacion,
-      codigo: item.codigo,
-      producto: item.producto,
-      proveedorId: item.proveedorId
-    })));
     if (!items || items.length === 0) {
-      console.error('handleSubmit: Debe agregar al menos un ítem válido al presupuesto');
       return;
     }
     for (const item of items) {
       if (!item.vdi_idsto && !(item.producto && item.producto.id)) {
-        console.error('handleSubmit: item inválido', item);
         return;
       }
     }
@@ -290,12 +272,14 @@ const EditarPresupuestoForm = ({
       let payload;
       if (initialData && initialData.id) {
         const mappedItems = items.map(mapItemFields);
+        const compPresupuesto = comprobantes.find(c => c.codigo_afip === '9997');
+        const comprobanteCodigoAfip = compPresupuesto ? compPresupuesto.codigo_afip : '9997';
         payload = {
           ven_id: parseInt(initialData.id),
           ven_estado: 'AB',
           ven_tipo: 'Presupuesto',
           tipo_comprobante: 'presupuesto',
-          comprobante: parseInt(form.comprobante) || parseInt(form.comprobanteId) || '',
+          comprobante_id: comprobanteCodigoAfip,
           ven_numero: Number(form.numero) || 1,
           ven_sucursal: parseInt(form.sucursalId, 10) || 1,
           ven_fecha: form.fecha,
@@ -317,13 +301,14 @@ const EditarPresupuestoForm = ({
           permitir_stock_negativo: true,
           update_atomic: true
         };
-        console.log('handleSubmit: payload de edición', payload);
       } else {
+        const compPresupuesto = comprobantes.find(c => c.codigo_afip === '9997');
+        const comprobanteCodigoAfip = compPresupuesto ? compPresupuesto.codigo_afip : '9997';
         payload = {
           ven_estado: 'AB',
           ven_tipo: 'Presupuesto',
           tipo_comprobante: 'presupuesto',
-          comprobante: comprobanteId,
+          comprobante_id: comprobanteCodigoAfip,
           ven_numero: form.numero || 1,
           ven_sucursal: form.sucursalId || 1,
           ven_fecha: form.fecha,
@@ -346,14 +331,9 @@ const EditarPresupuestoForm = ({
           update_atomic: true
         };
       }
-      console.log('handleSubmit: llamando a onSave');
       const onSaveResult = await onSave(payload);
-      console.log('handleSubmit: respuesta de onSave', onSaveResult);
-      console.log('handleSubmit: onSave completado');
       onCancel();
-      console.log('handleSubmit: onCancel ejecutado');
     } catch (err) {
-      console.error('handleSubmit: ERROR al guardar el presupuesto:', err);
     }
   };
 

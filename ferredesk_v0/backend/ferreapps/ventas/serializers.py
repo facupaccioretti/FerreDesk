@@ -15,6 +15,8 @@ class VentaDetalleItemSerializer(serializers.ModelSerializer):
         exclude = ['vdi_idve']
 
 class VentaSerializer(serializers.ModelSerializer):
+    comprobante = ComprobanteSerializer(read_only=True)
+    comprobante_id = serializers.CharField(write_only=True, required=False)
     tipo = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
     items = VentaDetalleItemSerializer(many=True, read_only=True)
@@ -69,6 +71,13 @@ class VentaSerializer(serializers.ModelSerializer):
         items_data = self.initial_data.get('items', [])
         if not items_data:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
+        
+        # Obtener el código AFIP del comprobante
+        comprobante_id = validated_data.pop('comprobante_id', None)
+        if comprobante_id:
+            validated_data['comprobante_id'] = comprobante_id
+
+        # Resto del código de create...
         descu1 = self.initial_data.get('descu1')
         if descu1 is None:
             descu1 = self.initial_data.get('ven_descu1', 0)
@@ -79,7 +88,7 @@ class VentaSerializer(serializers.ModelSerializer):
         descu2 = float(descu2)
         bonif_general = self.initial_data.get('bonificacionGeneral', 0)
         bonif_general = float(bonif_general)
-        comprobante_id = self.initial_data.get('comprobante', None)
+        
         # Calcular subtotal de cada ítem igual que en el frontend
         subtotales = []
         for item in items_data:
@@ -106,12 +115,12 @@ class VentaSerializer(serializers.ModelSerializer):
             iva_total += iva
             total_con_iva += item_subtotal_con_descuentos + iva
             ali_key = f"{alicuota:.2f}"
-            if comprobante_id not in [9998, 9999]:
+            if comprobante_id not in ['9998', '9999']:
                 if ali_key not in iva_desglose:
                     iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
                 iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
                 iva_desglose[ali_key]['iva'] += iva
-            elif comprobante_id == 9997:
+            elif comprobante_id == '9997':
                 if ali_key not in iva_desglose:
                     iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
                 iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
@@ -121,22 +130,27 @@ class VentaSerializer(serializers.ModelSerializer):
         validated_data['ven_descu1'] = descu1
         validated_data['ven_descu2'] = descu2
         validated_data['ven_bonificacion_general'] = bonif_general
-        if comprobante_id == 9997:
+        if comprobante_id == '9997':
             validated_data['iva_desglose'] = iva_desglose
         else:
-            validated_data['iva_desglose'] = iva_desglose if comprobante_id not in [9998, 9999] else {}
+            validated_data['iva_desglose'] = iva_desglose if comprobante_id not in ['9998', '9999'] else {}
+        
+        # Crear la venta
         venta = Venta.objects.create(**validated_data)
+        
+        # Crear los items
         for item_data in items_data:
             item_data['vdi_idve'] = venta
             VentaDetalleItem.objects.create(**item_data)
+        
         return venta
 
     def update(self, instance, validated_data):
         # Validación de unicidad excluyendo el propio registro
         ven_punto = validated_data.get('ven_punto', instance.ven_punto)
         ven_numero = validated_data.get('ven_numero', instance.ven_numero)
-        comprobante = validated_data.get('comprobante', instance.comprobante)
-        qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante=comprobante)
+        comprobante_id = validated_data.get('comprobante_id', instance.comprobante_id)
+        qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante_id=comprobante_id)
         if instance.pk:
             qs = qs.exclude(pk=instance.pk)
         if qs.exists():
@@ -145,6 +159,7 @@ class VentaSerializer(serializers.ModelSerializer):
                     'La combinación de punto de venta, número y comprobante ya existe en otro registro.'
                 ]
             })
+        
         # Actualizar los campos normalmente
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -154,8 +169,7 @@ class VentaSerializer(serializers.ModelSerializer):
     def validate(self, data):
         ven_punto = data.get('ven_punto', getattr(self.instance, 'ven_punto', None))
         ven_numero = data.get('ven_numero', getattr(self.instance, 'ven_numero', None))
-        comprobante = data.get('comprobante', getattr(self.instance, 'comprobante', None))
-        comprobante_id = getattr(comprobante, 'id', comprobante)
+        comprobante_id = getattr(self.instance, 'comprobante_id', getattr(self.instance, 'comprobante', None))
         qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante_id=comprobante_id)
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)

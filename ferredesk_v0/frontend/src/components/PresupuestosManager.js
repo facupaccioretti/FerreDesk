@@ -56,7 +56,7 @@ const mainTabs = [
   { key: 'vendedores', label: 'Vendedores', closable: false }
 ];
 
-const getComprobanteIconAndLabel = (tipo, nombre = '') => {
+const getComprobanteIconAndLabel = (tipo, nombre = '', letra = '') => {
   const n = String(nombre || '').toLowerCase();
   if (n.includes('presupuesto')) return { icon: <IconPresupuesto />, label: 'Presupuesto' };
   if (n.includes('venta')) return { icon: <IconVenta />, label: 'Venta' };
@@ -337,15 +337,16 @@ const PresupuestosManager = () => {
   // Normalizar datos de ventas/presupuestos para la grilla
   const normalizarVenta = (venta) => {
     let tipo = '';
-    if (venta.comprobante && typeof venta.comprobante === 'object') {
-      tipo = venta.comprobante.tipo ? venta.comprobante.tipo.charAt(0).toUpperCase() + venta.comprobante.tipo.slice(1) : '';
-    } else if (venta.comprobante && presupuestoComprobanteIds.includes(venta.comprobante)) {
+    let comprobanteObj = (venta.comprobante && typeof venta.comprobante === 'object') ? venta.comprobante : null;
+    if (!comprobanteObj) return null; // Si no hay comprobante, no se puede clasificar
+
+    // Determinar tipo SOLO por comprobante
+    if ((comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === 'presupuesto') || comprobanteObj.codigo_afip === '9997') {
       tipo = 'Presupuesto';
-    } else if (venta.comprobante && ventaComprobanteIds.includes(venta.comprobante)) {
-      tipo = 'Venta';
     } else {
-      tipo = venta.tipo || '';
+      tipo = 'Venta';
     }
+
     const estado = venta.estado || (venta.ven_estado === 'AB' ? 'Abierto' : venta.ven_estado === 'CE' ? 'Cerrado' : '');
     const items = (venta.items || venta.detalle || venta.productos || []).map(item => {
       const producto = productos.find(p => p.id === (item.vdi_idsto || item.producto?.id));
@@ -372,7 +373,7 @@ const PresupuestosManager = () => {
       ...venta,
       tipo,
       estado,
-      letra: (venta.comprobante && typeof venta.comprobante === 'object' && venta.comprobante.letra) ? venta.comprobante.letra : venta.letra || '',
+      letra: comprobanteObj.letra || venta.letra || '',
       numero: venta.numero_formateado || venta.ven_numero || venta.numero || '',
       cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
@@ -388,7 +389,7 @@ const PresupuestosManager = () => {
       descu3: venta.ven_descu3 || venta.descu3 || 0,
       copia: venta.ven_copia || venta.copia || 1,
       cae: venta.ven_cae || venta.cae || '',
-      comprobante: venta.comprobante && typeof venta.comprobante === 'object' ? venta.comprobante.id : venta.comprobante,
+      comprobante: comprobanteObj,
       total: venta.total || venta.ven_total || venta.importe_total || 0
     };
   };
@@ -539,11 +540,10 @@ const PresupuestosManager = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprobante</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
@@ -559,26 +559,34 @@ const PresupuestosManager = () => {
                       const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : '';
                       const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : '';
                       const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : '';
-                      const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre);
+                      const { icon, label } = getComprobanteIconAndLabel(comprobanteTipo, comprobanteNombre, comprobanteLetra);
+                      // Quitar letra del numero_formateado si existe
+                      let numeroSinLetra = p.numero_formateado;
+                      if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + ' ')) {
+                        numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1);
+                      }
                       return (
                         <tr key={p.id} className="hover:bg-gray-50">
+                          {/* Comprobante */}
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center">{icon}</span>
-                              {p.numero}
+                              {icon} {label}
+                            </div>
+                          </td>
+                          {/* Número */}
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {(comprobanteLetra ? comprobanteLetra + ' ' : '') + (numeroSinLetra || p.numero)}
                               <EstadoBadge estado={p.estado} />
                             </div>
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
+                          {/* Fecha */}
                           <td className="px-3 py-2 whitespace-nowrap">{p.fecha}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{p.estado}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {label}
-                              {comprobanteLetra && (label.startsWith('Factura') || label.startsWith('N. Cred') || label.startsWith('N. Deb')) ? ' ' + comprobanteLetra : ''}
-                            </div>
-                          </td>
+                          {/* Cliente */}
+                          <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
+                          {/* Total */}
                           <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
+                          {/* Acciones */}
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex gap-2">
                               {p.tipo === 'Presupuesto' && p.estado === 'Abierto' ? (
