@@ -15,12 +15,10 @@ def normalizar_situacion_iva(valor):
     return valor
 
 def asignar_comprobante(tipo_comprobante, situacion_iva_ferreteria, situacion_iva_cliente):
-    # Buscar todos los comprobantes activos del tipo
     comprobantes = Comprobante.objects.filter(activo=True, tipo=tipo_comprobante)
     if not comprobantes.exists():
         raise ValidationError(f"No hay comprobantes activos para el tipo '{tipo_comprobante}'.")
 
-    # Verificar si requiere lógica fiscal (si hay múltiples comprobantes del mismo tipo)
     requiere_logica_fiscal = comprobantes.count() > 1
 
     if not requiere_logica_fiscal:
