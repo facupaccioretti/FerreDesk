@@ -90,9 +90,24 @@ export function useClientesAPI() {
     }
   };
 
+  const fetchClientePorDefecto = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/clientes/clientes/cliente_por_defecto/');
+      if (!response.ok) throw new Error('Error al cargar cliente por defecto');
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchClientes();
   }, []);
 
-  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente };
+  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto };
 }

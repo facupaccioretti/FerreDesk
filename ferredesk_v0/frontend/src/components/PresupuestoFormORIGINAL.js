@@ -1,12 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
 import ComprobanteDropdown from './ComprobanteDropdown';
-import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
-import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
-import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
-import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -44,15 +39,13 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   ven_idcli: '',
   ven_idpla: '',
   ven_idvdo: '',
-  ven_copia: 1,
-  cuit: '',
-  domicilio: ''
+  ven_copia: 1
 });
 
 // Agrego la función mergeWithDefaults
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta);
-  return { ...defaults, ...data, items: Array.isArray(data?.items) ? data.items : [] };
+  return { ...defaults, ...data };
 };
 
 const PresupuestoForm = ({
@@ -64,6 +57,7 @@ const PresupuestoForm = ({
   tiposComprobante,
   tipoComprobante,
   setTipoComprobante,
+  clientes,
   plazos,
   vendedores,
   sucursales,
@@ -76,14 +70,23 @@ const PresupuestoForm = ({
   loadingFamilias,
   proveedores,
   loadingProveedores,
+  alicuotas,
+  loadingAlicuotas,
   errorProductos,
   errorFamilias,
   errorProveedores,
+  errorAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
 }) => {
-  const { clientes, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
-  const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
+  const getDefaultClienteId = (clientes) => {
+    const cc = clientes.find(c => (c.razon || c.nombre)?.toLowerCase().includes('cuenta corriente'));
+    return cc ? cc.id : '';
+  };
+  const getDefaultPlazoId = (plazos) => {
+    const contado = plazos.find(p => (p.nombre || '').toLowerCase().includes('contado'));
+    return contado ? contado.id : '';
+  };
 
   // Normaliza initialData para edición
   function normalizeInitialData(initialData, clientes, productosDisponibles = []) {
@@ -96,14 +99,6 @@ const PresupuestoForm = ({
     }
     // Si viene como número, convertir a string
     if (clienteId !== undefined && clienteId !== null) clienteId = String(clienteId);
-    
-    // Obtener datos del cliente seleccionado
-    const clienteSeleccionado = clientes.find(c => c.id === clienteId);
-    const datosCliente = {
-      cuit: clienteSeleccionado?.cuit || '',
-      domicilio: clienteSeleccionado?.domicilio || ''
-    };
-
     // Normalizar items
     let items = initialData.items;
     if (!items && initialData.detalle) items = initialData.detalle;
@@ -130,14 +125,33 @@ const PresupuestoForm = ({
         subtotal: item.subtotal || 0
       };
     });
-    return { ...initialData, clienteId, items, ...datosCliente };
+    return { ...initialData, clienteId, items };
   }
 
   // Actualizar el estado inicial del form
   const [form, setForm] = useState(() => {
-    const normalizedData = normalizeInitialData(initialData, clientes, productos);
-    return mergeWithDefaults(normalizedData, sucursales, puntosVenta);
+    const savedForm = localStorage.getItem('presupuestoFormDraft');
+    if (savedForm && !initialData) {
+      try {
+        const parsed = JSON.parse(savedForm);
+        return mergeWithDefaults({ ...parsed }, sucursales, puntosVenta);
+      } catch (e) {
+        return getInitialFormState(sucursales, puntosVenta);
+      }
+    }
+    return mergeWithDefaults(initialData || {
+      clienteId: getDefaultClienteId(clientes),
+      plazoId: getDefaultPlazoId(plazos),
+      vendedorId: '',
+    }, sucursales, puntosVenta);
   });
+
+  // Si initialData cambia (por ejemplo, al editar otro presupuesto), actualizo el form
+  useEffect(() => {
+    if (initialData) {
+      setForm(normalizeInitialData(initialData, clientes, productos));
+    }
+  }, [initialData, clientes, productos]);
 
   // Guardar en localStorage cuando el formulario cambie (solo si es alta)
   useEffect(() => {
@@ -150,26 +164,44 @@ const PresupuestoForm = ({
   const [descu1, setDescu1] = useState(form.descu1 || 0);
   const [descu2, setDescu2] = useState(form.descu2 || 0);
 
-  const alicuotasMap = useMemo(() => (
-    Array.isArray(alicuotas)
-      ? alicuotas.reduce((acc, ali) => {
-          acc[ali.id] = parseFloat(ali.porce) || 0;
-          return acc;
-        }, {})
-      : {}
-  ), [alicuotas]);
-
-  const {
-    lineas,
-    totales,
-    calcularLinea
-  } = useCalculosFormulario(form.items, {
-    bonificacionGeneral: form.bonificacionGeneral,
-    descu1: form.descu1,
-    descu2: form.descu2,
-    descu3: form.descu3,
-    alicuotas: alicuotasMap
-  });
+  // Copio la lógica de recalculo de VentaForm
+  useEffect(() => {
+    let subtotalSinIva = 0;
+    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+    const updatedItems = form.items.map(item => {
+      const bonifParticular = parseFloat(item.vdi_bonifica) || 0;
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio) || 0;
+      let subtotal = 0;
+      if (bonifParticular > 0) {
+        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
+      } else {
+        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
+      }
+      subtotalSinIva += subtotal;
+      return { ...item, subtotal };
+    });
+    // Aplicar descuentos sucesivos al subtotal global
+    let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+    subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+    // Calcular IVA y total sumando ítem por ítem
+    let totalConIva = 0;
+    updatedItems.forEach(item => {
+      const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
+      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
+      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+      const iva = itemSubtotalConDescuentos * (alicuotaIva / 100);
+      totalConIva += itemSubtotalConDescuentos + iva;
+    });
+    setForm(prevForm => ({
+      ...prevForm,
+      items: updatedItems,
+      ven_impneto: Math.round(subtotalConDescuentos * 100) / 100,
+      ven_total: Math.round(totalConIva * 100) / 100,
+      descu1,
+      descu2
+    }));
+  }, [form.bonificacionGeneral, form.items, descu1, descu2]);
 
   // handleRowsChange ahora actualiza los ítems en el estado del padre
   const handleRowsChange = (rows) => {
@@ -178,6 +210,9 @@ const PresupuestoForm = ({
       items: rows
     }));
   };
+
+  // Forzar comprobante 9997 para presupuesto
+  const comprobanteId = 9997;
 
   const stockProveedores = getStockProveedoresMap(productos);
 
@@ -189,6 +224,45 @@ const PresupuestoForm = ({
       itemsGridRef.current.handleAddItem(producto);
     }
   };
+
+  // Copio la función de mapeo de campos de items de Venta
+  const mapItemFields = (item, idx) => {
+    let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
+    if (idaliiva && typeof idaliiva === 'object') {
+      idaliiva = idaliiva.id;
+    }
+    return {
+      vdi_orden: idx + 1,
+      vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
+      vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
+      vdi_cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
+      vdi_importe: item.costo ?? item.precio ?? item.importe ?? item.vdi_importe ?? 0,
+      vdi_bonifica: item.bonificacion ?? item.bonifica ?? item.vdi_bonifica ?? 0,
+      vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
+      vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
+      vdi_idaliiva: idaliiva,
+    };
+  };
+
+  // Diccionario de alícuotas
+  const ALICUOTAS = {
+    1: 0, // NO GRAVADO
+    2: 0, // EXENTO
+    3: 0, // 0%
+    4: 10.5,
+    5: 21,
+    6: 27
+  };
+
+  function calcularSubtotalLinea(item, bonifGeneral) {
+    const bonifParticular = parseFloat(item.vdi_bonifica);
+    const bonif = (!isNaN(bonifParticular) && bonifParticular > 0) 
+      ? bonifParticular 
+      : bonifGeneral;
+    const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
+    const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
+    return (precio * cantidad) * (1 - bonif / 100);
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -226,7 +300,7 @@ const PresupuestoForm = ({
           ven_idpla: form.plazoId,
           ven_idvdo: form.vendedorId,
           ven_copia: parseInt(form.copia, 10) || 1,
-          items: items.map(mapearCamposItem),
+          items: items.map(mapItemFields),
           permitir_stock_negativo: true
         };
       } else {
@@ -255,7 +329,7 @@ const PresupuestoForm = ({
           ven_idpla: form.plazoId,
           ven_idvdo: form.vendedorId,
           ven_copia: form.copia || 1,
-          items: items.map(mapearCamposItem),
+          items: items.map(mapItemFields),
           permitir_stock_negativo: true
         };
       }
@@ -273,8 +347,14 @@ const PresupuestoForm = ({
 
   const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
 
-  // Reemplazar handleChange por manejarCambioFormulario
-  const handleChange = manejarCambioFormulario(setForm);
+  // Copio handleChange de VentaForm
+  const handleChange = e => {
+    const { name, value, type } = e.target;
+    setForm(prevForm => ({
+      ...prevForm,
+      [name]: type === 'number' ? parseFloat(value) : value
+    }));
+  };
 
   // Copio la función auxiliar para obtener los ítems actuales del grid, igual que en VentaForm
   const getCurrentItems = () => {
@@ -284,35 +364,6 @@ const PresupuestoForm = ({
     }
     return Array.isArray(form.items) ? form.items : [];
   };
-
-  const handleClienteChange = manejarCambioCliente(setForm, clientes);
-
-  // Usar las funciones del hook donde sea necesario
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...form.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setForm(prev => ({ ...prev, items: newItems }));
-  };
-
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1) cuando la lista de clientes esté cargada y no haya cliente seleccionado
-  useEffect(() => {
-    if (!form.clienteId && clientes.length > 0) {
-      // Buscar el cliente con ID 1 (Mostrador) en la lista
-      const mostrador = clientes.find(c => String(c.id) === '1');
-      if (mostrador) {
-        setForm(prev => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || '',
-          domicilio: mostrador.domicilio || '',
-          plazoId: mostrador.plazoId || mostrador.plazo || ''
-        }));
-      }
-    }
-  }, [clientes, form.clienteId]);
-
-  if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>;
-  if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>;
 
   return (
     <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
@@ -325,49 +376,19 @@ const PresupuestoForm = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Cliente *</label>
-          {loadingClientes ? (
-            <div className="text-gray-500">Cargando clientes...</div>
-          ) : errorClientes ? (
-            <div className="text-red-600">{errorClientes}</div>
-          ) : (
-            <select
-              name="clienteId"
-              value={form.clienteId}
-              onChange={handleClienteChange}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-              required
-              disabled={isReadOnly}
-            >
-              <option value="">Seleccionar cliente...</option>
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>{c.razon || c.nombre}</option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">CUIT</label>
-          <input
-            name="cuit"
-            type="text"
-            value={form.cuit}
+          <select
+            name="clienteId"
+            value={form.clienteId}
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-            maxLength={11}
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Domicilio</label>
-          <input
-            name="domicilio"
-            type="text"
-            value={form.domicilio}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-            maxLength={40}
-            readOnly={isReadOnly}
-          />
+            required
+            disabled={isReadOnly}
+          >
+            <option value="">Seleccionar cliente...</option>
+            {clientes.map(c => (
+              <option key={c.id} value={c.id}>{c.razon || c.nombre}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Fecha</label>
@@ -474,26 +495,10 @@ const PresupuestoForm = ({
 
       <div className="mb-4 flex gap-4 items-center">
         <label className="text-sm font-medium text-gray-700">Descuento 1 (%)</label>
-        <input type="number" min="0" max="100" step="0.01" value={form.descu1} onChange={e => setForm(f => ({ ...f, descu1: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <input type="number" min="0" max="100" step="0.01" value={descu1} onChange={e => setDescu1(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
         <label className="text-sm font-medium text-gray-700">Descuento 2 (%)</label>
-        <input type="number" min="0" max="100" step="0.01" value={form.descu2} onChange={e => setForm(f => ({ ...f, descu2: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
+        <input type="number" min="0" max="100" step="0.01" value={descu2} onChange={e => setDescu2(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
         <span className="text-xs text-gray-500 ml-2">Los descuentos se aplican de manera sucesiva sobre el subtotal neto.</span>
-      </div>
-      <div className="mb-4 flex items-center gap-4">
-        <label className="text-sm font-medium text-gray-700">Bonificación general (%)</label>
-        <input
-          type="number"
-          min="0"
-          max="100"
-          step="0.01"
-          value={form.bonificacionGeneral}
-          onChange={e => setForm(f => ({ ...f, bonificacionGeneral: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
-          className="w-24 px-2 py-1 border border-gray-300 rounded"
-        />
-        <span className="ml-4 text-gray-500" tabIndex="0" aria-label="Ayuda bonificación general">
-          <svg className="inline w-4 h-4 mr-1 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
-          <span className="text-xs">La bonificación general solo se aplica a ítems sin bonificación particular.</span>
-        </span>
       </div>
 
       <div className="mb-8">
@@ -502,14 +507,16 @@ const PresupuestoForm = ({
           productos={productos}
           onSelect={handleAddItemToGrid}
         />
-        {(loadingProductos || loadingFamilias || loadingProveedores) ? (
-          <div className="text-center text-gray-500 py-4">Cargando productos, familias y proveedores...</div>
+        {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
+          <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
           <div className="text-center text-red-600 py-4">{errorProductos}</div>
         ) : errorFamilias ? (
           <div className="text-center text-red-600 py-4">{errorFamilias}</div>
         ) : errorProveedores ? (
           <div className="text-center text-red-600 py-4">{errorProveedores}</div>
+        ) : errorAlicuotas ? (
+          <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
         ) : (
           <ItemsGrid
             ref={itemsGridRef}
@@ -531,21 +538,73 @@ const PresupuestoForm = ({
           <div className="flex flex-col gap-2 text-lg font-semibold text-gray-800">
             <div className="flex gap-6 items-center">
               <span>Subtotal s/IVA:</span>
-              <span className="text-black">${totales.subtotal.toFixed(2)}</span>
+              <span className="text-black">${(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotal = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                return Number(subtotal).toFixed(2);
+              })()}</span>
               <span className="ml-8">Bonificación general:</span>
               <span className="text-black">{form.bonificacionGeneral}%</span>
               <span className="ml-8">Descuento 1:</span>
-              <span className="text-black">{form.descu1}%</span>
+              <span className="text-black">{descu1}%</span>
               <span className="ml-8">Descuento 2:</span>
-              <span className="text-black">{form.descu2}%</span>
+              <span className="text-black">{descu2}%</span>
             </div>
             <div className="flex gap-6 items-center">
               <span>Subtotal c/Descuentos:</span>
-              <span className="text-black">${totales.subtotalConDescuentos.toFixed(2)}</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                return Number(subtotalConDescuentos).toFixed(2);
+              })()}</span>
               <span className="ml-8">IVA:</span>
-              <span className="text-black">${totales.iva.toFixed(2)}</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
+                });
+                return Number(ivaTotal).toFixed(2);
+              })()}</span>
               <span className="ml-8">Total c/IVA:</span>
-              <span className="text-black">${totales.total.toFixed(2)}</span>
+              <span className="text-black">{(() => {
+                const items = getCurrentItems();
+                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
+                const subtotalSinIva = Array.isArray(items)
+                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
+                  : 0;
+                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
+                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
+                let ivaTotal = 0;
+                items.forEach(item => {
+                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
+                  const aliPorc = ALICUOTAS[aliId] || 0;
+                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
+                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
+                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
+                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
+                });
+                return (subtotalConDescuentos + ivaTotal).toFixed(2);
+              })()}</span>
             </div>
           </div>
         </div>
