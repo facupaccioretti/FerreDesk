@@ -45,6 +45,7 @@ class Venta(models.Model):
     ven_id = models.AutoField(primary_key=True, db_column='VEN_ID')
     ven_sucursal = models.SmallIntegerField(db_column='VEN_SUCURSAL')
     ven_fecha = models.DateField(db_column='VEN_FECHA')
+    hora_creacion = models.TimeField(auto_now_add=True, db_column='VEN_HORA_CREACION', null=True, blank=True)
     comprobante = models.ForeignKey(
         Comprobante,
         to_field='codigo_afip',
@@ -55,15 +56,15 @@ class Venta(models.Model):
     )
     ven_punto = models.SmallIntegerField(db_column='VEN_PUNTO')
     ven_numero = models.IntegerField(db_column='VEN_NUMERO')
-    ven_impneto = models.DecimalField(max_digits=15, decimal_places=2, db_column='VEN_IMPNETO')
     ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU1')
     ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU2')
     ven_descu3 = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_DESCU3')
-    ven_total = models.DecimalField(max_digits=15, decimal_places=2, db_column='VEN_TOTAL', null=True, blank=True)
     ven_vdocomvta = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMVTA')
     ven_vdocomcob = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMCOB')
     ven_estado = models.CharField(max_length=2, db_column='VEN_ESTADO', null=True, blank=True)
     ven_idcli = models.IntegerField(db_column='VEN_IDCLI')
+    ven_cuit = models.CharField(max_length=20, db_column='VEN_CUIT', blank=True, null=True)
+    ven_domicilio = models.CharField(max_length=100, db_column='VEN_DOMICILIO', blank=True, null=True)
     ven_idpla = models.IntegerField(db_column='VEN_IDPLA')
     ven_idvdo = models.IntegerField(db_column='VEN_IDVDO')
     ven_copia = models.SmallIntegerField(db_column='VEN_COPIA')
@@ -71,7 +72,6 @@ class Venta(models.Model):
     ven_cae = models.CharField(max_length=20, db_column='VEN_CAE', null=True, blank=True)
     ven_caevencimiento = models.DateField(db_column='VEN_CAEVENCIMIENTO', null=True, blank=True)
     ven_qr = models.BinaryField(db_column='VEN_QR', null=True, blank=True)
-    iva_desglose = JSONField(null=True, blank=True, db_column='VEN_IVA_DESGLOSE')
     ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
     class Meta:
@@ -99,7 +99,8 @@ class VentaDetalleItem(models.Model):
     vdi_idsto = models.IntegerField(db_column='VDI_IDSTO')
     vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2, db_column='VDI_CANTIDAD')
-    vdi_importe = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_IMPORTE')
+    vdi_costo = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_COSTO')
+    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_MARGEN')
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_BONIFICA')
     vdi_detalle1 = models.CharField(max_length=40, db_column='VDI_DETALLE1', null=True)
     vdi_detalle2 = models.CharField(max_length=40, db_column='VDI_DETALLE2', null=True)
@@ -142,3 +143,45 @@ class VentaRemPed(models.Model):
 
     class Meta:
         db_table = 'VENTA_REMPED'
+
+class VentaDetalleItemCalculado(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    vdi_idve = models.IntegerField()
+    vdi_orden = models.SmallIntegerField()
+    vdi_idsto = models.IntegerField()
+    vdi_idpro = models.IntegerField()
+    vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2)
+    vdi_costo = models.DecimalField(max_digits=13, decimal_places=3)
+    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2)
+    vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2)
+    vdi_idaliiva = models.IntegerField()
+    vdi_ivaitem = models.DecimalField(max_digits=15, decimal_places=3)
+
+    class Meta:
+        managed = False
+        db_table = 'VENTADETALLEITEM_CALCULADO'
+
+class VentaIVAAlicuota(models.Model):
+    id = models.BigIntegerField(primary_key=True)
+    vdi_idve = models.IntegerField()
+    vdi_idaliiva = models.IntegerField()
+    iva_total = models.DecimalField(max_digits=15, decimal_places=3)
+
+    class Meta:
+        managed = False
+        db_table = 'VENTAIVA_ALICUOTA'
+
+class VentaCalculada(models.Model):
+    ven_id = models.IntegerField(primary_key=True)
+    ven_sucursal = models.SmallIntegerField()
+    ven_fecha = models.DateField()
+    ven_punto = models.SmallIntegerField()
+    ven_numero = models.IntegerField()
+    ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2)
+    ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2)
+    subtotal_bruto = models.DecimalField(max_digits=15, decimal_places=3)
+    iva_global = models.DecimalField(max_digits=15, decimal_places=3)
+
+    class Meta:
+        managed = False
+        db_table = 'VENTA_CALCULADO'

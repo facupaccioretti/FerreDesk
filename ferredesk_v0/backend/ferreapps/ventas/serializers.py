@@ -1,8 +1,13 @@
 from rest_framework import serializers
-from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+from .models import (
+    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
+    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+)
 from django.db import models
 from ferreapps.productos.models import AlicuotaIVA
 from decimal import Decimal
+from ferreapps.clientes.models import Cliente
+from ferreapps.clientes.models import Vendedor
 
 class ComprobanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,7 +17,13 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItem
-        exclude = ['vdi_idve']
+        # ATENCIÓN: Solo se deben exponer los campos base de la tabla física.
+        # Los campos calculados (vdi_importe, vdi_importe_total, vdi_ivaitem) solo existen en la vista y en el modelo de solo lectura.
+        fields = [
+            'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
+            'vdi_costo', 'vdi_margen', 'vdi_bonifica',
+            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
+        ]
 
 class VentaSerializer(serializers.ModelSerializer):
     comprobante = ComprobanteSerializer(read_only=True)
@@ -21,12 +32,14 @@ class VentaSerializer(serializers.ModelSerializer):
     estado = serializers.SerializerMethodField()
     items = VentaDetalleItemSerializer(many=True, read_only=True)
     numero_formateado = serializers.SerializerMethodField()
-    iva_desglose = serializers.JSONField(read_only=True)
+    cliente_nombre = serializers.SerializerMethodField()
+    vendedor_nombre = serializers.SerializerMethodField()
+    # ATENCIÓN: No exponer campos calculados como ven_impneto, ven_total, iva_desglose, etc. Estos solo existen en la vista y en el modelo de solo lectura.
 
     class Meta:
         model = Venta
         fields = '__all__'
-        extra_fields = ['tipo', 'estado', 'numero_formateado']
+        extra_fields = ['tipo', 'estado', 'numero_formateado', 'cliente_nombre', 'vendedor_nombre']
 
     def get_tipo(self, obj):
         if not obj.comprobante:
@@ -62,6 +75,20 @@ class VentaSerializer(serializers.ModelSerializer):
             return f"{obj.ven_punto:04d}-{obj.ven_numero:08d}"
         return None
 
+    def get_cliente_nombre(self, obj):
+        try:
+            cliente = Cliente.objects.get(id=obj.ven_idcli)
+            return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
+        except Cliente.DoesNotExist:
+            return ''
+
+    def get_vendedor_nombre(self, obj):
+        try:
+            vendedor = Vendedor.objects.get(id=obj.ven_idvdo)
+            return vendedor.nombre if hasattr(vendedor, 'nombre') else str(vendedor)
+        except Exception:
+            return ''
+
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
@@ -77,72 +104,23 @@ class VentaSerializer(serializers.ModelSerializer):
         if comprobante_id:
             validated_data['comprobante_id'] = comprobante_id
 
-        # Resto del código de create...
-        descu1 = self.initial_data.get('descu1')
-        if descu1 is None:
-            descu1 = self.initial_data.get('ven_descu1', 0)
-        descu1 = float(descu1)
-        descu2 = self.initial_data.get('descu2')
-        if descu2 is None:
-            descu2 = self.initial_data.get('ven_descu2', 0)
-        descu2 = float(descu2)
+        # Asignar bonificación general a los ítems sin bonificación particular
         bonif_general = self.initial_data.get('bonificacionGeneral', 0)
         bonif_general = float(bonif_general)
-        
-        # Calcular subtotal de cada ítem igual que en el frontend
-        subtotales = []
         for item in items_data:
-            cantidad = float(item.get('vdi_cantidad', 0))
-            precio = float(item.get('vdi_importe', 0))
-            bonif_particular = item.get('vdi_bonifica')
-            bonif = float(bonif_particular) if bonif_particular not in [None, '', 0, '0', 0.0] and float(bonif_particular) > 0 else bonif_general
-            subtotal = (precio * cantidad) * (1 - bonif / 100)
-            subtotales.append(subtotal)
-        subtotal_sin_iva = sum(subtotales)
-        # Aplicar descuentos sucesivos
-        subtotal_con_descuentos = subtotal_sin_iva * (1 - descu1 / 100)
-        subtotal_con_descuentos = subtotal_con_descuentos * (1 - descu2 / 100)
-        iva_total = 0
-        total_con_iva = 0
-        iva_desglose = {}
-        alicuotas_map = {a.id: float(a.porce) for a in AlicuotaIVA.objects.all()}
-        for idx, item in enumerate(items_data):
-            ali_id = int(item.get('vdi_idaliiva', 0))
-            alicuota = alicuotas_map.get(ali_id, 0)
-            proporcion = subtotales[idx] / (subtotal_sin_iva or 1)
-            item_subtotal_con_descuentos = subtotal_con_descuentos * proporcion
-            iva = item_subtotal_con_descuentos * (alicuota / 100)
-            iva_total += iva
-            total_con_iva += item_subtotal_con_descuentos + iva
-            ali_key = f"{alicuota:.2f}"
-            if comprobante_id not in ['9998', '9999']:
-                if ali_key not in iva_desglose:
-                    iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
-                iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
-                iva_desglose[ali_key]['iva'] += iva
-            elif comprobante_id == '9997':
-                if ali_key not in iva_desglose:
-                    iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
-                iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
-                iva_desglose[ali_key]['iva'] += iva
-        validated_data['ven_impneto'] = Decimal(str(round(subtotal_con_descuentos, 2)))
-        validated_data['ven_total'] = float(round(total_con_iva, 2))
-        validated_data['ven_descu1'] = descu1
-        validated_data['ven_descu2'] = descu2
-        validated_data['ven_bonificacion_general'] = bonif_general
-        if comprobante_id == '9997':
-            validated_data['iva_desglose'] = iva_desglose
-        else:
-            validated_data['iva_desglose'] = iva_desglose if comprobante_id not in ['9998', '9999'] else {}
-        
-        # Crear la venta
+            bonif = item.get('vdi_bonifica')
+            if not bonif or float(bonif) == 0:
+                item['vdi_bonifica'] = bonif_general
+
+        # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
-        
-        # Crear los items
+        # Crear los items base (sin campos calculados)
         for item_data in items_data:
             item_data['vdi_idve'] = venta
+            # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
+            for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                item_data.pop(campo_calculado, None)
             VentaDetalleItem.objects.create(**item_data)
-        
         return venta
 
     def update(self, instance, validated_data):
@@ -164,6 +142,17 @@ class VentaSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
+        items_data = self.initial_data.get('items', [])
+        if items_data:
+            instance.items.all().delete()
+            for item_data in items_data:
+                item_data['vdi_idve'] = instance
+                # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
+                for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                    item_data.pop(campo_calculado, None)
+                VentaDetalleItem.objects.create(**item_data)
         return instance
 
     def validate(self, data):
@@ -189,4 +178,25 @@ class VentaDetalleManSerializer(serializers.ModelSerializer):
 class VentaRemPedSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaRemPed
-        fields = '__all__' 
+        fields = '__all__'
+
+class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaDetalleItemCalculado
+        fields = '__all__'
+        read_only_fields = '__all__'
+        extra_kwargs = {field: {'read_only': True} for field in fields}
+
+class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaIVAAlicuota
+        fields = '__all__'
+        read_only_fields = '__all__'
+        extra_kwargs = {field: {'read_only': True} for field in fields}
+
+class VentaCalculadaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaCalculada
+        fields = '__all__'
+        read_only_fields = '__all__'
+        extra_kwargs = {field: {'read_only': True} for field in fields} 

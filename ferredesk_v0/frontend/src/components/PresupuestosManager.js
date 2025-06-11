@@ -6,7 +6,7 @@ import { useFamiliasAPI } from '../utils/useFamiliasAPI';
 import { useProveedoresAPI } from '../utils/useProveedoresAPI';
 import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
 import { useComprobantesAPI } from '../utils/useComprobantesAPI';
-import { useClientesAPI } from '../utils/useClientesAPI';
+import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { usePlazosAPI } from '../utils/usePlazosAPI';
 import { useVendedoresAPI } from '../utils/useVendedoresAPI';
 import VendedorForm from './VendedorForm';
@@ -22,14 +22,27 @@ import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from
 import EditarPresupuestoForm from './EditarPresupuestoForm';
 import ConversionModal from './ConversionModal';
 import ConVentaForm from './ConVentaForm';
+import Paginador from './Paginador';
+import FiltrosPresupuestos from './herramientasforms/FiltrosPresupuestos';
 
-const filtros = [
-  { key: 'todos', label: 'Todos' },
-  { key: 'presupuestos', label: 'Presupuestos' },
-  { key: 'ventas', label: 'Ventas' }
+const mainTabs = [
+  { key: 'presupuestos', label: 'Presupuestos y Ventas', closable: false },
+  { key: 'vendedores', label: 'Vendedores', closable: false }
 ];
 
-// Badge de estado
+const getComprobanteIconAndLabel = (tipo, nombre = '', letra = '') => {
+  const n = String(nombre || '').toLowerCase();
+  if (n.includes('presupuesto')) return { icon: <IconPresupuesto />, label: 'Presupuesto' };
+  if (n.includes('venta')) return { icon: <IconVenta />, label: 'Venta' };
+  if (n.includes('factura')) return { icon: <IconFactura />, label: 'Factura' };
+  if (n.includes('nota de crédito interna')) return { icon: <IconCredito />, label: 'N. Cred. Int.' };
+  if (n.includes('nota de crédito')) return { icon: <IconCredito />, label: 'N. Cred.' };
+  if (n.includes('nota de débito')) return { icon: <IconCredito />, label: 'N. Deb.' };
+  if (n.includes('recibo')) return { icon: <IconRecibo />, label: 'Recibo' };
+  return { icon: <IconFactura />, label: String(nombre) };
+};
+
+// Badge de estado para mostrar visualmente si está Abierto o Cerrado
 const EstadoBadge = ({ estado }) => {
   if (estado === 'Cerrado') {
     return (
@@ -49,23 +62,6 @@ const EstadoBadge = ({ estado }) => {
       Abierto
     </span>
   );
-};
-
-const mainTabs = [
-  { key: 'presupuestos', label: 'Presupuestos y Ventas', closable: false },
-  { key: 'vendedores', label: 'Vendedores', closable: false }
-];
-
-const getComprobanteIconAndLabel = (tipo, nombre = '', letra = '') => {
-  const n = String(nombre || '').toLowerCase();
-  if (n.includes('presupuesto')) return { icon: <IconPresupuesto />, label: 'Presupuesto' };
-  if (n.includes('venta')) return { icon: <IconVenta />, label: 'Venta' };
-  if (n.includes('factura')) return { icon: <IconFactura />, label: 'Factura' };
-  if (n.includes('nota de crédito interna')) return { icon: <IconCredito />, label: 'N. Cred. Int.' };
-  if (n.includes('nota de crédito')) return { icon: <IconCredito />, label: 'N. Cred.' };
-  if (n.includes('nota de débito')) return { icon: <IconCredito />, label: 'N. Deb.' };
-  if (n.includes('recibo')) return { icon: <IconRecibo />, label: 'Recibo' };
-  return { icon: <IconFactura />, label: String(nombre) };
 };
 
 const PresupuestosManager = () => {
@@ -89,14 +85,14 @@ const PresupuestosManager = () => {
     document.title = "Presupuestos y Ventas FerreDesk";
   }, []);
 
-  const { ventas, error, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
+  const { ventas, error: ventasError, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI();
   const fetchPresupuestos = fetchVentas;
   const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI();
   const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI();
   const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI();
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
   const { comprobantes, loading: loadingComprobantes, error: errorComprobantes } = useComprobantesAPI();
-  const { clientes } = useClientesAPI();
+  const { clientes } = useClientesConDefecto();
   const { plazos } = usePlazosAPI();
   const {
     vendedores,
@@ -109,60 +105,48 @@ const PresupuestosManager = () => {
   } = useVendedoresAPI();
   const sucursales = [ { id: 1, nombre: 'Casa Central' } ]; // Ajusta según tu negocio
   const puntosVenta = [ { id: 1, nombre: 'PV 1' } ];        // Ajusta según tu negocio
-  const [filtro, setFiltro] = useState('todos');
-  const [tabs, setTabs] = useState([...mainTabs]);
-  const [activeTab, setActiveTab] = useState('presupuestos');
+  const [comprobanteTipo, setComprobanteTipo] = useState('');
+  const [comprobanteLetra, setComprobanteLetra] = useState('');
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+  const [clienteId, setClienteId] = useState('');
+  const [vendedorId, setVendedorId] = useState('');
+  const [tabs, setTabs] = useState(() => {
+    try {
+      const savedTabs = localStorage.getItem('presupuestosTabs');
+      if (savedTabs) {
+        const parsedTabs = JSON.parse(savedTabs);
+        // Validar que siempre estén los mainTabs al principio
+        let restoredTabs = parsedTabs;
+        mainTabs.forEach(mainTab => {
+          if (!restoredTabs.find(t => t.key === mainTab.key)) {
+            restoredTabs = [mainTab, ...restoredTabs];
+          }
+        });
+        console.log('[INIT] Tabs restauradas desde localStorage:', restoredTabs);
+        return restoredTabs;
+      }
+    } catch (e) {
+      console.error('[INIT] Error restaurando tabs:', e);
+    }
+    console.log('[INIT] Tabs por defecto:', [...mainTabs]);
+    return [...mainTabs];
+  });
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('presupuestosActiveTab') || 'presupuestos';
+  });
   const [editPresupuesto, setEditPresupuesto] = useState(null);
   const { localidades } = useLocalidadesAPI();
   const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false);
   const [draggedTabKey, setDraggedTabKey] = useState(null);
   const tiposComprobante = comprobantes.map(c => ({ value: c.id, label: c.nombre, campo: c.codigo_afip, tipo: c.tipo }));
-  const presupuestoComprobanteIds = comprobantes.filter(c => (c.tipo || '').toLowerCase() === 'presupuesto').map(c => c.id);
-  const ventaComprobanteIds = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto').map(c => c.id);
   const [tipoComprobante, setTipoComprobante] = useState(1); // 1=Factura A por defecto
   const [searchVendedor, setSearchVendedor] = useState('');
   const [editVendedorData, setEditVendedorData] = useState(null);
-  const [filtroAlicuota, setFiltroAlicuota] = useState('');
-  const [filtroTipoComprobante, setFiltroTipoComprobante] = useState('');
   const [conversionModal, setConversionModal] = useState({ open: false, presupuesto: null });
-
-  // Guardar estado de pestañas en localStorage cuando cambie
-  useEffect(() => {
-    localStorage.setItem('presupuestosTabs', JSON.stringify(tabs));
-    localStorage.setItem('presupuestosActiveTab', activeTab);
-  }, [tabs, activeTab]);
-
-  // Al montar, NO abrir automáticamente la tab de 'nuevo' aunque haya draft
-  // (el draft se mantiene, pero la tab solo se abre si el usuario la elige)
-  // eslint-disable-next-line
-  useEffect(() => {
-    // Solo restaurar tabs guardadas, no abrir 'nuevo' por draft
-    // (el draft se mantiene, pero la tab solo se abre si el usuario la elige)
-    // eslint-disable-next-line
-  }, []);
-
-  // Filtros
-  const filtrar = (lista) => {
-    let res = lista;
-    switch (filtro) {
-      case 'presupuestos':
-        res = res.filter(p => p.tipo === 'Presupuesto' && p.estado === 'Abierto');
-        break;
-      case 'ventas':
-        res = res.filter(p => p.tipo === 'Venta' && p.estado === 'Cerrado');
-        break;
-      case 'todos':
-      default:
-        break;
-    }
-    if (filtroAlicuota) {
-      res = res.filter(p => p.iva_desglose && Object.keys(p.iva_desglose).includes(filtroAlicuota));
-    }
-    if (filtroTipoComprobante) {
-      res = res.filter(p => String(p.comprobante) === filtroTipoComprobante);
-    }
-    return res;
-  };
+  // Estado para paginación
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [itemsPorPagina, setItemsPorPagina] = useState(15);
 
   // Funciones para tabs
   const openTab = (key, label, data = null) => {
@@ -182,7 +166,11 @@ const PresupuestosManager = () => {
   // Acciones
   const handleNuevo = () => {
     const newKey = `nuevo-${Date.now()}`;
-    setTabs(prev => [...prev, { key: newKey, label: 'Nuevo Presupuesto', closable: true }]);
+    setTabs(prev => {
+      const newTabs = [...prev, { key: newKey, label: 'Nuevo Presupuesto', closable: true }];
+      console.log('[handleNuevo] Tabs después de agregar:', newTabs);
+      return newTabs;
+    });
     setEditPresupuesto(null);
     setActiveTab(newKey);
     setTipoComprobante(4); // Forzar tipoComprobante a 4 para presupuesto
@@ -191,7 +179,11 @@ const PresupuestosManager = () => {
 
   const handleNuevaVenta = () => {
     const newKey = `nueva-venta-${Date.now()}`;
-    setTabs(prev => [...prev, { key: newKey, label: 'Nueva Venta', closable: true }]);
+    setTabs(prev => {
+      const newTabs = [...prev, { key: newKey, label: 'Nueva Venta', closable: true }];
+      console.log('[handleNuevaVenta] Tabs después de agregar:', newTabs);
+      return newTabs;
+    });
     setActiveTab(newKey);
     setTipoComprobante(1); // Forzar tipoComprobante a 1 para venta
     localStorage.removeItem('ventaFormDraft');
@@ -375,7 +367,11 @@ const PresupuestosManager = () => {
       estado,
       letra: comprobanteObj.letra || venta.letra || '',
       numero: venta.numero_formateado || venta.ven_numero || venta.numero || '',
-      cliente: clientes.find(c => c.id === venta.ven_idcli)?.razon || venta.cliente || '',
+      cliente:
+        clientes.find(c => c.id === venta.ven_idcli)?.razon
+        || (venta.ven_idcli === 1 || venta.ven_idcli === '1' ? 'Cliente Mostrador' : '')
+        || venta.cliente
+        || '',
       fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split('T')[0],
       id: venta.id || venta.ven_id || venta.pk,
       items,
@@ -394,17 +390,44 @@ const PresupuestosManager = () => {
     };
   };
 
-  // En el render, usar ventasNormalizadas en vez de ventas
-  const ventasNormalizadas = ventas.map(normalizarVenta);
+  // Normalizar datos de ventas/presupuestos para la grilla
+  const ventasNormalizadas = ventas.map(normalizarVenta).filter(Boolean);
+
+  // Usar directamente ventasNormalizadas para la paginación
+  const totalItems = ventasNormalizadas.length;
+  const datosPagina = ventasNormalizadas.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina);
+
+  useEffect(() => {
+    localStorage.setItem('presupuestosTabs', JSON.stringify(tabs));
+    localStorage.setItem('presupuestosActiveTab', activeTab);
+  }, [tabs, activeTab]);
+
+  const handleFiltroChange = (filtros) => {
+    setComprobanteTipo(filtros.comprobanteTipo);
+    setComprobanteLetra(filtros.comprobanteLetra);
+    setFechaDesde(filtros.fechaDesde);
+    setFechaHasta(filtros.fechaHasta);
+    setClienteId(filtros.clienteId);
+    setVendedorId(filtros.vendedorId);
+    const params = {};
+    // Ya no hay filtro rápido, solo filtramos por comprobanteTipo si está presente
+    if (filtros.comprobanteTipo) params['comprobante_tipo'] = filtros.comprobanteTipo;
+    if (filtros.comprobanteLetra) params['comprobante_letra'] = filtros.comprobanteLetra;
+    if (filtros.fechaDesde) params['ven_fecha_after'] = filtros.fechaDesde;
+    if (filtros.fechaHasta) params['ven_fecha_before'] = filtros.fechaHasta;
+    if (filtros.clienteId) params['ven_idcli'] = filtros.clienteId;
+    if (filtros.vendedorId) params['ven_idvdo'] = filtros.vendedorId;
+    fetchVentas(params);
+  };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-gray-100">
       <Navbar user={user} onLogout={handleLogout} />
-      <div className="container mx-auto px-6 py-8 flex-1 flex flex-col">
+      <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-bold text-gray-800">Gestión de Presupuestos y Ventas</h2>
         </div>
-        {error && (
+        {ventasError && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
             <div className="flex items-center">
               <svg
@@ -421,7 +444,7 @@ const PresupuestosManager = () => {
                   d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              {error}
+              {ventasError}
             </div>
           </div>
         )}
@@ -491,51 +514,39 @@ const PresupuestosManager = () => {
             {/* Presupuestos y Ventas */}
             {activeTab === 'presupuestos' && (
               <>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex gap-2">
-                    {filtros.map(f => (
-                      <button
-                        key={f.key}
-                        onClick={() => setFiltro(f.key)}
-                        className={`px-4 py-1.5 rounded-lg font-semibold text-sm transition-colors border border-gray-200 focus:outline-none ${filtro === f.key ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                  {filtro === 'presupuestos' || filtro === 'todos' ? (
-                    <button
-                      onClick={handleNuevo}
-                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
-                    >
-                      <span className="text-lg">+</span> Nuevo Presupuesto
-                    </button>
-                  ) : filtro === 'ventas' ? (
-                    <button
-                      onClick={handleNuevaVenta}
-                      className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
-                    >
-                      <span className="text-lg">+</span> Nueva Venta
-                    </button>
-                  ) : null}
+                <div className="mb-4">
+                  <FiltrosPresupuestos
+                    comprobantes={comprobantes}
+                    clientes={clientes}
+                    vendedores={vendedores}
+                    onFiltroChange={handleFiltroChange}
+                    comprobanteTipo={comprobanteTipo}
+                    setComprobanteTipo={setComprobanteTipo}
+                    comprobanteLetra={comprobanteLetra}
+                    setComprobanteLetra={setComprobanteLetra}
+                    fechaDesde={fechaDesde}
+                    setFechaDesde={setFechaDesde}
+                    fechaHasta={fechaHasta}
+                    setFechaHasta={setFechaHasta}
+                    clienteId={clienteId}
+                    setClienteId={setClienteId}
+                    vendedorId={vendedorId}
+                    setVendedorId={setVendedorId}
+                  />
                 </div>
-                {/* Filtros adicionales */}
-                <div className="flex gap-2 items-center mb-2">
-                  <label className="text-sm">Filtrar por alícuota:</label>
-                  <select value={filtroAlicuota} onChange={e => setFiltroAlicuota(e.target.value)} className="px-2 py-1 border rounded">
-                    <option value="">Todas</option>
-                    <option value="21">21%</option>
-                    <option value="10.5">10.5%</option>
-                    <option value="27">27%</option>
-                    <option value="0">Exento</option>
-                  </select>
-                  <label className="text-sm ml-4">Filtrar por comprobante:</label>
-                  <select value={filtroTipoComprobante} onChange={e => setFiltroTipoComprobante(e.target.value)} className="px-2 py-1 border rounded">
-                    <option value="">Todos</option>
-                    {comprobantes.map(c => (
-                      <option key={c.id} value={c.id}>{c.nombre}</option>
-                    ))}
-                  </select>
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={handleNuevo}
+                    className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                  >
+                    <span className="text-lg">+</span> Nuevo Presupuesto
+                  </button>
+                  <button
+                    onClick={handleNuevaVenta}
+                    className="bg-black hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-colors text-sm"
+                  >
+                    <span className="text-lg">+</span> Nueva Venta
+                  </button>
                 </div>
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -549,7 +560,7 @@ const PresupuestosManager = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filtrar(ventasNormalizadas).map(p => {
+                    {datosPagina.map(p => {
                       let comprobanteObj = null;
                       if (typeof p.comprobante === 'object' && p.comprobante !== null) {
                         comprobanteObj = p.comprobante;
@@ -616,6 +627,14 @@ const PresupuestosManager = () => {
                     })}
                   </tbody>
                 </table>
+                <Paginador
+                  totalItems={totalItems}
+                  itemsPerPage={itemsPorPagina}
+                  currentPage={paginaActual}
+                  onPageChange={setPaginaActual}
+                  onItemsPerPageChange={n => { setItemsPorPagina(n); setPaginaActual(1); }}
+                  opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
+                />
               </>
             )}
             {/* Vendedores: lista */}

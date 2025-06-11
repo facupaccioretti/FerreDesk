@@ -17,7 +17,7 @@ export function useClientesConDefecto() {
       .then(data => setClientePorDefecto(data))
       .catch(err => setErrorDefecto(err?.message || 'Error al cargar cliente por defecto'))
       .finally(() => setLoadingDefecto(false));
-  }, []); // Solo una vez al montar
+  }, [fetchClientePorDefecto]);
 
   // Combinar ambas listas, evitando duplicados por ID
   const clientes = [

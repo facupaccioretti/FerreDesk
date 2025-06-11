@@ -15,8 +15,10 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
   // Cálculo de subtotal base
   const calcularSubtotal = (item) => {
     const cantidad = parseFloat(item.cantidad ?? item.vdi_cantidad) || 0;
-    const precio = parseFloat(item.precio ?? item.costo ?? item.vdi_importe) || 0;
-    return cantidad * precio;
+    const aliId = obtenerAliId(item);
+    const aliPorc = alicuotas[aliId] || 0;
+    const precioBase = parseFloat(item.precio ?? item.costo ?? item.vdi_importe) || 0;
+    return cantidad * precioBase;
   };
 
   // Cálculo de bonificación particular
@@ -129,4 +131,70 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
     calcularIVA,
     calcularTotal
   };
-}; 
+};
+
+// Helper para calcular el precio unitario sin IVA
+export function calcularPrecioUnitarioSinIVA(item) {
+  const costo = parseFloat(item.costo ?? item.vdi_costo) || 0;
+  const margen = parseFloat(item.margen ?? item.vdi_margen) || 0;
+  return costo * (1 + margen / 100);
+}
+
+// Helper para calcular el precio unitario con IVA
+export function calcularPrecioUnitarioConIVA(item, alicuotas) {
+  const precioSinIVA = calcularPrecioUnitarioSinIVA(item);
+  const aliId = item.alicuotaIva ?? item.vdi_idaliiva ?? item.idaliiva ?? (item.producto && (item.producto.idaliiva?.id ?? item.producto.idaliiva)) ?? 0;
+  const aliPorc = alicuotas?.[aliId] || 0;
+  return precioSinIVA * (1 + aliPorc / 100);
+}
+
+// Helper para calcular el total de la línea (precio unitario con IVA * cantidad)
+export function calcularTotalLinea(item, alicuotas) {
+  const precioUnitarioConIVA = calcularPrecioUnitarioConIVA(item, alicuotas);
+  const cantidad = parseFloat(item.cantidad ?? item.vdi_cantidad) || 0;
+  return precioUnitarioConIVA * cantidad;
+} 
+
+/**
+ * Componente visual para mostrar los totales y descuentos de la venta/presupuesto.
+ * Centraliza la visualización para todos los formularios.
+ * @param {Object} props
+ * @param {number} bonificacionGeneral - Bonificación general aplicada
+ * @param {number} descu1 - Primer descuento
+ * @param {number} descu2 - Segundo descuento
+ * @param {number} descu3 - Tercer descuento (opcional)
+ * @param {Object} totales - Objeto de totales calculados
+ * @returns {JSX.Element}
+ */
+export function TotalesVisualizacion({ bonificacionGeneral = 0, descu1 = 0, descu2 = 0, descu3 = 0, totales = {} }) {
+  return (
+    <div className="mt-8 flex justify-end">
+      <div className="inline-block bg-gray-50 rounded-lg shadow px-8 py-4 text-right">
+        <div className="flex flex-col gap-2 text-lg font-semibold text-gray-800">
+          <div className="flex gap-6 items-center">
+            <span>Subtotal s/IVA:</span>
+            <span className="text-black">${totales.subtotal?.toFixed(2) ?? '0.00'}</span>
+            <span className="ml-8">Bonificación general:</span>
+            <span className="text-black">{bonificacionGeneral}%</span>
+            <span className="ml-8">Descuento 1:</span>
+            <span className="text-black">{descu1}%</span>
+            <span className="ml-8">Descuento 2:</span>
+            <span className="text-black">{descu2}%</span>
+            {descu3 > 0 && <>
+              <span className="ml-8">Descuento 3:</span>
+              <span className="text-black">{descu3}%</span>
+            </>}
+          </div>
+          <div className="flex gap-6 items-center">
+            <span>Subtotal c/Descuentos:</span>
+            <span className="text-black">${totales.subtotalConDescuentos?.toFixed(2) ?? '0.00'}</span>
+            <span className="ml-8">IVA:</span>
+            <span className="text-black">${totales.iva?.toFixed(2) ?? '0.00'}</span>
+            <span className="ml-8">Total c/IVA:</span>
+            <span className="text-black">${totales.total?.toFixed(2) ?? '0.00'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+} 

@@ -3,13 +3,16 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404
-from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed, VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
 from .serializers import (
     ComprobanteSerializer,
     VentaSerializer,
     VentaDetalleItemSerializer,
     VentaDetalleManSerializer,
-    VentaRemPedSerializer
+    VentaRemPedSerializer,
+    VentaDetalleItemCalculadoSerializer,
+    VentaIVAAlicuotaSerializer,
+    VentaCalculadaSerializer
 )
 from django.db import transaction
 from ferreapps.productos.models import Stock, StockProve
@@ -20,6 +23,7 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from .utils import asignar_comprobante
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 
 # Diccionario de alícuotas (igual que en el frontend)
 ALICUOTAS = {
@@ -31,88 +35,49 @@ ALICUOTAS = {
     6: Decimal('27')
 }
 
-def calcular_totales(items, bonificacion_general, descu1, descu2):
-    """
-    Calcula los totales de la venta/presupuesto usando la misma lógica que el frontend.
-    """
-    subtotal_sin_iva = Decimal('0')
-    items_con_subtotal = []
-    
-    # Calcular subtotal sin IVA y aplicar bonificaciones
-    for item in items:
-        bonif_particular = Decimal(str(item.get('vdi_bonifica', 0)))
-        cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
-        precio = Decimal(str(item.get('vdi_importe', 0)))
-        
-        if bonif_particular > 0:
-            subtotal = (precio * cantidad) * (1 - bonif_particular / Decimal('100'))
-        else:
-            subtotal = (precio * cantidad) * (1 - Decimal(str(bonificacion_general)) / Decimal('100'))
-        
-        subtotal_sin_iva += subtotal
-        items_con_subtotal.append({
-            'item': item,
-            'subtotal': subtotal
-        })
-    
-    # Aplicar descuentos sucesivos
-    subtotal_con_descuentos = subtotal_sin_iva * (1 - Decimal(str(descu1)) / Decimal('100'))
-    subtotal_con_descuentos = subtotal_con_descuentos * (1 - Decimal(str(descu2)) / Decimal('100'))
-    
-    # Calcular IVA y total
-    iva_total = Decimal('0')
-    total_con_iva = Decimal('0')
-    
-    for item_data in items_con_subtotal:
-        item = item_data['item']
-        ali_id = item.get('vdi_idaliiva')
-        ali_porc = Decimal(str(ALICUOTAS.get(ali_id, Decimal('0'))))
-        
-        # Calcular proporción del descuento global
-        proporcion = item_data['subtotal'] / subtotal_sin_iva if subtotal_sin_iva else Decimal('0')
-        item_subtotal_con_descuentos = subtotal_con_descuentos * proporcion
-        
-        # Calcular IVA
-        iva = item_subtotal_con_descuentos * (ali_porc / Decimal('100'))
-        iva_total += iva
-        total_con_iva += item_subtotal_con_descuentos + iva
-    
-    return {
-        'subtotal_sin_iva': round(subtotal_sin_iva, 2),
-        'subtotal_con_descuentos': round(subtotal_con_descuentos, 2),
-        'iva_total': round(iva_total, 2),
-        'total_con_iva': round(total_con_iva, 2)
-    }
-
-def recalcular_totales_presupuesto(presupuesto):
-    """
-    Recalcula los totales del presupuesto (Venta) usando los ítems actuales.
-    """
-    items = presupuesto.items.all()
-    items_dicts = []
-    for item in items:
-        items_dicts.append({
-            'vdi_bonifica': getattr(item, 'vdi_bonifica', 0),
-            'vdi_cantidad': getattr(item, 'vdi_cantidad', 0),
-            'vdi_importe': getattr(item, 'vdi_importe', 0),
-            'vdi_idaliiva': getattr(item, 'vdi_idaliiva', 0),
-        })
-    bonificacion_general = getattr(presupuesto, 'bonificacionGeneral', 0) or getattr(presupuesto, 'ven_bonificacion_general', 0) or 0
-    descu1 = getattr(presupuesto, 'ven_descu1', 0) or 0
-    descu2 = getattr(presupuesto, 'ven_descu2', 0) or 0
-    totales = calcular_totales(items_dicts, bonificacion_general, descu1, descu2)
-    presupuesto.ven_impneto = totales['subtotal_con_descuentos']
-    presupuesto.ven_total = totales['total_con_iva']
-
 # Create your views here.
 
 class ComprobanteViewSet(viewsets.ModelViewSet):
     queryset = Comprobante.objects.all()
     serializer_class = ComprobanteSerializer
 
+    @action(detail=False, methods=['post'], url_path='asignar')
+    def asignar(self, request):
+        tipo_comprobante = request.data.get('tipo_comprobante')
+        situacion_iva_cliente = request.data.get('situacion_iva_cliente')
+        if not tipo_comprobante or not situacion_iva_cliente:
+            return Response({'detail': 'Faltan datos requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            comprobante = asignar_comprobante(tipo_comprobante, situacion_iva_cliente)
+            return Response(comprobante)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class VentaFilter(FilterSet):
+    ven_fecha = DateFromToRangeFilter(field_name='ven_fecha')
+    ven_idcli = NumberFilter(field_name='ven_idcli')
+    ven_idvdo = NumberFilter(field_name='ven_idvdo')
+    ven_estado = NumberFilter(field_name='ven_estado')
+    comprobante = NumberFilter(field_name='comprobante')
+    comprobante_tipo = CharFilter(field_name='comprobante__tipo', lookup_expr='iexact')
+    comprobante_letra = CharFilter(field_name='comprobante__letra', lookup_expr='iexact')
+    ven_sucursal = NumberFilter(field_name='ven_sucursal')
+    ven_total = DateFromToRangeFilter(field_name='ven_total')
+    ven_punto = NumberFilter(field_name='ven_punto')
+    ven_numero = NumberFilter(field_name='ven_numero')
+
+    class Meta:
+        model = Venta
+        fields = [
+            'ven_fecha', 'ven_idcli', 'ven_idvdo', 'ven_estado', 'comprobante',
+            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_total', 'ven_punto', 'ven_numero'
+        ]
+
 class VentaViewSet(viewsets.ModelViewSet):
     queryset = Venta.objects.all()
     serializer_class = VentaSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaFilter
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -120,6 +85,17 @@ class VentaViewSet(viewsets.ModelViewSet):
         items = data.get('items', [])
         if not items:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
+        bonif_general = data.get('bonificacionGeneral', 0)
+        try:
+            bonif_general = float(bonif_general)
+        except Exception:
+            bonif_general = 0
+        for item in items:
+            bonif = item.get('vdi_bonifica')
+            if not bonif or float(bonif) == 0:
+                item['vdi_bonifica'] = bonif_general
 
         permitir_stock_negativo = data.get('permitir_stock_negativo', False)
         tipo_comprobante = data.get('tipo_comprobante')
@@ -177,7 +153,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 "nombre": comprobante_obj.nombre,
             } if comprobante_obj else None
         else:
-            comprobante = asignar_comprobante(tipo_comprobante, situacion_iva_ferreteria, tipo_iva_cliente)
+            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
         if not comprobante:
             return Response({'detail': 'No se encontró comprobante válido para la venta. Verifique la configuración de comprobantes y letras.'}, status=status.HTTP_400_BAD_REQUEST)
         data['comprobante_id'] = comprobante["codigo_afip"]
@@ -243,7 +219,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
                 tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
-                comprobante_venta = asignar_comprobante('factura', situacion_iva_ferreteria, tipo_iva_cliente)
+                comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
                 if not comprobante_venta:
                     return Response({'detail': 'No se encontró comprobante de tipo factura para la conversión.'}, status=status.HTTP_400_BAD_REQUEST)
                 venta.comprobante_id = comprobante_venta["codigo_afip"]
@@ -287,70 +263,27 @@ class VentaViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Si es una actualización atómica, procesar todo en una sola transacción
-        if request.data.get('update_atomic', False):
-            try:
-                # Obtener los datos de los items antes de actualizar
-                items_data = request.data.pop('items', None)
-                
-                # Calcular los totales antes de actualizar
-                if items_data is not None:
-                    bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
-                    descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
-                    descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
-                    
-                    totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
-                    
-                    # Actualizar los campos calculados
-                    request.data['ven_impneto'] = totales['subtotal_con_descuentos']
-                    request.data['ven_total'] = totales['total_con_iva']
-                
-                # Actualizar los campos principales
-                serializer = self.get_serializer(instance, data=request.data, partial=partial)
-                serializer.is_valid(raise_exception=True)
-                self.perform_update(serializer)
-                
-                # Actualizar los items en la misma transacción
-                if items_data is not None:
-                    instance.items.all().delete()
-                    for item_data in items_data:
-                        item_data['vdi_idve'] = instance
-                        VentaDetalleItem.objects.create(**item_data)
-                
-                return Response(serializer.data)
-            except Exception as e:
-                logging.error(f"Error en actualización atómica de venta: {e}")
-                raise
-        
-        # Si no es atómica, mantener el comportamiento anterior
+        # ATENCIÓN: Ya no se calculan ni manipulan campos calculados (ven_impneto, ven_total, etc.) aquí.
+        # Toda la lógica de totales y cálculos se delega a la vista SQL.
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
         items_data = request.data.get('items', None)
         if items_data is not None:
             try:
-                # Calcular los totales
-                bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
-                descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
-                descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
-                
-                totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
-                
-                # Actualizar los campos calculados
-                instance.ven_impneto = totales['subtotal_con_descuentos']
-                instance.ven_total = totales['total_con_iva']
-                instance.save()
-                
-                # Actualizar los items
+                # ATENCIÓN: No calcular totales ni campos calculados aquí.
+                # Solo actualizar los ítems base.
                 instance.items.all().delete()
                 for item_data in items_data:
                     item_data['vdi_idve'] = instance
+                    for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                        item_data.pop(campo_calculado, None)
                     VentaDetalleItem.objects.create(**item_data)
             except Exception as e:
                 logging.error(f"Error actualizando ítems de venta: {e}")
                 raise
-        
+
         return Response(serializer.data)
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
@@ -364,6 +297,18 @@ class VentaDetalleManViewSet(viewsets.ModelViewSet):
 class VentaRemPedViewSet(viewsets.ModelViewSet):
     queryset = VentaRemPed.objects.all()
     serializer_class = VentaRemPedSerializer
+
+class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaDetalleItemCalculado.objects.all()
+    serializer_class = VentaDetalleItemCalculadoSerializer
+
+class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaIVAAlicuota.objects.all()
+    serializer_class = VentaIVAAlicuotaSerializer
+
+class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaCalculada.objects.all()
+    serializer_class = VentaCalculadaSerializer
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -447,8 +392,19 @@ def convertir_presupuesto_a_venta(request):
             tipo_iva_cliente = cliente.iva.nombre.strip().lower()
 
             # Usar asignar_comprobante para determinar el comprobante correcto
-            comprobante = asignar_comprobante(tipo_comprobante, situacion_iva_ferreteria, tipo_iva_cliente)
+            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
             venta_data['comprobante_id'] = comprobante['codigo_afip']
+
+            # --- Asignar bonificación general a los ítems sin bonificación particular ---
+            bonif_general = venta_data.get('bonificacionGeneral', 0)
+            try:
+                bonif_general = float(bonif_general)
+            except Exception:
+                bonif_general = 0
+            for item in venta_data.get('items', []):
+                bonif = item.get('vdi_bonifica')
+                if not bonif or float(bonif) == 0:
+                    item['vdi_bonifica'] = bonif_general
 
             intentos = 0
             max_intentos = 10

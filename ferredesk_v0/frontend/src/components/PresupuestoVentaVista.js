@@ -228,7 +228,6 @@ const TablaItems = ({ data }) => {
   const getAlicuota = (item) => {
     const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : undefined;
     if (ali !== undefined && ALICUOTAS[ali] !== undefined) return ALICUOTAS[ali] + '%';
-    // Si ali es porcentaje, buscar la clave cuyo valor es igual a ali
     const aliKey = Object.keys(ALICUOTAS).find(k => Number(ALICUOTAS[k]) === ali);
     if (aliKey) return ALICUOTAS[aliKey] + '%';
     if (item.alicuota) return item.alicuota + '%';
@@ -236,6 +235,21 @@ const TablaItems = ({ data }) => {
     if (item.iva_porcentaje) return item.iva_porcentaje + '%';
     if (item.vdi_idaliiva !== undefined) return String(item.vdi_idaliiva);
     return '-';
+  };
+  const getUnidad = (item) => item.unidad || item.vdi_detalle2 || '-';
+  const getCantidad = (item) => item.cantidad ?? item.vdi_cantidad ?? 0;
+  const getPrecioUnitario = (item) => parseFloat(item.precio ?? item.vdi_importe ?? 0);
+  const getBonificacion = (item) => parseFloat(item.bonificacion ?? item.vdi_bonifica ?? 0);
+  const getPrecioConIVA = (item) => {
+    const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : 0;
+    const aliPorc = ALICUOTAS[ali] || 0;
+    return getPrecioUnitario(item) * (1 + aliPorc / 100);
+  };
+  const getPrecioBonificado = (item) => {
+    return getPrecioConIVA(item) * (1 - getBonificacion(item) / 100);
+  };
+  const getTotal = (item) => {
+    return getPrecioBonificado(item) * getCantidad(item);
   };
   return (
     <div className="mb-8">
@@ -249,23 +263,31 @@ const TablaItems = ({ data }) => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nro.</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Denominación</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Unidad</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Costo</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Unitario</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Bonificado</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">IVA %</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {items.map((item, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.denominacion}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{item.cantidad}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${item.precio?.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.bonificacion}%</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getAlicuota(item)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 text-center">{idx + 1}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo ?? item.vdi_idsto ?? '-'}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.denominacion ?? item.vdi_detalle1 ?? '-'}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getUnidad(item)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-center">{getCantidad(item)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getPrecioConIVA(item).toFixed(2)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-center">{getBonificacion(item)}%</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getPrecioBonificado(item).toFixed(2)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-center">{getAlicuota(item)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getTotal(item).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>

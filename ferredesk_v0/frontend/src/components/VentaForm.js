@@ -1,12 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
 import ComprobanteDropdown from './ComprobanteDropdown';
-import ItemsGrid from './ItemsGrid';
+import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
+import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
+import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
+import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
+import SumarDuplicar from './herramientasforms/SumarDuplicar';
+import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
+import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: '',
   cliente: '',
   clienteId: '',
+  cuit: '',
+  domicilio: '',
   plazoId: '',
   vendedorId: '',
   sucursalId: sucursales[0]?.id || '',
@@ -20,22 +30,12 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   descu1: 0,
   descu2: 0,
   descu3: 0,
-  copia: 1,
-  cae: '',
+  copia: 1
 });
 
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta);
-  return { ...defaults, ...data };
-};
-
-const getDefaultClienteId = (clientes) => {
-  const cc = clientes.find(c => (c.razon || c.nombre)?.toLowerCase().includes('cuenta corriente'));
-  return cc ? cc.id : '';
-};
-const getDefaultPlazoId = (plazos) => {
-  const contado = plazos.find(p => (p.nombre || '').toLowerCase().includes('contado'));
-  return contado ? contado.id : '';
+  return { ...defaults, ...data, items: Array.isArray(data?.items) ? data.items : [] };
 };
 
 const getStockProveedoresMap = (productos) => {
@@ -77,26 +77,64 @@ const VentaForm = ({
   autoSumarDuplicados,
   setAutoSumarDuplicados,
 }) => {
-  const [form, setForm] = useState(() => {
-    const savedForm = localStorage.getItem('ventaFormDraft');
-    if (savedForm && !initialData) {
-      try {
-        const parsed = JSON.parse(savedForm);
-        const items = parsed.items.map(item => {
-          const bonifParticular = parseFloat(item.vdi_bonifica) || 0;
-          const subtotal = (parseFloat(item.precio) * parseInt(item.cantidad)) * (1 - bonifParticular / 100);
-          return { ...item, subtotal };
-        });
-        return mergeWithDefaults({ ...parsed, items }, sucursales, puntosVenta);
-      } catch (e) {
-        return getInitialFormState(sucursales, puntosVenta);
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
+  const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
+
+  const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false);
+
+  // Función para normalizar items
+  const normalizarItems = (items) => {
+    return items.map((item, idx) => {
+      // Si ya tiene producto, dejarlo
+      if (item.producto) return { ...item, id: item.id || idx + 1 };
+      // Buscar producto por código si es posible
+      let prod = null;
+      if (item.codigo || item.codvta) {
+        prod = productos.find(p => (p.codvta || p.codigo)?.toString() === (item.codigo || item.codvta)?.toString());
       }
-    }
-    return mergeWithDefaults(initialData || {
-      clienteId: getDefaultClienteId(clientes),
-      plazoId: getDefaultPlazoId(plazos),
-      vendedorId: '',
-    }, sucursales, puntosVenta);
+      return {
+        id: item.id || idx + 1,
+        producto: prod || undefined,
+        codigo: item.codigo || item.codvta || (prod ? prod.codvta || prod.codigo : ''),
+        denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ''),
+        unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ''),
+        cantidad: item.cantidad || 1,
+        costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
+        bonificacion: item.vdi_bonifica || 0,
+        subtotal: item.subtotal || 0
+      };
+    });
+  };
+
+  // Usar el hook useFormularioDraft
+  const { 
+    formulario, 
+    setFormulario, 
+    limpiarBorrador, 
+    actualizarItems 
+  } = useFormularioDraft({
+    claveAlmacenamiento: 'ventaFormDraft',
+    datosIniciales: initialData,
+    combinarConValoresPorDefecto: mergeWithDefaults,
+    parametrosPorDefecto: [sucursales, puntosVenta],
+    normalizarItems
+  });
+
+  const alicuotasMap = useMemo(() => (
+    Array.isArray(alicuotasIVA)
+      ? alicuotasIVA.reduce((acc, ali) => {
+          acc[ali.id] = parseFloat(ali.porce) || 0;
+          return acc;
+        }, {})
+      : {}
+  ), [alicuotasIVA]);
+
+  const { totales } = useCalculosFormulario(formulario.items, {
+    bonificacionGeneral: formulario.bonificacionGeneral,
+    descu1: formulario.descu1,
+    descu2: formulario.descu2,
+    descu3: formulario.descu3,
+    alicuotas: alicuotasMap
   });
 
   const itemsGridRef = useRef();
@@ -111,6 +149,11 @@ const VentaForm = ({
     if (comprobantesVenta.length > 0) return comprobantesVenta[0].id;
     return '';
   });
+
+  // Obtener el comprobante seleccionado y su código AFIP
+  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+  const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
+
   useEffect(() => {
     if (comprobantesVenta.length > 0 && !comprobanteId) {
       setComprobanteId(comprobantesVenta[0].id);
@@ -125,134 +168,67 @@ const VentaForm = ({
   })();
 
   useEffect(() => {
-    if (!initialData) {
-      localStorage.setItem('ventaFormDraft', JSON.stringify(form));
-    }
-  }, [form, initialData]);
-
-  // Estado para descuentos
-  const [descu1, setDescu1] = useState(form.descu1 || 0);
-  const [descu2, setDescu2] = useState(form.descu2 || 0);
-
-  useEffect(() => {
-    let subtotalSinIva = 0;
-    const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-    const updatedItems = form.items.map(item => {
-      const bonifParticular = item.vdi_bonifica !== undefined
-        ? parseFloat(item.vdi_bonifica) || 0
-        : (parseFloat(item.vdi_bonifica) || 0);
-      const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
-      let subtotal = 0;
-      if (bonifParticular > 0) {
-        subtotal = (precio * cantidad) * (1 - bonifParticular / 100);
-      } else {
-        subtotal = (precio * cantidad) * (1 - bonifGeneral / 100);
-      }
-      subtotalSinIva += subtotal;
-      return { ...item, subtotal };
-    });
-    // Aplicar descuentos sucesivos al subtotal global
-    let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
-    subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-    // Calcular IVA y total sumando ítem por ítem
-    let ivaTotal = 0;
-    let totalConIva = 0;
-    updatedItems.forEach(item => {
-      const alicuotaIva = parseFloat(item.alicuotaIva) || 0;
-      // Proporción del descuento global que corresponde a este ítem
-      const proporcion = (item.subtotal || 0) / (subtotalSinIva || 1);
-      const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-      const iva = itemSubtotalConDescuentos * (alicuotaIva / 100);
-      ivaTotal += iva;
-      totalConIva += itemSubtotalConDescuentos + iva;
-    });
-    setForm(prevForm => ({
-      ...prevForm,
-      items: updatedItems,
-      ven_impneto: Math.round(subtotalConDescuentos * 100) / 100,
-      ven_total: Math.round(totalConIva * 100) / 100,
-      descu1,
-      descu2
-    }));
-  }, [form.bonificacionGeneral, form.items, descu1, descu2]);
-
-  useEffect(() => {
     if (!autoSumarDuplicados) {
       setAutoSumarDuplicados('sumar');
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
-  const handleChange = e => {
-    const { name, value, type } = e.target;
-    setForm(prevForm => ({
-      ...prevForm,
-      [name]: type === 'number' ? parseFloat(value) : value
-    }));
-  };
+  const handleChange = manejarCambioFormulario(setFormulario);
+  const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    localStorage.removeItem('ventaFormDraft');
-    const items = itemsGridRef.current.getItems();
-    const permitir_stock_negativo = itemsGridRef.current.getStockNegativo();
-    const itemsMapped = items.map((i, idx) => {
-      let idaliiva = i.vdi_idaliiva || i.producto?.idaliiva || 0;
-      if (idaliiva && typeof idaliiva === 'object') {
-        idaliiva = idaliiva.id;
-      }
-      // Si la bonificación particular es 0, usar la general
-      const bonifParticular = parseFloat(i.bonificacion) || parseFloat(i.vdi_bonifica) || 0;
-      const bonificacionFinal = bonifParticular > 0 ? bonifParticular : form.bonificacionGeneral;
-      return {
-        vdi_orden: idx + 1,
-        vdi_idsto: i.vdi_idsto || i.producto?.id,
-        vdi_idpro: i.vdi_idpro || i.proveedorId,
-        vdi_cantidad: parseFloat(i.vdi_cantidad) || 0,
-        vdi_importe: parseFloat(i.vdi_importe) || 0,
-        vdi_bonifica: bonificacionFinal,
-        vdi_detalle1: i.vdi_detalle1 || i.denominacion || '',
-        vdi_detalle2: i.vdi_detalle2 || i.unidad || '',
-        vdi_idaliiva: idaliiva,
+    if (!itemsGridRef.current) return;
+
+    try {
+      // ATENCIÓN: El payload que se envía al backend DEBE contener SOLO los campos base requeridos por el modelo físico.
+      // NUNCA incluir campos calculados como vdi_importe, vdi_importe_total, vdi_ivaitem, ven_total, iva_global, etc.
+      // La función mapearCamposItem ya filtra y elimina estos campos, pero si modificas este código, revisa DOCUMENTACION_VISTAS_VENTAS.md y Roadmap.txt.
+      // Si tienes dudas, consulta con el equipo antes de modificar la estructura del payload.
+      // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
+
+      const items = itemsGridRef.current.getItems();
+      limpiarBorrador();
+
+      const payload = {
+        ven_estado: 'CE',
+        ven_tipo: 'Venta',
+        tipo_comprobante: tipoComprobante,
+        comprobante_id: comprobanteCodigoAfip,
+        ven_numero: formulario.numero || numeroComprobante,
+        ven_sucursal: formulario.sucursalId || 1,
+        ven_fecha: formulario.fecha,
+        ven_punto: formulario.puntoVentaId || 1,
+        ven_impneto: formulario.ven_impneto || 0,
+        ven_descu1: formulario.descu1 || 0,
+        ven_descu2: formulario.descu2 || 0,
+        ven_descu3: formulario.descu3 || 0,
+        bonificacionGeneral: formulario.bonificacionGeneral || 0,
+        ven_bonificacion_general: formulario.bonificacionGeneral || 0,
+        ven_total: formulario.ven_total || 0,
+        ven_vdocomvta: formulario.ven_vdocomvta || 0,
+        ven_vdocomcob: formulario.ven_vdocomcob || 0,
+        ven_idcli: formulario.clienteId,
+        ven_idpla: formulario.plazoId,
+        ven_idvdo: formulario.vendedorId,
+        ven_copia: formulario.copia || 1,
+        items: items.map((item, idx) => mapearCamposItem(item, idx)),
+        permitir_stock_negativo: true
       };
-    });
-    const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-    const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
-    const payload = {
-      ven_estado: 'CE',
-      ven_tipo: 'Venta',
-      tipo_comprobante: tipoComprobante,
-      comprobante_id: comprobanteCodigoAfip,
-      ven_numero: form.numero || numeroComprobante,
-      ven_sucursal: form.sucursalId || 1,
-      ven_fecha: form.fecha,
-      ven_punto: form.puntoVentaId || 1,
-      ven_impneto: form.ven_impneto || 0,
-      ven_descu1: descu1 || 0,
-      ven_descu2: descu2 || 0,
-      ven_descu3: form.descu3 || 0,
-      bonificacionGeneral: form.bonificacionGeneral || 0,
-      ven_bonificacion_general: form.bonificacionGeneral || 0,
-      ven_total: form.ven_total || 0,
-      ven_vdocomvta: form.vdocomvta || 0,
-      ven_vdocomcob: form.vdocomcob || 0,
-      ven_idcli: form.clienteId,
-      ven_idpla: form.plazoId,
-      ven_idvdo: form.vendedorId,
-      ven_copia: form.copia || 1,
-      items: itemsMapped,
-      permitir_stock_negativo
-    };
-    // Log del payload antes de enviar
-    console.log('[VentaForm] Payload enviado a onSave:', payload);
-    await onSave(payload);
+
+      if (formulario.cuit) payload.ven_cuit = formulario.cuit;
+      if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
+
+      await onSave(payload);
+      onCancel();
+    } catch (error) {
+      console.error('Error al guardar venta:', error);
+    }
   };
 
   const handleCancel = () => {
-    if (window.confirm('¿Está seguro que desea cancelar? Se perderán los cambios no guardados.')) {
-      localStorage.removeItem('ventaFormDraft');
-      onCancel();
-    }
+    limpiarBorrador();
+    onCancel();
   };
 
   // Función para agregar producto a la grilla desde el buscador
@@ -262,92 +238,204 @@ const VentaForm = ({
     }
   };
 
-  // Opciones de tipo de comprobante con íconos
-  const tiposComprobante = [
-    { value: 'factura', label: 'Factura', icon: 'invoice' },
-    { value: 'venta', label: 'Venta', icon: 'document', codigo_afip: '9999' },
-    { value: 'nota_credito', label: 'Nota de Crédito', icon: 'credit' },
-    { value: 'nota_credito_interna', label: 'Nota de Crédito Interna', icon: 'credit' },
-    { value: 'nota_debito', label: 'Nota de Débito', icon: 'debit' },
-    { value: 'recibo', label: 'Recibo', icon: 'receipt' },
-  ];
-  const [tipoComprobante, setTipoComprobante] = useState(
-    tiposComprobante.find(tc => tc.value === 'presupuesto')?.value || tiposComprobante[0].value
-  );
+  // Eliminar el array tiposComprobante hardcodeado
+  const [tipoComprobante, setTipoComprobante] = useState(() => {
+    const comprobanteInicial = comprobantesVenta.find(c => 
+      (c.tipo || '').toLowerCase() === 'venta' || 
+      (c.tipo || '').toLowerCase() === 'factura'
+    );
+    return comprobanteInicial?.id || '';
+  });
 
-  // Diccionario de alícuotas
-  const ALICUOTAS = {
-    1: 0, // NO GRAVADO
-    2: 0, // EXENTO
-    3: 0, // 0%
-    4: 10.5,
-    5: 21,
-    6: 27
-  };
-
-  function calcularSubtotalLinea(item, bonifGeneral) {
-    const bonifParticular = parseFloat(item.vdi_bonifica);
-    const bonif = (!isNaN(bonifParticular) && bonifParticular > 0) 
-      ? bonifParticular 
-      : bonifGeneral;
-    const cantidad = parseFloat(item.cantidad || item.vdi_cantidad) || 0;
-    const precio = parseFloat(item.precio || item.costo || item.vdi_importe) || 0;
-    return (precio * cantidad) * (1 - bonif / 100);
-  }
-
-  const isReadOnly = readOnlyOverride || form.estado === 'Cerrado';
-
-  const getCurrentItems = () => {
-    if (itemsGridRef.current && itemsGridRef.current.getItems) {
-      return itemsGridRef.current.getItems();
-    }
-    return form.items;
-  };
+  const isReadOnly = readOnlyOverride || formulario.estado === 'Cerrado';
 
   // Función para actualizar los ítems en tiempo real desde ItemsGrid
   const handleRowsChange = (rows) => {
-    setForm(prevForm => ({
-      ...prevForm,
-      items: rows
-    }));
+    actualizarItems(rows);
   };
 
+  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  useEffect(() => {
+    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+      const mostrador = clientesConDefecto.find(c => String(c.id) === '1');
+      if (mostrador) {
+        setFormulario(prev => ({
+          ...prev,
+          clienteId: mostrador.id,
+          cuit: mostrador.cuit || '',
+          domicilio: mostrador.domicilio || '',
+          plazoId: mostrador.plazoId || mostrador.plazo || ''
+        }));
+      }
+    }
+  }, [clientesConDefecto, formulario.clienteId, setFormulario]);
+
+  // Opciones fijas para el dropdown
+  const opcionesComprobante = [
+    { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
+    { value: 'factura', label: 'Factura', tipo: 'factura' }
+  ];
+
+  // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
+  const clienteSeleccionado = clientes.find(c => String(c.id) === String(formulario.clienteId))
+    || clientesConDefecto.find(c => String(c.id) === String(formulario.clienteId))
+    || clientesConDefecto.find(c => String(c.id) === '1'); // Mostrador por defecto
+
+  // Construir objeto para validación fiscal con datos actuales del formulario
+  const clienteParaFiscal = useMemo(() => {
+    if (!clienteSeleccionado) return null;
+    return {
+      ...clienteSeleccionado,
+      cuit: formulario.cuit,
+      domicilio: formulario.domicilio,
+      razon: formulario.razon || clienteSeleccionado.razon,
+      nombre: formulario.nombre || clienteSeleccionado.nombre
+    };
+  }, [clienteSeleccionado, formulario.cuit, formulario.domicilio, formulario.razon, formulario.nombre]);
+
+  const usarFiscal = tipoComprobante === 'factura';
+  const fiscal = useComprobanteFiscal({
+    tipoComprobante: usarFiscal ? 'factura' : '',
+    cliente: usarFiscal ? clienteParaFiscal : null
+  });
+  const comprobanteLetra = usarFiscal ? fiscal.letra : 'V';
+  const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null;
+  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
+  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
+
+  if (loadingClientes) return <div>Cargando clientes...</div>;
+  if (errorClientes) return <div>Error al cargar clientes: {errorClientes}</div>;
+  if (loadingAlicuotasIVA) return <div>Cargando alícuotas de IVA...</div>;
+  if (errorAlicuotasIVA) return <div>Error al cargar alícuotas de IVA: {errorAlicuotasIVA}</div>;
+
   return (
-    <form className="w-full py-12 px-12 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
-      <h3 className="text-xl font-semibold text-gray-800 mb-6">{initialData ? (isReadOnly ? 'Ver Venta' : 'Editar Venta') : 'Nueva Venta'}</h3>
+    <form className="w-full py-6 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+      {/* Badge de letra de comprobante */}
+      {comprobanteLetra && (
+        <div style={{ position: 'absolute', top: 12, right: 18, zIndex: 10 }}>
+          <div className="w-12 h-12 flex flex-col items-center justify-center border-2 border-gray-800 shadow-md bg-white rounded-lg">
+            <span className="text-3xl font-extrabold font-mono text-gray-900 leading-none">{comprobanteLetra}</span>
+            <span className="text-[10px] font-mono text-gray-700 mt-0.5">COD {comprobanteCodigoAfip || ''}</span>
+          </div>
+        </div>
+      )}
+      {/* Mensaje de requisitos solo si es factura */}
+      {usarFiscal && comprobanteRequisitos && comprobanteRequisitos.mensaje && (
+        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 mt-2 text-sm text-blue-700 bg-blue-100 px-4 py-2 rounded shadow">
+          {comprobanteRequisitos.mensaje}
+        </div>
+      )}
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        {initialData ? (isReadOnly ? "Ver Venta" : "Editar Venta") : "Nueva Venta"}
+      </h3>
       {isReadOnly && (
         <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
           Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Cliente *</label>
-          <select
-            name="clienteId"
-            value={form.clienteId}
+      {/* CABECERA: Grid 3 filas x 4 columnas */}
+      <div className="w-full mb-4 grid grid-cols-4 grid-rows-3 gap-4">
+        {/* Fila 1 */}
+        <div className="col-start-1 row-start-1">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Cliente *</label>
+          {loadingClientes ? (
+            <div className="text-gray-500">Cargando clientes...</div>
+          ) : errorClientes ? (
+            <div className="text-red-600">{errorClientes}</div>
+          ) : (
+            <select
+              name="clienteId"
+              value={formulario.clienteId}
+              onChange={handleClienteChange}
+              className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+              required
+              disabled={isReadOnly}
+            >
+              <option value="">Seleccionar cliente...</option>
+              {clientesConDefecto.map(c => (
+                <option key={c.id} value={c.id}>{c.razon || c.nombre}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="col-start-2 row-start-1">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">
+            CUIT {usarFiscal && fiscal.camposRequeridos.cuit && '*'}
+          </label>
+          <input
+            name="cuit"
+            type="text"
+            value={formulario.cuit}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            required={usarFiscal && fiscal.camposRequeridos.cuit}
+            readOnly={isReadOnly}
+          />
+        </div>
+        <div className="col-start-3 row-start-1">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Fecha</label>
+          <input
+            name="fecha"
+            type="date"
+            value={formulario.fecha}
+            onChange={handleChange}
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            required
+            readOnly={isReadOnly}
+          />
+        </div>
+        <div className="col-start-4 row-start-1">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">
+            Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && '*'}
+          </label>
+          <input
+            name="domicilio"
+            type="text"
+            value={formulario.domicilio}
+            onChange={handleChange}
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            required={usarFiscal && fiscal.camposRequeridos.domicilio}
+            readOnly={isReadOnly}
+          />
+        </div>
+        {/* Fila 2 */}
+        <div className="col-start-1 row-start-2">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Sucursal *</label>
+          <select
+            name="sucursalId"
+            value={formulario.sucursalId}
+            onChange={handleChange}
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
             disabled={isReadOnly}
           >
-            <option value="">Seleccionar cliente...</option>
-            {clientes.map(c => (
-              <option key={c.id} value={c.id}>{c.razon || c.nombre}</option>
+            {sucursales.map(s => (
+              <option key={s.id} value={s.id}>{s.nombre}</option>
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Fecha</label>
-          <input name="fecha" type="date" value={form.fecha} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg" required readOnly={isReadOnly} />
+        <div className="col-start-2 row-start-2">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Punto de Venta *</label>
+          <select
+            name="puntoVentaId"
+            value={formulario.puntoVentaId}
+            onChange={handleChange}
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            required
+            disabled={isReadOnly}
+          >
+            {puntosVenta.map(pv => (
+              <option key={pv.id} value={pv.id}>{pv.nombre}</option>
+            ))}
+          </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Plazo *</label>
+        <div className="col-start-3 row-start-2">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Plazo *</label>
           <select
             name="plazoId"
-            value={form.plazoId}
+            value={formulario.plazoId}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
             disabled={isReadOnly}
           >
@@ -357,13 +445,13 @@ const VentaForm = ({
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Vendedor *</label>
+        <div className="col-start-4 row-start-2">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Vendedor *</label>
           <select
             name="vendedorId"
-            value={form.vendedorId}
+            value={formulario.vendedorId}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
             disabled={isReadOnly}
           >
@@ -373,74 +461,82 @@ const VentaForm = ({
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Sucursal *</label>
-          <select
-            name="sucursalId"
-            value={form.sucursalId}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-            required
+        {/* Fila 3 */}
+        <div className="col-start-1 row-start-3 flex flex-col justify-end">
+          <label className="block text-xs font-medium text-gray-500 mb-0.5">Tipo de Comprobante *</label>
+          <ComprobanteDropdown
+            opciones={opcionesComprobante}
+            value={tipoComprobante}
+            onChange={setTipoComprobante}
             disabled={isReadOnly}
-          >
-            {sucursales.map(s => (
-              <option key={s.id} value={s.id}>{s.nombre}</option>
-            ))}
-          </select>
+            className="w-full"
+          />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Punto de Venta *</label>
-          <select
-            name="puntoVentaId"
-            value={form.puntoVentaId}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-            required
-            disabled={isReadOnly}
-          >
-            {puntosVenta.map(pv => (
-              <option key={pv.id} value={pv.id}>{pv.nombre}</option>
-            ))}
-          </select>
+        <div className="col-start-2 row-start-3 flex flex-col justify-end">
+          <SumarDuplicar
+            autoSumarDuplicados={autoSumarDuplicados}
+            setAutoSumarDuplicados={setAutoSumarDuplicados}
+          />
         </div>
+        <div className="col-start-3 row-start-3"></div>
+        <div className="col-start-4 row-start-3"></div>
       </div>
 
-      {loadingComprobantes && <div className="mb-2 text-gray-500">Cargando tipos de comprobante...</div>}
-      {errorComprobantes && <div className="mb-2 text-red-600">{errorComprobantes}</div>}
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Comprobante *</label>
-        <ComprobanteDropdown
-          opciones={tiposComprobante}
-          value={tipoComprobante}
-          onChange={setTipoComprobante}
-          disabled={isReadOnly}
-        />
-      </div>
-
-      <div className="mb-4 flex gap-4 items-center">
-        <label className="text-sm font-medium text-gray-700">Acción por defecto al cargar ítem duplicado:</label>
-        <select value={autoSumarDuplicados} onChange={e => setAutoSumarDuplicados(e.target.value)} className="px-2 py-1 border rounded">
-          <option value="sumar">Sumar cantidades</option>
-          <option value="duplicar">Crear duplicado</option>
-        </select>
-        <span className="text-xs text-gray-500 ml-2">Se resaltarán en rojo los duplicados.</span>
-      </div>
-
-      <div className="mb-4 flex gap-4 items-center">
-        <label className="text-sm font-medium text-gray-700">Descuento 1 (%)</label>
-        <input type="number" min="0" max="100" step="0.01" value={descu1} onChange={e => setDescu1(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
-        <label className="text-sm font-medium text-gray-700">Descuento 2 (%)</label>
-        <input type="number" min="0" max="100" step="0.01" value={descu2} onChange={e => setDescu2(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))} className="w-20 px-2 py-1 border border-gray-300 rounded" />
-        <span className="text-xs text-gray-500 ml-2">Los descuentos se aplican de manera sucesiva sobre el subtotal neto.</span>
+      {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
+      <div className="mb-8">
+        <h4 className="text-lg font-medium text-gray-800 mb-2">Ítems de la Venta</h4>
+        <div className="flex flex-row items-center gap-2 w-full mb-2">
+          <div className="min-w-[350px] w-[350px]">
+            <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
+          </div>
+          <div className="flex flex-row items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-1 m-0">
+              Descuento 1
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={formulario.descu1}
+              onChange={(e) =>
+                setFormulario((f) => ({ ...f, descu1: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)) }))
+              }
+              className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+            />
+            <span className="text-sm">%</span>
+            <label className="text-sm font-medium text-gray-700 ml-4 m-0">Descuento 2</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={formulario.descu2}
+              onChange={(e) =>
+                setFormulario((f) => ({ ...f, descu2: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)) }))
+              }
+              className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+            />
+            <span className="text-sm">%</span>
+            <span
+              className="relative cursor-pointer"
+              onMouseEnter={() => setMostrarTooltipDescuentos(true)}
+              onMouseLeave={() => setMostrarTooltipDescuentos(false)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-gray-400 inline-block align-middle">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+              </svg>
+              {mostrarTooltipDescuentos && (
+                <span className="absolute left-6 top-1 z-20 bg-gray-800 text-white text-xs rounded px-2 py-1 shadow-lg whitespace-nowrap">
+                  Los descuentos se aplican de manera sucesiva sobre el subtotal neto.
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="mb-8">
-        <h4 className="text-lg font-medium text-gray-800 mb-4">Ítems de la Venta</h4>
-        <BuscadorProducto
-          productos={productos}
-          onSelect={handleAddItemToGrid}
-        />
         {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
         ) : errorProductos ? (
@@ -459,95 +555,38 @@ const VentaForm = ({
             stockProveedores={stockProveedores}
             autoSumarDuplicados={autoSumarDuplicados}
             setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={form.bonificacionGeneral}
-            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
+            bonificacionGeneral={formulario.bonificacionGeneral}
+            setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
             modo="venta"
             onRowsChange={handleRowsChange}
           />
         )}
       </div>
 
-      <div className="mt-8 flex justify-end">
-        <div className="inline-block bg-gray-50 rounded-lg shadow px-8 py-4 text-right">
-          <div className="flex flex-col gap-2 text-lg font-semibold text-gray-800">
-            <div className="flex gap-6 items-center">
-              <span>Subtotal s/IVA:</span>
-              <span className="text-black">${(() => {
-                const items = getCurrentItems();
-                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-                const subtotal = Array.isArray(items)
-                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
-                  : 0;
-                return Number(subtotal).toFixed(2);
-              })()}</span>
-              <span className="ml-8">Bonificación general:</span>
-              <span className="text-black">{form.bonificacionGeneral}%</span>
-              <span className="ml-8">Descuento 1:</span>
-              <span className="text-black">{descu1}%</span>
-              <span className="ml-8">Descuento 2:</span>
-              <span className="text-black">{descu2}%</span>
-            </div>
-            <div className="flex gap-6 items-center">
-              <span>Subtotal c/Descuentos:</span>
-              <span className="text-black">{(() => {
-                const items = getCurrentItems();
-                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-                const subtotalSinIva = Array.isArray(items)
-                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
-                  : 0;
-                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
-                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-                return Number(subtotalConDescuentos).toFixed(2);
-              })()}</span>
-              <span className="ml-8">IVA:</span>
-              <span className="text-black">{(() => {
-                const items = getCurrentItems();
-                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-                const subtotalSinIva = Array.isArray(items)
-                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
-                  : 0;
-                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
-                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-                let ivaTotal = 0;
-                items.forEach(item => {
-                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
-                  const aliPorc = ALICUOTAS[aliId] || 0;
-                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
-                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
-                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
-                });
-                return Number(ivaTotal).toFixed(2);
-              })()}</span>
-              <span className="ml-8">Total c/IVA:</span>
-              <span className="text-black">{(() => {
-                const items = getCurrentItems();
-                const bonifGeneral = parseFloat(form.bonificacionGeneral) || 0;
-                const subtotalSinIva = Array.isArray(items)
-                  ? items.reduce((sum, i) => sum + calcularSubtotalLinea(i, bonifGeneral), 0)
-                  : 0;
-                let subtotalConDescuentos = subtotalSinIva * (1 - descu1 / 100);
-                subtotalConDescuentos = subtotalConDescuentos * (1 - descu2 / 100);
-                let ivaTotal = 0;
-                items.forEach(item => {
-                  const aliId = item.alicuotaIva || item.vdi_idaliiva;
-                  const aliPorc = ALICUOTAS[aliId] || 0;
-                  const lineaSubtotal = calcularSubtotalLinea(item, bonifGeneral);
-                  const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
-                  const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-                  ivaTotal += itemSubtotalConDescuentos * (aliPorc / 100);
-                });
-                return (subtotalConDescuentos + ivaTotal).toFixed(2);
-              })()}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Bloque de totales y descuentos centralizado */}
+      <TotalesVisualizacion
+        bonificacionGeneral={formulario.bonificacionGeneral}
+        descu1={formulario.descu1}
+        descu2={formulario.descu2}
+        descu3={formulario.descu3}
+        totales={totales}
+      />
 
       <div className="mt-8 flex justify-end space-x-3">
-        <button type="button" onClick={handleCancel} className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors">{isReadOnly ? 'Cerrar' : 'Cancelar'}</button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+        >
+          {isReadOnly ? "Cerrar" : "Cancelar"}
+        </button>
         {!isReadOnly && (
-          <button type="submit" className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">{initialData ? 'Guardar Cambios' : 'Crear Venta'}</button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            {initialData ? "Guardar Cambios" : "Crear Venta"}
+          </button>
         )}
       </div>
     </form>

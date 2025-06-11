@@ -1,6 +1,5 @@
 import React, { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from 'react';
 import { BotonDuplicar } from './Botones';
-import { calcularPrecioUnitarioConIVA, calcularTotalLinea } from './herramientasforms/useCalculosFormulario';
 
 // Diccionario de alícuotas según la tabla proporcionada
 const ALICUOTAS = {
@@ -16,7 +15,8 @@ function getEmptyRow() {
   return { id: Date.now() + Math.random(), codigo: '', denominacion: '', unidad: '', cantidad: 1, precio: '', bonificacion: 0, producto: null };
 }
 
-const ItemsGridPresupuesto = forwardRef(({
+// Grilla para edición de productos existentes
+const ItemsGridEdicion = forwardRef(({
   productosDisponibles,
   proveedores,
   stockProveedores,
@@ -24,15 +24,34 @@ const ItemsGridPresupuesto = forwardRef(({
   setAutoSumarDuplicados,
   bonificacionGeneral,
   setBonificacionGeneral,
-  modo = 'presupuesto', // por defecto, para distinguir entre venta y presupuesto
+  modo = 'presupuesto', // solo 'presupuesto' o 'venta'
   onRowsChange,
   initialItems
 }, ref) => {
-  const esPresupuesto = modo === 'presupuesto';
-  const [rows, setRows] = useState(() => (Array.isArray(initialItems) && initialItems.length > 0 ? initialItems : [getEmptyRow()]));
-  const [stockNegativo, setStockNegativo] = useState(false);
+  const [rows, setRows] = useState(() => {
+    if (!Array.isArray(initialItems) || initialItems.length === 0) {
+      return [getEmptyRow()];
+    }
+    return initialItems.map((item, idx) => {
+      const producto = item.producto || productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id));
+      return {
+        id: item.id || Date.now() + idx,
+        codigo: item.codigo || producto?.codvta || producto?.codigo || '',
+        denominacion: item.denominacion || producto?.deno || producto?.nombre || '',
+        unidad: item.unidad || producto?.unidad || producto?.unidadmedida || '-',
+        cantidad: item.cantidad || item.vdi_cantidad || 1,
+        precio: item.precio || item.vdi_importe !== undefined ? parseFloat(item.vdi_importe) : 0,
+        bonificacion: item.bonificacion || item.vdi_bonifica || 0,
+        producto: producto,
+        proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
+        idaliiva: producto?.idaliiva || item.vdi_idaliiva || null
+      };
+    });
+  });
+
   const codigoRefs = useRef([]);
   const cantidadRefs = useRef([]);
+  const [stockNegativo, setStockNegativo] = useState(false);
   const [idxCantidadFoco, setIdxCantidadFoco] = useState(null);
 
   const getProveedoresProducto = useCallback((productoId, proveedorHabitualId = null) => {
@@ -112,52 +131,21 @@ const ItemsGridPresupuesto = forwardRef(({
     });
   }, [getProveedoresProducto, autoSumarDuplicados]);
 
-  useEffect(() => {
-    // Si el primer renglón es vacío y el input de código está vacío, enfocar automáticamente
-    if (rows.length > 0 && isRowVacio(rows[0]) && (!rows[0].codigo || rows[0].codigo === '')) {
-      if (codigoRefs.current[0]) {
-        codigoRefs.current[0].focus();
-      }
+  const handleAddItem = useCallback((producto) => {
+    if (!producto) return;
+    const proveedores = getProveedoresProducto(producto.id);
+    const proveedor = proveedores[0]; // Siempre será el proveedor habitual
+    const proveedorId = proveedor ? proveedor.id : '';
+    const cantidad = 1;
+    let totalStock = proveedor ? Number(proveedor.stock) : 0;
+    if (cantidad > totalStock) {
+      setStockNegativo(true);
+      return;
     }
-  }, [rows]);
+    addItemWithDuplicado(producto, proveedorId, cantidad);
+  }, [addItemWithDuplicado, getProveedoresProducto, setStockNegativo]);
 
-  function isRowLleno(row) {
-    return !!row.producto;
-  }
-
-  function isRowVacio(row) {
-    return !row.producto && (!row.codigo || row.codigo.trim() === '') && (!row.denominacion || row.denominacion.trim() === '');
-  }
-
-  function ensureSoloUnEditable(rows) {
-    let result = rows.slice();
-    // Eliminar vacíos intermedios
-    for (let i = result.length - 2; i >= 0; i--) {
-      if (isRowVacio(result[i])) {
-        result.splice(i, 1);
-      }
-    }
-    const sinProducto = result.filter(row => !isRowLleno(row));
-    if (sinProducto.length > 1) {
-      const lastIdx = result.map(row => !isRowLleno(row)).lastIndexOf(true);
-      if (lastIdx !== -1) {
-        result.splice(lastIdx, 1);
-      }
-    }
-    // Si hay algún renglón sin producto, no agrego otro vacío
-    if (result.some(row => !isRowLleno(row))) {
-      // Si el último renglón no tiene id, asignar uno único
-      const last = result[result.length - 1];
-      if (last && !last.id) {
-        last.id = Date.now() + Math.random();
-      }
-      return result;
-    }
-    // Solo agrego un vacío si todos los renglones tienen producto
-    result.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
-    return result;
-  }
-
+  // Handlers de edición, duplicados, enter, foco, etc. igual que ItemsGridPresupuesto
   const handleRowChange = (idx, field, value) => {
     setRows(prevRows => {
       const newRows = [...prevRows];
@@ -191,92 +179,6 @@ const ItemsGridPresupuesto = forwardRef(({
     });
   };
 
-  const handleAddItem = useCallback((producto) => {
-    if (!producto) return;
-    const proveedores = getProveedoresProducto(producto.id);
-    const proveedor = proveedores[0]; // Siempre será el proveedor habitual
-    const proveedorId = proveedor ? proveedor.id : '';
-    const cantidad = 1;
-    let totalStock = proveedor ? Number(proveedor.stock) : 0;
-    if (cantidad > totalStock) {
-      setStockNegativo(true);
-      return;
-    }
-    addItemWithDuplicado(producto, proveedorId, cantidad);
-  }, [addItemWithDuplicado, getProveedoresProducto, setStockNegativo]);
-
-  // En useImperativeHandle, expongo también getRows para acceder siempre al array actualizado
-  useImperativeHandle(ref, () => ({
-    getItems: () => {
-      const items = rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
-        const cantidad = parseFloat(row.cantidad) || 0;
-        const precio = parseFloat(row.precio) || 0;
-        const bonif = parseFloat(row.bonificacion) || 0;
-        const idaliiva = (row.producto.idaliiva && row.producto.idaliiva.id)
-          ? row.producto.idaliiva.id
-          : (typeof row.producto.idaliiva === 'number'
-              ? row.producto.idaliiva
-              : row.idaliiva || 0);
-        const margen = row.margen ?? row.vdi_margen ?? row.producto?.margen ?? 0;
-        const item = {
-          vdi_orden: idx + 1,
-          vdi_idsto: row.producto.id,
-          vdi_idpro: row.proveedorId,
-          vdi_cantidad: cantidad,
-          vdi_costo: row.vdi_costo ?? 0,
-          vdi_margen: margen,
-          vdi_bonifica: bonif,
-          vdi_detalle1: row.denominacion || '',
-          vdi_detalle2: row.unidad || '',
-          vdi_idaliiva: idaliiva,
-          alicuotaIva: undefined,
-          codigo: row.codigo || String(row.producto.id),
-          producto: row.producto,
-          proveedorId: row.proveedorId
-        };
-        return item;
-      });
-      console.log('[ItemsGrid.getItems] Ítems:', items);
-      return items;
-    },
-    getRows: () => rows,
-    handleAddItem,
-    getStockNegativo: () => stockNegativo,
-  }), [rows, handleAddItem, stockNegativo]);
-
-  // Actualizar precio automáticamente al cambiar proveedor
-  const handleProveedorChange = (idx, proveedorId) => {
-    setRows(prevRows => {
-      const newRows = prevRows.map((row, i) => {
-        if (i !== idx) return row;
-        const productoId = row.producto?.id;
-        const proveedores = getProveedoresProducto(productoId);
-        const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-        let nuevoPrecio = proveedor ? proveedor.precio : 0;
-        return { ...row, proveedorId, precio: nuevoPrecio };
-      });
-      onRowsChange?.(newRows);
-      return newRows;
-    });
-    const row = rows[idx];
-    const productoId = row.producto?.id;
-    const proveedores = getProveedoresProducto(productoId);
-    const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
-    let totalStock = proveedor ? Number(proveedor.stock) : 0;
-    const totalCantidad = rows.reduce((sum, r, i) => {
-      if (r.producto && r.producto.id === productoId && String(r.proveedorId) === String(proveedorId)) {
-        return sum + (i === idx ? Number(row.cantidad) : Number(r.cantidad));
-      }
-      return sum;
-    }, 0);
-    if (totalCantidad > totalStock) {
-      setStockNegativo(true);
-    } else {
-      setStockNegativo(false);
-    }
-  };
-
-  // handleCantidadChange: Si es presupuesto, solo setea cantidad, sin alertas ni modales
   const handleCantidadChange = (idx, cantidad) => {
     if (modo === 'presupuesto') {
       setRows(prevRows => {
@@ -308,41 +210,6 @@ const ItemsGridPresupuesto = forwardRef(({
     }
   };
 
-  // Eliminar ítem y dejar solo un renglón vacío si no quedan ítems
-  const handleDeleteRow = (idx) => {
-    setRows(rows => {
-      const newRows = rows.filter((_, i) => i !== idx);
-      onRowsChange?.(newRows);
-      if (newRows.filter(r => r.producto && r.codigo).length === 0) {
-        return [getEmptyRow()];
-      }
-      const last = newRows[newRows.length - 1];
-      if (last && last.producto) {
-        return [...newRows, getEmptyRow()];
-      }
-      return newRows;
-    });
-  };
-
-  // 1. Reescribir isDuplicado para que sea robusto y solo resalte la celda de cantidad
-  const getDuplicadoMap = () => {
-    const map = {};
-    rows.forEach((row, idx) => {
-      if (!row.producto || !row.proveedorId) return;
-      const key = `${row.producto.id}_${row.proveedorId}`;
-      if (!map[key]) map[key] = [];
-      map[key].push(idx);
-    });
-    return map;
-  };
-  const duplicadoMap = getDuplicadoMap();
-  const isDuplicado = (row, idx) => {
-    if (!row.producto || !row.proveedorId) return false;
-    const key = `${row.producto.id}_${row.proveedorId}`;
-    return duplicadoMap[key] && duplicadoMap[key].length > 1 && duplicadoMap[key].indexOf(idx) !== 0;
-  };
-
-  // Definir handleRowKeyDown si no está definida
   const handleRowKeyDown = (e, idx, field) => {
     if ((e.key === 'Enter' || (e.key === 'Tab' && field === 'bonificacion'))) {
       const row = rows[idx];
@@ -395,7 +262,6 @@ const ItemsGridPresupuesto = forwardRef(({
               e.stopPropagation();
               return;
             }
-            // Si no hay acción válida, no mover foco
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -451,7 +317,6 @@ const ItemsGridPresupuesto = forwardRef(({
     }
   };
 
-  // useEffect para mover el foco a cantidad si idxCantidadFoco está seteado
   useEffect(() => {
     if (idxCantidadFoco !== null) {
       if (cantidadRefs.current[idxCantidadFoco]) {
@@ -461,21 +326,130 @@ const ItemsGridPresupuesto = forwardRef(({
     }
   }, [rows, idxCantidadFoco]);
 
-  // Notificar al padre cuando cambian los rows
   useEffect(() => {
     if (onRowsChange) {
       onRowsChange(rows);
     }
   }, [rows, onRowsChange]);
 
+  // Helpers duplicados, vacíos, etc.
+  function isRowLleno(row) {
+    return !!row.producto;
+  }
+  function isRowVacio(row) {
+    return !row.producto && (!row.codigo || row.codigo.trim() === '') && (!row.denominacion || row.denominacion.trim() === '');
+  }
+  function ensureSoloUnEditable(rows) {
+    let result = rows.slice();
+    // Eliminar vacíos intermedios
+    for (let i = result.length - 2; i >= 0; i--) {
+      if (isRowVacio(result[i])) {
+        result.splice(i, 1);
+      }
+    }
+    const sinProducto = result.filter(row => !isRowLleno(row));
+    if (sinProducto.length > 1) {
+      const lastIdx = result.map(row => !isRowLleno(row)).lastIndexOf(true);
+      if (lastIdx !== -1) {
+        result.splice(lastIdx, 1);
+      }
+    }
+    // Si hay algún renglón sin producto, no agrego otro vacío
+    if (result.some(row => !isRowLleno(row))) {
+      // Si el último renglón no tiene id, asignar uno único
+      const last = result[result.length - 1];
+      if (last && !last.id) {
+        last.id = Date.now() + Math.random();
+      }
+      return result;
+    }
+    // Solo agrego un vacío si todos los renglones tienen producto
+    result.push({ ...getEmptyRow(), id: Date.now() + Math.random() });
+    return result;
+  }
+  function getDuplicadoMap() {
+    const map = {};
+    rows.forEach((row, idx) => {
+      if (!row.producto || !row.proveedorId) return;
+      const key = `${row.producto.id}_${row.proveedorId}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(idx);
+    });
+    return map;
+  }
+  const duplicadoMap = getDuplicadoMap();
+  function isDuplicado(row, idx) {
+    if (!row.producto || !row.proveedorId) return false;
+    const key = `${row.producto.id}_${row.proveedorId}`;
+    return duplicadoMap[key] && duplicadoMap[key].length > 1 && duplicadoMap[key].indexOf(idx) !== 0;
+  }
+
+  // Add missing handlers
+  const handleProveedorChange = (idx, proveedorId) => {
+    setRows(prevRows => {
+      const newRows = prevRows.map((row, i) => {
+        if (i !== idx) return row;
+        const productoId = row.producto?.id;
+        const proveedores = getProveedoresProducto(productoId);
+        const proveedor = proveedores.find(p => String(p.id) === String(proveedorId));
+        let nuevoPrecio = proveedor ? proveedor.precio : 0;
+        return { ...row, proveedorId, precio: nuevoPrecio };
+      });
+      onRowsChange?.(newRows);
+      return newRows;
+    });
+  };
+
+  const handleDeleteRow = (idx) => {
+    setRows(rows => {
+      const newRows = rows.filter((_, i) => i !== idx);
+      onRowsChange?.(newRows);
+      if (newRows.filter(r => r.producto && r.codigo).length === 0) {
+        return [getEmptyRow()];
+      }
+      const last = newRows[newRows.length - 1];
+      if (last && last.producto) {
+        return [...newRows, getEmptyRow()];
+      }
+      return newRows;
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    handleAddItem,
+    getItems: () => rows.filter(r => r.producto && (r.codigo || r.producto.id)).map((row, idx) => {
+      const cantidad = parseFloat(row.cantidad) || 0;
+      const precio = parseFloat(row.precio) || 0;
+      const bonif = parseFloat(row.bonificacion) || 0;
+      const idaliiva = (row.producto.idaliiva && row.producto.idaliiva.id)
+        ? row.producto.idaliiva.id
+        : (typeof row.producto.idaliiva === 'number'
+            ? row.producto.idaliiva
+            : row.idaliiva || 0);
+      const margen = row.margen ?? row.vdi_margen ?? row.producto?.margen ?? 0;
+      const item = {
+        vdi_orden: idx + 1,
+        vdi_idsto: row.producto.id,
+        vdi_idpro: row.proveedorId,
+        vdi_cantidad: cantidad,
+        vdi_costo: row.vdi_costo ?? 0,
+        vdi_margen: margen,
+        vdi_bonifica: bonif,
+        vdi_detalle1: row.denominacion || '',
+        vdi_detalle2: row.unidad || '',
+        vdi_idaliiva: idaliiva,
+        alicuotaIva: undefined,
+        codigo: row.codigo || String(row.producto.id),
+        producto: row.producto,
+        proveedorId: row.proveedorId
+      };
+      return item;
+    }),
+  }), [rows, handleAddItem]);
+
   // Render igual que ItemsGridPresupuesto
   return (
     <div className="space-y-4 w-full">
-      {esPresupuesto && (
-        <div className="mb-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
-          Este es un presupuesto. No se descuenta stock ni se valida disponibilidad. Las validaciones se aplicarán al convertir a venta.
-        </div>
-      )}
       <div className="flex items-center gap-4 mb-2">
         <div className="flex items-center gap-4 mb-2">
           <label className="text-sm font-medium text-gray-700">Bonificación general (%)</label>
@@ -644,8 +618,4 @@ const ItemsGridPresupuesto = forwardRef(({
   );
 });
 
-export function ItemsGridVenta(props, ref) {
-  return <ItemsGridPresupuesto {...props} ref={ref} />;
-}
-
-export default ItemsGridPresupuesto; 
+export default ItemsGridEdicion; 

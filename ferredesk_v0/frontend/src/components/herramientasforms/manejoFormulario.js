@@ -27,6 +27,8 @@ export const manejarCambioCliente = (setForm, clientes) => (e) => {
     clienteId: value,
     cuit: clienteSeleccionado?.cuit || '',
     domicilio: clienteSeleccionado?.domicilio || '',
-    plazoId: clienteSeleccionado?.plazoId || clienteSeleccionado?.plazo || ''
+    plazoId: clienteSeleccionado?.plazoId || clienteSeleccionado?.plazo || '',
+    descu1: clienteSeleccionado?.descu1 || 0,
+    descu2: clienteSeleccionado?.descu2 || 0
   }));
 }; 
