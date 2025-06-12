@@ -184,19 +184,32 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItemCalculado
         fields = '__all__'
-        read_only_fields = '__all__'
-        extra_kwargs = {field: {'read_only': True} for field in fields}
 
 class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaIVAAlicuota
         fields = '__all__'
-        read_only_fields = '__all__'
-        extra_kwargs = {field: {'read_only': True} for field in fields}
 
 class VentaCalculadaSerializer(serializers.ModelSerializer):
+    iva_desglose = serializers.SerializerMethodField()
+    comprobante = serializers.SerializerMethodField()
+
     class Meta:
         model = VentaCalculada
         fields = '__all__'
-        read_only_fields = '__all__'
-        extra_kwargs = {field: {'read_only': True} for field in fields} 
+
+    def get_iva_desglose(self, obj):
+        from .models import VentaIVAAlicuota
+        desglose = VentaIVAAlicuota.objects.filter(vdi_idve=obj.ven_id)
+        return {str(item.vdi_idaliiva): float(item.iva_total) for item in desglose}
+
+    def get_comprobante(self, obj):
+        return {
+            'id': obj.comprobante_id,
+            'nombre': obj.comprobante_nombre,
+            'letra': obj.comprobante_letra,
+            'tipo': obj.comprobante_tipo,
+            'codigo_afip': obj.comprobante_codigo_afip,
+            'descripcion': obj.comprobante_descripcion,
+            'activo': obj.comprobante_activo,
+        } 

@@ -2,6 +2,8 @@
 import React from 'react';
 import { BotonImprimir, BotonEliminar } from './Botones';
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
+import { useVentaDetalleAPI } from '../utils/useVentaDetalleAPI';
+import { mapearVentaDetalle } from '../components/herramientasforms/MapeoVentaDetalle';
 
 const PresupuestoVista = ({
   data,
@@ -224,33 +226,29 @@ const DatosGenerales = ({ data, clientes = [], vendedores = [], plazos = [], suc
 
 const TablaItems = ({ data }) => {
   const items = data.items || [];
+  // LOG: Mostrar todos los ítems y sus campos
+  console.log('DEBUG - Ítems recibidos en TablaItems:', items);
+  if (items.length > 0) {
+    items.forEach((item, idx) => {
+      console.log(`DEBUG - Ítem #${idx + 1}:`, item);
+    });
+  }
   // Helper para mostrar alícuota
   const getAlicuota = (item) => {
-    const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : undefined;
-    if (ali !== undefined && ALICUOTAS[ali] !== undefined) return ALICUOTAS[ali] + '%';
-    const aliKey = Object.keys(ALICUOTAS).find(k => Number(ALICUOTAS[k]) === ali);
-    if (aliKey) return ALICUOTAS[aliKey] + '%';
-    if (item.alicuota) return item.alicuota + '%';
-    if (item.iva) return item.iva + '%';
-    if (item.iva_porcentaje) return item.iva_porcentaje + '%';
-    if (item.vdi_idaliiva !== undefined) return String(item.vdi_idaliiva);
+    if (item.ali_porce !== undefined && item.ali_porce !== null) return item.ali_porce + '%';
     return '-';
   };
-  const getUnidad = (item) => item.unidad || item.vdi_detalle2 || '-';
-  const getCantidad = (item) => item.cantidad ?? item.vdi_cantidad ?? 0;
-  const getPrecioUnitario = (item) => parseFloat(item.precio ?? item.vdi_importe ?? 0);
-  const getBonificacion = (item) => parseFloat(item.bonificacion ?? item.vdi_bonifica ?? 0);
-  const getPrecioConIVA = (item) => {
-    const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : 0;
-    const aliPorc = ALICUOTAS[ali] || 0;
-    return getPrecioUnitario(item) * (1 + aliPorc / 100);
-  };
+  // Usar siempre los campos de la vista calculada
+  const getCodigo = (item) => item.codigo ?? item.vdi_idsto ?? '-';
+  const getDenominacion = (item) => item.vdi_detalle1 ?? '-';
+  const getUnidad = (item) => item.unidad ?? item.vdi_detalle2 ?? '-';
+  const getCantidad = (item) => item.vdi_cantidad ?? 0;
+  const getPrecioUnitario = (item) => parseFloat(item.vdi_importe ?? 0);
+  const getBonificacion = (item) => parseFloat(item.vdi_bonifica ?? 0);
   const getPrecioBonificado = (item) => {
-    return getPrecioConIVA(item) * (1 - getBonificacion(item) / 100);
+    return getPrecioUnitario(item) * (1 - getBonificacion(item) / 100);
   };
-  const getTotal = (item) => {
-    return getPrecioBonificado(item) * getCantidad(item);
-  };
+  const getTotal = (item) => parseFloat(item.vdi_importe_total ?? 0);
   return (
     <div className="mb-8">
       <h4 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
@@ -271,7 +269,7 @@ const TablaItems = ({ data }) => {
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Unitario</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Bonificado</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">IVA %</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">IVA</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
             </tr>
           </thead>
@@ -279,11 +277,11 @@ const TablaItems = ({ data }) => {
             {items.map((item, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 text-center">{idx + 1}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo ?? item.vdi_idsto ?? '-'}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.denominacion ?? item.vdi_detalle1 ?? '-'}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{getCodigo(item)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getDenominacion(item)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getUnidad(item)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-center">{getCantidad(item)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getPrecioConIVA(item).toFixed(2)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getPrecioUnitario(item).toFixed(2)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-center">{getBonificacion(item)}%</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium text-right">{getPrecioBonificado(item).toFixed(2)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-center">{getAlicuota(item)}</td>
@@ -389,13 +387,48 @@ const getComprobanteIconAndLabel = (tipo, nombre = '', letra = '') => {
   return { icon: <IconFactura className="w-10 h-10 text-gray-400" />, label: String(nombre) };
 };
 
+const mapearEstado = (ven_estado) => {
+  if (ven_estado === 'AB') return 'Abierto';
+  if (ven_estado === 'CE') return 'Cerrado';
+  return ven_estado || '-';
+};
+
+const armarNumeroFormateado = (letra, punto, numero) => {
+  if (letra && punto != null && numero != null) {
+    return `${letra} ${String(punto).padStart(4, '0')}-${String(numero).padStart(8, '0')}`;
+  }
+  if (punto != null && numero != null) {
+    return `${String(punto).padStart(4, '0')}-${String(numero).padStart(8, '0')}`;
+  }
+  return '-';
+};
+
 const PresupuestoVentaVista = (props) => {
   const { data, clientes = [], vendedores = [], plazos = [], sucursales = [], puntosVenta = [] } = props;
-  if (!data) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">
+  const idVenta = data?.ven_id || data?.id;
+  const { ventaCalculada, itemsCalculados, cargando, error } = useVentaDetalleAPI(idVenta);
+
+  if (cargando) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Cargando datos de la venta/presupuesto...</div>;
+  if (error) return <div className="p-8 text-red-600 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Error: {error}</div>;
+
+  // Usar el helper centralizado para mapear todos los campos
+  const datos = ventaCalculada
+    ? mapearVentaDetalle({
+        ventaCalculada,
+        itemsCalculados,
+        clientes,
+        vendedores,
+        plazos,
+        sucursales,
+        puntosVenta
+      })
+    : null;
+
+  if (!datos) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">
     <p className="text-center text-lg">No hay datos para mostrar.</p>
   </div>;
-  if (data.tipo === 'Venta') return <VentaVista {...props} clientes={clientes} vendedores={vendedores} plazos={plazos} sucursales={sucursales} puntosVenta={puntosVenta} />;
-  return <PresupuestoVista {...props} clientes={clientes} vendedores={vendedores} plazos={plazos} sucursales={sucursales} puntosVenta={puntosVenta} />;
+  if (datos.tipo === 'Venta') return <VentaVista {...props} data={datos} clientes={clientes} vendedores={vendedores} plazos={plazos} sucursales={sucursales} puntosVenta={puntosVenta} />;
+  return <PresupuestoVista {...props} data={datos} clientes={clientes} vendedores={vendedores} plazos={plazos} sucursales={sucursales} puntosVenta={puntosVenta} />;
 };
 
 export default PresupuestoVentaVista; 

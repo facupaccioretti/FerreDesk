@@ -3,7 +3,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ventas', '0013_venta_ven_cuit_venta_ven_domicilio'), # Cambia esto por el nombre real de la última migración
+        ('ventas', '0020_actualizar_vistas_calculadas'),
     ]
 
     operations = [
@@ -24,12 +24,16 @@ class Migration(migrations.Migration):
                 vdi."VDI_DETALLE1" AS vdi_detalle1,
                 vdi."VDI_DETALLE2" AS vdi_detalle2,
                 vdi."VDI_IDALIIVA" AS vdi_idaliiva,
-                (vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0)) AS vdi_importe,
-                (vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0) * vdi."VDI_CANTIDAD") AS vdi_importe_total,
-                ((vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0) * vdi."VDI_CANTIDAD") * (ali."ALI_PORCE" / 100.0)) AS vdi_ivaitem
+                sto."STO_CODVTA" AS codigo,
+                sto."STO_UNIDAD" AS unidad,
+                ali."ALI_PORCE" AS ali_porce,
+                ROUND((vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0)), 2) AS vdi_importe,
+                ROUND((vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0) * vdi."VDI_CANTIDAD"), 2) AS vdi_importe_total,
+                ROUND(((vdi."VDI_COSTO" * (1 + vdi."VDI_MARGEN" / 100.0) * (1 - vdi."VDI_BONIFICA" / 100.0) * vdi."VDI_CANTIDAD") * (ali."ALI_PORCE" / 100.0)), 2) AS vdi_ivaitem
             FROM
                 "VENTA_DETAITEM" vdi
-                JOIN "ALICUOTASIVA" ali ON vdi."VDI_IDALIIVA" = ali."ALI_ID";
+                JOIN "ALICUOTASIVA" ali ON vdi."VDI_IDALIIVA" = ali."ALI_ID"
+                JOIN "STOCK" sto ON vdi."VDI_IDSTO" = sto."STO_ID";
             """,
             reverse_sql="""
             DROP VIEW IF EXISTS "VENTADETALLEITEM_CALCULADO";
