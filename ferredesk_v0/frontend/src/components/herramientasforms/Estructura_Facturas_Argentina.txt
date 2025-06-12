@@ -1,0 +1,104 @@
+
+FACTURA A
+
+Destinatarios:
+- Contribuyentes inscriptos en IVA.
+
+Detalle obligatorio del comprobante:
+- Cantidad: Obligatorio por cada ítem.
+- Descripción del producto/servicio: Obligatorio, claro y completo.
+- Precio unitario (sin IVA): Obligatorio. El precio debe ser neto, sin impuestos.
+- Alícuota de IVA: Obligatorio. Mostrar % (21%, 10,5%, etc.).
+- Importe (neto + IVA): Obligatorio. Monto final por ítem.
+- IVA discriminado (detalle inferior): Obligatorio. Desglosado: neto gravado, IVA 21%, IVA 10,5%.
+- Subtotal, descuentos, total: Obligatorio. Puede haber descuento general o por ítem.
+- CAE / Código QR / Fecha de vencimiento del CAE: Obligatorio.
+- Datos del emisor y receptor: Obligatorio. CUIT, IVA, domicilio, etc.
+
+Descuentos por ítem:
+- Sí se pueden mostrar. Recomendable agregar columna "Descuento (%)" y "Precio final".
+
+Ejemplo de columnas:
+| Código | Descripción | Cantidad | Precio Unitario | Desc. % | Precio Unit. Bonificado | Alicuota | IVA | Total |
+Campos mapeados:
+- Código: codigo (no se cual es el campo en la vista exactamente)
+- Descripción: vdi_detalle1
+- Cantidad: vdi_cantidad
+- Precio Unitario: vdi_importe (sin IVA)
+- Desc. %: vdi_bonifica y descuento 1 y 2 (en suma) (no se cual es el campo en la vista exactamente)
+- Precio Unit. Bonificado: precio_unitario_bonificado (calculado en la vista)
+- Alicuota: ali_porce
+- IVA: iva (monto del ítem)
+- Total: vdi_importe_total (neto bonificado + IVA)
+
+
+FACTURA B
+
+Destinatarios:
+- Consumidor final, monotributistas o exentos. Emitida por responsables inscriptos.
+
+Detalle obligatorio del comprobante:
+- Cantidad: Obligatorio.
+- Descripción: Obligatorio.
+- Precio unitario (con IVA): Obligatorio.
+- Importe total del ítem (con IVA): Obligatorio.
+- NO se debe discriminar IVA por ítem.
+- NO se muestra alícuota de IVA.
+- Subtotal / descuento / total: Obligatorio.
+- CAE, QR, datos de emisor/receptor: Obligatorio.
+
+Descuentos por ítem:
+- Sí se puede mostrar. Se aplica sobre el precio con IVA.
+
+Ejemplo de columnas:
+| Código | Descripción | Cantidad | Precio Unitario (IVA incl.) | Desc. % | Precio Unit. Bonificado | Importe Final |
+Campos mapeados:
+- Código: codigo (no se cual es el campo en la vista exactamente)
+- Descripción: vdi_detalle1
+- Cantidad: vdi_cantidad
+- Precio Unitario (IVA incl.): vdi_importe (con IVA)
+- Desc. %: vdi_bonifica,  descuento 1 y 2 (en suma) (no se cual es el campo en la vista exactamente)
+- Precio Unit. Bonificado: precio_unitario_bonificado (calculado en la vista)
+- Importe Final: vdi_importe_total (bonificado * cantidad)
+
+
+FACTURA C
+
+Destinatarios:
+- Emitida por monotributistas o exentos.
+
+Detalle obligatorio del comprobante:
+- Cantidad: Obligatorio.
+- Descripción: Obligatorio.
+- Precio unitario (con IVA): Obligatorio.
+- Importe total por ítem: Obligatorio.
+- NO se discrimina IVA.
+- NO se muestra alícuota de IVA.
+- Subtotal, descuento, total: Obligatorio.
+- CAE, QR, datos del emisor/receptor: Obligatorio.
+
+Descuentos por ítem:
+- Igual que en la factura B.
+
+Ejemplo de columnas:
+| Código | Descripción | Cantidad | Precio Unitario | Desc. % | Precio Unit. Bonificado | Importe Final |
+Campos mapeados:
+- Código: codigo (no se cual es el campo en la vista exactamente)
+- Descripción: vdi_detalle1
+- Cantidad: vdi_cantidad
+- Precio Unitario: vdi_importe (con IVA)
+- Desc. %: vdi_bonifica,  descuento 1 y 2 (en suma) (no se cual es el campo en la vista exactamente)
+- Precio Unit. Bonificado: precio_unitario_bonificado (calculado en la vista)
+- Importe Final: vdi_importe_total (bonificado * cantidad)
+
+
+Tabla genérica adaptable a los tres tipos:
+| Código | Descripción | Cantidad | Precio Unitario | Desc. % | Precio Final | Alícuota IVA (solo A) | IVA (solo A) | Importe Total |
+
+Resumen:
+- Factura A: mostrar IVA y discriminación inferior.
+- Factura B y C: ocultar columnas de IVA y mostrar total con IVA incluido.
+- Descuentos: permitidos por ítem en su columna correspondiente.
+
+Campo de Descuento General:
+- Opcional. Puede agregarse en el resumen de totales.

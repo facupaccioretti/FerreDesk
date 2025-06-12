@@ -16,7 +16,7 @@ import PresupuestoForm from './PresupuestoForm';
 import VentaForm from './VentaForm';
 import ItemsGrid from './ItemsGrid';
 import { BotonEditar, BotonEliminar, BotonImprimir, BotonConvertir, BotonVerDetalle } from './Botones';
-import PresupuestoVentaVista from './PresupuestoVentaVista';
+import PresupuestoVentaVista from './herramientasforms/PresupuestoVentaVista';
 import { getCookie } from '../utils/csrf';
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from './ComprobanteIcono';
 import EditarPresupuestoForm from './EditarPresupuestoForm';

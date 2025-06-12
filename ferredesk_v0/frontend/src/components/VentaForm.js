@@ -190,32 +190,46 @@ const VentaForm = ({
       const items = itemsGridRef.current.getItems();
       limpiarBorrador();
 
+      // Determinar el tipo de comprobante como string fijo
+      // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "venta"
+      const tipoComprobanteSeleccionado = compSeleccionado && (compSeleccionado.tipo || '').toLowerCase() === 'factura' ? 'factura' : 'venta';
+      // Usar el codigo_afip del comprobante como comprobante_id
+      const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
+
+      // Definir constantes descriptivas para valores por defecto
+      // Estado cerrado para ventas
+      const ESTADO_VENTA_CERRADA = 'CE';
+      // Tipo de operación para ventas
+      const TIPO_VENTA = 'Venta';
+
+      // Construir el payload asegurando conversiones de tipo y sin valores mágicos
       const payload = {
-        ven_estado: 'CE',
-        ven_tipo: 'Venta',
-        tipo_comprobante: tipoComprobante,
-        comprobante_id: comprobanteCodigoAfip,
-        ven_numero: formulario.numero || numeroComprobante,
-        ven_sucursal: formulario.sucursalId || 1,
-        ven_fecha: formulario.fecha,
-        ven_punto: formulario.puntoVentaId || 1,
-        ven_impneto: formulario.ven_impneto || 0,
-        ven_descu1: formulario.descu1 || 0,
-        ven_descu2: formulario.descu2 || 0,
-        ven_descu3: formulario.descu3 || 0,
-        bonificacionGeneral: formulario.bonificacionGeneral || 0,
-        ven_bonificacion_general: formulario.bonificacionGeneral || 0,
-        ven_total: formulario.ven_total || 0,
-        ven_vdocomvta: formulario.ven_vdocomvta || 0,
-        ven_vdocomcob: formulario.ven_vdocomcob || 0,
-        ven_idcli: formulario.clienteId,
-        ven_idpla: formulario.plazoId,
-        ven_idvdo: formulario.vendedorId,
-        ven_copia: formulario.copia || 1,
-        items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        permitir_stock_negativo: true
+        ven_estado: ESTADO_VENTA_CERRADA, // Estado cerrado
+        ven_tipo: TIPO_VENTA, // Tipo de operación
+        tipo_comprobante: tipoComprobanteSeleccionado, // "venta" o "factura"
+        comprobante_id: comprobanteCodigoAfip, // Código AFIP del comprobante
+        ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante, // Número de comprobante
+        ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1, // Sucursal
+        ven_fecha: formulario.fecha, // Fecha
+        ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1, // Punto de venta
+        ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0, // Importe neto
+        ven_descu1: Number.parseFloat(formulario.descu1) || 0, // Descuento 1
+        ven_descu2: Number.parseFloat(formulario.descu2) || 0, // Descuento 2
+        ven_descu3: Number.parseFloat(formulario.descu3) || 0, // Descuento 3
+        bonificacionGeneral: Number.parseFloat(formulario.bonificacionGeneral) || 0, // Bonificación general
+        ven_bonificacion_general: Number.parseFloat(formulario.bonificacionGeneral) || 0, // Bonificación general (duplicado por compatibilidad)
+        ven_total: Number.parseFloat(formulario.ven_total) || 0, // Total
+        ven_vdocomvta: Number.parseFloat(formulario.ven_vdocomvta) || 0, // Valor documento venta
+        ven_vdocomcob: Number.parseFloat(formulario.ven_vdocomcob) || 0, // Valor documento cobro
+        ven_idcli: formulario.clienteId, // ID cliente
+        ven_idpla: formulario.plazoId, // ID plazo
+        ven_idvdo: formulario.vendedorId, // ID vendedor
+        ven_copia: Number.parseInt(formulario.copia, 10) || 1, // Cantidad de copias
+        items: items.map((item, idx) => mapearCamposItem(item, idx)), // Ítems mapeados
+        permitir_stock_negativo: true // Permitir stock negativo
       };
 
+      // Agregar CUIT y domicilio si existen
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
 
@@ -303,6 +317,41 @@ const VentaForm = ({
   const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
   const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
 
+  // Determinar el código AFIP y la letra a mostrar en el badge
+  let letraComprobanteMostrar = 'V';
+  let codigoAfipMostrar = '';
+  if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
+    letraComprobanteMostrar = fiscal.letra || 'A';
+    codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
+  } else if (compSeleccionado) {
+    letraComprobanteMostrar = compSeleccionado.letra || 'V';
+    codigoAfipMostrar = compSeleccionado.codigo_afip || '';
+  }
+
+  // Sincronizar comprobanteId con el tipo de comprobante seleccionado
+  useEffect(() => {
+    const comprobanteDelTipo = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === tipoComprobante);
+    if (comprobanteDelTipo && comprobanteId !== comprobanteDelTipo.id) {
+      setComprobanteId(comprobanteDelTipo.id);
+    }
+  }, [tipoComprobante, comprobantesVenta]);
+
+  // Inicializar tipoComprobante y comprobanteId para que por defecto sea 'venta'
+  useEffect(() => {
+    // Solo ejecutar en el primer render
+    if (!comprobanteId && comprobantesVenta.length > 0) {
+      const comprobanteVentaPorDefecto = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'venta');
+      if (comprobanteVentaPorDefecto) {
+        setTipoComprobante('venta');
+        setComprobanteId(comprobanteVentaPorDefecto.id);
+      } else {
+        // Si no hay comprobante de tipo venta, usar el primero disponible
+        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || 'venta');
+        setComprobanteId(comprobantesVenta[0].id);
+      }
+    }
+  }, [comprobantesVenta, comprobanteId]);
+
   if (loadingClientes) return <div>Cargando clientes...</div>;
   if (errorClientes) return <div>Error al cargar clientes: {errorClientes}</div>;
   if (loadingAlicuotasIVA) return <div>Cargando alícuotas de IVA...</div>;
@@ -311,11 +360,11 @@ const VentaForm = ({
   return (
     <form className="w-full py-6 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
       {/* Badge de letra de comprobante */}
-      {comprobanteLetra && (
+      {letraComprobanteMostrar && (
         <div style={{ position: 'absolute', top: 12, right: 18, zIndex: 10 }}>
           <div className="w-12 h-12 flex flex-col items-center justify-center border-2 border-gray-800 shadow-md bg-white rounded-lg">
-            <span className="text-3xl font-extrabold font-mono text-gray-900 leading-none">{comprobanteLetra}</span>
-            <span className="text-[10px] font-mono text-gray-700 mt-0.5">COD {comprobanteCodigoAfip || ''}</span>
+            <span className="text-3xl font-extrabold font-mono text-gray-900 leading-none">{letraComprobanteMostrar}</span>
+            <span className="text-[10px] font-mono text-gray-700 mt-0.5">COD {codigoAfipMostrar}</span>
           </div>
         </div>
       )}

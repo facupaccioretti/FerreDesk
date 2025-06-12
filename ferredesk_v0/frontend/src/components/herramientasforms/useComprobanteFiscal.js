@@ -63,6 +63,8 @@ const REQUISITOS_POR_TIPO = {
 
 export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const [letra, setLetra] = useState('');
+  const [codigoAfip, setCodigoAfip] = useState('');
+  const [comprobanteFiscal, setComprobanteFiscal] = useState(null);
   const [requisitos, setRequisitos] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -73,6 +75,8 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   // Función para limpiar estado
   const limpiarEstado = useCallback(() => {
     setLetra('');
+    setCodigoAfip('');
+    setComprobanteFiscal(null);
     setRequisitos({});
     setError(null);
     setOpcionDropdown(null);
@@ -161,7 +165,8 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
       
       const letraComprobante = data.letra || '';
       setLetra(letraComprobante);
-      
+      setCodigoAfip(data.codigo_afip || '');
+      setComprobanteFiscal(data);
       // Validar requisitos con la letra obtenida
       validarRequisitos(letraComprobante, cliente);
       
@@ -191,6 +196,8 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
 
   return { 
     letra, 
+    codigoAfip,
+    comprobanteFiscal,
     requisitos, 
     loading, 
     error, 

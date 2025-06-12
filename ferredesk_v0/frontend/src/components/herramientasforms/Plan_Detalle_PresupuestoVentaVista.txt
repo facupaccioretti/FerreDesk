@@ -1,0 +1,83 @@
+PLANIFICACIÓN DETALLADA PARA EL NUEVO DETALLE DE PRESUPUESTOVENTAVISTA
+
+Objetivo:
+Rediseñar el componente de detalle de PresupuestoVentaVista para que muestre la tabla de ítems 
+y totales según el tipo de comprobante (Factura A, B, C, Presupuesto, Venta),
+ siguiendo la normativa de ARCA.
+
+---
+
+1. ¿QUÉ HAY QUE HACER?
+
+- Implementar tres vistas diferenciadas para el detalle de ítems y totales:
+  - Vista Factura A (formal, con IVA discriminado)
+  - Vista Factura B (IVA incluido, sin discriminación)
+  - Vista Factura C (igual que B, la más simple)
+- Para comprobantes de tipo Presupuesto y Venta, usar la estructura de Factura C.
+- Mostrar totales y desgloses según corresponda a cada tipo.
+- Mostrar campos adicionales obligatorios (CAE, QR, datos emisor/receptor, etc). (Hay datos que por el momento no se va a poder mostar
+  porque el sistema todavia no esta preparado para cargar qr, no tiene configuraciond e datos del emisor, cae etc pero se va a dejar secciones de codigo preparadas para futuras implementaciones
+  Nos basamos estrictamente en SOLID donde cada nueva implementacion no tenga que cambiar lo que ya tenemos)
+- Permitir descuentos por ítem y generales. (los descuentos 1 y 2 en cascada se van a mostrar de la siguiente forma:  
+  El item tiene una bonificacion  del 5% -> se muestra en el campo Descuento % 5, ahora el item tiene una bonificacion  del 5% y 
+  ademas la venta tiene Descuento 1 del 10% y Descuento 2 del 20% se muestra en el campo Descuento % 5+10+20 (los calculos de los descuentos no funcionan asi, esto es puramente visual para el cliente))
+- Ejemplificar visualmente cada variante.
+- Dejar espacio para ideas de mejoras y dudas abiertas.
+
+---
+
+2. ¿DÓNDE LO VAMOS A HACER?
+
+- Archivo principal: PresupuestoVentaVista.js
+- Subcomponentes: crear (o refactorizar) componentes para cada tipo de vista de detalle (por ejemplo: DetalleFacturaA, DetalleFacturaB, DetalleFacturaC).
+- Helpers de mapeo y cálculo: reutilizar o adaptar lógica de mapeo y cálculos en herramientasforms (MapeoVentaDetalle.js, useCalculosFormulario.js, etc).
+- Estilos: mantener consistencia visual con el resto del sistema.
+- Documentar en este archivo y en la documentación interna del proyecto.
+
+---
+
+3. ¿CÓMO LO VAMOS A HACER?
+
+- Detectar el tipo de comprobante a partir de los datos (comprobante.tipo, comprobante.letra, comprobante.codigo_afip).
+- Renderizar el subcomponente de detalle correspondiente según el tipo:
+  - Si es Factura A: mostrar tabla con columnas de IVA, desglose inferior, etc.
+  - Si es Factura B: tabla sin IVA discriminado, totales con IVA incluido.
+  - Si es Factura C, Presupuesto o Venta: tabla simple, totales simples.
+- Ejemplo de estructura de columnas por tipo:
+
+  Factura A:
+  | Código | Descripción | Cantidad | Precio Unitario (sin IVA) | Desc. % | Alícuota IVA | Importe Neto | IVA | Total |
+
+  Factura B:
+  | Código | Descripción | Cantidad | Precio Unitario (IVA incl.) | Desc. % | Importe Final |
+
+  Factura C / Presupuesto / Venta:
+  | Código | Descripción | Cantidad | Precio Unitario | Desc. % | Total |
+
+- Ejemplo de fila para cada tipo:
+  - Factura A: 001 | Tornillo | 10 | $100,00 | 5% | 21% | $950,00 | $199,50 | $1.149,50
+  - Factura B: 001 | Tornillo | 10 | $121,00 | 5% | $1.149,50
+  - Factura C: 001 | Tornillo | 10 | $121,00 | 5% | $1.149,50
+
+- Totales y desgloses:
+  - Factura A: Subtotal, Bonif. Gral., Descuento 1, Descuento 2, IVA discriminado, Total, CAE, QR, etc. (revisar las aclaraciones de como se deben mostrar los descuentos 1 y 2 como sumas a la bonificacion en la columna)
+  - Factura B/C/Presupuesto/Venta: Subtotal, Bonif. Gral., Descuento 1, Descuento 2, Total, CAE, QR, etc.
+
+- Campos adicionales:
+  - Siempre: Datos emisor/receptor, CAE, QR, fecha de vencimiento CAE.
+
+- Ideas y mejoras:
+  - Permitir exportar a PDF.
+  - Permitir mostrar/ocultar columnas opcionales.
+  - Personalización de columnas por usuario.
+  - Visualización adaptable a dispositivos móviles.
+
+- Dudas y decisiones abiertas:
+  - ¿Cómo manejar otros tipos de comprobantes (nota de crédito, recibo, etc)? -> vamos a crear otros componentes
+  - ¿Personalización por usuario? -> por ahora no
+  - ¿Visualización móvil? -> por ahora no
+  - ¿Qué hacer si el comprobante tiene campos atípicos? -> ya lo veremos
+
+---
+
+Este archivo debe ser revisado y completado antes de avanzar a la implementación. Agregar aquí cualquier idea, requerimiento o ejemplo adicional que surja en el proceso. 

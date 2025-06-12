@@ -1,0 +1,200 @@
+PLANEACIÓN TÉCNICA PARA LA REFACTORIZACIÓN DE PRESUPUESTOVENTAVISTA (PLANTILLAS)
+
+---
+
+1. ANÁLISIS TEXTUAL Y PRECISO DE LOS CAMBIOS
+
+- El componente principal PresupuestoVentaVista dejará de distinguir entre "presupuesto" y "venta" a nivel de lógica visual. Ambos serán tratados como comprobantes y su visualización dependerá de la plantilla asignada.
+- Se implementará un sistema de plantillas (PlantillaFacturaA, PlantillaFacturaB, PlantillaFacturaC) que define cómo se muestra el detalle de cada comprobante, siguiendo la normativa de ARCA y la estructura de facturas reales.
+- El mapeo entre tipos de comprobante y plantillas será centralizado. Si se agrega un nuevo comprobante (ej: Factura M), solo se lo suma al mapeo y se reutiliza la plantilla correspondiente.
+- La tabla de ítems y los totales se adaptarán estrictamente a la plantilla seleccionada. Por ejemplo, Factura A mostrará IVA discriminado y desglose, Factura B mostrará totales con IVA incluido, Factura C (y Presupuesto/Venta) será la más simple.
+- Los descuentos 1 y 2 en cascada se mostrarán visualmente como sumas en la columna de Descuento % (ej: "5+10+20"), aunque el cálculo real sea escalonado. Esto es puramente visual para el cliente.
+- Secciones para CAE, QR, datos del emisor/receptor, etc, estarán preparadas en el código aunque no se muestren aún, siguiendo SOLID para facilitar futuras implementaciones.
+- No se modificarán hooks ni helpers de lógica compartida (useVentaDetalleAPI, mapearVentaDetalle, etc). Solo se compondrán nuevos componentes visuales.
+- El código será modular, extensible y fácil de mantener. Cada plantilla será autocontenida y solo de presentación.
+
+---
+
+2. ANÁLISIS TÉCNICO Y EJEMPLOS DE IMPLEMENTACIÓN
+
+A. Estructura general esperada:
+
+- PresupuestoVentaVista.js (componente principal)
+  - Obtiene los datos (fetch + mapeo, sin cambios)
+  - Determina la plantilla a usar según el comprobante:
+    - Por letra, tipo o código_afip (ej: 'A', 'B', 'C', 'M', 'PRESUPUESTO', 'VENTA')
+    - Ejemplo de mapeo:
+      const MAPEO_PLANTILLAS = {
+        'A': PlantillaFacturaA,
+        'M': PlantillaFacturaA,
+        'B': PlantillaFacturaB,
+        'C': PlantillaFacturaC,
+        'PRESUPUESTO': PlantillaFacturaC,
+        'VENTA': PlantillaFacturaC,
+      };
+  - Renderiza la plantilla correspondiente:
+    const Plantilla = MAPEO_PLANTILLAS[letraComprobante] || PlantillaFacturaC;
+    return <Plantilla data={datos} ...otrosProps />;
+
+B. Estructura de cada plantilla:
+
+- PlantillaFacturaA.js
+  - Tabla de ítems: Código, Descripción, Cantidad, Precio Unitario (sin IVA), Desc. %, Alícuota IVA, Importe Neto, IVA, Total
+  - Columna Descuento %: muestra bonificación y descuentos en formato "5+10+20"
+  - Totales: Subtotal, Bonif. Gral., Descuento 1, Descuento 2, IVA discriminado, Total
+  - Sección (placeholder) para CAE, QR, datos emisor/receptor
+
+- PlantillaFacturaB.js
+  - Tabla de ítems: Código, Descripción, Cantidad, Precio Unitario (IVA incl.), Desc. %, Importe Final
+  - Columna Descuento %: igual formato visual
+  - Totales: Subtotal, Bonif. Gral., Descuento 1, Descuento 2, Total
+  - Sección (placeholder) para CAE, QR, datos emisor/receptor
+
+- PlantillaFacturaC.js (incluye Presupuesto y Venta)
+  - Tabla de ítems: Código, Descripción, Cantidad, Precio Unitario, Desc. %, Total
+  - Columna Descuento %: igual formato visual
+  - Totales: Subtotal, Bonif. Gral., Descuento 1, Descuento 2, Total
+  - Sección (placeholder) para CAE, QR, datos emisor/receptor
+
+C. Ejemplo de renderizado en PresupuestoVentaVista.js:
+
+import { PlantillaFacturaA, PlantillaFacturaB, PlantillaFacturaC } from './plantillasComprobantes';
+
+const MAPEO_PLANTILLAS = {
+  'A': PlantillaFacturaA,
+  'M': PlantillaFacturaA,
+  'B': PlantillaFacturaB,
+  'C': PlantillaFacturaC,
+  'PRESUPUESTO': PlantillaFacturaC,
+  'VENTA': PlantillaFacturaC,
+};
+
+function obtenerLetraComprobante(comprobante) {
+  // lógica robusta para extraer la letra/tipo/código
+  // fallback a 'C' si no se reconoce
+}
+
+const letra = obtenerLetraComprobante(datos.comprobante);
+const Plantilla = MAPEO_PLANTILLAS[letra] || PlantillaFacturaC;
+return <Plantilla data={datos} ...otrosProps />;
+
+D. Orden y ubicación de cada cosa:
+
+- PresupuestoVentaVista.js: lógica de fetch, mapeo y selección de plantilla
+- /plantillasComprobantes/PlantillaFacturaA.js: visualización específica de Factura A
+- /plantillasComprobantes/PlantillaFacturaB.js: visualización específica de Factura B
+- /plantillasComprobantes/PlantillaFacturaC.js: visualización específica de Factura C, Presupuesto y Venta
+- Helpers visuales y estilos pueden estar en /plantillasComprobantes/helpers.js si es necesario
+
+E. Ejemplo de columna de descuentos visual:
+
+// En la tabla de ítems de cualquier plantilla
+<td>{`${item.bonificacion}%${descu1 ? '+' + descu1 : ''}${descu2 ? '+' + descu2 : ''}`}</td>
+
+F. Extensibilidad:
+
+- Para agregar un nuevo comprobante (ej: Factura M), solo se lo suma al MAPEO_PLANTILLAS y se reutiliza la plantilla correspondiente.
+- Si en el futuro se requiere una plantilla nueva, se crea un nuevo archivo y se agrega al mapeo.
+
+G. Notas finales:
+
+- No se modifica lógica de negocio ni hooks compartidos.
+- El código es abierto a extensión y cerrado a modificación (Open/Closed, SOLID).
+- Las plantillas son autocontenidas y solo de presentación.
+- El sistema es fácil de mantener y escalar.
+
+---
+
+ESTRUCTURA VISUAL Y DE DATOS DETALLADA PARA PLANTILLAS DE COMPROBANTES (A, B, C)
+
+1. ENCABEZADO PRINCIPAL (BLOQUE SUPERIOR)
+- Tres bloques horizontales bien diferenciados:
+  a) IZQUIERDA (Datos del Emisor):
+     - Nombre/Razón Social de la empresa
+     - Dirección (calle, número, localidad, provincia)
+     - CUIT
+     - Ingresos Brutos
+     - Fecha de inicio de actividades
+     - Condición frente al IVA
+  b) CENTRO (Identificación del Comprobante):
+     - Letra grande del comprobante (A, B, C)
+     - Debajo: Código de comprobante (ej: "Cód. 01 ORIGINAL")
+     - Tipo de comprobante (ej: "FACTURA") en mayúsculas
+     - Número de comprobante (formato 0000-00000001)
+     - Fecha de emisión
+  c) DERECHA (Datos del Cliente/Receptor):
+     - Nombre/Razón Social del cliente
+     - Domicilio
+     - Localidad
+     - Provincia
+     - CUIT/DNI
+     - Condición frente al IVA
+     - Teléfono (si está disponible)
+
+2. TABLA DE ÍTEMS (DETALLE DE PRODUCTOS/SERVICIOS)
+- Columnas y estructura según tipo de comprobante:
+  a) FACTURA A:
+     - Código
+     - Descripción
+     - Cantidad
+     - Precio Unitario (sin IVA)
+     - Descuento % (visual, formato "5+10+20")
+     - Alícuota IVA
+     - Importe Neto
+     - IVA
+     - Importe Total
+  b) FACTURA B:
+     - Código
+     - Descripción
+     - Cantidad
+     - Precio Unitario (IVA incluido)
+     - Descuento % (visual)
+     - Importe Final
+  c) FACTURA C (y Presupuesto/Venta):
+     - Código
+     - Descripción
+     - Cantidad
+     - Precio Unitario
+     - Descuento % (visual)
+     - Importe Total
+- La columna de descuentos es una mejora propia y debe estar alineada visualmente.
+- Títulos claros, alineados y con jerarquía visual.
+
+3. BLOQUE DE TOTALES Y DESGLOSE (DEBAJO DE LA TABLA)
+- FACTURA A:
+  - Bloque separado, alineado a la derecha.
+  - Importe Neto Gravado
+  - IVA 21% (y otras alícuotas si corresponde)
+  - Otros Impuestos Nacionales (si aplica)
+  - Importe Total
+- FACTURA B y C:
+  - Subtotal
+  - Dto./Recargo
+  - Total
+- El bloque de totales debe estar bien separado visualmente de la tabla de ítems.
+
+4. PIE DE COMPROBANTE (BLOQUE INFERIOR)
+- Por ahora, solo mostrar:
+  - CAE (si está disponible)
+  - Fecha de vencimiento del CAE (si está disponible)
+  - (Opcional) QR o leyenda de comprobante propio
+- No incluir logos de ARCA ni leyendas de AFIP hasta que se implemente facturación electrónica real.
+
+5. JERARQUÍA VISUAL Y SEPARACIÓN
+- La letra del comprobante debe ser grande y visible.
+- El tipo de comprobante y el número deben estar bien destacados.
+- Los bloques de emisor, centro y receptor deben estar bien separados y alineados.
+- El bloque de totales/desglose debe estar claramente delimitado y alineado a la derecha.
+- La tabla de ítems debe ser clara, con títulos alineados y filas alternadas si es posible.
+- El pie debe estar separado del resto del contenido.
+
+6. NOTAS Y ACLARACIONES
+- No mezclar datos del emisor y receptor en el mismo bloque.
+- No omitir el código de comprobante ni la letra.
+- Mantener la columna de descuentos como mejora visual.
+- Adaptar la estructura a la normativa, pero con mejoras propias donde aporte claridad o valor al usuario.
+
+Esta estructura debe ser la referencia visual y de datos para todas las plantillas de comprobantes del sistema, asegurando máxima claridad, profesionalismo y cumplimiento normativo, pero sin elementos de facturación electrónica hasta que corresponda.
+
+---
+

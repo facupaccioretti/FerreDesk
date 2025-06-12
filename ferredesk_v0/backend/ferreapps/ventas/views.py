@@ -298,9 +298,17 @@ class VentaRemPedViewSet(viewsets.ModelViewSet):
     queryset = VentaRemPed.objects.all()
     serializer_class = VentaRemPedSerializer
 
+class VentaDetalleItemCalculadoFilter(FilterSet):
+    vdi_idve = NumberFilter(field_name='vdi_idve')
+    class Meta:
+        model = VentaDetalleItemCalculado
+        fields = ['vdi_idve']
+
 class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaDetalleItemCalculado.objects.all()
     serializer_class = VentaDetalleItemCalculadoSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaDetalleItemCalculadoFilter
 
 class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaIVAAlicuota.objects.all()
