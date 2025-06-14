@@ -200,8 +200,19 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
 
     def get_iva_desglose(self, obj):
         from .models import VentaIVAAlicuota
-        desglose = VentaIVAAlicuota.objects.filter(vdi_idve=obj.ven_id)
-        return {str(item.vdi_idaliiva): float(item.iva_total) for item in desglose}
+        # Filtra por la venta y excluye alícuotas de 0%
+        desglose_qs = VentaIVAAlicuota.objects.filter(vdi_idve=obj.ven_id).exclude(ali_porce=0)
+        
+        # Construye el diccionario con el formato que espera el frontend
+        desglose_final = {}
+        for item in desglose_qs:
+            # La clave es el porcentaje, el valor es un objeto con neto e iva
+            porcentaje_str = str(item.ali_porce)
+            desglose_final[porcentaje_str] = {
+                "neto": item.neto_gravado,
+                "iva": item.iva_total
+            }
+        return desglose_final
 
     def get_comprobante(self, obj):
         return {

@@ -24,6 +24,8 @@ import ConversionModal from './ConversionModal';
 import ConVentaForm from './ConVentaForm';
 import Paginador from './Paginador';
 import FiltrosPresupuestos from './herramientasforms/FiltrosPresupuestos';
+import { useVentaDetalleAPI } from '../utils/useVentaDetalleAPI';
+import { formatearMoneda } from './herramientasforms/plantillasComprobantes/helpers';
 
 const mainTabs = [
   { key: 'presupuestos', label: 'Presupuestos y Ventas', closable: false },
@@ -63,6 +65,14 @@ const EstadoBadge = ({ estado }) => {
     </span>
   );
 };
+
+// Componente para mostrar el total correcto desde la vista calculada
+function CeldaTotalVenta({ idVenta }) {
+  const { ventaCalculada, cargando, error } = useVentaDetalleAPI(idVenta);
+  if (cargando) return <span className="text-gray-400">...</span>;
+  if (error) return <span className="text-red-500">Err</span>;
+  return <span>${formatearMoneda(ventaCalculada?.ven_total)}</span>;
+}
 
 const PresupuestosManager = () => {
   // Estado y fetch para el usuario
@@ -596,7 +606,7 @@ const PresupuestosManager = () => {
                           {/* Cliente */}
                           <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
                           {/* Total */}
-                          <td className="px-3 py-2 whitespace-nowrap">${p.total}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><CeldaTotalVenta idVenta={p.id} /></td>
                           {/* Acciones */}
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex gap-2">

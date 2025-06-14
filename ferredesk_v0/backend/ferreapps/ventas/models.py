@@ -157,12 +157,13 @@ class VentaDetalleItemCalculado(models.Model):
     vdi_detalle1 = models.CharField(max_length=40, null=True)
     vdi_detalle2 = models.CharField(max_length=40, null=True)
     vdi_idaliiva = models.IntegerField()
-    codigo = models.CharField(max_length=40, null=True)  # Código de venta del stock
-    unidad = models.CharField(max_length=20, null=True)  # Unidad de medida del stock
-    ali_porce = models.DecimalField(max_digits=5, decimal_places=2)  # Porcentaje de alícuota de IVA
-    vdi_importe = models.DecimalField(max_digits=13, decimal_places=2)  # Importe unitario calculado
-    vdi_importe_total = models.DecimalField(max_digits=15, decimal_places=2)  # Importe total del ítem
-    vdi_ivaitem = models.DecimalField(max_digits=15, decimal_places=2)  # IVA calculado para el ítem
+    codigo = models.CharField(max_length=40, null=True)
+    unidad = models.CharField(max_length=20, null=True)
+    ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
+    precio_unitario_lista = models.DecimalField(max_digits=13, decimal_places=2)
+    precio_unitario_bonificado = models.DecimalField(max_digits=13, decimal_places=2)
+    vdi_importe_total = models.DecimalField(max_digits=15, decimal_places=2)
+    iva = models.DecimalField(max_digits=15, decimal_places=2)
 
     class Meta:
         managed = False
@@ -171,8 +172,9 @@ class VentaDetalleItemCalculado(models.Model):
 class VentaIVAAlicuota(models.Model):
     id = models.BigIntegerField(primary_key=True)
     vdi_idve = models.IntegerField()
-    vdi_idaliiva = models.IntegerField()
-    iva_total = models.DecimalField(max_digits=15, decimal_places=3)
+    ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
+    neto_gravado = models.DecimalField(max_digits=15, decimal_places=2)
+    iva_total = models.DecimalField(max_digits=15, decimal_places=2)
 
     class Meta:
         managed = False

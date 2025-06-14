@@ -8,13 +8,13 @@
  * @param {number} descu2 - Descuento 2 general
  * @returns {string} Descuento visual
  */
-export function formatearDescuentosVisual(bonificacion, descu1, descu2) {
-  let partes = [];
-  if (bonificacion && bonificacion > 0) partes.push(bonificacion);
-  if (descu1 && descu1 > 0) partes.push(descu1);
-  if (descu2 && descu2 > 0) partes.push(descu2);
-  return partes.length > 0 ? partes.join('+') : '0';
-}
+export const formatearDescuentosVisual = (bonificacionItem) => {
+  const bonif = parseFloat(bonificacionItem);
+  if (bonif > 0) {
+    return `${bonif.toFixed(2)}%`;
+  }
+  return "0.00%";
+};
 
 /**
  * Formatea un número como moneda con dos decimales
