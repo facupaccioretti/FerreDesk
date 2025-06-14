@@ -33,10 +33,11 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   copia: 1
 });
 
-const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
-  const defaults = getInitialFormState(sucursales, puntosVenta);
-  return { ...defaults, ...data, items: Array.isArray(data?.items) ? data.items : [] };
-};
+const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => ({
+  ...getInitialFormState(sucursales, puntosVenta),
+  ...data,
+  items: Array.isArray(data?.items) ? data.items : []
+});
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -77,10 +78,19 @@ const VentaForm = ({
   autoSumarDuplicados,
   setAutoSumarDuplicados,
 }) => {
+  // Estados para manejar la carga
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(null);
+
+  // Hooks existentes movidos al inicio
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
-
   const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false);
+
+  // Estados sincronizados para comprobante y tipo
+  const [inicializado, setInicializado] = useState(false);
+  const [tipoComprobante, setTipoComprobante] = useState('');
+  const [comprobanteId, setComprobanteId] = useState('');
 
   // Función para normalizar items
   const normalizarItems = (items) => {
@@ -138,21 +148,25 @@ const VentaForm = ({
   });
 
   const itemsGridRef = useRef();
-
   const stockProveedores = getStockProveedoresMap(productos);
 
   // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
 
-  // Nuevo: id del comprobante seleccionado
-  const [comprobanteId, setComprobanteId] = useState(() => {
-    if (comprobantesVenta.length > 0) return comprobantesVenta[0].id;
-    return '';
-  });
-
-  // Obtener el comprobante seleccionado y su código AFIP
-  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-  const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
+  // Efecto de inicialización sincronizada
+  useEffect(() => {
+    if (!inicializado && comprobantesVenta.length > 0) {
+      const comprobanteVenta = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'venta');
+      if (comprobanteVenta) {
+        setTipoComprobante('venta');
+        setComprobanteId(comprobanteVenta.id);
+      } else {
+        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || 'venta');
+        setComprobanteId(comprobantesVenta[0].id);
+      }
+      setInicializado(true);
+    }
+  }, [inicializado, comprobantesVenta]);
 
   useEffect(() => {
     if (comprobantesVenta.length > 0 && !comprobanteId) {
@@ -160,18 +174,101 @@ const VentaForm = ({
     }
   }, [comprobantesVenta, comprobanteId]);
 
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados('sumar');
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados]);
+
+  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  useEffect(() => {
+    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+      const mostrador = clientesConDefecto.find(c => String(c.id) === '1');
+      if (mostrador) {
+        setFormulario(prev => ({
+          ...prev,
+          clienteId: mostrador.id,
+          cuit: mostrador.cuit || '',
+          domicilio: mostrador.domicilio || '',
+          plazoId: mostrador.plazoId || mostrador.plazo || ''
+        }));
+      }
+    }
+  }, [clientesConDefecto, formulario.clienteId, setFormulario]);
+
+  // Sincronizar comprobanteId con el tipo de comprobante seleccionado
+  useEffect(() => {
+    const comprobanteDelTipo = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === tipoComprobante);
+    if (comprobanteDelTipo && comprobanteId !== comprobanteDelTipo.id) {
+      setComprobanteId(comprobanteDelTipo.id);
+    }
+  }, [tipoComprobante, comprobantesVenta, comprobanteId]);
+
+  // Efecto para manejar el estado de carga
+  useEffect(() => {
+    if (!inicializado) {
+      setIsLoading(true);
+      return;
+    }
+    if (loadingClientes || loadingAlicuotasIVA) {
+      setIsLoading(true);
+      return;
+    }
+    if (errorClientes || errorAlicuotasIVA) {
+      setLoadingError(errorClientes || errorAlicuotasIVA);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(false);
+  }, [inicializado, loadingClientes, loadingAlicuotasIVA, errorClientes, errorAlicuotasIVA]);
+
+  // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
+  const clienteSeleccionado = clientes.find(c => String(c.id) === String(formulario.clienteId))
+    || clientesConDefecto.find(c => String(c.id) === String(formulario.clienteId))
+    || clientesConDefecto.find(c => String(c.id) === '1'); // Mostrador por defecto
+
+  // Construir objeto para validación fiscal con datos actuales del formulario
+  const clienteParaFiscal = useMemo(() => {
+    if (!clienteSeleccionado) return null;
+    return {
+      ...clienteSeleccionado,
+      cuit: formulario.cuit,
+      domicilio: formulario.domicilio,
+      razon: formulario.razon || clienteSeleccionado.razon,
+      nombre: formulario.nombre || clienteSeleccionado.nombre
+    };
+  }, [clienteSeleccionado, formulario.cuit, formulario.domicilio, formulario.razon, formulario.nombre]);
+
+  const usarFiscal = tipoComprobante === 'factura';
+  const fiscal = useComprobanteFiscal({
+    tipoComprobante: usarFiscal ? 'factura' : '',
+    cliente: usarFiscal ? clienteParaFiscal : null
+  });
+  const comprobanteLetra = usarFiscal ? fiscal.letra : 'V';
+  const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null;
+  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
+  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
+
+  // Determinar el código AFIP y la letra a mostrar en el badge
+  let letraComprobanteMostrar = 'V';
+  let codigoAfipMostrar = '';
+  if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
+    letraComprobanteMostrar = fiscal.letra || 'A';
+    codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
+  } else if (comprobantesVenta.length > 0 && comprobanteId) {
+    const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+    if (compSeleccionado) {
+      letraComprobanteMostrar = compSeleccionado.letra || 'V';
+      codigoAfipMostrar = compSeleccionado.codigo_afip || '';
+    }
+  }
+
   // Nuevo: calcular número de comprobante según comprobante seleccionado
   const numeroComprobante = (() => {
     const comp = comprobantesVenta.find(c => c.id === comprobanteId);
     if (!comp) return 1;
     return (comp.ultimo_numero || 0) + 1;
   })();
-
-  useEffect(() => {
-    if (!autoSumarDuplicados) {
-      setAutoSumarDuplicados('sumar');
-    }
-  }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleChange = manejarCambioFormulario(setFormulario);
   const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
@@ -192,9 +289,9 @@ const VentaForm = ({
 
       // Determinar el tipo de comprobante como string fijo
       // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "venta"
-      const tipoComprobanteSeleccionado = compSeleccionado && (compSeleccionado.tipo || '').toLowerCase() === 'factura' ? 'factura' : 'venta';
+      const tipoComprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId) && (comprobantesVenta.find(c => c.id === comprobanteId).tipo || '').toLowerCase() === 'factura' ? 'factura' : 'venta';
       // Usar el codigo_afip del comprobante como comprobante_id
-      const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
+      const comprobanteCodigoAfip = comprobantesVenta.find(c => c.id === comprobanteId) ? comprobantesVenta.find(c => c.id === comprobanteId).codigo_afip : '';
 
       // Definir constantes descriptivas para valores por defecto
       // Estado cerrado para ventas
@@ -252,15 +349,6 @@ const VentaForm = ({
     }
   };
 
-  // Eliminar el array tiposComprobante hardcodeado
-  const [tipoComprobante, setTipoComprobante] = useState(() => {
-    const comprobanteInicial = comprobantesVenta.find(c => 
-      (c.tipo || '').toLowerCase() === 'venta' || 
-      (c.tipo || '').toLowerCase() === 'factura'
-    );
-    return comprobanteInicial?.id || '';
-  });
-
   const isReadOnly = readOnlyOverride || formulario.estado === 'Cerrado';
 
   // Función para actualizar los ítems en tiempo real desde ItemsGrid
@@ -268,94 +356,20 @@ const VentaForm = ({
     actualizarItems(rows);
   };
 
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
-  useEffect(() => {
-    if (!formulario.clienteId && clientesConDefecto.length > 0) {
-      const mostrador = clientesConDefecto.find(c => String(c.id) === '1');
-      if (mostrador) {
-        setFormulario(prev => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || '',
-          domicilio: mostrador.domicilio || '',
-          plazoId: mostrador.plazoId || mostrador.plazo || ''
-        }));
-      }
-    }
-  }, [clientesConDefecto, formulario.clienteId, setFormulario]);
-
   // Opciones fijas para el dropdown
   const opcionesComprobante = [
     { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
     { value: 'factura', label: 'Factura', tipo: 'factura' }
   ];
 
-  // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
-  const clienteSeleccionado = clientes.find(c => String(c.id) === String(formulario.clienteId))
-    || clientesConDefecto.find(c => String(c.id) === String(formulario.clienteId))
-    || clientesConDefecto.find(c => String(c.id) === '1'); // Mostrador por defecto
-
-  // Construir objeto para validación fiscal con datos actuales del formulario
-  const clienteParaFiscal = useMemo(() => {
-    if (!clienteSeleccionado) return null;
-    return {
-      ...clienteSeleccionado,
-      cuit: formulario.cuit,
-      domicilio: formulario.domicilio,
-      razon: formulario.razon || clienteSeleccionado.razon,
-      nombre: formulario.nombre || clienteSeleccionado.nombre
-    };
-  }, [clienteSeleccionado, formulario.cuit, formulario.domicilio, formulario.razon, formulario.nombre]);
-
-  const usarFiscal = tipoComprobante === 'factura';
-  const fiscal = useComprobanteFiscal({
-    tipoComprobante: usarFiscal ? 'factura' : '',
-    cliente: usarFiscal ? clienteParaFiscal : null
-  });
-  const comprobanteLetra = usarFiscal ? fiscal.letra : 'V';
-  const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null;
-  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
-  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
-
-  // Determinar el código AFIP y la letra a mostrar en el badge
-  let letraComprobanteMostrar = 'V';
-  let codigoAfipMostrar = '';
-  if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
-    letraComprobanteMostrar = fiscal.letra || 'A';
-    codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
-  } else if (compSeleccionado) {
-    letraComprobanteMostrar = compSeleccionado.letra || 'V';
-    codigoAfipMostrar = compSeleccionado.codigo_afip || '';
+  // Renderizado condicional al final
+  if (isLoading) {
+    return <div className="text-center py-4">Cargando...</div>;
   }
 
-  // Sincronizar comprobanteId con el tipo de comprobante seleccionado
-  useEffect(() => {
-    const comprobanteDelTipo = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === tipoComprobante);
-    if (comprobanteDelTipo && comprobanteId !== comprobanteDelTipo.id) {
-      setComprobanteId(comprobanteDelTipo.id);
-    }
-  }, [tipoComprobante, comprobantesVenta]);
-
-  // Inicializar tipoComprobante y comprobanteId para que por defecto sea 'venta'
-  useEffect(() => {
-    // Solo ejecutar en el primer render
-    if (!comprobanteId && comprobantesVenta.length > 0) {
-      const comprobanteVentaPorDefecto = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'venta');
-      if (comprobanteVentaPorDefecto) {
-        setTipoComprobante('venta');
-        setComprobanteId(comprobanteVentaPorDefecto.id);
-      } else {
-        // Si no hay comprobante de tipo venta, usar el primero disponible
-        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || 'venta');
-        setComprobanteId(comprobantesVenta[0].id);
-      }
-    }
-  }, [comprobantesVenta, comprobanteId]);
-
-  if (loadingClientes) return <div>Cargando clientes...</div>;
-  if (errorClientes) return <div>Error al cargar clientes: {errorClientes}</div>;
-  if (loadingAlicuotasIVA) return <div>Cargando alícuotas de IVA...</div>;
-  if (errorAlicuotasIVA) return <div>Error al cargar alícuotas de IVA: {errorAlicuotasIVA}</div>;
+  if (loadingError) {
+    return <div className="text-center text-red-600 py-4">{loadingError}</div>;
+  }
 
   return (
     <form className="w-full py-6 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
