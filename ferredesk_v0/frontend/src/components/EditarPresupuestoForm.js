@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import BuscadorProducto from './BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from './ComprobanteDropdown';
@@ -78,7 +78,8 @@ const normalizarItems = (items, productosDisponibles = []) => {
 // Función para mapear los campos del backend a los nombres del formulario
 const mapearCamposPresupuesto = (data, productos) => {
   if (!data) return {};
-  return {
+  console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos recibidos:', data);
+  const mapeado = {
     id: data.ven_id ?? data.id ?? '',
     clienteId: data.ven_idcli ?? data.clienteId ?? '',
     cuit: data.ven_cuit ?? data.cuit ?? '',
@@ -95,7 +96,7 @@ const mapearCamposPresupuesto = (data, productos) => {
     numero: data.ven_numero ?? data.numero ?? '',
     estado: data.ven_estado ?? data.estado ?? '',
     tipo: data.ven_tipo ?? data.tipo ?? '',
-    comprobanteId: data.comprobante_id ?? data.comprobanteId ?? '',
+    comprobanteId: data.comprobante?.codigo_afip ?? data.comprobante_id ?? data.comprobanteId ?? '',
     ven_impneto: data.ven_impneto ?? 0,
     ven_total: data.ven_total ?? 0,
     ven_vdocomvta: data.ven_vdocomvta ?? 0,
@@ -103,6 +104,8 @@ const mapearCamposPresupuesto = (data, productos) => {
     copia: data.ven_copia ?? data.copia ?? 1,
     items: Array.isArray(data.items) ? normalizarItems(data.items, productos) : [],
   };
+  console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos mapeados:', mapeado);
+  return mapeado;
 };
 
 // Utilidad simple para generar un checksum estable del presupuesto original
@@ -139,6 +142,13 @@ const EditarPresupuestoForm = ({
   errorFamilias,
   errorProveedores
 }) => {
+  console.log('[EditarPresupuestoForm] Props recibidas:', {
+    initialData,
+    comprobantes,
+    tiposComprobante,
+    tipoComprobante,
+    comprobanteId: initialData?.comprobante_id
+  });
   // Hook unificado de estado con soporte de borrador
   const {
     formulario,
@@ -163,10 +173,10 @@ const EditarPresupuestoForm = ({
   const itemsGridRef = useRef();
   const [gridKey, setGridKey] = useState(Date.now());
 
-  // Handler para cambios en la grilla
-  const handleRowsChange = (rows) => {
-    actualizarItems(rows);
-  };
+  // Handler para cambios en la grilla memorizado para evitar renders infinitos
+  const handleRowsChange = useCallback((rowsActualizados) => {
+    actualizarItems(rowsActualizados)
+  }, [actualizarItems]);
 
   // Manejadores de cambios
   const handleChange = manejarCambioFormulario(setFormulario);
@@ -217,13 +227,10 @@ const EditarPresupuestoForm = ({
     e.preventDefault();
     if (!itemsGridRef.current) return;
     try {
-      // ATENCIÓN: El payload que se envía al backend DEBE contener SOLO los campos base requeridos por el modelo físico.
-      // NUNCA incluir campos calculados como vdi_importe, vdi_importe_total, vdi_ivaitem, ven_total, iva_global, etc.
-      // La función mapearCamposItem ya filtra y elimina estos campos, pero si modificas este código, revisa DOCUMENTACION_VISTAS_VENTAS.md y Roadmap.txt.
-      // Si tienes dudas, consulta con el equipo antes de modificar la estructura del payload.
-      // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
-
       const itemsToSave = itemsGridRef.current.getItems();
+      console.log('[EditarPresupuestoForm/handleSubmit] Formulario actual:', formulario);
+      console.log('[EditarPresupuestoForm/handleSubmit] ComprobanteId:', formulario.comprobanteId);
+      
       let payload = {
         ven_id: parseInt(formulario.id),
         ven_estado: formulario.estado || 'AB',
@@ -251,6 +258,7 @@ const EditarPresupuestoForm = ({
         permitir_stock_negativo: true,
         update_atomic: true
       };
+      console.log('[EditarPresupuestoForm/handleSubmit] Payload final:', payload);
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
       await onSave(payload);
@@ -439,6 +447,7 @@ const EditarPresupuestoForm = ({
               Descuento 1
             </label>
             <input
+              name="descu1"
               type="number"
               min="0"
               max="100"
@@ -450,6 +459,7 @@ const EditarPresupuestoForm = ({
             <span className="text-sm">%</span>
             <label className="text-sm font-medium text-gray-700 ml-4 m-0">Descuento 2</label>
             <input
+              name="descu2"
               type="number"
               min="0"
               max="100"

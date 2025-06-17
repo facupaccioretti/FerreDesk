@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Navbar from "./Navbar"
 import { useVentasAPI } from "../utils/useVentasAPI"
 import { useProductosAPI } from "../utils/useProductosAPI"
@@ -184,6 +184,12 @@ const PresupuestosManager = () => {
     return localStorage.getItem("presupuestosActiveTab") || "presupuestos"
   })
   const [editPresupuesto, setEditPresupuesto] = useState(null)
+
+  // Memorizar los datos para la pestaña activa para evitar re-renders innecesarios
+  const activeTabData = useMemo(() => {
+    return tabs.find((t) => t.key === activeTab)?.data || null
+  }, [tabs, activeTab])
+
   const { localidades } = useLocalidadesAPI()
   const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false)
   const [draggedTabKey, setDraggedTabKey] = useState(null)
@@ -893,7 +899,7 @@ const PresupuestosManager = () => {
                     closeTab(activeTab)
                   }}
                   onCancel={() => closeTab(activeTab)}
-                  initialData={tabs.find((t) => t.key === activeTab)?.data || editPresupuesto}
+                  initialData={activeTabData || editPresupuesto}
                   comprobantes={comprobantes}
                   tiposComprobante={tiposComprobante}
                   tipoComprobante={tipoComprobante}
@@ -917,7 +923,7 @@ const PresupuestosManager = () => {
                     closeTab(activeTab)
                   }}
                   onCancel={() => closeTab(activeTab)}
-                  initialData={tabs.find((t) => t.key === activeTab)?.data || editPresupuesto}
+                  initialData={activeTabData || editPresupuesto}
                   readOnlyOverride={false}
                   comprobantes={comprobantes}
                   tiposComprobante={tiposComprobante}

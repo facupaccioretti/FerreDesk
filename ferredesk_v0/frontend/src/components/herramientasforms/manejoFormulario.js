@@ -5,10 +5,15 @@
  */
 export const manejarCambioFormulario = (setForm) => (e) => {
   const { name, value, type } = e.target;
-  setForm(prevForm => ({
-    ...prevForm,
-    [name]: type === 'number' ? parseFloat(value) : value
-  }));
+  console.log(`[manejarCambioFormulario] Campo: ${name}, Valor: ${value}`);
+  setForm(prevForm => {
+    const newForm = {
+      ...prevForm,
+      [name]: type === 'number' ? parseFloat(value) || 0 : value
+    };
+    console.log('[manejarCambioFormulario] Nuevo estado:', newForm);
+    return newForm;
+  });
 };
 
 /**

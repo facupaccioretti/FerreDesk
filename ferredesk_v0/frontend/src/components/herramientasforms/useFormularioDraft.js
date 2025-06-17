@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 // Utilidad interna para saber si una función es válida
 const esFuncion = (fn) => typeof fn === 'function';
@@ -62,20 +62,20 @@ export const useFormularioDraft = ({
   };
 
   // Función para actualizar el formulario
-  const actualizarFormulario = (nuevosDatos) => {
+  const actualizarFormulario = useCallback((nuevosDatos) => {
     setFormulario(prev => ({
       ...prev,
       ...nuevosDatos
     }));
-  };
+  }, []);
 
   // Función para actualizar items
-  const actualizarItems = (items) => {
+  const actualizarItems = useCallback((items) => {
     setFormulario(prev => ({
       ...prev,
       items: items
     }));
-  };
+  }, []);
 
   return {
     formulario,

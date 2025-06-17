@@ -159,26 +159,3 @@ Para refactorizar `EditarPresupuestoForm.js`, seguiremos estos pasos:
 Este plan resultará en un `EditarPresupuestoForm.js` más limpio, robusto y consistente con el resto de la aplicación, eliminando código repetitivo y añadiendo la funcionalidad de guardado de borradores sin esfuerzo adicional. 
 
 
-
-Hallé la causa detrás de los “ítems que siguen mal”:
-ItemsGrid copia los initialItems sólo al montarse; si luego se corrigen los ítems (por ejemplo cuando llegan los productos y los normalizamos), la grilla ya no se entera.
-Solución implementada:
-Añadí un versionItems (contador) en EditarPresupuestoForm.
-Cuando el efecto re-normaliza los ítems (al detectar que faltaba el producto), incremento versionItems.
-Se pasa key={versionItems} a ItemsGrid. React desmonta y vuelve a montar la grilla, por lo tanto recoge la versión correcta de initialItems.
-Resultado: la grilla ahora se pinta con los precios/IVA correctos en cuanto los productos llegan.
-Tema de “Cancelar y volver”:
-limpiarBorrador() ya se llama al pulsar Cancelar.
-closeTab borra la entrada de localStorage también.
-El comportamiento observado era una consecuencia de los ítems cacheados en la grilla; al rematarlo con el reinicio de la grilla, el problema desaparece.
-</contemplator>
-<final_answer>
-La grilla ya se actualiza en tiempo real:
-Cuando los productos aún no están cargados, el formulario muestra los ítems vacíos.
-Al llegar la lista de productos, normalizamos los ítems y reiniciamos la grilla (gracias a la prop key).
-Eso garantiza que siempre veas precios y totales correctos.
-Además, al pulsar “Cancelar”:
-Se borra el borrador (limpiarBorrador).
-Se cierra la pestaña (lo que también elimina cualquier borrador residual).
-Si vuelves a editar ese presupuesto, cargas datos desde cero, sin cambios antiguos.
-Prueba el flujo completo; debería funcionar sin que queden valores corruptos ni borradores persistentes.
