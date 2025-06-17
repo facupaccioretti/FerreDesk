@@ -106,7 +106,7 @@ const PlantillaFacturaC = ({ data }) => {
                   ${formatearMoneda((item.precio_unitario_lista || 0) * alicuota)}
                 </td>
                 <td className="px-4 py-3 text-center text-sm font-medium text-orange-600">
-                  {formatearDescuentosVisual(item.vdi_bonifica)}
+                  {formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3)}
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
                   ${formatearMoneda((item.precio_unitario_bonificado || 0) * alicuota)}

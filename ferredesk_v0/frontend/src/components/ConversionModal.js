@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatearMoneda } from './herramientasforms/plantillasComprobantes/helpers';
 
 const ALICUOTAS = {
   1: 0, // NO GRAVADO
@@ -128,9 +129,9 @@ const ConversionModal = ({
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Denominación</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Costo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Unit.</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">IVA %</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -161,11 +162,11 @@ const ConversionModal = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.denominacion}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{item.cantidad}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${Number(item.precio).toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.bonificacion}%</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{getAlicuota(item)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_detalle1 || item.denominacion}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{item.vdi_cantidad || item.cantidad}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${formatearMoneda(item.precio_unitario_lista || item.precio)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_bonifica || item.bonificacion}%</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-bold">${formatearMoneda(item.vdi_importe_total)}</td>
                   </tr>
                 ))}
               </tbody>

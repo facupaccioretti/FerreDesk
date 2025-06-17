@@ -21,10 +21,13 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   const vdi_costo = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? 0);
   console.log('[mapearCamposItem] vdi_costo calculado:', vdi_costo);
 
-  // Definir los campos base permitidos
+  // Lista de campos permitidos. Se mantiene como referencia estática
+  // aunque el mapeo se hace explícitamente más abajo.
+  /* eslint-disable no-unused-vars */
   const CAMPOS_BASE = [
     'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
   ];
+  /* eslint-enable no-unused-vars */
   // Mapear solo los campos base
   const camposMapeados = {
     vdi_idve: item.vdi_idve ?? null,

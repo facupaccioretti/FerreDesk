@@ -510,3 +510,54 @@ def convertir_presupuesto_a_venta(request):
     except Exception as e:
         print("DEBUG - Error en convertir_presupuesto_a_venta:", str(e))
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+def recalcular_totales_presupuesto(presupuesto):
+    """Recalcula `ven_impneto` y `ven_total` tomando los ítems reales del presupuesto.
+
+    IMPORTANTE:
+    • Los campos **vdi_importe** o **vdi_importe_total** no existen en el modelo *VentaDetalleItem*;
+      sólo están presentes en la vista SQL de items calculados.  Por eso se reproduce aquí la
+      misma fórmula empleando los campos persistentes (`vdi_costo`, `vdi_margen`, `vdi_bonifica`, `vdi_cantidad`).
+    • En los presupuestos el IVA no se discrimina.  Por lo tanto **ven_total = ven_impneto**.
+    """
+
+    items_restantes = list(presupuesto.items.all())
+    if not items_restantes:
+        presupuesto.ven_impneto = Decimal('0.00')
+        presupuesto.ven_total = Decimal('0.00')
+        return
+
+    subtotal_bruto = Decimal('0')
+
+    for item in items_restantes:
+        # 1) Precio de lista = costo + margen
+        precio_lista = Decimal(item.vdi_costo or 0) * (Decimal('1') + Decimal(item.vdi_margen or 0) / Decimal('100'))
+
+        # 2) Aplicar bonificación particular del ítem
+        precio_bonificado = precio_lista * (Decimal('1') - Decimal(item.vdi_bonifica or 0) / Decimal('100'))
+
+        # 3) Importe total del ítem = precio bonificado por cantidad
+        importe_item = precio_bonificado * Decimal(item.vdi_cantidad or 0)
+
+        subtotal_bruto += importe_item
+
+    # ---- Aplicar bonificación/desc. generales del presupuesto ----
+    bonif_general = Decimal(presupuesto.ven_bonificacion_general or 0)
+    desc1 = Decimal(presupuesto.ven_descu1 or 0)
+    desc2 = Decimal(presupuesto.ven_descu2 or 0)
+    desc3 = Decimal(presupuesto.ven_descu3 or 0)
+
+    neto = subtotal_bruto
+
+    if bonif_general:
+        neto *= (Decimal('1') - bonif_general / Decimal('100'))
+    if desc1:
+        neto *= (Decimal('1') - desc1 / Decimal('100'))
+    if desc2:
+        neto *= (Decimal('1') - desc2 / Decimal('100'))
+    if desc3:
+        neto *= (Decimal('1') - desc3 / Decimal('100'))
+
+    # En la etapa de presupuesto no se agrega IVA
+    presupuesto.ven_impneto = neto.quantize(Decimal('0.01'))
+    presupuesto.ven_total = neto.quantize(Decimal('0.01'))

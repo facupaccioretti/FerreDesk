@@ -1,0 +1,184 @@
+# Plan de Actualización para EditarPresupuestoForm.js
+
+**Análisis y Plan Detallado para la Refactorización del Componente de Edición de Presupuestos**
+
+---
+
+## Introducción
+
+Este documento detalla el plan para actualizar el componente `EditarPresupuestoForm.js`. El objetivo es alinearlo con la arquitectura moderna y robusta ya implementada en `PresupuestoForm.js`, que sirve como nuestro formulario de referencia para la creación de presupuestos.
+
+La meta principal es refactorizar `EditarPresupuestoForm.js` para que utilice los mismos hooks personalizados (`useFormularioDraft`, `useCalculosFormulario`) y patrones de manejo de estado, pero **preservando su lógica fundamental y única**: cargar, modificar y guardar un presupuesto existente. No se trata de un simple reemplazo, sino de una adaptación inteligente.
+
+---
+
+## Sección 1: Análisis de `PresupuestoForm.js` (El Componente de Referencia)
+
+`PresupuestoForm.js` representa el estándar de cómo deben funcionar nuestros formularios. Sus características clave son:
+
+1.  **Manejo de Estado Centralizado con `useFormularioDraft`**:
+    *   **Propósito**: Este hook es el cerebro del formulario. Abstrae toda la lógica de manejo de estado, incluyendo:
+        *   **Inicialización**: Carga un borrador guardado desde `localStorage` o inicializa un estado por defecto.
+        *   **Persistencia automática**: Guarda automáticamente cualquier cambio en `localStorage`, previniendo la pérdida de datos si el usuario recarga la página.
+        *   **Limpieza**: Proporciona una función `limpiarBorrador` para eliminar el estado guardado tras un envío exitoso o cancelación.
+    *   **Referencia en el código**:
+        ```javascript
+        const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+          claveAlmacenamiento: "presupuestoFormDraft",
+          datosIniciales: initialData,
+          // ...
+        });
+        ```
+
+2.  **Cálculos Delegados a `useCalculosFormulario`**:
+    *   Toda la lógica compleja de cálculo de subtotales, aplicación de descuentos, IVA y totales generales está encapsulada en este hook. El formulario solo le pasa los ítems y los descuentos, y recibe los totales calculados. Esto mantiene el componente principal limpio y enfocado en la interfaz.
+    *   **Referencia en el código**:
+        ```javascript
+        const { totales } = useCalculosFormulario(formulario.items, { /* ... descuentos y alícuotas ... */ });
+        ```
+
+3.  **Normalización de Ítems Integrada**:
+    *   La lógica para asegurar que los ítems (ya sea de `initialData` o agregados) tengan la estructura correcta para la grilla (`ItemsGrid`) está integrada en la configuración de `useFormularioDraft` a través de la opción `normalizarItems`.
+
+4.  **Manejo de Eventos Genérico**:
+    *   Utiliza funciones de ayuda importadas como `manejarCambioFormulario` y `manejarCambioCliente`, lo que reduce el código repetitivo para los `onChange` de los inputs.
+
+---
+
+## Sección 2: Análisis Comparativo de `EditarPresupuestoForm.js` (El Componente a Refactorizar)
+
+`EditarPresupuestoForm.js` cumple su función, pero utiliza un enfoque más antiguo y manual que lo hace menos robusto y más difícil de mantener.
+
+1.  **Manejo de Estado Manual con `useState`**:
+    *   **Problema**: El componente depende de `useState` para manejar tanto el estado del formulario (`form`) como el de los ítems (`items`). Esto crea varios problemas:
+        *   No hay persistencia de datos (borradores). Si el usuario refresca la página a mitad de una edición, pierde todos los cambios.
+        *   Requiere `useEffect` para sincronizar `initialData` con el estado del formulario, lo cual es propenso a errores y añade complejidad.
+    *   **Referencia en el código**:
+        ```javascript
+        const [form, setForm] = useState(() => mapearCamposPresupuesto(initialData, productos));
+        const [items, setItems] = useState(() => form.items || []);
+        
+        useEffect(() => {
+          setForm(mapearCamposPresupuesto(initialData, productos));
+        }, [initialData, productos]);
+        ```
+
+2.  **Funciones de Mapeo y Normalización Aisladas**:
+    *   Las funciones `mapearCamposPresupuesto` y `normalizarItems` están definidas a nivel de módulo. Aunque funcionan, su lógica está fuertemente acoplada al componente y debería ser parte de la estrategia de manejo de estado (como lo hace `useFormularioDraft`).
+
+3.  **Uso incorrecto de `ItemsGrid`**:
+    *   Aunque el import parece ser `ItemsGrid`, la lógica del formulario no está completamente adaptada. El `modo` se pasa como `"edicion"`, un valor que `ItemsGrid` no reconoce explícitamente (`presupuesto` o `venta`). Esto debe corregirse a `"presupuesto"`.
+
+4.  **Lógica de `handleSubmit`**:
+    *   La construcción del `payload` es funcionalmente correcta, pero es manual y podría beneficiarse de la estructura que provee el estado `formulario` de `useFormularioDraft`.
+
+---
+
+## Sección 3: Plan de Acción Detallado (Paso a Paso)
+
+Para refactorizar `EditarPresupuestoForm.js`, seguiremos estos pasos:
+
+**Paso 1: Reemplazar `useState` con `useFormularioDraft`**
+
+1.  **Importar el hook**:
+    ```javascript
+    import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
+    ```
+
+2.  **Eliminar los `useState` y `useEffect` manuales**:
+    *   Quitar `const [form, setForm] = useState(...)`.
+    *   Quitar `const [items, setItems] = useState(...)`.
+    *   Quitar los `useEffect` que sincronizan el estado con `initialData`.
+
+3.  **Instanciar `useFormularioDraft`**:
+    *   El hook se configurará para recibir `initialData` y usar una clave de almacenamiento dinámica para que cada presupuesto en edición tenga su propio borrador.
+    *   La lógica de `mapearCamposPresupuesto` se moverá a la función `combinarConValoresPorDefecto`.
+
+    ```javascript
+    // Eliminar la función mapearCamposPresupuesto del scope del módulo
+    
+    // Dentro del componente:
+    const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+      // Clave única para cada presupuesto en edición
+      claveAlmacenamiento: `presupuestoEditDraft_${initialData.ven_id}`, 
+      datosIniciales: initialData,
+      // La lógica de mapeo ahora vive aquí
+      combinarConValoresPorDefecto: (data) => {
+        if (!data) return {};
+        // Reutilizar la lógica de la vieja función 'mapearCamposPresupuesto'
+        return {
+          id: data.ven_id ?? data.id ?? '',
+          clienteId: data.ven_idcli ?? '',
+          cuit: data.ven_cuit ?? '',
+          // ... resto de los campos ...
+          items: Array.isArray(data.items) ? data.items : [], // Los items se normalizarán por separado
+        };
+      },
+      // La lógica de normalización también se integra
+      normalizarItems: (items) => {
+        if (!Array.isArray(items)) return [];
+        return items.map((item, idx) => {
+          // ... lógica de la vieja función normalizarItems ...
+        });
+      },
+      parametrosPorDefecto: [productos] // Pasar productos para la normalización
+    });
+    ```
+
+**Paso 2: Conectar los Componentes al Nuevo Estado**
+
+1.  **Inputs del formulario**:
+    *   Todos los `value` de los inputs (ej: `form.clienteId`) ahora serán `formulario.clienteId`.
+    *   Los `onChange` usarán `setFormulario` o el `manejarCambioFormulario` importado.
+    
+2.  **Grilla de Items (`ItemsGrid`)**:
+    *   El prop `initialItems` debe recibir `formulario.items`.
+    *   El prop `onRowsChange` debe apuntar a `actualizarItems`.
+    *   El prop `modo` debe ser `"presupuesto"`.
+    *   Las referencias a `form.bonificacionGeneral` deben cambiar a `formulario.bonificacionGeneral`.
+    *   El `setBonificacionGeneral` debe usar `setFormulario`:
+        ```javascript
+        setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+        ```
+
+**Paso 3: Actualizar `handleSubmit` y `handleCancel`**
+
+1.  **`handleSubmit`**:
+    *   La lógica de crear el `payload` es casi la misma, pero ahora tomará los datos de `formulario` en lugar de `form`.
+    *   Al final del `try`, se debe llamar a `limpiarBorrador()`.
+
+2.  **`handleCancel`**:
+    *   Debe llamar a `limpiarBorrador()` antes de `onCancel()`.
+
+**Paso 4: Limpieza Final**
+
+1.  Eliminar las funciones `mapearCamposPresupuesto` y `normalizarItems` del ámbito del módulo, ya que su lógica ahora está dentro de `useFormularioDraft`.
+2.  Eliminar la importación de `useEffect` si ya no se usa.
+3.  Revisar que todas las referencias al antiguo estado `form` hayan sido reemplazadas por `formulario`.
+
+Este plan resultará en un `EditarPresupuestoForm.js` más limpio, robusto y consistente con el resto de la aplicación, eliminando código repetitivo y añadiendo la funcionalidad de guardado de borradores sin esfuerzo adicional. 
+
+
+
+Hallé la causa detrás de los “ítems que siguen mal”:
+ItemsGrid copia los initialItems sólo al montarse; si luego se corrigen los ítems (por ejemplo cuando llegan los productos y los normalizamos), la grilla ya no se entera.
+Solución implementada:
+Añadí un versionItems (contador) en EditarPresupuestoForm.
+Cuando el efecto re-normaliza los ítems (al detectar que faltaba el producto), incremento versionItems.
+Se pasa key={versionItems} a ItemsGrid. React desmonta y vuelve a montar la grilla, por lo tanto recoge la versión correcta de initialItems.
+Resultado: la grilla ahora se pinta con los precios/IVA correctos en cuanto los productos llegan.
+Tema de “Cancelar y volver”:
+limpiarBorrador() ya se llama al pulsar Cancelar.
+closeTab borra la entrada de localStorage también.
+El comportamiento observado era una consecuencia de los ítems cacheados en la grilla; al rematarlo con el reinicio de la grilla, el problema desaparece.
+</contemplator>
+<final_answer>
+La grilla ya se actualiza en tiempo real:
+Cuando los productos aún no están cargados, el formulario muestra los ítems vacíos.
+Al llegar la lista de productos, normalizamos los ítems y reiniciamos la grilla (gracias a la prop key).
+Eso garantiza que siempre veas precios y totales correctos.
+Además, al pulsar “Cancelar”:
+Se borra el borrador (limpiarBorrador).
+Se cierra la pestaña (lo que también elimina cualquier borrador residual).
+Si vuelves a editar ese presupuesto, cargas datos desde cero, sin cambios antiguos.
+Prueba el flujo completo; debería funcionar sin que queden valores corruptos ni borradores persistentes.

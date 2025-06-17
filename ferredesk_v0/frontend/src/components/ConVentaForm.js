@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import ItemsGridEdicion from './ItemsGridEdicion';
+import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from './BuscadorProducto';
 import ComprobanteDropdown from './ComprobanteDropdown';
 import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
@@ -59,17 +59,42 @@ function normalizarItems(itemsSeleccionados, productosDisponibles = []) {
   if (!Array.isArray(itemsSeleccionados)) return [];
   return itemsSeleccionados.map((item, idx) => {
     let prod = item.producto || productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id));
-    return {
+
+    // Determinar margen priorizando el de la línea distinta de 0
+    const margen = (item.vdi_margen && Number(item.vdi_margen) !== 0)
+                    ? item.vdi_margen
+                    : (item.margen && Number(item.margen) !== 0)
+                    ? item.margen
+                    : (prod?.margen ?? 0);
+
+    let precioBase = item.precio || item.costo || item.precio_unitario_lista || item.vdi_importe || 0;
+    console.debug('[ConVentaForm/normalizarItems] Márgenes/Precio preliminar', { idx, margen, precioBase });
+    if (!precioBase || Number(precioBase) === 0) {
+      const costo = item.vdi_costo ?? item.costo ?? prod?.costo ?? 0;
+      precioBase = parseFloat(costo) * (1 + parseFloat(margen) / 100);
+    }
+
+    // Asegurar que idaliiva sea numérico
+    const idaliivaRaw = prod?.idaliiva ?? item.vdi_idaliiva ?? null;
+    const idaliiva = (idaliivaRaw && typeof idaliivaRaw === 'object') ? idaliivaRaw.id : idaliivaRaw;
+
+    const obj = {
       id: item.id || idx + 1,
       producto: prod,
       codigo: item.codigo || prod?.codvta || prod?.codigo || '',
       denominacion: item.denominacion || prod?.deno || prod?.nombre || '',
       unidad: item.unidad || prod?.unidad || prod?.unidadmedida || '-',
       cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: item.precio || item.costo || item.vdi_importe || 0,
+      precio: precioBase,
+      vdi_costo: item.vdi_costo ?? item.costo ?? 0,
+      margen: margen,
       bonificacion: item.bonificacion || item.vdi_bonifica || 0,
       proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
+      idaliiva: idaliiva,
     };
+
+    console.debug('[ConVentaForm/normalizarItems] Ítem normalizado:', { idx, obj });
+    return obj;
   });
 }
 
@@ -107,7 +132,12 @@ const ConVentaForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
+  // Estados de carga centralizados
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(null);
+
   const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false);
+  const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
 
   // Usar el hook useFormularioDraft
   const { 
@@ -116,11 +146,12 @@ const ConVentaForm = ({
     limpiarBorrador, 
     actualizarItems 
   } = useFormularioDraft({
-    claveAlmacenamiento: 'conVentaFormDraft',
+    claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
     datosIniciales: getInitialFormState(presupuestoOrigen, itemsSeleccionados, sucursales, puntosVenta, productos),
     combinarConValoresPorDefecto: (data) => ({ ...data }),
     parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItems(items, productos)
+    normalizarItems: (items) => normalizarItems(items, productos),
+    validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
   });
 
   const alicuotasMap = useMemo(() => (
@@ -142,6 +173,19 @@ const ConVentaForm = ({
 
   const itemsGridRef = useRef();
 
+  // Efecto para re-normalizar items cuando los productos llegan tarde
+  useEffect(() => {
+    if (!Array.isArray(productos) || productos.length === 0) return;
+    if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
+
+    const faltanProductos = formulario.items.some(it => !it.producto);
+    if (faltanProductos) {
+      const itemsNormalizados = normalizarItems(formulario.items, productos);
+      actualizarItems(itemsNormalizados);
+      setGridKey(Date.now());
+    }
+  }, [productos]);
+
   const stockProveedores = useMemo(() => {
     const map = {};
     productos?.forEach(p => {
@@ -150,28 +194,67 @@ const ConVentaForm = ({
     return map;
   }, [productos]);
 
-  // Comprobantes de venta
+  // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
-  const [comprobanteId, setComprobanteId] = useState(() => {
-    if (comprobantesVenta.length > 0) return comprobantesVenta[0].id;
-    return '';
-  });
 
-  // Obtener el comprobante seleccionado y su código AFIP
-  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-  const comprobanteCodigoAfip = compSeleccionado ? compSeleccionado.codigo_afip : '';
+  // Estado sincronizado para comprobante seleccionado
+  const [comprobanteId, setComprobanteId] = useState('');
 
+  // Estado de tipo de comprobante como string ('venta' | 'factura') y flag de inicialización
+  const [tipoComprobante, setTipoComprobante] = useState('');
+  const [inicializado, setInicializado] = useState(false);
+
+  // Efecto de inicialización sincronizada (similar a VentaForm)
   useEffect(() => {
-    if (comprobantesVenta.length > 0 && !comprobanteId) {
-      setComprobanteId(comprobantesVenta[0].id);
+    if (!inicializado && comprobantesVenta.length > 0) {
+      const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
+      if (compFactura) {
+        setTipoComprobante('factura');
+        setComprobanteId(compFactura.id);
+      } else {
+        setTipoComprobante('venta');
+        setComprobanteId(comprobantesVenta[0].id);
+      }
+      setInicializado(true);
     }
-  }, [comprobantesVenta, comprobanteId]);
+  }, [inicializado, comprobantesVenta]);
 
-  const numeroComprobante = (() => {
+  // Mantener comprobanteId sincronizado con tipoComprobante (segunda fase)
+  useEffect(() => {
+    const compDelTipo = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === tipoComprobante);
+    if (compDelTipo && compDelTipo.id !== comprobanteId) {
+      setComprobanteId(compDelTipo.id);
+    }
+  }, [tipoComprobante, comprobantesVenta, comprobanteId]);
+
+  // Obtener comprobante seleccionado y su código AFIP
+  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+  const comprobanteCodigoAfip = compSeleccionado?.codigo_afip || '';
+
+  // Calcular el número de comprobante basado en el último número del comprobante seleccionado
+  const numeroComprobante = useMemo(() => {
     const comp = comprobantesVenta.find(c => c.id === comprobanteId);
     if (!comp) return 1;
     return (comp.ultimo_numero || 0) + 1;
-  })();
+  }, [comprobantesVenta, comprobanteId]);
+
+  // Efecto para manejar estado de carga centralizado
+  useEffect(() => {
+    if (!inicializado) {
+      setIsLoading(true);
+      return;
+    }
+    if (loadingClientes || loadingAlicuotasIVA) {
+      setIsLoading(true);
+      return;
+    }
+    if (errorClientes || errorAlicuotasIVA) {
+      setLoadingError(errorClientes || errorAlicuotasIVA);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(false);
+  }, [inicializado, loadingClientes, loadingAlicuotasIVA, errorClientes, errorAlicuotasIVA]);
 
   // Guardar los ids seleccionados originales del modal
   const [idsSeleccionados, setIdsSeleccionados] = useState(() => Array.isArray(itemsSeleccionadosIds)
@@ -210,12 +293,16 @@ const ConVentaForm = ({
       const items = itemsGridRef.current.getItems();
       limpiarBorrador();
 
+      // Constantes descriptivas
+      const ESTADO_VENTA_CERRADA = 'CE';
+      const TIPO_VENTA = 'Venta';
+
       const payload = {
-        ven_estado: 'CE',
-        ven_tipo: 'Venta',
+        ven_estado: ESTADO_VENTA_CERRADA,
+        ven_tipo: TIPO_VENTA,
         tipo_comprobante: tipoComprobante,
         comprobante_id: comprobanteCodigoAfip,
-        ven_numero: formulario.numero || numeroComprobante,
+        ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
         ven_sucursal: formulario.sucursalId || 1,
         ven_fecha: formulario.fecha,
         ven_punto: formulario.puntoVentaId || 1,
@@ -266,14 +353,6 @@ const ConVentaForm = ({
     { value: 'factura', label: 'Factura', tipo: 'factura' }
   ];
 
-  const [tipoComprobante, setTipoComprobante] = useState(() => {
-    const comprobanteInicial = comprobantesVenta.find(c => 
-      (c.tipo || '').toLowerCase() === 'venta' || 
-      (c.tipo || '').toLowerCase() === 'factura'
-    );
-    return comprobanteInicial?.id || '';
-  });
-
   const isReadOnly = formulario.estado === 'Cerrado';
 
   // Función para actualizar los ítems en tiempo real desde ItemsGrid
@@ -308,10 +387,14 @@ const ConVentaForm = ({
   const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
   const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
 
-  if (loadingClientes) return <div>Cargando clientes...</div>;
-  if (errorClientes) return <div>Error al cargar clientes: {errorClientes}</div>;
-  if (loadingAlicuotasIVA) return <div>Cargando alícuotas de IVA...</div>;
-  if (errorAlicuotasIVA) return <div>Error al cargar alícuotas de IVA: {errorAlicuotasIVA}</div>;
+  // Renderizado condicional centralizado
+  if (isLoading) {
+    return <div className="text-center py-4">Cargando...</div>;
+  }
+
+  if (loadingError) {
+    return <div className="text-center text-red-600 py-4">{loadingError}</div>;
+  }
 
   return (
     <form className="w-full py-6 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
@@ -553,7 +636,8 @@ const ConVentaForm = ({
         ) : errorAlicuotas ? (
           <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
         ) : (
-          <ItemsGridEdicion
+          <ItemsGrid
+            key={gridKey}
             ref={itemsGridRef}
             productosDisponibles={productos}
             proveedores={proveedores}

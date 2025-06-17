@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import Paginador from './Paginador';
 
 const VendedoresTable = ({ vendedores, onEdit, onDelete, search, setSearch }) => {
   const filtered = vendedores.filter((v) =>
     v.nombre.toLowerCase().includes(search.toLowerCase()) ||
     (v.dni || '').toLowerCase().includes(search.toLowerCase())
   );
+
+  // ------------------------------ Paginación ------------------------------
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [itemsPorPagina, setItemsPorPagina] = useState(10);
+
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [search, vendedores]);
+
+  const indiceInicio = (paginaActual - 1) * itemsPorPagina;
+  const vendedoresPagina = filtered.slice(indiceInicio, indiceInicio + itemsPorPagina);
 
   return (
     <div className="flex flex-col h-full">
@@ -30,7 +42,7 @@ const VendedoresTable = ({ vendedores, onEdit, onDelete, search, setSearch }) =>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {filtered.map(v => (
+            {vendedoresPagina.map(v => (
               <tr key={v.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">{v.nombre}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-gray-600">{v.dni}</td>
@@ -63,6 +75,17 @@ const VendedoresTable = ({ vendedores, onEdit, onDelete, search, setSearch }) =>
             ))}
           </tbody>
         </table>
+        {/* Paginador */}
+        <Paginador
+          totalItems={filtered.length}
+          itemsPerPage={itemsPorPagina}
+          currentPage={paginaActual}
+          onPageChange={setPaginaActual}
+          onItemsPerPageChange={(n) => {
+            setItemsPorPagina(n);
+            setPaginaActual(1);
+          }}
+        />
       </div>
     </div>
   );

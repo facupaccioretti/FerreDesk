@@ -8,6 +8,7 @@ from ferreapps.productos.models import AlicuotaIVA
 from decimal import Decimal
 from ferreapps.clientes.models import Cliente
 from ferreapps.clientes.models import Vendedor
+from datetime import date, timedelta
 
 class ComprobanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -96,6 +97,18 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
+        # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
+        dias_validez = self.initial_data.get('dias_validez')
+        if dias_validez is not None:
+            try:
+                dias_validez = int(dias_validez)
+            except Exception:
+                dias_validez = None
+        if dias_validez and dias_validez > 0:
+            fecha_base = validated_data.get('ven_fecha')
+            if fecha_base is None:
+                fecha_base = date.today()
+            validated_data['ven_vence'] = fecha_base + timedelta(days=dias_validez)
         if not items_data:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
         
@@ -145,6 +158,17 @@ class VentaSerializer(serializers.ModelSerializer):
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
         items_data = self.initial_data.get('items', [])
+        # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
+        dias_validez = self.initial_data.get('dias_validez')
+        if dias_validez is not None:
+            try:
+                dias_validez = int(dias_validez)
+            except Exception:
+                dias_validez = None
+        if dias_validez and dias_validez > 0:
+            fecha_base = validated_data.get('ven_fecha', instance.ven_fecha or date.today())
+            instance.ven_vence = fecha_base + timedelta(days=dias_validez)
+            instance.save(update_fields=['ven_vence'])
         if items_data:
             instance.items.all().delete()
             for item_data in items_data:

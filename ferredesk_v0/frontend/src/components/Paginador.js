@@ -72,7 +72,7 @@ const Paginador = ({
   currentPage,
   onPageChange,
   onItemsPerPageChange,
-  opcionesItemsPorPagina = [10, 20, 30, 40, 50],
+  opcionesItemsPorPagina = [1, 10, 20, 30, 40, 50],
 }) => {
   const totalPages = Math.ceil(totalItems / itemsPerPage)
   if (totalItems === 0) return null

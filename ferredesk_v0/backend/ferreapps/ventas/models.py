@@ -74,6 +74,10 @@ class Venta(models.Model):
     ven_qr = models.BinaryField(db_column='VEN_QR', null=True, blank=True)
     ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
+    # Fecha hasta la cual el presupuesto/venta es válido.  En presupuestos se
+    # usa para determinar su caducidad automática.
+    ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)
+
     class Meta:
         db_table = 'VENTA'
         unique_together = ['ven_punto', 'ven_numero', 'comprobante']

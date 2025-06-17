@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import BuscadorProducto from './BuscadorProducto';
-import ItemsGridEdicion from './ItemsGridEdicion';
+import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from './ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioCliente } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
+import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -19,23 +20,58 @@ const getStockProveedoresMap = (productos) => {
 };
 
 const normalizarItems = (items, productosDisponibles = []) => {
+  // Alineado con la lógica de ConVentaForm para garantizar coherencia de datos
   if (!Array.isArray(items)) return [];
   return items.map((item, idx) => {
-    let prod = item.producto || productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id));
-    return {
+    const prod = item.producto || productosDisponibles.find(p => String(p.id) === String(item.vdi_idsto || item.idSto || item.idsto || item.id));
+
+    // DEBUG LOG: estado crudo del ítem
+    console.debug('[EditarPresupuestoForm/normalizarItems] Ítem crudo:', { idx, item });
+
+    const margen = (item.vdi_margen && Number(item.vdi_margen) !== 0)
+                  ? item.vdi_margen
+                  : (item.margen && Number(item.margen) !== 0)
+                  ? item.margen
+                  : (prod?.margen ?? 0);
+
+    let precioBase =
+      item.precio ??
+      item.costo ??
+      item.precio_unitario_lista ??
+      item.vdi_importe ??
+      prod?.precio ??
+      prod?.preciovta ??
+      prod?.preciounitario ??
+      0;
+
+    console.debug('[EditarPresupuestoForm/normalizarItems] Márgenes/Precio preliminar', { idx, margen, precioBase });
+
+    // Si sigue sin valor, calcular basado en costo + margen
+    if (!precioBase || Number(precioBase) === 0) {
+      const costo = item.vdi_costo ?? item.costo ?? prod?.costo ?? 0;
+      precioBase = parseFloat(costo) * (1 + parseFloat(margen) / 100);
+    }
+
+    const obj = {
       id: item.id || idx + 1,
       producto: prod,
-      codigo: item.codigo || prod?.codvta || prod?.codigo || '',
-      denominacion: item.denominacion || prod?.deno || prod?.nombre || '',
-      unidad: item.unidad || prod?.unidad || prod?.unidadmedida || '-',
+      codigo: item.codigo || item.codvta || prod?.codvta || prod?.codigo || '',
+      denominacion: item.denominacion || item.vdi_detalle1 || prod?.deno || prod?.nombre || '',
+      unidad: item.unidad || item.vdi_detalle2 || prod?.unidad || prod?.unidadmedida || '-',
       cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: item.precio || item.costo || item.vdi_importe || prod?.precio || prod?.preciovta || prod?.preciounitario || 0,
+      precio: precioBase,
+      vdi_costo: item.vdi_costo ?? item.costo ?? 0,
+      margen: margen,
       bonificacion: item.bonificacion || item.vdi_bonifica || 0,
       proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
-      margen: item.margen || item.vdi_margen || prod?.margen || 0,
-      vdi_costo: item.vdi_costo || item.costo || prod?.costo || 0,
-      subtotal: item.subtotal || 0
+      idaliiva: (prod?.idaliiva && typeof prod.idaliiva === 'object') ? prod.idaliiva.id : (prod?.idaliiva ?? item.vdi_idaliiva ?? null),
+      subtotal: item.subtotal || 0,
     };
+
+    // El log final debe ser después de crear el objeto pero antes de devolverlo
+    console.debug('[EditarPresupuestoForm/normalizarItems] Ítem normalizado:', { idx, obj });
+
+    return obj;
   });
 };
 
@@ -69,6 +105,16 @@ const mapearCamposPresupuesto = (data, productos) => {
   };
 };
 
+// Utilidad simple para generar un checksum estable del presupuesto original
+const generarChecksum = (data) => {
+  if (!data) return '';
+  return JSON.stringify({
+    total: data?.ven_total ?? data?.total ?? 0,
+    itemsLen: Array.isArray(data?.items) ? data.items.length : 0,
+    actualizado: data?.updated_at ?? null
+  });
+};
+
 const EditarPresupuestoForm = ({
   onSave,
   onCancel,
@@ -93,40 +139,54 @@ const EditarPresupuestoForm = ({
   errorFamilias,
   errorProveedores
 }) => {
-  // Normalizar los items de initialData al cargar
-  const [form, setForm] = useState(() => mapearCamposPresupuesto(initialData, productos));
+  // Hook unificado de estado con soporte de borrador
+  const {
+    formulario,
+    setFormulario,
+    limpiarBorrador,
+    actualizarItems
+  } = useFormularioDraft({
+    claveAlmacenamiento: initialData && initialData.id ? `editarPresupuestoDraft_${initialData.id}` : 'editarPresupuestoDraft_nuevo',
+    datosIniciales: initialData,
+    combinarConValoresPorDefecto: (data) => {
+      const base = mapearCamposPresupuesto(data, productos);
+      return { ...base, __checksum: generarChecksum(data) };
+    },
+    parametrosPorDefecto: [productos],
+    normalizarItems: (items) => normalizarItems(items, productos),
+    validarBorrador: (saved, datosOriginales) => {
+      // Se considera válido solo si el checksum coincide
+      return saved?.__checksum === generarChecksum(datosOriginales);
+    }
+  });
 
-  // Actualizar el estado si cambia initialData
-  useEffect(() => {
-    setForm(mapearCamposPresupuesto(initialData, productos));
-  }, [initialData, productos]);
-
-  // Estado de los ítems controlado
-  const [items, setItems] = useState(() => form.items || []);
-  useEffect(() => {
-    setItems(form.items || []);
-  }, [form.items]);
+  const itemsGridRef = useRef();
+  const [gridKey, setGridKey] = useState(Date.now());
 
   // Handler para cambios en la grilla
   const handleRowsChange = (rows) => {
-    setItems(rows);
+    actualizarItems(rows);
   };
 
-  // Handler para cambios en el formulario
-  const handleChange = e => {
-    const { name, value, type } = e.target;
-    setForm(prevForm => ({
-      ...prevForm,
-      [name]: type === 'number' ? parseFloat(value) : value
-    }));
-  };
+  // Manejadores de cambios
+  const handleChange = manejarCambioFormulario(setFormulario);
 
-  // Handler para cambio de cliente (solo si el usuario lo cambia manualmente)
-  const handleClienteChange = manejarCambioCliente((nuevoForm) => setForm(f => ({ ...f, ...nuevoForm })), clientes);
+  const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
 
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
   const stockProveedores = getStockProveedoresMap(productos);
-  const itemsGridRef = useRef();
+
+  // Efecto: cuando llegan los productos (o cambian) volver a normalizar ítems sin producto
+  useEffect(() => {
+    if (!Array.isArray(productos) || productos.length === 0) return;
+    if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
+    const faltanProductos = formulario.items?.some(it => !it.producto);
+    if (faltanProductos) {
+      const itemsNormalizados = normalizarItems(formulario.items, productos);
+      actualizarItems(itemsNormalizados);
+      setGridKey(Date.now()); // Forzar remount de la grilla
+    }
+  }, [productos]);
 
   // Agregar producto desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -144,11 +204,11 @@ const EditarPresupuestoForm = ({
     : {});
 
   // Calcular los totales usando el hook centralizado
-  const { totales } = useCalculosFormulario(items, {
-    bonificacionGeneral: form.bonificacionGeneral,
-    descu1: form.descu1,
-    descu2: form.descu2,
-    descu3: form.descu3,
+  const { totales } = useCalculosFormulario(formulario.items, {
+    bonificacionGeneral: formulario.bonificacionGeneral,
+    descu1: formulario.descu1,
+    descu2: formulario.descu2,
+    descu3: formulario.descu3,
     alicuotas: alicuotasMap
   });
 
@@ -165,35 +225,36 @@ const EditarPresupuestoForm = ({
 
       const itemsToSave = itemsGridRef.current.getItems();
       let payload = {
-        ven_id: parseInt(form.id),
-        ven_estado: form.estado || 'AB',
-        ven_tipo: form.tipo || 'Presupuesto',
+        ven_id: parseInt(formulario.id),
+        ven_estado: formulario.estado || 'AB',
+        ven_tipo: formulario.tipo || 'Presupuesto',
         tipo_comprobante: 'presupuesto',
-        comprobante_id: form.comprobanteId || '',
-        ven_numero: Number.parseInt(form.numero, 10) || 1,
-        ven_sucursal: Number.parseInt(form.sucursalId, 10) || 1,
-        ven_fecha: form.fecha,
-        ven_punto: Number.parseInt(form.puntoVentaId, 10) || 1,
-        ven_impneto: Number.parseFloat(form.ven_impneto) || 0,
-        ven_descu1: Number.parseFloat(form.descu1) || 0,
-        ven_descu2: Number.parseFloat(form.descu2) || 0,
-        ven_descu3: Number.parseFloat(form.descu3) || 0,
-        bonificacionGeneral: Number.parseFloat(form.bonificacionGeneral) || 0,
-        ven_bonificacion_general: Number.parseFloat(form.bonificacionGeneral) || 0,
-        ven_total: Number.parseFloat(form.ven_total) || 0,
-        ven_vdocomvta: Number.parseFloat(form.ven_vdocomvta) || 0,
-        ven_vdocomcob: Number.parseFloat(form.ven_vdocomcob) || 0,
-        ven_idcli: form.clienteId,
-        ven_idpla: form.plazoId,
-        ven_idvdo: form.vendedorId,
-        ven_copia: Number.parseInt(form.copia, 10) || 1,
+        comprobante_id: formulario.comprobanteId || '',
+        ven_numero: Number.parseInt(formulario.numero, 10) || 1,
+        ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
+        ven_fecha: formulario.fecha,
+        ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1,
+        ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
+        ven_descu1: Number.parseFloat(formulario.descu1) || 0,
+        ven_descu2: Number.parseFloat(formulario.descu2) || 0,
+        ven_descu3: Number.parseFloat(formulario.descu3) || 0,
+        bonificacionGeneral: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+        ven_bonificacion_general: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+        ven_total: Number.parseFloat(formulario.ven_total) || 0,
+        ven_vdocomvta: Number.parseFloat(formulario.ven_vdocomvta) || 0,
+        ven_vdocomcob: Number.parseFloat(formulario.ven_vdocomcob) || 0,
+        ven_idcli: formulario.clienteId,
+        ven_idpla: formulario.plazoId,
+        ven_idvdo: formulario.vendedorId,
+        ven_copia: Number.parseInt(formulario.copia, 10) || 1,
         items: itemsToSave.map((item, idx) => mapearCamposItem(item, idx)),
         permitir_stock_negativo: true,
         update_atomic: true
       };
-      if (form.cuit) payload.ven_cuit = form.cuit;
-      if (form.domicilio) payload.ven_domicilio = form.domicilio;
+      if (formulario.cuit) payload.ven_cuit = formulario.cuit;
+      if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
       await onSave(payload);
+      limpiarBorrador();
       onCancel();
     } catch (err) {
       console.error('Error al guardar:', err);
@@ -201,10 +262,11 @@ const EditarPresupuestoForm = ({
   };
 
   const handleCancel = () => {
+    limpiarBorrador();
     onCancel();
   };
 
-  const isReadOnly = form.estado === 'Cerrado';
+  const isReadOnly = formulario.estado === 'Cerrado';
 
   if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>;
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>;
@@ -226,7 +288,7 @@ const EditarPresupuestoForm = ({
           <label className="block text-xs font-medium text-gray-500 mb-0.5">Cliente *</label>
           <select
             name="clienteId"
-            value={form.clienteId}
+            value={formulario.clienteId}
             onChange={handleClienteChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -245,7 +307,7 @@ const EditarPresupuestoForm = ({
           <input
             name="cuit"
             type="text"
-            value={form.cuit}
+            value={formulario.cuit}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             maxLength={11}
@@ -257,7 +319,7 @@ const EditarPresupuestoForm = ({
           <input
             name="fecha"
             type="date"
-            value={form.fecha}
+            value={formulario.fecha}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -269,7 +331,7 @@ const EditarPresupuestoForm = ({
           <input
             name="domicilio"
             type="text"
-            value={form.domicilio}
+            value={formulario.domicilio}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             maxLength={40}
@@ -281,7 +343,7 @@ const EditarPresupuestoForm = ({
           <label className="block text-xs font-medium text-gray-500 mb-0.5">Sucursal *</label>
           <select
             name="sucursalId"
-            value={form.sucursalId}
+            value={formulario.sucursalId}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -298,7 +360,7 @@ const EditarPresupuestoForm = ({
           <label className="block text-xs font-medium text-gray-500 mb-0.5">Punto de Venta *</label>
           <select
             name="puntoVentaId"
-            value={form.puntoVentaId}
+            value={formulario.puntoVentaId}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -315,7 +377,7 @@ const EditarPresupuestoForm = ({
           <label className="block text-xs font-medium text-gray-500 mb-0.5">Plazo *</label>
           <select
             name="plazoId"
-            value={form.plazoId}
+            value={formulario.plazoId}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -333,7 +395,7 @@ const EditarPresupuestoForm = ({
           <label className="block text-xs font-medium text-gray-500 mb-0.5">Vendedor *</label>
           <select
             name="vendedorId"
-            value={form.vendedorId}
+            value={formulario.vendedorId}
             onChange={handleChange}
             className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
             required
@@ -381,7 +443,7 @@ const EditarPresupuestoForm = ({
               min="0"
               max="100"
               step="0.01"
-              value={form.descu1}
+              value={formulario.descu1}
               onChange={handleChange}
               className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
             />
@@ -392,7 +454,7 @@ const EditarPresupuestoForm = ({
               min="0"
               max="100"
               step="0.01"
-              value={form.descu2}
+              value={formulario.descu2}
               onChange={handleChange}
               className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
             />
@@ -408,29 +470,29 @@ const EditarPresupuestoForm = ({
         ) : errorProveedores ? (
           <div className="text-center text-red-600 py-4">{errorProveedores}</div>
         ) : (
-          <ItemsGridEdicion
+          <ItemsGrid
+            key={gridKey}
             ref={itemsGridRef}
             productosDisponibles={productos}
             proveedores={proveedores}
             stockProveedores={stockProveedores}
             autoSumarDuplicados={autoSumarDuplicados}
             setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={form.bonificacionGeneral}
-            setBonificacionGeneral={value => setForm(f => ({ ...f, bonificacionGeneral: value }))}
-            modo="edicion"
+            bonificacionGeneral={formulario.bonificacionGeneral}
+            setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+            modo="presupuesto"
             onRowsChange={handleRowsChange}
-            initialItems={items}
-            alicuotas={alicuotas}
+            initialItems={formulario.items}
           />
         )}
       </div>
 
       {/* Bloque de totales y descuentos centralizado */}
       <TotalesVisualizacion
-        bonificacionGeneral={form.bonificacionGeneral}
-        descu1={form.descu1}
-        descu2={form.descu2}
-        descu3={form.descu3}
+        bonificacionGeneral={formulario.bonificacionGeneral}
+        descu1={formulario.descu1}
+        descu2={formulario.descu2}
+        descu3={formulario.descu3}
         totales={totales}
       />
 

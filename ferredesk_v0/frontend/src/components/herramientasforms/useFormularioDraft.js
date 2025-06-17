@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 
+// Utilidad interna para saber si una función es válida
+const esFuncion = (fn) => typeof fn === 'function';
+
 /**
  * Hook para manejar la persistencia de formularios en localStorage
  * @param {Object} opciones - Opciones de configuración
@@ -8,6 +11,7 @@ import { useState, useEffect } from 'react';
  * @param {Function} opciones.combinarConValoresPorDefecto - Función para combinar con valores por defecto
  * @param {Array} opciones.parametrosPorDefecto - Parámetros para combinarConValoresPorDefecto
  * @param {Function} opciones.normalizarItems - Función para normalizar items (opcional)
+ * @param {Function} opciones.validarBorrador - Función para validar el borrador (opcional)
  * @returns {Object} Estado y funciones para manejar el borrador
  */
 export const useFormularioDraft = ({
@@ -15,15 +19,26 @@ export const useFormularioDraft = ({
   datosIniciales,
   combinarConValoresPorDefecto,
   parametrosPorDefecto = [],
-  normalizarItems
+  normalizarItems,
+  validarBorrador
 }) => {
   // Estado inicial del formulario
   const [formulario, setFormulario] = useState(() => {
     try {
       const savedData = localStorage.getItem(claveAlmacenamiento);
       if (savedData) {
-        const parsedData = JSON.parse(savedData);
-        return combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
+        try {
+          const parsedData = JSON.parse(savedData);
+          // Si hay función de validación y no pasa, ignorar borrador
+          if (esFuncion(validarBorrador)) {
+            const esValido = validarBorrador(parsedData, datosIniciales);
+            if (!esValido) throw new Error('Borrador inválido');
+          }
+          return combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
+        } catch (err) {
+          // Si falla parsing o validación, continuar a datos iniciales
+          console.info('[useFormularioDraft] Borrador descartado:', err.message);
+        }
       }
     } catch (e) {
       console.error('Error al cargar borrador:', e);
