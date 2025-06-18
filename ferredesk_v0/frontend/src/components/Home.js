@@ -118,10 +118,10 @@ const cards = [
         />
       </svg>
     ),
-    iconColor: "text-amber-700",
-    gradient: "from-amber-50 to-amber-100/60",
-    borderColor: "border-amber-300/50",
-    hoverGradient: "hover:from-amber-100 hover:to-amber-200/60",
+    iconColor: "text-red-700",
+    gradient: "from-red-50 to-red-100/60",
+    borderColor: "border-red-300/50",
+    hoverGradient: "hover:from-red-100 hover:to-red-200/60",
   },
   {
     label: "Notas",

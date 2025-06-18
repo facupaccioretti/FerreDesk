@@ -127,7 +127,7 @@ export default function Navbar({ user, onLogout }) {
 
           <button
             onClick={() => handleNavigation("/dashboard/proveedores")}
-            className="p-3 rounded-xl hover:bg-orange-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+            className="p-3 rounded-xl hover:bg-red-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -135,7 +135,7 @@ export default function Navbar({ user, onLogout }) {
               viewBox="0 0 24 24"
               strokeWidth={1.5}
               stroke="currentColor"
-              className="w-5 h-5 text-amber-700"
+              className="w-5 h-5 text-red-700"
             >
               <path
                 strokeLinecap="round"

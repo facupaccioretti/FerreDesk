@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import Paginador from "./Paginador"
+import Paginador from "../Paginador"
 
 function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
   const [form, setForm] = useState({ razon: "", fantasia: "", domicilio: "", tel1: "", cuit: "" })

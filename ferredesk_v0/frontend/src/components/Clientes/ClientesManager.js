@@ -30,11 +30,34 @@ const ClientesManager = () => {
 
   // Búsqueda
   const [search, setSearch] = useState("")
+  const [searchInactivos, setSearchInactivos] = useState("")
 
   // ---------- Tabs tipo navegador ----------
   const [tabs, setTabs] = useState(() => {
     const savedTabs = localStorage.getItem("clientesTabs")
-    return savedTabs ? JSON.parse(savedTabs) : [{ key: "lista", label: "Lista de Clientes", closable: false }]
+    // Empezamos con un array base de las pestañas que el usuario pueda tener.
+    let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
+
+    // Aseguramos que "Lista de Clientes" esté presente y configurada correctamente.
+    let listaTab = currentTabs.find((t) => t.key === "lista")
+    if (listaTab) {
+      listaTab.closable = false // No se puede cerrar
+    } else {
+      // Si no existe, la añadimos al principio.
+      currentTabs.unshift({ key: "lista", label: "Lista de Clientes", closable: false })
+    }
+
+    // Aseguramos que "Clientes Inactivos" esté presente y configurada.
+    let inactivosTab = currentTabs.find((t) => t.key === "inactivos")
+    if (inactivosTab) {
+      inactivosTab.closable = false // No se puede cerrar
+    } else {
+      // Si no existe, la insertamos justo después de "Lista de Clientes".
+      const listaIndex = currentTabs.findIndex((t) => t.key === "lista")
+      currentTabs.splice(listaIndex + 1, 0, { key: "inactivos", label: "Clientes Inactivos", closable: false })
+    }
+
+    return currentTabs
   })
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -108,6 +131,10 @@ const ClientesManager = () => {
     openTab("nuevo", "Nuevo Cliente", cliente)
   }
 
+  // Filtrado de clientes activos e inactivos con useMemo para optimización
+  const clientesActivos = React.useMemo(() => clientes.filter((c) => c.activo === "A"), [clientes])
+  const clientesInactivos = React.useMemo(() => clientes.filter((c) => c.activo !== "A"), [clientes])
+
   // ---------- Hooks de entidades relacionales ----------
   const { barrios, setBarrios } = useBarriosAPI()
   const { localidades, setLocalidades } = useLocalidadesAPI()
@@ -175,11 +202,31 @@ const ClientesManager = () => {
           <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
             {activeTab === "lista" && (
               <ClientesTable
-                clientes={clientes}
+                clientes={clientesActivos}
                 onEdit={handleEditCliente}
                 onDelete={handleDeleteCliente}
                 search={search}
                 setSearch={setSearch}
+                expandedClientId={expandedClientId}
+                setExpandedClientId={setExpandedClientId}
+                barrios={barrios}
+                localidades={localidades}
+                provincias={provincias}
+                tiposIVA={tiposIVA}
+                transportes={transportes}
+                vendedores={vendedores}
+                plazos={plazos}
+                categorias={categorias}
+              />
+            )}
+
+            {activeTab === "inactivos" && (
+              <ClientesTable
+                clientes={clientesInactivos}
+                onEdit={handleEditCliente}
+                onDelete={handleDeleteCliente}
+                search={searchInactivos}
+                setSearch={setSearchInactivos}
                 expandedClientId={expandedClientId}
                 setExpandedClientId={setExpandedClientId}
                 barrios={barrios}

@@ -11,18 +11,22 @@ const MAPEO_PLANTILLAS = {
   'M': PlantillaFacturaA,
   'B': PlantillaFacturaB,
   'C': PlantillaFacturaC,
-  'PRESUPUESTO': PlantillaFacturaC,
-  'VENTA': PlantillaFacturaC,
+  'P': PlantillaFacturaC,
+  'V': PlantillaFacturaC,
 };
 
 function obtenerLetraComprobante(comprobante) {
   if (!comprobante) return 'C';
   if (comprobante.letra) return comprobante.letra.toUpperCase();
-  if (comprobante.tipo) return comprobante.tipo.toUpperCase();
+  if (comprobante.tipo) {
+    const tipo = comprobante.tipo.toUpperCase();
+    if (tipo.includes('PRESUPUESTO')) return 'P';
+    if (tipo.includes('VENTA')) return 'V';
+  }
   if (comprobante.nombre) {
     const nombre = comprobante.nombre.toUpperCase();
-    if (nombre.includes('PRESUPUESTO')) return 'PRESUPUESTO';
-    if (nombre.includes('VENTA')) return 'VENTA';
+    if (nombre.includes('PRESUPUESTO')) return 'P';
+    if (nombre.includes('FACTURA VENTA')) return 'V';
     if (nombre.includes('FACTURA A')) return 'A';
     if (nombre.includes('FACTURA B')) return 'B';
     if (nombre.includes('FACTURA C')) return 'C';
@@ -56,6 +60,8 @@ const PresupuestoVentaVista = (props) => {
   </div>;
 
   const letra = obtenerLetraComprobante(datos.comprobante);
+  datos.letra = letra;
+
   const Plantilla = MAPEO_PLANTILLAS[letra] || PlantillaFacturaC;
 
   return (

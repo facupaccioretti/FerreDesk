@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import Navbar from "./Navbar"
+import { useEffect, useState, useMemo } from "react"
+import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
-import { useProductosAPI } from "../utils/useProductosAPI"
-import { useFamiliasAPI } from "../utils/useFamiliasAPI"
-import { useProveedoresAPI } from "../utils/useProveedoresAPI"
-import { useStockProveAPI } from "../utils/useStockProveAPI"
+import { useProductosAPI } from "../../utils/useProductosAPI"
+import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
+import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
+import { useStockProveAPI } from "../../utils/useStockProveAPI"
 
 const ProductosManager = () => {
   useEffect(() => {
@@ -21,11 +21,31 @@ const ProductosManager = () => {
   const { stockProve, updateStockProve } = useStockProveAPI()
 
   const [search, setSearch] = useState("")
+  const [searchInactivos, setSearchInactivos] = useState("")
 
   // Cargar estado de pestañas desde localStorage
   const [tabs, setTabs] = useState(() => {
     const savedTabs = localStorage.getItem("productosTabs")
-    return savedTabs ? JSON.parse(savedTabs) : [{ key: "lista", label: "Lista de Productos", closable: false }]
+    let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
+
+    // Aseguramos que "Lista de Productos" esté presente y no sea cerrable
+    let listaTab = currentTabs.find((t) => t.key === "lista")
+    if (listaTab) {
+      listaTab.closable = false
+    } else {
+      currentTabs.unshift({ key: "lista", label: "Lista de Productos", closable: false })
+    }
+
+    // Aseguramos que "Productos Inactivos" esté presente y no sea cerrable
+    let inactivosTab = currentTabs.find((t) => t.key === "inactivos")
+    if (inactivosTab) {
+      inactivosTab.closable = false
+    } else {
+      const listaIndex = currentTabs.findIndex((t) => t.key === "lista")
+      currentTabs.splice(listaIndex + 1, 0, { key: "inactivos", label: "Productos Inactivos", closable: false })
+    }
+
+    return currentTabs
   })
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -218,6 +238,10 @@ const ProductosManager = () => {
   // Permite que StockForm pueda actualizar el estado de edición
   window.setEditStatesProductosManager = setEditStates
 
+  // Filtrar productos activos/inactivos con memo para rendimiento
+  const productosActivos = useMemo(() => productos.filter((p) => p.acti === "S"), [productos])
+  const productosInactivos = useMemo(() => productos.filter((p) => p.acti === "N"), [productos])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
       <Navbar user={user} onLogout={handleLogout} />
@@ -265,12 +289,37 @@ const ProductosManager = () => {
           <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
             {activeTab === "lista" && (
               <ProductosTable
-                productos={productos}
+                productos={productosActivos}
                 familias={familias}
                 proveedores={proveedores}
                 setProveedores={addProveedor}
                 search={search}
                 setSearch={setSearch}
+                expandedId={expandedId}
+                setExpandedId={setExpandedId}
+                groupByFamilia={groupByFamilia}
+                setGroupByFamilia={setGroupByFamilia}
+                selectedNivel={selectedNivel}
+                setSelectedNivel={setSelectedNivel}
+                addFamilia={addFamilia}
+                updateFamilia={updateFamilia}
+                deleteFamilia={deleteFamilia}
+                addProveedor={addProveedor}
+                updateProveedor={updateProveedor}
+                deleteProveedor={deleteProveedor}
+                deleteProducto={deleteProducto}
+                onEdit={handleEditProducto}
+                onUpdateStock={handleUpdateStock}
+              />
+            )}
+            {activeTab === "inactivos" && (
+              <ProductosTable
+                productos={productosInactivos}
+                familias={familias}
+                proveedores={proveedores}
+                setProveedores={addProveedor}
+                search={searchInactivos}
+                setSearch={setSearchInactivos}
                 expandedId={expandedId}
                 setExpandedId={setExpandedId}
                 groupByFamilia={groupByFamilia}

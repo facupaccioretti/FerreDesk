@@ -97,7 +97,7 @@ const ClientesTable = ({
                       <button
                         onClick={() => onEdit(cli)}
                         title="Editar"
-                        className="transition-colors px-1 py-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded"
+                        className="transition-colors px-1 py-1 text-[#0055A4] hover:text-[#004488] hover:bg-blue-50 rounded"
                       >
                         {/* ícono editar */}
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">

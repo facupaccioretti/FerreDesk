@@ -6,7 +6,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import ClientesManager from './components/Clientes/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
-import ProductosManager from './components/ProductosManager';
+import ProductosManager from './components/Productos/ProductosManager';
 import ProveedoresManager from './components/ProveedoresManager';
 import PresupuestosManager from './components/PresupuestosManager';
 import NotasManager from './components/NotasManager';
