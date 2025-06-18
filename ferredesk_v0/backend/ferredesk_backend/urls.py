@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/clientes/', include('ferreapps.clientes.urls')),
     path('api/productos/', include('ferreapps.productos.urls')),
     path('api/', include('ferreapps.ventas.urls')),
+    path('api/', include('ferreapps.urls')),  # Rutas centralizadas para notas, alertas y notificaciones
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     path('', include('ferreapps.login.urls')),
 ]
