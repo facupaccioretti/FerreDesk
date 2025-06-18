@@ -1,15 +1,18 @@
 from django.shortcuts import render, get_object_or_404
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404
-from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed, VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
 from .serializers import (
     ComprobanteSerializer,
     VentaSerializer,
     VentaDetalleItemSerializer,
     VentaDetalleManSerializer,
-    VentaRemPedSerializer
+    VentaRemPedSerializer,
+    VentaDetalleItemCalculadoSerializer,
+    VentaIVAAlicuotaSerializer,
+    VentaCalculadaSerializer
 )
 from django.db import transaction
 from ferreapps.productos.models import Stock, StockProve
@@ -18,6 +21,9 @@ from ferreapps.productos.models import Ferreteria
 from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
 import logging
+from rest_framework.permissions import IsAuthenticated
+from .utils import asignar_comprobante
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 
 # Diccionario de alícuotas (igual que en el frontend)
 ALICUOTAS = {
@@ -29,68 +35,49 @@ ALICUOTAS = {
     6: Decimal('27')
 }
 
-def calcular_totales(items, bonificacion_general, descu1, descu2):
-    """
-    Calcula los totales de la venta/presupuesto usando la misma lógica que el frontend.
-    """
-    subtotal_sin_iva = Decimal('0')
-    items_con_subtotal = []
-    
-    # Calcular subtotal sin IVA y aplicar bonificaciones
-    for item in items:
-        bonif_particular = Decimal(str(item.get('vdi_bonifica', 0)))
-        cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
-        precio = Decimal(str(item.get('vdi_importe', 0)))
-        
-        if bonif_particular > 0:
-            subtotal = (precio * cantidad) * (1 - bonif_particular / Decimal('100'))
-        else:
-            subtotal = (precio * cantidad) * (1 - Decimal(str(bonificacion_general)) / Decimal('100'))
-        
-        subtotal_sin_iva += subtotal
-        items_con_subtotal.append({
-            'item': item,
-            'subtotal': subtotal
-        })
-    
-    # Aplicar descuentos sucesivos
-    subtotal_con_descuentos = subtotal_sin_iva * (1 - Decimal(str(descu1)) / Decimal('100'))
-    subtotal_con_descuentos = subtotal_con_descuentos * (1 - Decimal(str(descu2)) / Decimal('100'))
-    
-    # Calcular IVA y total
-    iva_total = Decimal('0')
-    total_con_iva = Decimal('0')
-    
-    for item_data in items_con_subtotal:
-        item = item_data['item']
-        ali_id = item.get('vdi_idaliiva')
-        ali_porc = Decimal(str(ALICUOTAS.get(ali_id, Decimal('0'))))
-        
-        # Calcular proporción del descuento global
-        proporcion = item_data['subtotal'] / subtotal_sin_iva if subtotal_sin_iva else Decimal('0')
-        item_subtotal_con_descuentos = subtotal_con_descuentos * proporcion
-        
-        # Calcular IVA
-        iva = item_subtotal_con_descuentos * (ali_porc / Decimal('100'))
-        iva_total += iva
-        total_con_iva += item_subtotal_con_descuentos + iva
-    
-    return {
-        'subtotal_sin_iva': round(subtotal_sin_iva, 2),
-        'subtotal_con_descuentos': round(subtotal_con_descuentos, 2),
-        'iva_total': round(iva_total, 2),
-        'total_con_iva': round(total_con_iva, 2)
-    }
-
 # Create your views here.
 
 class ComprobanteViewSet(viewsets.ModelViewSet):
     queryset = Comprobante.objects.all()
     serializer_class = ComprobanteSerializer
 
+    @action(detail=False, methods=['post'], url_path='asignar')
+    def asignar(self, request):
+        tipo_comprobante = request.data.get('tipo_comprobante')
+        situacion_iva_cliente = request.data.get('situacion_iva_cliente')
+        if not tipo_comprobante or not situacion_iva_cliente:
+            return Response({'detail': 'Faltan datos requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            comprobante = asignar_comprobante(tipo_comprobante, situacion_iva_cliente)
+            return Response(comprobante)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class VentaFilter(FilterSet):
+    ven_fecha = DateFromToRangeFilter(field_name='ven_fecha')
+    ven_idcli = NumberFilter(field_name='ven_idcli')
+    ven_idvdo = NumberFilter(field_name='ven_idvdo')
+    ven_estado = NumberFilter(field_name='ven_estado')
+    comprobante = NumberFilter(field_name='comprobante')
+    comprobante_tipo = CharFilter(field_name='comprobante__tipo', lookup_expr='iexact')
+    comprobante_letra = CharFilter(field_name='comprobante__letra', lookup_expr='iexact')
+    ven_sucursal = NumberFilter(field_name='ven_sucursal')
+    ven_total = DateFromToRangeFilter(field_name='ven_total')
+    ven_punto = NumberFilter(field_name='ven_punto')
+    ven_numero = NumberFilter(field_name='ven_numero')
+
+    class Meta:
+        model = Venta
+        fields = [
+            'ven_fecha', 'ven_idcli', 'ven_idvdo', 'ven_estado', 'comprobante',
+            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_total', 'ven_punto', 'ven_numero'
+        ]
+
 class VentaViewSet(viewsets.ModelViewSet):
     queryset = Venta.objects.all()
     serializer_class = VentaSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaFilter
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -99,9 +86,19 @@ class VentaViewSet(viewsets.ModelViewSet):
         if not items:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
+        bonif_general = data.get('bonificacionGeneral', 0)
+        try:
+            bonif_general = float(bonif_general)
+        except Exception:
+            bonif_general = 0
+        for item in items:
+            bonif = item.get('vdi_bonifica')
+            if not bonif or float(bonif) == 0:
+                item['vdi_bonifica'] = bonif_general
+
         permitir_stock_negativo = data.get('permitir_stock_negativo', False)
         tipo_comprobante = data.get('tipo_comprobante')
-        # Si es presupuesto, NO descontar stock
         es_presupuesto = (tipo_comprobante == 'presupuesto')
         errores_stock = []
         stock_actualizado = []
@@ -127,37 +124,40 @@ class VentaViewSet(viewsets.ModelViewSet):
             if errores_stock:
                 return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
 
-        # --- Lógica de comprobante robusta y validación AFIP ---
         ferreteria = Ferreteria.objects.first()
         cliente_id = data.get('ven_idcli')
         cliente = Cliente.objects.filter(id=cliente_id).first()
+        situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
         comprobante = None
-        letra = None
         if tipo_comprobante == 'presupuesto':
-            comprobante = Comprobante.objects.filter(codigo_afip='9997').first()
+            comprobante_obj = Comprobante.objects.filter(codigo_afip='9997').first()
+            comprobante = {
+                "id": comprobante_obj.id,
+                "activo": comprobante_obj.activo,
+                "codigo_afip": comprobante_obj.codigo_afip,
+                "descripcion": comprobante_obj.descripcion,
+                "letra": comprobante_obj.letra,
+                "tipo": comprobante_obj.tipo,
+                "nombre": comprobante_obj.nombre,
+            } if comprobante_obj else None
         elif tipo_comprobante == 'venta':
-            comprobante = Comprobante.objects.filter(codigo_afip='9999').first()
-        elif tipo_comprobante in ['factura', 'nota_credito', 'nota_debito', 'recibo']:
-            # Determinar letra según situación de la ferretería y el cliente
-            if ferreteria and ferreteria.situacion_iva == 'RI':
-                if tipo_iva_cliente == 'consumidor final' or tipo_iva_cliente == 'monotributista':
-                    letra = 'B'
-                else:
-                    letra = 'A'
-            elif ferreteria and ferreteria.situacion_iva == 'MO':
-                letra = 'C'
-            else:
-                letra = 'B'  # fallback
-            comprobante = Comprobante.objects.filter(tipo__iexact=tipo_comprobante, letra=letra, activo=True).first()
+            comprobante_obj = Comprobante.objects.filter(codigo_afip='9999').first()
+            comprobante = {
+                "id": comprobante_obj.id,
+                "activo": comprobante_obj.activo,
+                "codigo_afip": comprobante_obj.codigo_afip,
+                "descripcion": comprobante_obj.descripcion,
+                "letra": comprobante_obj.letra,
+                "tipo": comprobante_obj.tipo,
+                "nombre": comprobante_obj.nombre,
+            } if comprobante_obj else None
         else:
-            # fallback genérico
-            comprobante = Comprobante.objects.filter(tipo__iexact=tipo_comprobante, activo=True).first()
+            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
         if not comprobante:
             return Response({'detail': 'No se encontró comprobante válido para la venta. Verifique la configuración de comprobantes y letras.'}, status=status.HTTP_400_BAD_REQUEST)
-        data['comprobante'] = comprobante.id
+        data['comprobante_id'] = comprobante["codigo_afip"]
 
-        # --- Lógica de numeración robusta ---
         punto_venta = data.get('ven_punto')
         if not punto_venta:
             return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)
@@ -166,18 +166,21 @@ class VentaViewSet(viewsets.ModelViewSet):
         while intentos < max_intentos:
             ultima_venta = Venta.objects.filter(
                 ven_punto=punto_venta,
-                comprobante=comprobante
+                comprobante_id=comprobante["codigo_afip"]
             ).order_by('-ven_numero').first()
             nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
             data['ven_numero'] = nuevo_numero
             try:
                 response = super().create(request, *args, **kwargs)
                 response.data['stock_actualizado'] = stock_actualizado
+                response.data['comprobante_letra'] = comprobante["letra"]
+                response.data['comprobante_nombre'] = comprobante["nombre"]
+                response.data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
                 return response
             except IntegrityError as e:
                 if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
                     intentos += 1
-                    continue  # Reintentar con el siguiente número
+                    continue
                 else:
                     raise
         return Response({'detail': 'No se pudo asignar un número único de venta tras varios intentos.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -188,7 +191,6 @@ class VentaViewSet(viewsets.ModelViewSet):
         venta = get_object_or_404(Venta, pk=pk)
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
-                # Descontar stock por proveedor para cada item
                 items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
                 permitir_stock_negativo = request.data.get('permitir_stock_negativo', False)
                 errores_stock = []
@@ -213,16 +215,22 @@ class VentaViewSet(viewsets.ModelViewSet):
                     stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
                 if errores_stock:
                     return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
-                # Buscar el comprobante de tipo 'factura' o el que corresponda para la conversión
-                comprobante_venta = Comprobante.objects.filter(tipo='factura', activo=True).order_by('codigo_afip').first()
+                ferreteria = Ferreteria.objects.first()
+                cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
+                situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
+                tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+                comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
                 if not comprobante_venta:
                     return Response({'detail': 'No se encontró comprobante de tipo factura para la conversión.'}, status=status.HTTP_400_BAD_REQUEST)
-                venta.comprobante = comprobante_venta
+                venta.comprobante_id = comprobante_venta["codigo_afip"]
                 venta.ven_estado = 'CE'
                 venta.save()
                 serializer = self.get_serializer(venta)
                 data = serializer.data
                 data['stock_actualizado'] = stock_actualizado
+                data['comprobante_letra'] = comprobante_venta["letra"]
+                data['comprobante_nombre'] = comprobante_venta["nombre"]
+                data['comprobante_codigo_afip'] = comprobante_venta["codigo_afip"]
                 return Response(data)
             else:
                 return Response({'detail': 'Este documento no es un presupuesto o ya fue convertido.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -255,70 +263,27 @@ class VentaViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Si es una actualización atómica, procesar todo en una sola transacción
-        if request.data.get('update_atomic', False):
-            try:
-                # Obtener los datos de los items antes de actualizar
-                items_data = request.data.pop('items', None)
-                
-                # Calcular los totales antes de actualizar
-                if items_data is not None:
-                    bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
-                    descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
-                    descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
-                    
-                    totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
-                    
-                    # Actualizar los campos calculados
-                    request.data['ven_impneto'] = totales['subtotal_con_descuentos']
-                    request.data['ven_total'] = totales['total_con_iva']
-                
-                # Actualizar los campos principales
-                serializer = self.get_serializer(instance, data=request.data, partial=partial)
-                serializer.is_valid(raise_exception=True)
-                self.perform_update(serializer)
-                
-                # Actualizar los items en la misma transacción
-                if items_data is not None:
-                    instance.items.all().delete()
-                    for item_data in items_data:
-                        item_data['vdi_idve'] = instance
-                        VentaDetalleItem.objects.create(**item_data)
-                
-                return Response(serializer.data)
-            except Exception as e:
-                logging.error(f"Error en actualización atómica de venta: {e}")
-                raise
-        
-        # Si no es atómica, mantener el comportamiento anterior
+        # ATENCIÓN: Ya no se calculan ni manipulan campos calculados (ven_impneto, ven_total, etc.) aquí.
+        # Toda la lógica de totales y cálculos se delega a la vista SQL.
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
         items_data = request.data.get('items', None)
         if items_data is not None:
             try:
-                # Calcular los totales
-                bonificacion_general = Decimal(str(request.data.get('bonificacionGeneral', 0)))
-                descu1 = Decimal(str(request.data.get('ven_descu1', 0)))
-                descu2 = Decimal(str(request.data.get('ven_descu2', 0)))
-                
-                totales = calcular_totales(items_data, bonificacion_general, descu1, descu2)
-                
-                # Actualizar los campos calculados
-                instance.ven_impneto = totales['subtotal_con_descuentos']
-                instance.ven_total = totales['total_con_iva']
-                instance.save()
-                
-                # Actualizar los items
+                # ATENCIÓN: No calcular totales ni campos calculados aquí.
+                # Solo actualizar los ítems base.
                 instance.items.all().delete()
                 for item_data in items_data:
                     item_data['vdi_idve'] = instance
+                    for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                        item_data.pop(campo_calculado, None)
                     VentaDetalleItem.objects.create(**item_data)
             except Exception as e:
                 logging.error(f"Error actualizando ítems de venta: {e}")
                 raise
-        
+
         return Response(serializer.data)
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
@@ -332,3 +297,267 @@ class VentaDetalleManViewSet(viewsets.ModelViewSet):
 class VentaRemPedViewSet(viewsets.ModelViewSet):
     queryset = VentaRemPed.objects.all()
     serializer_class = VentaRemPedSerializer
+
+class VentaDetalleItemCalculadoFilter(FilterSet):
+    vdi_idve = NumberFilter(field_name='vdi_idve')
+    class Meta:
+        model = VentaDetalleItemCalculado
+        fields = ['vdi_idve']
+
+class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaDetalleItemCalculado.objects.all()
+    serializer_class = VentaDetalleItemCalculadoSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaDetalleItemCalculadoFilter
+
+class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaIVAAlicuota.objects.all()
+    serializer_class = VentaIVAAlicuotaSerializer
+
+class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = VentaCalculada.objects.all()
+    serializer_class = VentaCalculadaSerializer
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def convertir_presupuesto_a_venta(request):
+    try:
+        with transaction.atomic():
+            print("DEBUG - request.data:", request.data)
+            print("DEBUG - presupuesto_origen:", request.data.get('presupuesto_origen'), type(request.data.get('presupuesto_origen')))
+            print("DEBUG - items_seleccionados:", request.data.get('items_seleccionados'), type(request.data.get('items_seleccionados')))
+            data = request.data
+            presupuesto_id = data.get('presupuesto_origen')
+            items_seleccionados = data.get('items_seleccionados', [])
+            venta_data = data.copy()
+            venta_data.pop('presupuesto_origen', None)
+            venta_data.pop('items_seleccionados', None)
+
+            if not presupuesto_id or not items_seleccionados:
+                raise Exception('Faltan datos de presupuesto o ítems seleccionados.')
+
+            print("DEBUG - INICIO BLOQUE ATOMICO")
+            # Obtener el presupuesto con bloqueo
+            presupuesto = Venta.objects.select_for_update().get(ven_id=presupuesto_id)
+            print("DEBUG - Presupuesto obtenido:", presupuesto)
+            # Validar que es un presupuesto (estado AB)
+            if presupuesto.ven_estado != 'AB':
+                print("DEBUG - Presupuesto no está en estado AB")
+                raise Exception('Solo se pueden convertir presupuestos (estado AB).')
+
+            # Obtener items del presupuesto
+            items_presupuesto = list(presupuesto.items.all())
+            ids_items_presupuesto = [str(item.id) for item in items_presupuesto]
+            print("DEBUG - IDs items presupuesto:", ids_items_presupuesto)
+            # Validar que los ítems seleccionados pertenecen al presupuesto
+            if not all(str(i) in ids_items_presupuesto for i in items_seleccionados):
+                print("DEBUG - Algunos ítems seleccionados no pertenecen al presupuesto")
+                raise Exception('Algunos ítems seleccionados no pertenecen al presupuesto.')
+
+            # Validar stock si es necesario
+            permitir_stock_negativo = data.get('permitir_stock_negativo', False)
+            items_editados = {str(item.get('id')): item for item in data.get('items', [])}
+            if not permitir_stock_negativo:
+                errores_stock = []
+                for item_id in items_seleccionados:
+                    item_editado = items_editados.get(str(item_id))
+                    if not item_editado:
+                        continue
+                    try:
+                        stockprove = StockProve.objects.select_for_update().get(
+                            stock_id=item_editado.get('vdi_idsto'),
+                            proveedor_id=item_editado.get('vdi_idpro')
+                        )
+                        cantidad = item_editado.get('vdi_cantidad', 0)
+                        if stockprove.cantidad < cantidad:
+                            errores_stock.append(
+                                f"Stock insuficiente para producto {item_editado.get('vdi_idsto')} con proveedor {item_editado.get('vdi_idpro')}. "
+                                f"Disponible: {stockprove.cantidad}, solicitado: {cantidad}"
+                            )
+                    except StockProve.DoesNotExist:
+                        errores_stock.append(
+                            f"No existe stock para el producto {item_editado.get('vdi_idsto')} y proveedor {item_editado.get('vdi_idpro')}"
+                        )
+                if errores_stock:
+                    print("DEBUG - Errores de stock:", errores_stock)
+                    raise Exception({'detail': 'Error de stock', 'errores': errores_stock})
+
+            # Preparar datos de la venta
+            venta_data['ven_estado'] = 'CE'  # Estado Venta
+            venta_data['ven_tipo'] = 'Venta'  # Tipo Venta
+
+            # --- Lógica de numeración robusta ---
+            punto_venta = venta_data.get('ven_punto')
+            tipo_comprobante = venta_data.get('tipo_comprobante')
+            if not punto_venta or not tipo_comprobante:
+                print("DEBUG - Falta punto de venta o tipo de comprobante")
+                raise Exception('El punto de venta y tipo de comprobante son requeridos')
+
+            # Obtener la situación fiscal de la ferretería y el cliente
+            ferreteria = Ferreteria.objects.first()
+            cliente = Cliente.objects.get(id=venta_data.get('ven_idcli'))
+            situacion_iva_ferreteria = ferreteria.situacion_iva
+            tipo_iva_cliente = cliente.iva.nombre.strip().lower()
+
+            # Usar asignar_comprobante para determinar el comprobante correcto
+            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+            venta_data['comprobante_id'] = comprobante['codigo_afip']
+
+            # --- Asignar bonificación general a los ítems sin bonificación particular ---
+            bonif_general = venta_data.get('bonificacionGeneral', 0)
+            try:
+                bonif_general = float(bonif_general)
+            except Exception:
+                bonif_general = 0
+            for item in venta_data.get('items', []):
+                bonif = item.get('vdi_bonifica')
+                if not bonif or float(bonif) == 0:
+                    item['vdi_bonifica'] = bonif_general
+
+            intentos = 0
+            max_intentos = 10
+            venta = None
+            print("LOG: Antes de crear la venta")
+            while intentos < max_intentos:
+                ultima_venta = Venta.objects.filter(
+                    ven_punto=punto_venta,
+                    comprobante_id=comprobante['codigo_afip']
+                ).order_by('-ven_numero').first()
+                nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
+                venta_data['ven_numero'] = nuevo_numero
+                venta_serializer = VentaSerializer(data=venta_data)
+                try:
+                    venta_serializer.is_valid(raise_exception=True)
+                    venta = venta_serializer.save()
+                    print(f"LOG: Venta creada con ID {venta.pk}")
+                    break
+                except IntegrityError as e:
+                    if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                        intentos += 1
+                        continue  # Reintentar con el siguiente número
+                    else:
+                        print("DEBUG - Error de integridad:", e)
+                        raise
+            else:
+                print("DEBUG - No se pudo asignar un número único de venta tras varios intentos.")
+                raise Exception('No se pudo asignar un número único de venta tras varios intentos.')
+
+            print("LOG: Antes de editar/eliminar el presupuesto")
+            # Convertir ambos arrays de IDs a int para comparar correctamente
+            ids_items_presupuesto_int = [int(i.id) for i in items_presupuesto]
+            items_seleccionados_int = [int(i) for i in items_seleccionados]
+            print(f"DEBUG - ids_items_presupuesto_int: {ids_items_presupuesto_int} (type: {type(ids_items_presupuesto_int[0]) if ids_items_presupuesto_int else None})")
+            print(f"DEBUG - items_seleccionados_int: {items_seleccionados_int} (type: {type(items_seleccionados_int[0]) if items_seleccionados_int else None})")
+            if set(items_seleccionados_int) == set(ids_items_presupuesto_int):
+                print("DEBUG - Se seleccionaron todos los ítems, eliminando presupuesto")
+                presupuesto.delete()
+                print("LOG: Presupuesto eliminado")
+                presupuesto_result = None
+            else:
+                print("DEBUG - Se dejan ítems no seleccionados en el presupuesto")
+                items_restantes = [item for item in items_presupuesto if int(item.id) not in items_seleccionados_int]
+                presupuesto.items.set(items_restantes)
+                # Eliminar físicamente los ítems seleccionados del presupuesto
+                ids_a_eliminar = [item.id for item in items_presupuesto if int(item.id) in items_seleccionados_int]
+                if ids_a_eliminar:
+                    VentaDetalleItem.objects.filter(id__in=ids_a_eliminar).delete()
+                # Si no quedan ítems, eliminar el presupuesto
+                if not items_restantes:
+                    print("LOG: Presupuesto quedó vacío tras conversión, eliminando presupuesto")
+                    presupuesto.delete()
+                    presupuesto_result = None
+                else:
+                    # Recalcular totales y guardar
+                    recalcular_totales_presupuesto(presupuesto)
+                    presupuesto.save()
+                    presupuesto_result = VentaSerializer(presupuesto).data
+
+            print("LOG: Antes de actualizar stock")
+            # Actualizar stock
+            stock_actualizado = []
+            for item_id in items_seleccionados:
+                item_editado = items_editados.get(str(item_id))
+                if not item_editado:
+                    continue
+                try:
+                    stockprove = StockProve.objects.select_for_update().get(
+                        stock_id=item_editado.get('vdi_idsto'),
+                        proveedor_id=item_editado.get('vdi_idpro')
+                    )
+                    cantidad = item_editado.get('vdi_cantidad', 0)
+                    stockprove.cantidad -= cantidad
+                    stockprove.save()
+                    stock_actualizado.append({
+                        'stock_id': stockprove.stock_id,
+                        'proveedor_id': stockprove.proveedor_id,
+                        'cantidad_actual': stockprove.cantidad
+                    })
+                except StockProve.DoesNotExist:
+                    print(f"DEBUG - No se encontró stock para el item {item_id}")
+                    continue
+
+            # Preparar respuesta
+            response_data = {
+                'venta': VentaSerializer(venta).data,
+                'presupuesto': presupuesto_result,
+                'stock_actualizado': stock_actualizado,
+                'comprobante_letra': comprobante['letra'],
+                'comprobante_nombre': comprobante['nombre'],
+                'comprobante_codigo_afip': comprobante['codigo_afip']
+            }
+            return Response(response_data)
+
+    except Exception as e:
+        print("DEBUG - Error en convertir_presupuesto_a_venta:", str(e))
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+def recalcular_totales_presupuesto(presupuesto):
+    """Recalcula `ven_impneto` y `ven_total` tomando los ítems reales del presupuesto.
+
+    IMPORTANTE:
+    • Los campos **vdi_importe** o **vdi_importe_total** no existen en el modelo *VentaDetalleItem*;
+      sólo están presentes en la vista SQL de items calculados.  Por eso se reproduce aquí la
+      misma fórmula empleando los campos persistentes (`vdi_costo`, `vdi_margen`, `vdi_bonifica`, `vdi_cantidad`).
+    • En los presupuestos el IVA no se discrimina.  Por lo tanto **ven_total = ven_impneto**.
+    """
+
+    items_restantes = list(presupuesto.items.all())
+    if not items_restantes:
+        presupuesto.ven_impneto = Decimal('0.00')
+        presupuesto.ven_total = Decimal('0.00')
+        return
+
+    subtotal_bruto = Decimal('0')
+
+    for item in items_restantes:
+        # 1) Precio de lista = costo + margen
+        precio_lista = Decimal(item.vdi_costo or 0) * (Decimal('1') + Decimal(item.vdi_margen or 0) / Decimal('100'))
+
+        # 2) Aplicar bonificación particular del ítem
+        precio_bonificado = precio_lista * (Decimal('1') - Decimal(item.vdi_bonifica or 0) / Decimal('100'))
+
+        # 3) Importe total del ítem = precio bonificado por cantidad
+        importe_item = precio_bonificado * Decimal(item.vdi_cantidad or 0)
+
+        subtotal_bruto += importe_item
+
+    # ---- Aplicar bonificación/desc. generales del presupuesto ----
+    bonif_general = Decimal(presupuesto.ven_bonificacion_general or 0)
+    desc1 = Decimal(presupuesto.ven_descu1 or 0)
+    desc2 = Decimal(presupuesto.ven_descu2 or 0)
+    desc3 = Decimal(presupuesto.ven_descu3 or 0)
+
+    neto = subtotal_bruto
+
+    if bonif_general:
+        neto *= (Decimal('1') - bonif_general / Decimal('100'))
+    if desc1:
+        neto *= (Decimal('1') - desc1 / Decimal('100'))
+    if desc2:
+        neto *= (Decimal('1') - desc2 / Decimal('100'))
+    if desc3:
+        neto *= (Decimal('1') - desc3 / Decimal('100'))
+
+    # En la etapa de presupuesto no se agrega IVA
+    presupuesto.ven_impneto = neto.quantize(Decimal('0.01'))
+    presupuesto.ven_total = neto.quantize(Decimal('0.01'))

@@ -11,13 +11,27 @@ class FamiliaSerializer(serializers.ModelSerializer):
         model = Familia
         fields = '__all__'
 
+class AlicuotaIVASerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AlicuotaIVA
+        fields = ['id', 'codigo', 'deno', 'porce']
+
 class StockProveSerializer(serializers.ModelSerializer):
     proveedor = ProveedorSerializer(read_only=True)
     proveedor_id = serializers.PrimaryKeyRelatedField(queryset=Proveedor.objects.all(), source='proveedor', write_only=True)
+    precio_venta = serializers.SerializerMethodField()
 
     class Meta:
         model = StockProve
-        fields = ['id', 'stock', 'proveedor', 'proveedor_id', 'cantidad', 'costo', 'fecultcan', 'fecultcos', 'codigo_producto_proveedor', 'fecha_actualizacion']
+        fields = ['id', 'stock', 'proveedor', 'proveedor_id', 'cantidad', 'costo', 'fecultcan', 'fecultcos', 'codigo_producto_proveedor', 'fecha_actualizacion', 'precio_venta']
+
+    def get_precio_venta(self, obj):
+        try:
+            margen = obj.stock.margen if obj.stock and obj.stock.margen is not None else 0
+            costo = obj.costo if obj.costo is not None else 0
+            return round(float(costo) * (1 + float(margen) / 100), 2)
+        except Exception:
+            return 0
 
     def validate(self, data):
         # Solo validar unicidad si hay código de proveedor asociado
@@ -47,19 +61,16 @@ class StockSerializer(serializers.ModelSerializer):
     idfam2_id = serializers.PrimaryKeyRelatedField(queryset=Familia.objects.all(), source='idfam2', write_only=True, required=False)
     idfam3 = FamiliaSerializer(read_only=True)
     idfam3_id = serializers.PrimaryKeyRelatedField(queryset=Familia.objects.all(), source='idfam3', write_only=True, required=False)
+    idaliiva = AlicuotaIVASerializer(read_only=True)
+    idaliiva_id = serializers.PrimaryKeyRelatedField(queryset=AlicuotaIVA.objects.all(), source='idaliiva', write_only=True, required=False)
 
     class Meta:
         model = Stock
         fields = [
-            'id', 'codvta', 'codcom', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva',
+            'id', 'codvta', 'codcom', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva', 'idaliiva_id',
             'idfam1', 'idfam1_id', 'idfam2', 'idfam2_id', 'idfam3', 'idfam3_id',
             'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores'
         ]
-
-class AlicuotaIVASerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AlicuotaIVA
-        fields = ['id', 'codigo', 'deno', 'porce']
 
 class FerreteriaSerializer(serializers.ModelSerializer):
     class Meta:

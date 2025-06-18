@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCookie } from '../utils/csrf';
+import { mapearCamposItem } from '../components/herramientasforms/mapeoItems';
 
 export function useVentasAPI() {
   const [ventas, setVentas] = useState([]);
@@ -7,11 +8,19 @@ export function useVentasAPI() {
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchVentas = async () => {
+  const fetchVentas = async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/ventas/', { credentials: 'include' });
+      // Construir querystring a partir de filtros
+      const params = new URLSearchParams();
+      Object.entries(filtros).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value);
+        }
+      });
+      const url = params.toString() ? `/api/ventas/?${params.toString()}` : '/api/ventas/';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener ventas');
       const data = await res.json();
       setVentas(Array.isArray(data) ? data : (data.results || []));
@@ -22,27 +31,16 @@ export function useVentasAPI() {
     }
   };
 
-  const mapItemFields = (item) => {
-    return {
-      vdi_orden: item.orden ?? item.vdi_orden,
-      vdi_idsto: item.idSto ?? item.vdi_idsto,
-      vdi_idpro: item.idPro ?? item.vdi_idpro,
-      vdi_cantidad: item.cantidad ?? item.vdi_cantidad,
-      vdi_importe: item.importe ?? item.vdi_importe,
-      vdi_bonifica: item.bonifica ?? item.bonificacion ?? item.vdi_bonifica,
-      vdi_detalle1: item.detalle1 ?? item.vdi_detalle1,
-      vdi_detalle2: item.detalle2 ?? item.vdi_detalle2,
-      vdi_idaliiva: item.alicuotaIva ?? item.vdi_idaliiva,
-    };
-  };
-
   const addVenta = async (venta) => {
     setError(null);
     try {
       let ventaMapped = { ...venta };
-      console.log('[useVentasAPI] Valor original de venta.items:', venta.items);
-      ventaMapped.items = Array.isArray(venta.items) ? venta.items.map(mapItemFields) : [];
-      console.log('[useVentasAPI] Payload mapeado a enviar:', ventaMapped);
+      console.log('[addVenta] Ítems antes de mapear:', venta.items);
+      ventaMapped.items = Array.isArray(venta.items) ? venta.items.map((item, idx) => {
+        console.log('[addVenta] Ítem recibido para mapear:', item, 'idx:', idx);
+        return mapearCamposItem(item, idx);
+      }) : [];
+      console.log('[addVenta] Payload mapeado a enviar:', ventaMapped);
       if (!ventaMapped.items || !Array.isArray(ventaMapped.items) || ventaMapped.items.length === 0) {
         console.error('[useVentasAPI] ERROR: El campo items está vacío o ausente en el payload mapeado');
       } else {

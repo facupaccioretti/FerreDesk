@@ -3,36 +3,10 @@ description:
 globs: 
 alwaysApply: true
 ---
-Reglas y aclaraciones para Presupuestos y Ventas (FerreDesk)
-Presupuestos:
-Se pueden crear, editar y borrar libremente mientras no hayan sido convertidos a venta.
-No descuentan stock.
-Pueden convertirse en ventas.
-Al convertirse en venta, se realiza la resta de stock según la lógica de ventas.
-Ventas:
-Se crean a partir de un presupuesto o directamente.
-Descuentan stock por proveedor.
-NO se pueden editar ni borrar, solo anular (cambiar estado).
-Las ventas anuladas deben mostrarse en una sección especial (“Ventas anuladas”).
-Stock y Proveedores:
-Cada producto tiene stock por proveedor (StockProve).
-Siempre se usa primero el stock del proveedor habitual.
-Si el stock del proveedor habitual se agota, se debe notificar al usuario y permitir elegir otro proveedor.
-Si el stock total (sumando todos los proveedores) se agota, se notifica al usuario y, si continúa, el stock puede pasar a negativo.
-El sistema debe mantener el conteo de stock por proveedor y notificar cada vez que se cambia de proveedor o se agota el stock.
-Stock Negativo:
-El checkbox “Permitir stock negativo” solo aparece cuando el stock total se agota.
-Si el usuario acepta, se permite continuar y el stock puede quedar negativo.
-El backend debe validar y notificar si se está por pasar a stock negativo.
-Concurrencia y multiusuario:
-Todas las operaciones críticas (creación de ventas, conversión de presupuestos, descuento de stock) deben ser atómicas y seguras para múltiples usuarios simultáneos.
-Usar transacciones atomicas y locks (select_for_update) en backend.
-El frontend debe mostrar mensajes claros si ocurre un conflicto de concurrencia o stock.
-Flujo de conversión:
-Al convertir un presupuesto a venta, se descuenta el stock según la lógica de ventas.
-Si hay problemas de stock, se debe permitir al usuario elegir proveedor o aceptar stock negativo.
-Formularios:
-Los formularios de Presupuesto y Venta deben ser consistentes en la lógica de selección de proveedor y manejo de stock.
-En Presupuesto, solo se selecciona proveedor (no descuenta stock).
+Queremos cambiar el sistema para que en lugar de guardar precios unitarios, guardemos el costo, el margen y el IVA de cada producto. El precio unitario es un valor calculado sin IVA que representa el importe base de venta por unidad de producto. Se determina a partir del costo neto, aplicando un porcentaje de margen de ganancia y restando una bonificación particular sobre ese mismo costo. Esto nos permitirá tener un mejor control sobre los márgenes de ganancia y hacer análisis más precisos de rentabilidad. El precio que ve el cliente será calculado a partir de estos componentes, pero en la base de datos mantendremos los valores base (costo y margen) para tener más flexibilidad y control sobre los precios.
+Necesitamos manejar los precios de manera diferente según el tipo de comprobante. Para Boletas A, se mostrarán los precios sin IVA y se discriminará el IVA por separado. Para Boletas B y C, se mostrarán los precios con el IVA incluido y sin discriminar. Es importante destacar que en la base de datos siempre guardaremos los valores SIN IVA, independientemente del tipo de comprobante.
+La presentación al usuario variará según el tipo de comprobante. En Boletas A, se mostrarán los precios sin IVA más el IVA discriminado.El desglose de precios sigue siendo con IVA incluido en comprobantes B y C, pero debe incluir un detalle adicional del "IVA contenido".
+No hay que mostrar el precio sin IVA, ni el IVA como línea separada como en la factura A. Solo indicar el importe del IVA contenido, generalmente como una línea debajo del total. En todos los casos, mantendremos la consistencia en los decimales y cálculos, trabajando con 2 decimales como corresponde en Argentina.
+Este comportamiento que necesitamos implementar asegurará que los cálculos y la presentación sean correctos mientras mantenemos los valores sin IVA en la base de datos. Esto nos permitirá tener un sistema más flexible y preciso para el manejo de precios y márgenes, cumpliendo con las reglas fiscales argentinas y facilitando el análisis de rentabilidad.
 
-En Venta, se descuenta stock y se valida toda la lógica de stock/proveedor/negativo.
+

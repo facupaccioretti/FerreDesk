@@ -1,59 +1,35 @@
-Actualizar el sistema para que trabaje con transacciones atomicas (Mejor pasarse a POSTGRESQL)
-Formularios no tienen memoria (se vive saliendo la opcion cada que los actualizo)
 
-
-Compaginacion de las tablas para cuando haya muchos 
-
-n el modal asociar codigo proveedor mejorar como se muestran los codigos
-  
-    
-cambiar zona horaria django
-
-El enter en ningun formulario deberia completar el formulario (es molesto ya que si
- queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
-
-- Revisar y garantizar que el descuento de stock y la creación de los ítems de detalle de la venta
- estén dentro de la misma transacción atómica. Si falla la creación de los ítems, el stock no debe descontarse (atomicidad total en ventas).
-
--Exportar el libro de IVA a Excel o PDF.
--Ver totales acumulados por alícuota en el reporte.
-
-Buscador de productos en Presupuestos y Ventas genera dos renglones vacios al cargar duplicados
+Falta hacer una pantalla de 'Configuracion' donde el usuario pueda poner los datos de la ferretería (nombre, dirección, situación fiscal, etc.). 
 
 El cliente no se debe poder borrar si tiene algun movimiento
 
+En el modal asociar codigo proveedor mejorar como se muestran los codigos 
+
+
+El enter en ningun formulario deberia completar el formulario (es molesto ya que si
+ queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
+ 
+
 Aplicar logica nota de credito
-
 Mejores buscadores en presupuesto y venta
-
-conversion presupuesto a venta editable 
-
-Falta hacer una pantalla de 'Datos de Ferretería' en el 
-frontend para cargar y editar los datos de la ferretería (nombre, dirección, situación fiscal, etc.). 
-
-
-manejo multiples usuarios presupuesto y venta!!!!!!!!!!!!
-
-
-El buscador de productos llama al modal de stock negativo 
-
-En venta el modal solo deberia aparecer una unica vez cuando se termina el stock de cada proveedor.
-
-Arreglar el modal directamente
-
-
-
-
-Verificacion de Paginas
-
 
 
 Clientes todo ok agregar compaginacion y trans atomicas
-Productos todo ok pero agregar compaginacion y sistema bajo stock (cant minima)
+Productos todo ok pero agregar compaginacion y sistema bajo stock (cant minima), agregar costo en edicion de productos. 
+     Arreglar el editor de cantidad dentro del form de producto, por algun motivo multiplica el costo
 Proveedores Todo ok pero agregar compaginacion
 Presupuestos y Ventas
 
+    Generar libro IVA
+    Notas de credito son genericas, y puede (o no) cargar items una nota puede tener varias facturas y una factura varias notas
+    La de debito entonces son recargos monetarios, no de items. Por ejemplo si hubo un cheque devuelto hay que permitir que el importe del cheque sea excento no tenga iva.
 
-Cosas hechas:
- Limpieza codigo
- Transacciones atomicas en creacion/edicion de productos
+Los componentes que exhiben datos agregados o calculados** (por ejemplo, `PresupuestosManager`, `PresupuestoVentaVista`, etc.) deben consultar los datos desde las nuevas
+ vistas calculadas (`VENTA_CALCULADO`, `VENTADETALLEITEM_CALCULADO`) y **no desde la tabla base**.
+- Esto garantiza que siempre se muestren los importes, totales e IVAs correctos y actualizados.
+- Se recomienda adaptar estos componentes para consumir los endpoints de solo lectura de las vistas.
+- Verificar que ningún flujo del sistema (importación, edición masiva, integración externa) intente manipular campos calculados en la tabla base.
+
+
+
+

@@ -2,12 +2,6 @@ import { useState, useEffect } from 'react';
 
 const DRAFT_KEY = 'proveedorFormDraft';
 
-// Datos mock iniciales (listos para ser reemplazados por fetch a la API)
-const mockProveedores = [
-  { id: 1, razon: 'Juan', fantasia: 'Juan SRL', domicilio: 'Calle 1', tel1: '123', cuit: '20-12345678-9', sigla: 'JUA' },
-  { id: 2, razon: 'Marquitos', fantasia: 'Marquitos SA', domicilio: 'Calle 2', tel1: '456', cuit: '20-98765432-1', sigla: 'MAR' },
-  { id: 3, razon: 'Ferretería S.A.', fantasia: 'Ferretería S.A.', domicilio: 'Calle 3', tel1: '789', cuit: '30-11112222-3', sigla: 'FER' },
-];
 
 export default function useProveedores() {
   const [proveedores, setProveedores] = useState([]);

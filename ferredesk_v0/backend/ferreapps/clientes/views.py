@@ -1,5 +1,7 @@
 from django.shortcuts import render
 from rest_framework import viewsets, generics
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from .models import Localidad, Provincia, Barrio, TipoIVA, Transporte, Vendedor, Plazo, CategoriaCliente, Cliente
 from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
@@ -41,8 +43,17 @@ class CategoriaClienteViewSet(viewsets.ModelViewSet):
     serializer_class = CategoriaClienteSerializer
 
 class ClienteViewSet(viewsets.ModelViewSet):
-    queryset = Cliente.objects.all()
+    queryset = Cliente.objects.exclude(id=1)
     serializer_class = ClienteSerializer
+
+    @action(detail=False, methods=['get'])
+    def cliente_por_defecto(self, request):
+        try:
+            cliente = Cliente.objects.get(id=1)
+            serializer = self.get_serializer(cliente)
+            return Response(serializer.data)
+        except Cliente.DoesNotExist:
+            return Response({'error': 'Cliente por defecto no encontrado'}, status=404)
 
 class BarrioList(generics.ListAPIView):
     queryset = Barrio.objects.all()

@@ -71,8 +71,25 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([]);
 
+  const [codigoProveedorDetectado, setCodigoProveedorDetectado] = useState(false);
+
   useEffect(() => {
     if (stock) {
+      // Construir stock_proveedores para edición con solo proveedor_id
+      const stockProveedores = stock.stock_proveedores && stock.stock_proveedores.length > 0
+        ? stock.stock_proveedores.map(sp => ({
+            ...sp,
+            proveedor_id: sp.proveedor_id || (sp.proveedor && (sp.proveedor.id || sp.proveedor))
+          }))
+        : stockProve
+            .filter(sp => sp.stock === stock.id)
+            .map(sp => ({
+              proveedor_id: sp.proveedor?.id || sp.proveedor,
+              cantidad: sp.cantidad,
+              costo: sp.costo,
+              codigo_producto_proveedor: sp.codigo_producto_proveedor || ''
+            }));
+
       setForm({
         codvta: stock.codvta || '',
         codcom: stock.codcom || '',
@@ -97,11 +114,14 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         idaliiva: stock.idaliiva && typeof stock.idaliiva === 'object'
           ? stock.idaliiva.id
           : stock.idaliiva ?? '',
-        id: stock.id // <-- Aseguro que el id esté siempre presente
+        margen: stock.margen !== undefined && stock.margen !== null ? String(stock.margen) : '',
+        acti: stock.acti !== undefined && stock.acti !== null ? String(stock.acti) : '',
+        id: stock.id,
+        stock_proveedores: stockProveedores
       });
       setNewStockProve(prev => ({ ...prev, stock: stock.id }));
     }
-  }, [stock]);
+  }, [stock, stockProve]);
 
   useEffect(() => {
     if (modo === 'nuevo' && !stock) {
@@ -127,54 +147,73 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   }, [modo, form.id]);
 
   useEffect(() => {
+    let detectado = false;
     const proveedorId = newStockProve.proveedor;
-    let codigoProveedor = '';
-
-    // Buscar código asociado (pendiente o real) para el proveedor seleccionado
     if (proveedorId) {
-      // 1. Buscar en pendientes
-      const codigoPendiente = codigosPendientes.find(
-        c => String(c.proveedor_id) === String(proveedorId)
-      );
-      if (codigoPendiente) {
-        codigoProveedor = codigoPendiente.codigo_producto_proveedor;
-      }
-      // 2. Buscar en reales si no hay pendiente
-      if (!codigoProveedor && stock?.id) {
-        const sp = stockProve.find(
-          sp => (sp.proveedor?.id || sp.proveedor) === Number(proveedorId)
+      if (isEdicion && stock) {
+        const relacion = stockProve.find(
+          sp => String(sp.stock?.id || sp.stock) === String(stock.id) && String(sp.proveedor?.id || sp.proveedor) === String(proveedorId)
         );
-        if (sp && sp.codigo_producto_proveedor) {
-          codigoProveedor = sp.codigo_producto_proveedor;
+        if (relacion && relacion.codigo_producto_proveedor) {
+          detectado = true;
+        }
+      } else if (!isEdicion) {
+        const codigoPendiente = codigosPendientes.find(
+          c => String(c.proveedor_id) === String(proveedorId)
+        );
+        if (codigoPendiente && codigoPendiente.codigo_producto_proveedor) {
+          detectado = true;
         }
       }
     }
+    setCodigoProveedorDetectado(detectado);
+  }, [newStockProve.proveedor, stockProve, codigosPendientes, isEdicion, stock?.id]);
 
+  useEffect(() => {
+    const proveedorId = newStockProve.proveedor;
+    let codigoProveedor = '';
+    if (proveedorId) {
+      if (!isEdicion) {
+        const codigoPendiente = codigosPendientes.find(
+          c => String(c.proveedor_id) === String(proveedorId)
+        );
+        if (codigoPendiente) {
+          codigoProveedor = codigoPendiente.codigo_producto_proveedor;
+        }
+      } else if (form && Array.isArray(form.stock_proveedores)) {
+        const relacion = form.stock_proveedores.find(
+          sp => String(sp.proveedor_id) === String(proveedorId)
+        );
+        if (relacion && relacion.codigo_producto_proveedor) {
+          codigoProveedor = relacion.codigo_producto_proveedor;
+        }
+      }
+    }
     if (proveedorId && codigoProveedor) {
-      // Buscar precio de lista para ese proveedor y código
       fetch(`/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProveedor)}`)
         .then(res => res.json())
         .then(data => {
-          if (data && data.precio) {
+          if (data && typeof data.precio === 'number' && data.precio > 0) {
             setNewStockProve(prev => ({ ...prev, costo: String(data.precio) }));
-            setPermitirCostoManual(false);
+            setPermitirCostoManual(true);
             setCargarPrecioManual(false);
           } else {
             setNewStockProve(prev => ({ ...prev, costo: '' }));
-            setPermitirCostoManual(true);
-            setCargarPrecioManual(true);
+            setPermitirCostoManual(false);
+            setCargarPrecioManual(false);
           }
         })
         .catch(() => {
-          setPermitirCostoManual(true);
-          setCargarPrecioManual(true);
+          setNewStockProve(prev => ({ ...prev, costo: '' }));
+          setPermitirCostoManual(false);
+          setCargarPrecioManual(false);
         });
     } else if (proveedorId) {
-      setPermitirCostoManual(true);
-      setCargarPrecioManual(true);
+      setPermitirCostoManual(false);
+      setCargarPrecioManual(false);
       setNewStockProve(prev => ({ ...prev, costo: '' }));
     }
-  }, [newStockProve.proveedor, stock?.id, stockProve, codigosPendientes]);
+  }, [newStockProve.proveedor, form, codigosPendientes, isEdicion]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -182,14 +221,17 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       ...prev,
       [name]: name === "proveedor_habitual_id"
         ? value === "" ? '' : String(value)
-        : ["idfam1", "idfam2", "idfam3", "idaliiva"].includes(name)
+        : ["idfam1", "idfam2", "idfam3"].includes(name)
           ? value === "" ? null : Number(value)
-          : value
+          : ["idaliiva"].includes(name)
+            ? value === "" ? null : Number(value)
+            : value
     }));
   };
 
   const handleNewStockProveChange = (e) => {
     const { name, value } = e.target;
+    console.log('[handleNewStockProveChange] Cambio:', name, value);
     setNewStockProve(prev => ({
       ...prev,
       [name]: name === "proveedor" ? String(value) : value
@@ -201,7 +243,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       alert('Por favor complete todos los campos del proveedor');
       return;
     }
-    if ((permitirCostoManual && !newStockProve.costo) || (!permitirCostoManual && cargarPrecioManual && !newStockProve.costo)) {
+    // Detectar si hay código asociado
+    if (!codigoProveedorDetectado && !newStockProve.costo) {
       alert('Debe ingresar el costo.');
       return;
     }
@@ -332,6 +375,21 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           { proveedor_id, codigo_producto_proveedor, costo }
         ];
       });
+      // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
+      setForm(prevForm => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm;
+        const actualizado = prevForm.stock_proveedores.map(sp =>
+          String(sp.proveedor_id) === String(proveedor_id)
+            ? { ...sp, codigo_producto_proveedor, costo }
+            : sp
+        );
+        // Si no existe, agregarlo
+        const existe = actualizado.some(sp => String(sp.proveedor_id) === String(proveedor_id));
+        return {
+          ...prevForm,
+          stock_proveedores: existe ? actualizado : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo }]
+        };
+      });
       return { ok: true };
     }
 
@@ -394,6 +452,17 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     localStorage.removeItem('stockFormDraft');
     setFormError(null);
     let formToSave = { ...form };
+    
+    // Asegurar que los IDs de familia se envíen correctamente
+    if (formToSave.idfam1 !== null) formToSave.idfam1_id = formToSave.idfam1;
+    if (formToSave.idfam2 !== null) formToSave.idfam2_id = formToSave.idfam2;
+    if (formToSave.idfam3 !== null) formToSave.idfam3_id = formToSave.idfam3;
+    
+    // Limpiar los campos originales para evitar duplicación
+    delete formToSave.idfam1;
+    delete formToSave.idfam2;
+    delete formToSave.idfam3;
+
     if (!isEdicion && form.id) {
       formToSave.id = form.id;
     }
@@ -454,26 +523,26 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           });
         const res = await fetch('/api/productos/editar-producto-con-relaciones/', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
-          },
-          credentials: 'include',
-          body: JSON.stringify({
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
+            },
+            credentials: 'include',
+            body: JSON.stringify({
             producto: formToSave,
             stock_proveedores: stockProveedores
-          })
-        });
-        const data = await res.json();
+            })
+          });
+            const data = await res.json();
         if (!res.ok) {
           setFormError(data.detail || 'Error al actualizar el producto.');
-          return;
-        }
+            return;
+          }
         productoGuardado = { ...formToSave, id: data.producto_id || stock.id };
         setCodigosPendientesEdicion([]);
         if (typeof fetchStockProve === 'function') fetchStockProve();
         await onSave(productoGuardado);
-      }
+        }
     } catch (err) {
       setFormError('Error al guardar el producto o sus relaciones.');
       return;
@@ -500,21 +569,16 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const handleEditStockProveSave = async (id) => {
     const sp = stockProve.find(sp => sp.id === id);
     if (!sp) return;
-    // Validar y convertir cantidad a entero
-    const cantidadNum = parseInt(String(nuevaCantidad).replace(',', '.'), 10);
-    if (isNaN(cantidadNum) || cantidadNum < 0) {
-      setFormError('Ingrese una cantidad válida (entera)');
+    // Permitir negativos y decimales
+    const cantidadNum = parseFloat(String(nuevaCantidad).replace(',', '.'));
+    if (isNaN(cantidadNum)) {
+      setFormError('Ingrese una cantidad válida');
       return;
     }
-    // Validar cantidad original para evitar división por cero
+    // Calcular nuevo costo proporcional si corresponde
     const cantidadOriginal = parseFloat(sp.cantidad);
-    if (!cantidadOriginal) {
-      setFormError('La cantidad original es inválida');
-      return;
-    }
-    const costoUnitario = sp.costo / cantidadOriginal;
+    const costoUnitario = cantidadOriginal !== 0 ? sp.costo / cantidadOriginal : 0;
     let nuevoCosto = cantidadNum * costoUnitario;
-    // Redondear costo a 2 decimales
     nuevoCosto = Math.round((nuevoCosto + Number.EPSILON) * 100) / 100;
     if (isNaN(nuevoCosto) || !isFinite(nuevoCosto)) {
       setFormError('El costo calculado no es válido');
@@ -677,6 +741,42 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Margen (%)</label>
+            <input
+              type="number"
+              name="margen"
+              value={form.margen ?? ''}
+              onChange={handleChange}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              step="0.01"
+              min="0"
+              placeholder="Porcentaje de ganancia"
+            />
+            {form.margen && newStockProve.costo && !isNaN(Number(form.margen)) && !isNaN(Number(newStockProve.costo)) && (
+              <div className="mt-1 text-xs text-green-700">
+                Precio de venta sugerido: ${(Number(newStockProve.costo) * (1 + Number(form.margen) / 100)).toFixed(2)}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Activo</label>
+            <select
+              name="acti"
+              value={form.acti ?? ''}
+              onChange={handleChange}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
+            >
+              <option value="">Sin asignar</option>
+              <option value="S">Activo</option>
+              <option value="N">Inactivo</option>
+            </select>
+            <span className="text-xs text-gray-500">Indica si el producto está activo en el sistema.</span>
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700">Proveedor Habitual</label>
           <select
@@ -801,10 +901,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                 value={newStockProve.costo}
                 onChange={handleNewStockProveChange}
                 placeholder="Costo"
-                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 w-full pr-10"
-                disabled={!permitirCostoManual && !cargarPrecioManual}
+                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                disabled={permitirCostoManual && !cargarPrecioManual}
               />
-              {!permitirCostoManual && (
+              {permitirCostoManual && (
                 <label className="ml-2 flex items-center text-xs">
                   <input
                     type="checkbox"

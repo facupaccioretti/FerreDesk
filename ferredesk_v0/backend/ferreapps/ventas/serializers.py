@@ -1,8 +1,14 @@
 from rest_framework import serializers
-from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+from .models import (
+    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
+    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+)
 from django.db import models
 from ferreapps.productos.models import AlicuotaIVA
 from decimal import Decimal
+from ferreapps.clientes.models import Cliente
+from ferreapps.clientes.models import Vendedor
+from datetime import date, timedelta
 
 class ComprobanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,19 +18,29 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItem
-        exclude = ['vdi_idve']
+        # ATENCIÓN: Solo se deben exponer los campos base de la tabla física.
+        # Los campos calculados (vdi_importe, vdi_importe_total, vdi_ivaitem) solo existen en la vista y en el modelo de solo lectura.
+        fields = [
+            'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
+            'vdi_costo', 'vdi_margen', 'vdi_bonifica',
+            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
+        ]
 
 class VentaSerializer(serializers.ModelSerializer):
+    comprobante = ComprobanteSerializer(read_only=True)
+    comprobante_id = serializers.CharField(write_only=True, required=False)
     tipo = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
     items = VentaDetalleItemSerializer(many=True, read_only=True)
     numero_formateado = serializers.SerializerMethodField()
-    iva_desglose = serializers.JSONField(read_only=True)
+    cliente_nombre = serializers.SerializerMethodField()
+    vendedor_nombre = serializers.SerializerMethodField()
+    # ATENCIÓN: No exponer campos calculados como ven_impneto, ven_total, iva_desglose, etc. Estos solo existen en la vista y en el modelo de solo lectura.
 
     class Meta:
         model = Venta
         fields = '__all__'
-        extra_fields = ['tipo', 'estado', 'numero_formateado']
+        extra_fields = ['tipo', 'estado', 'numero_formateado', 'cliente_nombre', 'vendedor_nombre']
 
     def get_tipo(self, obj):
         if not obj.comprobante:
@@ -60,6 +76,20 @@ class VentaSerializer(serializers.ModelSerializer):
             return f"{obj.ven_punto:04d}-{obj.ven_numero:08d}"
         return None
 
+    def get_cliente_nombre(self, obj):
+        try:
+            cliente = Cliente.objects.get(id=obj.ven_idcli)
+            return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
+        except Cliente.DoesNotExist:
+            return ''
+
+    def get_vendedor_nombre(self, obj):
+        try:
+            vendedor = Vendedor.objects.get(id=obj.ven_idvdo)
+            return vendedor.nombre if hasattr(vendedor, 'nombre') else str(vendedor)
+        except Exception:
+            return ''
+
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
@@ -67,67 +97,42 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
+        # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
+        dias_validez = self.initial_data.get('dias_validez')
+        if dias_validez is not None:
+            try:
+                dias_validez = int(dias_validez)
+            except Exception:
+                dias_validez = None
+        if dias_validez and dias_validez > 0:
+            fecha_base = validated_data.get('ven_fecha')
+            if fecha_base is None:
+                fecha_base = date.today()
+            validated_data['ven_vence'] = fecha_base + timedelta(days=dias_validez)
         if not items_data:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
-        descu1 = self.initial_data.get('descu1')
-        if descu1 is None:
-            descu1 = self.initial_data.get('ven_descu1', 0)
-        descu1 = float(descu1)
-        descu2 = self.initial_data.get('descu2')
-        if descu2 is None:
-            descu2 = self.initial_data.get('ven_descu2', 0)
-        descu2 = float(descu2)
+        
+        # Obtener el código AFIP del comprobante
+        comprobante_id = validated_data.pop('comprobante_id', None)
+        if comprobante_id:
+            validated_data['comprobante_id'] = comprobante_id
+
+        # Asignar bonificación general a los ítems sin bonificación particular
         bonif_general = self.initial_data.get('bonificacionGeneral', 0)
         bonif_general = float(bonif_general)
-        comprobante_id = self.initial_data.get('comprobante', None)
-        # Calcular subtotal de cada ítem igual que en el frontend
-        subtotales = []
         for item in items_data:
-            cantidad = float(item.get('vdi_cantidad', 0))
-            precio = float(item.get('vdi_importe', 0))
-            bonif_particular = item.get('vdi_bonifica')
-            bonif = float(bonif_particular) if bonif_particular not in [None, '', 0, '0', 0.0] and float(bonif_particular) > 0 else bonif_general
-            subtotal = (precio * cantidad) * (1 - bonif / 100)
-            subtotales.append(subtotal)
-        subtotal_sin_iva = sum(subtotales)
-        # Aplicar descuentos sucesivos
-        subtotal_con_descuentos = subtotal_sin_iva * (1 - descu1 / 100)
-        subtotal_con_descuentos = subtotal_con_descuentos * (1 - descu2 / 100)
-        iva_total = 0
-        total_con_iva = 0
-        iva_desglose = {}
-        alicuotas_map = {a.id: float(a.porce) for a in AlicuotaIVA.objects.all()}
-        for idx, item in enumerate(items_data):
-            ali_id = int(item.get('vdi_idaliiva', 0))
-            alicuota = alicuotas_map.get(ali_id, 0)
-            proporcion = subtotales[idx] / (subtotal_sin_iva or 1)
-            item_subtotal_con_descuentos = subtotal_con_descuentos * proporcion
-            iva = item_subtotal_con_descuentos * (alicuota / 100)
-            iva_total += iva
-            total_con_iva += item_subtotal_con_descuentos + iva
-            ali_key = f"{alicuota:.2f}"
-            if comprobante_id not in [9998, 9999]:
-                if ali_key not in iva_desglose:
-                    iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
-                iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
-                iva_desglose[ali_key]['iva'] += iva
-            elif comprobante_id == 9997:
-                if ali_key not in iva_desglose:
-                    iva_desglose[ali_key] = {'neto': 0, 'iva': 0}
-                iva_desglose[ali_key]['neto'] += item_subtotal_con_descuentos
-                iva_desglose[ali_key]['iva'] += iva
-        validated_data['ven_impneto'] = Decimal(str(round(subtotal_con_descuentos, 2)))
-        validated_data['ven_total'] = float(round(total_con_iva, 2))
-        validated_data['ven_descu1'] = descu1
-        validated_data['ven_descu2'] = descu2
-        validated_data['ven_bonificacion_general'] = bonif_general
-        if comprobante_id == 9997:
-            validated_data['iva_desglose'] = iva_desglose
-        else:
-            validated_data['iva_desglose'] = iva_desglose if comprobante_id not in [9998, 9999] else {}
+            bonif = item.get('vdi_bonifica')
+            if not bonif or float(bonif) == 0:
+                item['vdi_bonifica'] = bonif_general
+
+        # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
+        # Crear los items base (sin campos calculados)
         for item_data in items_data:
             item_data['vdi_idve'] = venta
+            # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
+            for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                item_data.pop(campo_calculado, None)
             VentaDetalleItem.objects.create(**item_data)
         return venta
 
@@ -135,8 +140,8 @@ class VentaSerializer(serializers.ModelSerializer):
         # Validación de unicidad excluyendo el propio registro
         ven_punto = validated_data.get('ven_punto', instance.ven_punto)
         ven_numero = validated_data.get('ven_numero', instance.ven_numero)
-        comprobante = validated_data.get('comprobante', instance.comprobante)
-        qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante=comprobante)
+        comprobante_id = validated_data.get('comprobante_id', instance.comprobante_id)
+        qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante_id=comprobante_id)
         if instance.pk:
             qs = qs.exclude(pk=instance.pk)
         if qs.exists():
@@ -145,17 +150,39 @@ class VentaSerializer(serializers.ModelSerializer):
                     'La combinación de punto de venta, número y comprobante ya existe en otro registro.'
                 ]
             })
+        
         # Actualizar los campos normalmente
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
+        items_data = self.initial_data.get('items', [])
+        # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
+        dias_validez = self.initial_data.get('dias_validez')
+        if dias_validez is not None:
+            try:
+                dias_validez = int(dias_validez)
+            except Exception:
+                dias_validez = None
+        if dias_validez and dias_validez > 0:
+            fecha_base = validated_data.get('ven_fecha', instance.ven_fecha or date.today())
+            instance.ven_vence = fecha_base + timedelta(days=dias_validez)
+            instance.save(update_fields=['ven_vence'])
+        if items_data:
+            instance.items.all().delete()
+            for item_data in items_data:
+                item_data['vdi_idve'] = instance
+                # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
+                for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
+                    item_data.pop(campo_calculado, None)
+                VentaDetalleItem.objects.create(**item_data)
         return instance
 
     def validate(self, data):
         ven_punto = data.get('ven_punto', getattr(self.instance, 'ven_punto', None))
         ven_numero = data.get('ven_numero', getattr(self.instance, 'ven_numero', None))
-        comprobante = data.get('comprobante', getattr(self.instance, 'comprobante', None))
-        comprobante_id = getattr(comprobante, 'id', comprobante)
+        comprobante_id = getattr(self.instance, 'comprobante_id', getattr(self.instance, 'comprobante', None))
         qs = Venta.objects.filter(ven_punto=ven_punto, ven_numero=ven_numero, comprobante_id=comprobante_id)
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
@@ -175,4 +202,49 @@ class VentaDetalleManSerializer(serializers.ModelSerializer):
 class VentaRemPedSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaRemPed
-        fields = '__all__' 
+        fields = '__all__'
+
+class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaDetalleItemCalculado
+        fields = '__all__'
+
+class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VentaIVAAlicuota
+        fields = '__all__'
+
+class VentaCalculadaSerializer(serializers.ModelSerializer):
+    iva_desglose = serializers.SerializerMethodField()
+    comprobante = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VentaCalculada
+        fields = '__all__'
+
+    def get_iva_desglose(self, obj):
+        from .models import VentaIVAAlicuota
+        # Filtra por la venta y excluye alícuotas de 0%
+        desglose_qs = VentaIVAAlicuota.objects.filter(vdi_idve=obj.ven_id).exclude(ali_porce=0)
+        
+        # Construye el diccionario con el formato que espera el frontend
+        desglose_final = {}
+        for item in desglose_qs:
+            # La clave es el porcentaje, el valor es un objeto con neto e iva
+            porcentaje_str = str(item.ali_porce)
+            desglose_final[porcentaje_str] = {
+                "neto": item.neto_gravado,
+                "iva": item.iva_total
+            }
+        return desglose_final
+
+    def get_comprobante(self, obj):
+        return {
+            'id': obj.comprobante_id,
+            'nombre': obj.comprobante_nombre,
+            'letra': obj.comprobante_letra,
+            'tipo': obj.comprobante_tipo,
+            'codigo_afip': obj.comprobante_codigo_afip,
+            'descripcion': obj.comprobante_descripcion,
+            'activo': obj.comprobante_activo,
+        } 
