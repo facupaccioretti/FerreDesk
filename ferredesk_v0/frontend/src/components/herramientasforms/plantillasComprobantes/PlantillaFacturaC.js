@@ -1,5 +1,8 @@
 // PlantillaFacturaC.js
 // Componente visual para mostrar el detalle de una Factura C, Presupuesto o Venta
+
+//linea 30
+
 import React from 'react';
 import { formatearDescuentosVisual, formatearMoneda } from './helpers';
 
@@ -27,7 +30,7 @@ const PlantillaFacturaC = ({ data }) => {
         {/* Centro: letra, código, tipo, número, fecha */}
         <div className="centro text-center flex flex-col items-center justify-center bg-white rounded-lg p-4 shadow-sm border-2 border-purple-200">
           <div className="letra-comprobante text-5xl font-black text-purple-600 leading-none mb-1">
-            {data.comprobante?.letra || "C"}
+            {data.comprobante?.letra || "C"} {/* Centro: letra, código, tipo, número, fecha */}
           </div>
           <div className="codigo-comprobante text-xs font-semibold text-gray-500 mb-2">
             Cód. {data.comprobante?.codigo_afip || "11"}
