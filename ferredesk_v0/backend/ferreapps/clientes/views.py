@@ -7,6 +7,8 @@ from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
     VendedorSerializer, PlazoSerializer, CategoriaClienteSerializer, ClienteSerializer
 )
+from django.db import transaction
+from django.utils.decorators import method_decorator
 
 # Create your views here.
 
@@ -42,6 +44,7 @@ class CategoriaClienteViewSet(viewsets.ModelViewSet):
     queryset = CategoriaCliente.objects.all()
     serializer_class = CategoriaClienteSerializer
 
+@method_decorator(transaction.atomic, name='dispatch')
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.exclude(id=1)
     serializer_class = ClienteSerializer

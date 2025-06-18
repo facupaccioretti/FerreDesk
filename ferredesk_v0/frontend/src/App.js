@@ -4,7 +4,7 @@ import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
 import Register from './components/Register';
-import ClientesManager from './components/ClientesManager';
+import ClientesManager from './components/Clientes/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
 import ProductosManager from './components/ProductosManager';
 import ProveedoresManager from './components/ProveedoresManager';

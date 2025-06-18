@@ -1,0 +1,138 @@
+Roadmap Quirúrgico para Modularizar `ClientesManager.js`
+======================================================
+
+### Principio Rector
+Este plan asume que toda la lógica en `ClientesManager.js` es funcional y correcta. El objetivo **NO** es reescribir o "mejorar" la lógica, sino **reubicarla** en componentes especializados con las mínimas adaptaciones necesarias para que se comuniquen a través de `props`. El `ClientesManager.js` original actuará como nuestra "fuente de la verdad" para el código.
+
+### Estructura de Archivos Final
+```
+components/
+├── Clientes/
+│   ├── ClienteForm.js
+│   ├── ClientesManager.js
+│   ├── ClientesTable.js
+│   └── FilterableSelect.js
+└── ClientesManager.js      <-- ESTE ARCHIVO NO SERÁ ELIMINADO/MODIFICADO HASTA QUE EL USUARIO ORDENE
+```
+
+---
+### Plan de Ejecución Detallado
+---
+
+#### **PASO 1: Crear `FilterableSelect.js`**
+*   **Objetivo**: Extraer el componente de select con búsqueda. Es el más aislado.
+*   **Acciones**:
+    1.  **Crear archivo**: `ferredesk_v0/frontend/src/components/Clientes/FilterableSelect.js`.
+    2.  **Extraer de `ClientesManager.js`**:
+        *   **Cortar** la definición completa: `const FilterableSelect = (...) => { ... }`.
+    3.  **Contenido de `FilterableSelect.js`**:
+        ```javascript
+        import React, { useState } from "react";
+
+        const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder, addLabel, name }) => {
+          // ... PEGAR AQUÍ EXACTAMENTE EL CÓDIGO INTERNO DEL COMPONENTE ORIGINAL ...
+        };
+
+        export default FilterableSelect;
+        ```
+
+#### **PASO 2: Crear `ClientesTable.js`**
+*   **Objetivo**: Extraer el componente que renderiza la tabla de clientes.
+*   **Acciones**:
+    1.  **Crear archivo**: `ferredesk_v0/frontend/src/components/Clientes/ClientesTable.js`.
+    2.  **Extraer de `ClientesManager.js`**:
+        *   **Cortar** la definición completa: `const ClientesTable = ({...}) => { ... }`.
+        *   **Cortar** la definición de `ClientesTable.defaultProps`.
+    3.  **Contenido de `ClientesTable.js`**:
+        ```javascript
+        import React, { useState, useEffect } from "react";
+        import Paginador from "../Paginador"; // La ruta puede necesitar ajuste
+
+        const ClientesTable = ({
+          // Todas las props originales se mantienen
+          clientes, onEdit, onDelete, search, setSearch, expandedClientId, 
+          setExpandedClientId, barrios, localidades, provincias, tiposIVA, 
+          transportes, vendedores, plazos, categorias
+        }) => {
+          // ... PEGAR AQUÍ EXACTAMENTE EL CÓDIGO INTERNO DEL COMPONENTE ORIGINAL ...
+        };
+
+        ClientesTable.defaultProps = {
+          // ... PEGAR AQUÍ EL OBJETO defaultProps ORIGINAL ...
+        };
+
+        export default ClientesTable;
+        ```
+
+#### **PASO 3: Crear `ClienteForm.js`**
+*   **Objetivo**: Extraer el formulario de alta/edición, que es la pieza más compleja.
+*   **Acciones**:
+    1.  **Crear archivo**: `ferredesk_v0/frontend/src/components/Clientes/ClienteForm.js`.
+    2.  **Extraer de `ClientesManager.js`**:
+        *   **Cortar** la definición `const NuevoClienteForm = ({...}) => { ... }`. En el nuevo archivo, la renombraremos a `ClienteForm`.
+        *   Dentro de esta función, se moverá toda su lógica interna sin cambios:
+            *   Todos los `useState` (`form`, `error`, `modal`, `modalForm`, `modalLoading`).
+            *   Todas las funciones auxiliares: `handleChange`, `openAddModal`, `closeModal`, `handleAddModalSave`, `renderModalForm`, y `handleSubmit`.
+    3.  **Contenido de `ClienteForm.js`**:
+        ```javascript
+        import React, { useState, useEffect } from "react";
+        import { getCookie } from "../../utils/csrf"; // Ajustar ruta
+        import FilterableSelect from "./FilterableSelect";
+
+        const ClienteForm = ({
+          // Todas las props originales se mantienen
+          onSave, onCancel, initialData, barrios, localidades, /*...etc...*/, apiError 
+        }) => {
+          // ... PEGAR AQUÍ TODA LA LÓGICA INTERNA DEL FORMULARIO ORIGINAL ...
+          // (useState, handleChange, handleSubmit, renderModalForm, etc.)
+
+          return (
+            // ... PEGAR AQUÍ TODO EL JSX ORIGINAL DEL <form> y el modal ...
+          );
+        };
+
+        export default ClienteForm;
+        ```
+
+#### **PASO 4: Refactorizar `ClientesManager.js` a su versión final**
+*   **Objetivo**: Convertir el `ClientesManager` original en un "contenedor" puro.
+*   **Acciones**:
+    1.  **Crear copia y renombrar**: Crear `ferredesk_v0/frontend/src/components/Clientes/ClientesManager.js`.
+    2.  **Contenido a Eliminar** de este nuevo archivo:
+        *   La definición completa de `ClientesTable`.
+        *   La definición completa de `FilterableSelect`.
+        *   La definición completa de `NuevoClienteForm` y toda su lógica interna.
+    3.  **Contenido a Añadir**:
+        *   Las importaciones para los nuevos componentes:
+          ```javascript
+          import ClientesTable from "./ClientesTable.js";
+          import ClienteForm from "./ClienteForm.js";
+          ```
+    4.  **Ajuste del Renderizado (JSX)**:
+        *   La sección del JSX que renderizaba `<ClientesTable ... />` se mantendrá, pero ahora llamará al componente importado.
+        *   La sección que renderizaba `<NuevoClienteForm ... />` será reemplazada por:
+          ```jsx
+          {activeTab === "nuevo" && (
+            <div className="flex justify-center items-center min-h-[60vh]">
+              <ClienteForm
+                onSave={handleSaveCliente}
+                onCancel={() => closeTab("nuevo")}
+                initialData={editCliente}
+                // ... pasar todas las demás props necesarias (barrios, localidades, etc.)
+                apiError={error}
+              />
+            </div>
+          )}
+          ```
+    5.  **Lógica que permanece en `ClientesManager.js`**:
+        *   Todos los hooks `use...API`.
+        *   Los `useState` para `search`, `tabs`, `activeTab`, `editCliente`, `expandedClientId`, `user`.
+        *   Los `useEffect` para el título y el localStorage.
+        *   Las funciones de orquestación: `handleLogout`, `openTab`, `closeTab`, `handleSaveCliente`, `handleDeleteCliente`, `handleEditCliente`.
+
+#### **PASO 5: Limpieza Final**
+*   Una vez que el nuevo `ClientesManager.js` y sus hijos funcionen correctamente, **eliminar** el archivo original `ferredesk_v0/frontend/src/components/ClientesManager.js`.
+*   Ejecutar el linter/formateador (`prettier`) sobre los nuevos archivos para asegurar consistencia de estilo.
+---
+
+Este plan es una guía directa para "cortar y pegar" el código existente en una estructura modular, minimizando la introducción de nueva lógica y reduciendo el riesgo de errores.  

@@ -40,8 +40,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -63,8 +65,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -85,8 +89,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -105,9 +111,11 @@ export function useClientesAPI() {
     }
   }, []);
 
+  const clearError = () => setError(null);
+
   useEffect(() => {
     fetchClientes();
   }, []);
 
-  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto };
+  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
 }

@@ -15,17 +15,22 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import JSONParser
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from django.utils.decorators import method_decorator
 
 # Create your views here.
 
 # Aquí se agregarán las vistas para el ABM de stock y proveedores
 
+# Aseguramos que cualquier operación sobre proveedores se realice dentro de una transacción atómica
+@method_decorator(transaction.atomic, name='dispatch')
 class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo', 'razon', 'fantasia', 'acti']
 
+# Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
+@method_decorator(transaction.atomic, name='dispatch')
 class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
@@ -40,6 +45,8 @@ class StockViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+# Atomicidad para las relaciones entre productos y proveedores
+@method_decorator(transaction.atomic, name='dispatch')
 class StockProveViewSet(viewsets.ModelViewSet):
     queryset = StockProve.objects.all()
     serializer_class = StockProveSerializer
