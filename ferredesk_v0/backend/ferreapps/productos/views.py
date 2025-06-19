@@ -278,16 +278,26 @@ def asociar_codigo_proveedor(request):
 @permission_classes([permissions.IsAuthenticated])
 def codigos_lista_proveedor(request, proveedor_id):
     from .models import PrecioProveedorExcel
-    # Buscar la última lista cargada
-    qs = PrecioProveedorExcel.objects.filter(proveedor_id=proveedor_id).order_by('-fecha_carga')
-    if not qs.exists():
+
+    # 1. Encontrar el registro más reciente para obtener el nombre del último archivo cargado
+    ultimo_registro = PrecioProveedorExcel.objects.filter(proveedor_id=proveedor_id).order_by('-fecha_carga').first()
+
+    if not ultimo_registro:
         return Response({'codigos': []})
-    ultima = qs.first()
-    # Buscar todos los códigos con el mismo nombre de archivo y fecha (ignorando milisegundos)
-    codigos = list(qs.filter(
-        nombre_archivo=ultima.nombre_archivo,
-        fecha_carga__date=ultima.fecha_carga.date()
-    ).values_list('codigo_producto_excel', flat=True))
+
+    # 2. Obtener el nombre del archivo de ese último registro
+    ultimo_nombre_archivo = ultimo_registro.nombre_archivo
+
+    # 3. Devolver todos los códigos asociados a ese nombre de archivo, ignorando la fecha.
+    # Esto soluciona el problema de la zona horaria y respeta la lógica de que
+    # la última lista cargada es la única válida.
+    codigos = list(
+        PrecioProveedorExcel.objects.filter(
+            proveedor_id=proveedor_id,
+            nombre_archivo=ultimo_nombre_archivo
+        ).values_list('codigo_producto_excel', flat=True)
+    )
+    
     return Response({'codigos': codigos})
 
 @api_view(['POST'])

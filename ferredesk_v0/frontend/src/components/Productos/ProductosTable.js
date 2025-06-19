@@ -396,9 +396,13 @@ export default function ProductosTable({
             className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
           >
             <option value="">Todas</option>
-            {familias.filter((f) => f.nivel === "1").map((f) => (
-              <option key={f.id} value={f.id}>{f.deno}</option>
-            ))}
+            {familias
+              .filter((f) => f.nivel === "1")
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.deno}
+                </option>
+              ))}
           </select>
         </div>
         <div>
@@ -409,9 +413,13 @@ export default function ProductosTable({
             className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
           >
             <option value="">Todas</option>
-            {familias.filter((f) => f.nivel === "2").map((f) => (
-              <option key={f.id} value={f.id}>{f.deno}</option>
-            ))}
+            {familias
+              .filter((f) => f.nivel === "2")
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.deno}
+                </option>
+              ))}
           </select>
         </div>
         <div>
@@ -422,9 +430,13 @@ export default function ProductosTable({
             className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
           >
             <option value="">Todas</option>
-            {familias.filter((f) => f.nivel === "3").map((f) => (
-              <option key={f.id} value={f.id}>{f.deno}</option>
-            ))}
+            {familias
+              .filter((f) => f.nivel === "3")
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.deno}
+                </option>
+              ))}
           </select>
         </div>
       </div>
@@ -463,9 +475,7 @@ export default function ProductosTable({
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Sub-subfamilia
               </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Stock
-              </th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Stock</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Acciones
               </th>
@@ -483,13 +493,7 @@ export default function ProductosTable({
                         aria-label={expandedRows.has(product.id) ? "Ocultar detalles" : "Mostrar detalles"}
                         style={{ padding: 0 }}
                       >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          className="block m-auto"
-                        >
+                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" className="block m-auto">
                           <polygon points="5,3 15,10 5,17" />
                         </svg>
                       </button>
@@ -556,77 +560,197 @@ export default function ProductosTable({
                 </tr>
                 {expandedRows.has(product.id) && (
                   <tr>
-                    <td colSpan="8" className="px-3 py-2 bg-slate-50/50">
-                      <div className="p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="font-medium mb-2 text-slate-700">Información General</h4>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Orden:</span> {product.orden ?? "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Unidad:</span> {product.unidad ?? "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Margen:</span> {product.margen ?? "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Cantidad Mínima:</span>{" "}
-                              {product.cantmin ?? "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Alícuota de IVA:</span>{" "}
-                              {product.idaliiva
-                                ? `${product.idaliiva.deno} (${product.idaliiva.porce}%)`
-                                : "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Activo:</span>{" "}
-                              {product.acti === "S"
-                                ? "Activo"
-                                : product.acti === "N"
-                                  ? "Inactivo"
-                                  : "Sin asignar"}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Familia:</span>{" "}
-                              {getFamiliaNombre(product.idfam1)}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Subfamilia:</span>{" "}
-                              {getFamiliaNombre(product.idfam2)}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Sub-subfamilia:</span>{" "}
-                              {getFamiliaNombre(product.idfam3)}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Proveedor Habitual:</span>{" "}
-                              {product.proveedor_habitual?.razon || "Sin asignar"}
-                            </p>
+                    <td colSpan="7" className="px-0 py-0">
+                      <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-l-4 border-orange-500 mx-3 mb-2 rounded-lg shadow-sm">
+                        <div className="p-4">
+                          {/* Header con información clave */}
+                          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
+                            <div className="flex items-center gap-4">
+                              <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                                <svg
+                                  className="w-4 h-4 text-orange-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                Detalles del Producto
+                              </h4>
+                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full font-medium">
+                                ID: {product.id}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm text-slate-600">Stock Total</div>
+                              <div className="text-lg font-bold text-slate-800">
+                                {Number(product.stock_total ?? 0).toFixed(2)}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-medium mb-2 text-slate-700">Stock por Proveedor</h4>
-                            <table className="min-w-full text-sm">
-                              <thead>
-                                <tr className="bg-slate-100">
-                                  <th className="px-2 py-1 text-left text-slate-600">Proveedor</th>
-                                  <th className="px-2 py-1 text-left text-slate-600">Cantidad</th>
-                                  <th className="px-2 py-1 text-left text-slate-600">Costo</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(product.stock_proveedores || []).map((sp, index) => (
-                                  <tr key={index}>
-                                    <td className="px-2 py-1 text-slate-700">
-                                      {sp.proveedor?.razon || "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-slate-700">{sp.cantidad}</td>
-                                    <td className="px-2 py-1 text-slate-700">${sp.costo}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+
+                          {/* Contenido principal en grid compacto */}
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* Información Básica */}
+                            <div className="bg-white rounded-lg p-3 border border-slate-200">
+                              <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                <svg
+                                  className="w-4 h-4 text-blue-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                                Información Básica
+                              </h5>
+                              <div className="space-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Código Compra:</span>
+                                  <span className="font-medium text-slate-700">{product.codcom || "N/A"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Unidad:</span>
+                                  <span className="font-medium text-slate-700">{product.unidad || "N/A"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Margen:</span>
+                                  <span className="font-medium text-slate-700">
+                                    {product.margen ? `${product.margen}%` : "N/A"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Cant. Mínima:</span>
+                                  <span className="font-medium text-slate-700">{product.cantmin ?? "N/A"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Estado:</span>
+                                  <span
+                                    className={`font-medium px-2 py-0.5 rounded-full text-xs ${
+                                      product.acti === "S"
+                                        ? "bg-green-100 text-green-800"
+                                        : product.acti === "N"
+                                          ? "bg-red-100 text-red-800"
+                                          : "bg-gray-100 text-gray-800"
+                                    }`}
+                                  >
+                                    {product.acti === "S" ? "Activo" : product.acti === "N" ? "Inactivo" : "N/A"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Categorización */}
+                            <div className="bg-white rounded-lg p-3 border border-slate-200">
+                              <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                <svg
+                                  className="w-4 h-4 text-purple-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                  />
+                                </svg>
+                                Categorización
+                              </h5>
+                              <div className="space-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Familia:</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam1)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Subfamilia:</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Sub-subfamilia:</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam3)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Alícuota IVA:</span>
+                                  <span className="font-medium text-slate-700">
+                                    {product.idaliiva ? `${product.idaliiva.deno} (${product.idaliiva.porce}%)` : "N/A"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Prov. Habitual:</span>
+                                  <span
+                                    className="font-medium text-slate-700 truncate"
+                                    title={product.proveedor_habitual?.razon}
+                                  >
+                                    {product.proveedor_habitual?.razon || "N/A"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Stock por Proveedor */}
+                            <div className="bg-white rounded-lg p-3 border border-slate-200">
+                              <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                <svg
+                                  className="w-4 h-4 text-green-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                  />
+                                </svg>
+                                Stock por Proveedor
+                              </h5>
+                              <div className="max-h-24 overflow-y-auto">
+                                {(product.stock_proveedores || []).length > 0 ? (
+                                  <div className="space-y-1">
+                                    {product.stock_proveedores.map((sp, index) => (
+                                      <div
+                                        key={index}
+                                        className="flex justify-between items-center text-xs bg-slate-50 rounded p-2"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <div
+                                            className="font-medium text-slate-700 truncate"
+                                            title={sp.proveedor?.razon}
+                                          >
+                                            {sp.proveedor?.razon || "N/A"}
+                                          </div>
+                                        </div>
+                                        <div className="flex gap-2 text-right">
+                                          <span className="text-slate-600">
+                                            Cant: <strong>{sp.cantidad}</strong>
+                                          </span>
+                                          <span className="text-slate-600">
+                                            $<strong>{sp.costo}</strong>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-slate-500 italic text-center py-2">
+                                    Sin stock de proveedores
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

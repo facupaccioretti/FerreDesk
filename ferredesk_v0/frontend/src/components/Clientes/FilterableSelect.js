@@ -88,4 +88,4 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
   )
 }
 
-export default React.memo(FilterableSelect) 
+export default React.memo(FilterableSelect); 

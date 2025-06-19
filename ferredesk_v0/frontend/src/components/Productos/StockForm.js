@@ -1046,7 +1046,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                   <button
                     type="button"
                     onClick={() => setShowAsociarModal(true)}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg hover:shadow-xl text-sm"
+                    className="px-4 py-2 bg-[#2F2F2F] text-white rounded-lg hover:bg-slate-700 font-semibold shadow-lg hover:shadow-xl text-sm"
                   >
                     Asociar código de proveedor
                   </button>

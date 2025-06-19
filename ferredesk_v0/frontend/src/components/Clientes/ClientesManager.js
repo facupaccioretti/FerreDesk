@@ -277,4 +277,4 @@ const ClientesManager = () => {
   )
 }
 
-export default ClientesManager 
+export default ClientesManager;
