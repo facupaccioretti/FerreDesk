@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
+import { TotalesVisualizacion } from "./herramientasforms/useCalculosFormulario"
 
 // Componente del botón duplicar con estética FerreDesk
 const BotonDuplicar = ({ onClick, tabIndex }) => (
@@ -109,6 +110,13 @@ const ItemsGridPresupuesto = forwardRef(
       modo = "presupuesto", // por defecto, para distinguir entre venta y presupuesto
       onRowsChange,
       initialItems,
+      descu1 = 0,
+      descu2 = 0,
+      descu3 = 0,
+      totales = {},
+      setDescu1 = () => {},
+      setDescu2 = () => {},
+      setDescu3 = () => {},
     },
     ref,
   ) => {
@@ -125,6 +133,8 @@ const ItemsGridPresupuesto = forwardRef(
     const codigoRefs = useRef([])
     const cantidadRefs = useRef([])
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
+    const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
+    const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
 
     const getProveedoresProducto = useCallback(
       (productoId, proveedorHabitualId = null) => {
@@ -621,72 +631,178 @@ const ItemsGridPresupuesto = forwardRef(
             </div>
           </div>
         )}
-        <div className="flex items-center gap-4 mb-2">
-          <div className="flex items-center gap-4 mb-2">
-            <label className="text-sm font-semibold text-slate-700">Bonificación general (%)</label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              value={bonificacionGeneral}
-              onChange={(e) => {
-                const value = Math.min(Math.max(Number.parseFloat(e.target.value) || 0, 0), 100)
-                setBonificacionGeneral(value)
-              }}
-              className="w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            />
+        {/* Encabezado organizado en grid */}
+        <div className="grid gap-4 mb-2 items-end" style={{gridTemplateColumns: 'auto auto auto 1fr'}}>
+          {/* Bonificación general */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Bonificación general (%)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={bonificacionGeneral}
+                onChange={(e) => {
+                  const value = Math.min(Math.max(Number.parseFloat(e.target.value) || 0, 0), 100)
+                  setBonificacionGeneral(value)
+                }}
+                className="w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+              />
+              <div
+                className="relative cursor-pointer"
+                onMouseEnter={() => setMostrarTooltipBonif?.(true)}
+                onMouseLeave={() => setMostrarTooltipBonif?.(false)}
+              >
+                <div className="w-6 h-6 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                    className="w-3.5 h-3.5 text-slate-600"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                  </svg>
+                </div>
+                {mostrarTooltipBonif && (
+                  <div className="absolute left-8 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                    La bonificación general solo se aplica a ítems sin bonificación particular.
+                    <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <span className="ml-4 text-slate-500" tabIndex="0" aria-label="Ayuda bonificación general">
-            <svg
-              className="inline w-4 h-4 mr-1 text-blue-400"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
+
+          {/* Descuento 1 */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Descuento 1 (%)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={descu1}
+                onChange={(e) => {
+                  const value = Math.min(Math.max(Number.parseFloat(e.target.value) || 0, 0), 100)
+                  setDescu1(value)
+                }}
+                className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+              />
+            </div>
+          </div>
+
+          {/* Descuento 2 */}
+          <div className="flex items-center gap-2">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Descuento 2 (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={descu2}
+                onChange={(e) => {
+                  const value = Math.min(Math.max(Number.parseFloat(e.target.value) || 0, 0), 100)
+                  setDescu2(value)
+                }}
+                className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+              />
+            </div>
+            {/* Tooltip descuentos escalonados */}
+            <div
+              className="relative cursor-pointer mt-5"
+              onMouseEnter={() => setMostrarTooltipDescuentos(true)}
+              onMouseLeave={() => setMostrarTooltipDescuentos(false)}
             >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 16v-4m0-4h.01" />
-            </svg>
-            <span className="text-xs">La bonificación general solo se aplica a ítems sin bonificación particular.</span>
-          </span>
+              <div className="w-6 h-6 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="1.5"
+                  stroke="currentColor"
+                  className="w-3.5 h-3.5 text-slate-600"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                </svg>
+              </div>
+              {mostrarTooltipDescuentos && (
+                <div className="absolute left-8 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                  Los descuentos se aplican de manera sucesiva sobre el subtotal neto.
+                  <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Resumen de Totales compacto */}
+          <div className="col-span-1 flex justify-end items-end">
+            <div className="min-w-[420px]">
+              <div className="w-full bg-gradient-to-r from-slate-50 via-slate-100/80 to-slate-50 rounded-xl shadow border border-slate-300/50 px-6 py-2">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-600 font-semibold">Subtotal s/IVA:</span>
+                    <span className="text-slate-800 font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-600 font-semibold">Subtotal c/Desc:</span>
+                    <span className="text-slate-800 font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-600 font-semibold">IVA:</span>
+                    <span className="text-slate-800 font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-600 font-semibold">Total c/IVA:</span>
+                    <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-3 py-1 rounded-lg shadow">
+                      <span className="font-bold text-base">${totales.total?.toFixed(2) ?? "0.00"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="w-full">
-          <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-slate-200/50 shadow-lg">
-            <table className="min-w-full divide-y divide-slate-200">
+          <div className="max-h-[20rem] overflow-y-auto overscroll-contain rounded-xl border border-slate-200/50 shadow-lg">
+            <table className="items-grid min-w-full divide-y divide-slate-200">
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100/80 sticky top-0">
                 <tr className="bg-slate-100">
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-12">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-10">
                     Nro.
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-14">
                     Código
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-48">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-48">
                     Denominación
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-20">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-14">
                     Unidad
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-12">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-12">
                     Cantidad
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-32">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-32">
                     Precio Unitario
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
                     Bonif. %
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
                     Precio Bonificado
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-20">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-20">
                     IVA %
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
                     Total
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-20">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-10">
                     Acciones
                   </th>
                 </tr>
@@ -760,7 +876,7 @@ const ItemsGridPresupuesto = forwardRef(
                           inputMode="decimal"
                           value={
                             row.precio !== "" && row.precio !== undefined
-                              ? Number((parseFloat(row.precio) * (1 + ((ALICUOTAS[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100))).toFixed(2))
+                              ? Number((parseFloat(row.precio) * (1 + ((ALICUOTAS[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100))).toFixed(2))
                               : ""
                           }
                           onChange={(e) => {
@@ -814,12 +930,12 @@ const ItemsGridPresupuesto = forwardRef(
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-center">
-                        <div className="flex gap-2 justify-center">
+                        <div className="flex gap-[4px] justify-center">
                           {row.producto && (
                             <>
                               <button
                                 onClick={() => handleDeleteRow(idx)}
-                                className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-xl transition-all duration-200"
+                                className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded-lg transition-all duration-200"
                                 title="Eliminar"
                                 aria-label="Eliminar fila"
                                 tabIndex={0}
@@ -831,7 +947,7 @@ const ItemsGridPresupuesto = forwardRef(
                                   viewBox="0 0 24 24"
                                   strokeWidth={1.5}
                                   stroke="currentColor"
-                                  className="w-5 h-5"
+                                  className="w-4 h-4"
                                 >
                                   <path
                                     strokeLinecap="round"
@@ -840,7 +956,7 @@ const ItemsGridPresupuesto = forwardRef(
                                   />
                                 </svg>
                               </button>
-                              <div className="hover:bg-orange-50 p-2 rounded-xl transition-all duration-200">
+                              <div className="hover:bg-orange-50 p-1 rounded-lg transition-all duration-200">
                                 <BotonDuplicar
                                   onClick={() => {
                                     setRows((prevRows) => {

@@ -570,430 +570,307 @@ const PresupuestosManager = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
       <Navbar user={user} onLogout={handleLogout} />
-      <div className="px-6 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
-        </div>
-        {ventasError && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
-            <div className="flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {ventasError}
-            </div>
+      <div className="py-8 px-4">
+        <div className="w-[1400px] mx-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-3xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
           </div>
-        )}
-        <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200">
-          {/* Tabs tipo browser */}
-          <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-slate-50">
-            {tabs.map((tab) => (
-              <div
-                key={tab.key}
-                className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                  activeTab === tab.key
-                    ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-                onClick={() => setActiveTab(tab.key)}
-                style={{ position: "relative", zIndex: 1 }}
-                draggable={tab.closable}
-                onDragStart={
-                  tab.closable
-                    ? (e) => {
-                        setDraggedTabKey(tab.key)
-                        e.dataTransfer.effectAllowed = "move"
-                      }
-                    : undefined
-                }
-                onDrop={
-                  tab.closable
-                    ? (e) => {
-                        e.preventDefault()
-                        if (draggedTabKey && draggedTabKey !== tab.key) {
-                          const dynamicTabs = tabs.filter((t) => t.closable)
-                          const fixedTabs = tabs.filter((t) => !t.closable)
-                          const draggedIdx = dynamicTabs.findIndex((t) => t.key === draggedTabKey)
-                          const dropIdx = dynamicTabs.findIndex((t) => t.key === tab.key)
-                          if (draggedIdx !== -1 && dropIdx !== -1) {
-                            const newDynamicTabs = [...dynamicTabs]
-                            const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1)
-                            newDynamicTabs.splice(dropIdx, 0, draggedTab)
-                            setTabs([...fixedTabs, ...newDynamicTabs])
-                          }
-                        }
-                        setDraggedTabKey(null)
-                      }
-                    : undefined
-                }
-                onDragEnd={() => {
-                  setDraggedTabKey(null)
-                }}
-              >
-                {tab.label}
-                {tab.closable && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeTab(tab.key)
-                    }}
-                    className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                    title="Cerrar"
-                  >
-                    ×
-                  </button>
-                )}
+          {ventasError && (
+            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
+              <div className="flex items-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {ventasError}
               </div>
-            ))}
-          </div>
-          <div className="flex-1 p-6">
-            {/* Presupuestos y Ventas */}
-            {activeTab === "presupuestos" && (
-              <>
-                <div className="mb-4">
-                  <FiltrosPresupuestos
-                    comprobantes={comprobantes}
-                    clientes={clientes}
+            </div>
+          )}
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 max-w-full">
+            {/* Tabs tipo browser */}
+            <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-slate-50">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.key}
+                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
+                    activeTab === tab.key
+                      ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{ position: "relative", zIndex: 1 }}
+                  draggable={tab.closable}
+                  onDragStart={
+                    tab.closable
+                      ? (e) => {
+                          setDraggedTabKey(tab.key)
+                          e.dataTransfer.effectAllowed = "move"
+                        }
+                      : undefined
+                  }
+                  onDrop={
+                    tab.closable
+                      ? (e) => {
+                          e.preventDefault()
+                          if (draggedTabKey && draggedTabKey !== tab.key) {
+                            const dynamicTabs = tabs.filter((t) => t.closable)
+                            const fixedTabs = tabs.filter((t) => !t.closable)
+                            const draggedIdx = dynamicTabs.findIndex((t) => t.key === draggedTabKey)
+                            const dropIdx = dynamicTabs.findIndex((t) => t.key === tab.key)
+                            if (draggedIdx !== -1 && dropIdx !== -1) {
+                              const newDynamicTabs = [...dynamicTabs]
+                              const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1)
+                              newDynamicTabs.splice(dropIdx, 0, draggedTab)
+                              setTabs([...fixedTabs, ...newDynamicTabs])
+                            }
+                          }
+                          setDraggedTabKey(null)
+                        }
+                      : undefined
+                  }
+                  onDragEnd={() => {
+                    setDraggedTabKey(null)
+                  }}
+                >
+                  {tab.label}
+                  {tab.closable && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        closeTab(tab.key)
+                      }}
+                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                      title="Cerrar"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex-1 p-6">
+              {/* Presupuestos y Ventas */}
+              {activeTab === "presupuestos" && (
+                <>
+                  <div className="mb-4">
+                    <FiltrosPresupuestos
+                      comprobantes={comprobantes}
+                      clientes={clientes}
+                      vendedores={vendedores}
+                      onFiltroChange={handleFiltroChange}
+                      comprobanteTipo={comprobanteTipo}
+                      setComprobanteTipo={setComprobanteTipo}
+                      comprobanteLetra={comprobanteLetra}
+                      setComprobanteLetra={setComprobanteLetra}
+                      fechaDesde={fechaDesde}
+                      setFechaDesde={setFechaDesde}
+                      fechaHasta={fechaHasta}
+                      setFechaHasta={setFechaHasta}
+                      clienteId={clienteId}
+                      setClienteId={setClienteId}
+                      vendedorId={vendedorId}
+                      setVendedorId={setVendedorId}
+                    />
+                  </div>
+                  <div className="mb-4 flex gap-2">
+                    <button
+                      onClick={handleNuevo}
+                      className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-lg">+</span> Nuevo Presupuesto
+                    </button>
+                    <button
+                      onClick={handleNuevaVenta}
+                      className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-lg">+</span> Nueva Venta
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px" }}>
+                      <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
+                        <tr>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            Comprobante
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            N°
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            Fecha
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            Cliente
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            Total
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-slate-100">
+                        {datosPagina.map((p) => {
+                          let comprobanteObj = null
+                          if (typeof p.comprobante === "object" && p.comprobante !== null) {
+                            comprobanteObj = p.comprobante
+                          } else if (p.comprobante) {
+                            comprobanteObj = comprobantes.find((c) => c.id === p.comprobante) || null
+                          }
+                          const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
+                          const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
+                          const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
+                          const { icon, label } = getComprobanteIconAndLabel(
+                            comprobanteTipo,
+                            comprobanteNombre,
+                            comprobanteLetra,
+                          )
+                          // Quitar letra del numero_formateado si existe
+                          let numeroSinLetra = p.numero_formateado
+                          if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
+                            numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
+                          }
+                          return (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                              {/* Comprobante */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <div className="flex items-center gap-2 text-slate-700">
+                                  {icon} <span className="font-medium">{label}</span>
+                                </div>
+                              </td>
+                              {/* Número */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-slate-800">
+                                    {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
+                                  </span>
+                                  <EstadoBadge estado={p.estado} />
+                                </div>
+                              </td>
+                              {/* Fecha */}
+                              <td className="px-3 py-3 whitespace-nowrap text-slate-600">{p.fecha}</td>
+                              {/* Cliente */}
+                              <td className="px-3 py-3 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
+                              {/* Total */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <CeldaTotalVenta idVenta={p.id} />
+                              </td>
+                              {/* Acciones */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <div className="flex gap-1">
+                                  {p.tipo === "Presupuesto" && p.estado === "Abierto" ? (
+                                    <>
+                                      <BotonEditar onClick={() => handleEdit(p)} />
+                                      <BotonImprimir onClick={() => handleImprimir(p)} />
+                                      <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                      <BotonConvertir
+                                        onClick={() => handleConvertir(p)}
+                                        disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
+                                        title={
+                                          isFetchingForConversion && fetchingPresupuestoId === p.id
+                                            ? "Cargando..."
+                                            : "Convertir"
+                                        }
+                                      />
+                                      <BotonEliminar onClick={() => handleDelete(p.id)} />
+                                    </>
+                                  ) : p.tipo === "Venta" && p.estado === "Cerrado" ? (
+                                    <>
+                                      <BotonImprimir onClick={() => handleImprimir(p)} />
+                                      <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                      <BotonEliminar onClick={() => handleDelete(p.id)} />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                      <BotonImprimir onClick={() => handleImprimir(p)} />
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Paginador
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPorPagina}
+                    currentPage={paginaActual}
+                    onPageChange={setPaginaActual}
+                    onItemsPerPageChange={(n) => {
+                      setItemsPorPagina(n)
+                      setPaginaActual(1)
+                    }}
+                    opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
+                  />
+                </>
+              )}
+              {/* Vendedores: lista */}
+              {activeTab === "vendedores" && (
+                <>
+                  <div className="flex justify-end mb-4">
+                    <button
+                      onClick={handleNuevoVendedor}
+                      className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-lg">+</span> Nuevo Vendedor
+                    </button>
+                  </div>
+                  <VendedoresTable
                     vendedores={vendedores}
-                    onFiltroChange={handleFiltroChange}
-                    comprobanteTipo={comprobanteTipo}
-                    setComprobanteTipo={setComprobanteTipo}
-                    comprobanteLetra={comprobanteLetra}
-                    setComprobanteLetra={setComprobanteLetra}
-                    fechaDesde={fechaDesde}
-                    setFechaDesde={setFechaDesde}
-                    fechaHasta={fechaHasta}
-                    setFechaHasta={setFechaHasta}
-                    clienteId={clienteId}
-                    setClienteId={setClienteId}
-                    vendedorId={vendedorId}
-                    setVendedorId={setVendedorId}
+                    onEdit={handleEditVendedor}
+                    onDelete={handleDeleteVendedor}
+                    search={searchVendedor}
+                    setSearch={setSearchVendedor}
+                  />
+                </>
+              )}
+              {/* Vendedores: nuevo/editar */}
+              {(activeTab.startsWith("nuevo-vendedor") || activeTab.startsWith("editar-vendedor")) && (
+                <div className="flex justify-center items-center min-h-[60vh]">
+                  <VendedorForm
+                    initialData={editVendedorData}
+                    onSave={handleSaveVendedor}
+                    onCancel={() => closeTab(activeTab)}
+                    loading={loadingVendedores}
+                    error={errorVendedores}
+                    localidades={localidades}
                   />
                 </div>
-                <div className="mb-4 flex gap-2">
-                  <button
-                    onClick={handleNuevo}
-                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                  >
-                    <span className="text-lg">+</span> Nuevo Presupuesto
-                  </button>
-                  <button
-                    onClick={handleNuevaVenta}
-                    className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                  >
-                    <span className="text-lg">+</span> Nueva Venta
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Comprobante
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          N°
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Fecha
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Cliente
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Total
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100">
-                      {datosPagina.map((p) => {
-                        let comprobanteObj = null
-                        if (typeof p.comprobante === "object" && p.comprobante !== null) {
-                          comprobanteObj = p.comprobante
-                        } else if (p.comprobante) {
-                          comprobanteObj = comprobantes.find((c) => c.id === p.comprobante) || null
-                        }
-                        const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
-                        const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
-                        const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
-                        const { icon, label } = getComprobanteIconAndLabel(
-                          comprobanteTipo,
-                          comprobanteNombre,
-                          comprobanteLetra,
-                        )
-                        // Quitar letra del numero_formateado si existe
-                        let numeroSinLetra = p.numero_formateado
-                        if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
-                          numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
-                        }
-                        return (
-                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                            {/* Comprobante */}
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <div className="flex items-center gap-2 text-slate-700">
-                                {icon} <span className="font-medium">{label}</span>
-                              </div>
-                            </td>
-                            {/* Número */}
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-slate-800">
-                                  {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
-                                </span>
-                                <EstadoBadge estado={p.estado} />
-                              </div>
-                            </td>
-                            {/* Fecha */}
-                            <td className="px-3 py-3 whitespace-nowrap text-slate-600">{p.fecha}</td>
-                            {/* Cliente */}
-                            <td className="px-3 py-3 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
-                            {/* Total */}
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <CeldaTotalVenta idVenta={p.id} />
-                            </td>
-                            {/* Acciones */}
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <div className="flex gap-1">
-                                {p.tipo === "Presupuesto" && p.estado === "Abierto" ? (
-                                  <>
-                                    <BotonEditar onClick={() => handleEdit(p)} />
-                                    <BotonImprimir onClick={() => handleImprimir(p)} />
-                                    <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                    <BotonConvertir
-                                      onClick={() => handleConvertir(p)}
-                                      disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
-                                      title={
-                                        isFetchingForConversion && fetchingPresupuestoId === p.id
-                                          ? "Cargando..."
-                                          : "Convertir"
-                                      }
-                                    />
-                                    <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                  </>
-                                ) : p.tipo === "Venta" && p.estado === "Cerrado" ? (
-                                  <>
-                                    <BotonImprimir onClick={() => handleImprimir(p)} />
-                                    <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                    <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                  </>
-                                ) : (
-                                  <>
-                                    <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                    <BotonImprimir onClick={() => handleImprimir(p)} />
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <Paginador
-                  totalItems={totalItems}
-                  itemsPerPage={itemsPorPagina}
-                  currentPage={paginaActual}
-                  onPageChange={setPaginaActual}
-                  onItemsPerPageChange={(n) => {
-                    setItemsPorPagina(n)
-                    setPaginaActual(1)
-                  }}
-                  opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
-                />
-              </>
-            )}
-            {/* Vendedores: lista */}
-            {activeTab === "vendedores" && (
-              <>
-                <div className="flex justify-end mb-4">
-                  <button
-                    onClick={handleNuevoVendedor}
-                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                  >
-                    <span className="text-lg">+</span> Nuevo Vendedor
-                  </button>
-                </div>
-                <VendedoresTable
-                  vendedores={vendedores}
-                  onEdit={handleEditVendedor}
-                  onDelete={handleDeleteVendedor}
-                  search={searchVendedor}
-                  setSearch={setSearchVendedor}
-                />
-              </>
-            )}
-            {/* Vendedores: nuevo/editar */}
-            {(activeTab.startsWith("nuevo-vendedor") || activeTab.startsWith("editar-vendedor")) && (
-              <div className="flex justify-center items-center min-h-[60vh]">
-                <VendedorForm
-                  initialData={editVendedorData}
-                  onSave={handleSaveVendedor}
-                  onCancel={() => closeTab(activeTab)}
-                  loading={loadingVendedores}
-                  error={errorVendedores}
-                  localidades={localidades}
-                />
-              </div>
-            )}
-            {/* Presupuestos: nuevo/editar/vista */}
-            {(activeTab.startsWith("nuevo-") ||
-              activeTab.startsWith("editar") ||
-              activeTab.startsWith("nueva-venta-") ||
-              activeTab.startsWith("vista-")) &&
-              !activeTab.startsWith("nuevo-vendedor") &&
-              !activeTab.startsWith("editar-vendedor") &&
-              (activeTab.startsWith("nueva-venta-") ? (
-                <VentaForm
-                  onSave={async (payload) => {
-                    await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
-                    closeTab(activeTab)
-                  }}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={null}
-                  readOnlyOverride={false}
-                  comprobantes={comprobantes}
-                  tiposComprobante={tiposComprobante}
-                  tipoComprobante={tipoComprobante}
-                  setTipoComprobante={setTipoComprobante}
-                  clientes={clientes}
-                  plazos={plazos}
-                  vendedores={vendedores}
-                  sucursales={sucursales}
-                  puntosVenta={puntosVenta}
-                  loadingComprobantes={loadingComprobantes}
-                  errorComprobantes={errorComprobantes}
-                  productos={productos}
-                  loadingProductos={loadingProductos}
-                  familias={familias}
-                  loadingFamilias={loadingFamilias}
-                  proveedores={proveedores}
-                  loadingProveedores={loadingProveedores}
-                  alicuotas={alicuotas}
-                  loadingAlicuotas={loadingAlicuotas}
-                  errorProductos={errorProductos}
-                  errorFamilias={errorFamilias}
-                  errorProveedores={errorProveedores}
-                  errorAlicuotas={errorAlicuotas}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  ItemsGrid={ItemsGrid}
-                />
-              ) : activeTab.startsWith("vista-") ? (
-                <PresupuestoVentaVista
-                  data={tabs.find((t) => t.key === activeTab)?.data}
-                  clientes={clientes}
-                  vendedores={vendedores}
-                  plazos={plazos}
-                  sucursales={sucursales}
-                  puntosVenta={puntosVenta}
-                  comprobantes={comprobantes}
-                  onImprimir={handleImprimir}
-                  onEliminar={async (id) => {
-                    await handleDelete(id)
-                    closeTab(activeTab)
-                  }}
-                  onCerrar={() => closeTab(activeTab)}
-                />
-              ) : activeTab.startsWith("editar") ? (
-                <EditarPresupuestoForm
-                  onSave={async (payload) => {
-                    const idOriginal = activeTabData?.id || activeTabData?.ven_id
-                    if (!idOriginal) {
-                      alert("No se encontró el ID del presupuesto a editar.")
-                      return
-                    }
-                    await updateVenta(idOriginal, {
-                      ...payload,
-                      tipoOriginal: activeTabData?.tipo,
-                      estadoOriginal: activeTabData?.estado,
-                    })
-                    closeTab(activeTab)
-                  }}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={activeTabData || editPresupuesto}
-                  comprobantes={comprobantes}
-                  tiposComprobante={tiposComprobante}
-                  tipoComprobante={tipoComprobante}
-                  setTipoComprobante={setTipoComprobante}
-                  clientes={clientes}
-                  plazos={plazos}
-                  vendedores={vendedores}
-                  sucursales={sucursales}
-                  puntosVenta={puntosVenta}
-                  productos={productos}
-                  proveedores={proveedores}
-                  alicuotas={alicuotas}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  ItemsGrid={ItemsGrid}
-                />
-              ) : (
-                <PresupuestoForm
-                  onSave={async (payload) => {
-                    await addVenta({ ...payload, tipo: "Presupuesto", estado: "Abierto" })
-                    closeTab(activeTab)
-                  }}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={activeTabData || editPresupuesto}
-                  readOnlyOverride={false}
-                  comprobantes={comprobantes}
-                  tiposComprobante={tiposComprobante}
-                  tipoComprobante={tipoComprobante}
-                  setTipoComprobante={setTipoComprobante}
-                  clientes={clientes}
-                  plazos={plazos}
-                  vendedores={vendedores}
-                  sucursales={sucursales}
-                  puntosVenta={puntosVenta}
-                  loadingComprobantes={loadingComprobantes}
-                  errorComprobantes={errorComprobantes}
-                  productos={productos}
-                  loadingProductos={loadingProductos}
-                  familias={familias}
-                  loadingFamilias={loadingFamilias}
-                  proveedores={proveedores}
-                  loadingProveedores={loadingProveedores}
-                  alicuotas={alicuotas}
-                  loadingAlicuotas={loadingAlicuotas}
-                  errorProductos={errorProductos}
-                  errorFamilias={errorFamilias}
-                  errorProveedores={errorProveedores}
-                  errorAlicuotas={errorAlicuotas}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  ItemsGrid={ItemsGrid}
-                />
-              ))}
-            {tabs.map(
-              (tab) =>
-                activeTab === tab.key &&
-                tab.tipo === "conventa" && (
-                  <ConVentaForm
-                    key={tab.key}
-                    presupuestoOrigen={tab.data.presupuestoOrigen}
-                    itemsSeleccionados={tab.data.itemsSeleccionados}
-                    onSave={(payload, tk) => {
-                      console.info("[PresupuestosManager] onSave de ConVentaForm, tabKey:", tk)
-                      handleConVentaFormSave(payload, tk)
+              )}
+              {/* Presupuestos: nuevo/editar/vista */}
+              {(activeTab.startsWith("nuevo-") ||
+                activeTab.startsWith("editar") ||
+                activeTab.startsWith("nueva-venta-") ||
+                activeTab.startsWith("vista-")) &&
+                !activeTab.startsWith("nuevo-vendedor") &&
+                !activeTab.startsWith("editar-vendedor") &&
+                (activeTab.startsWith("nueva-venta-") ? (
+                  <VentaForm
+                    onSave={async (payload) => {
+                      await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
+                      closeTab(activeTab)
                     }}
-                    onCancel={() => handleConVentaFormCancel(tab.key)}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={null}
+                    readOnlyOverride={false}
                     comprobantes={comprobantes}
-                    ferreteria={null}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
                     clientes={clientes}
                     plazos={plazos}
                     vendedores={vendedores}
@@ -1015,10 +892,135 @@ const PresupuestosManager = () => {
                     errorAlicuotas={errorAlicuotas}
                     autoSumarDuplicados={autoSumarDuplicados}
                     setAutoSumarDuplicados={setAutoSumarDuplicados}
-                    tabKey={tab.key}
+                    ItemsGrid={ItemsGrid}
                   />
-                ),
-            )}
+                ) : activeTab.startsWith("vista-") ? (
+                  <PresupuestoVentaVista
+                    data={tabs.find((t) => t.key === activeTab)?.data}
+                    clientes={clientes}
+                    vendedores={vendedores}
+                    plazos={plazos}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    comprobantes={comprobantes}
+                    onImprimir={handleImprimir}
+                    onEliminar={async (id) => {
+                      await handleDelete(id)
+                      closeTab(activeTab)
+                    }}
+                    onCerrar={() => closeTab(activeTab)}
+                  />
+                ) : activeTab.startsWith("editar") ? (
+                  <EditarPresupuestoForm
+                    onSave={async (payload) => {
+                      const idOriginal = activeTabData?.id || activeTabData?.ven_id
+                      if (!idOriginal) {
+                        alert("No se encontró el ID del presupuesto a editar.")
+                        return
+                      }
+                      await updateVenta(idOriginal, {
+                        ...payload,
+                        tipoOriginal: activeTabData?.tipo,
+                        estadoOriginal: activeTabData?.estado,
+                      })
+                      closeTab(activeTab)
+                    }}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={activeTabData || editPresupuesto}
+                    comprobantes={comprobantes}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
+                    clientes={clientes}
+                    plazos={plazos}
+                    vendedores={vendedores}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    productos={productos}
+                    proveedores={proveedores}
+                    alicuotas={alicuotas}
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    ItemsGrid={ItemsGrid}
+                  />
+                ) : (
+                  <PresupuestoForm
+                    onSave={async (payload) => {
+                      await addVenta({ ...payload, tipo: "Presupuesto", estado: "Abierto" })
+                      closeTab(activeTab)
+                    }}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={activeTabData || editPresupuesto}
+                    readOnlyOverride={false}
+                    comprobantes={comprobantes}
+                    tiposComprobante={tiposComprobante}
+                    tipoComprobante={tipoComprobante}
+                    setTipoComprobante={setTipoComprobante}
+                    clientes={clientes}
+                    plazos={plazos}
+                    vendedores={vendedores}
+                    sucursales={sucursales}
+                    puntosVenta={puntosVenta}
+                    loadingComprobantes={loadingComprobantes}
+                    errorComprobantes={errorComprobantes}
+                    productos={productos}
+                    loadingProductos={loadingProductos}
+                    familias={familias}
+                    loadingFamilias={loadingFamilias}
+                    proveedores={proveedores}
+                    loadingProveedores={loadingProveedores}
+                    alicuotas={alicuotas}
+                    loadingAlicuotas={loadingAlicuotas}
+                    errorProductos={errorProductos}
+                    errorFamilias={errorFamilias}
+                    errorProveedores={errorProveedores}
+                    errorAlicuotas={errorAlicuotas}
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    ItemsGrid={ItemsGrid}
+                  />
+                ))}
+              {tabs.map(
+                (tab) =>
+                  activeTab === tab.key &&
+                  tab.tipo === "conventa" && (
+                    <ConVentaForm
+                      key={tab.key}
+                      presupuestoOrigen={tab.data.presupuestoOrigen}
+                      itemsSeleccionados={tab.data.itemsSeleccionados}
+                      onSave={(payload, tk) => {
+                        console.info("[PresupuestosManager] onSave de ConVentaForm, tabKey:", tk)
+                        handleConVentaFormSave(payload, tk)
+                      }}
+                      onCancel={() => handleConVentaFormCancel(tab.key)}
+                      comprobantes={comprobantes}
+                      ferreteria={null}
+                      clientes={clientes}
+                      plazos={plazos}
+                      vendedores={vendedores}
+                      sucursales={sucursales}
+                      puntosVenta={puntosVenta}
+                      loadingComprobantes={loadingComprobantes}
+                      errorComprobantes={errorComprobantes}
+                      productos={productos}
+                      loadingProductos={loadingProductos}
+                      familias={familias}
+                      loadingFamilias={loadingFamilias}
+                      proveedores={proveedores}
+                      loadingProveedores={loadingProveedores}
+                      alicuotas={alicuotas}
+                      loadingAlicuotas={loadingAlicuotas}
+                      errorProductos={errorProductos}
+                      errorFamilias={errorFamilias}
+                      errorProveedores={errorProveedores}
+                      errorAlicuotas={errorAlicuotas}
+                      autoSumarDuplicados={autoSumarDuplicados}
+                      setAutoSumarDuplicados={setAutoSumarDuplicados}
+                      tabKey={tab.key}
+                    />
+                  ),
+              )}
+            </div>
           </div>
         </div>
       </div>

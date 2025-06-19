@@ -7,7 +7,7 @@ import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarCambioCliente } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
-import { useCalculosFormulario, TotalesVisualizacion } from "./herramientasforms/useCalculosFormulario"
+import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
@@ -87,7 +87,6 @@ const VentaForm = ({
   // Hooks existentes movidos al inicio
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
-  const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -398,13 +397,13 @@ const VentaForm = ({
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 py-6">
       <div className="px-6">
         <form
-          className="w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
+          className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
         >
           {/* Gradiente decorativo superior */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
 
-          <div className="p-8">
+          <div className="px-8 pt-4 pb-6">
             {/* Badge de letra de comprobante */}
             {letraComprobanteMostrar && (
               <div className="absolute top-6 right-6 z-10">
@@ -436,10 +435,10 @@ const VentaForm = ({
               </div>
             )}
 
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-slate-800 mb-2 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-lg">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -470,258 +469,187 @@ const VentaForm = ({
               )}
             </div>
 
-            {/* CABECERA: Grid 3 filas x 4 columnas */}
-            <div className="w-full mb-8 grid grid-cols-4 grid-rows-3 gap-6">
-              {/* Fila 1 */}
-              <div className="col-start-1 row-start-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Cliente *</label>
-                {loadingClientes ? (
-                  <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                    Cargando clientes...
-                  </div>
-                ) : errorClientes ? (
-                  <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">
-                    {errorClientes}
-                  </div>
-                ) : (
+            {/* CABECERA organizada en dos filas de 4 columnas */}
+            <div className="w-full mb-4">
+              {/* Fila 1: Cliente | CUIT | Domicilio | Fecha */}
+              <div className="grid grid-cols-4 gap-4 mb-3 items-end">
+                {/* Cliente */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
+                  {loadingClientes ? (
+                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+                      Cargando clientes...
+                    </div>
+                  ) : errorClientes ? (
+                    <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">
+                      {errorClientes}
+                    </div>
+                  ) : (
+                    <select
+                      name="clienteId"
+                      value={formulario.clienteId}
+                      onChange={handleClienteChange}
+                      className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Seleccionar cliente...</option>
+                      {clientesConDefecto.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.razon || c.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* CUIT */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}</label>
+                  <input
+                    name="cuit"
+                    type="text"
+                    value={formulario.cuit}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required={usarFiscal && fiscal.camposRequeridos.cuit}
+                    readOnly={isReadOnly}
+                  />
+                </div>
+
+                {/* Domicilio */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                  <input
+                    name="domicilio"
+                    type="text"
+                    value={formulario.domicilio}
+                    onChange={handleChange}
+                    className="compacto max-w-sm w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                    readOnly={isReadOnly}
+                  />
+                </div>
+
+                {/* Fecha */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
+                  <input
+                    name="fecha"
+                    type="date"
+                    value={formulario.fecha}
+                    onChange={handleChange}
+                    className="compacto max-w-[9rem] w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
+
+              {/* Fila 2: Sucursal | Punto de Venta | Plazo | Vendedor */}
+              <div className="grid grid-cols-4 gap-4 items-end">
+                {/* Sucursal */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
                   <select
-                    name="clienteId"
-                    value={formulario.clienteId}
-                    onChange={handleClienteChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    name="sucursalId"
+                    value={formulario.sucursalId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
                     required
                     disabled={isReadOnly}
                   >
-                    <option value="">Seleccionar cliente...</option>
-                    {clientesConDefecto.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.razon || c.nombre}
-                      </option>
+                    {sucursales.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
                     ))}
                   </select>
-                )}
+                </div>
+
+                {/* Punto Venta */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
+                  <select
+                    name="puntoVentaId"
+                    value={formulario.puntoVentaId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    {puntosVenta.map((pv) => (
+                      <option key={pv.id} value={pv.id}>{pv.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Plazo */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
+                  <select
+                    name="plazoId"
+                    value={formulario.plazoId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    <option value="">Seleccionar plazo...</option>
+                    {plazos.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Vendedor */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
+                  <select
+                    name="vendedorId"
+                    value={formulario.vendedorId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    <option value="">Seleccionar vendedor...</option>
+                    {vendedores.map((v) => (
+                      <option key={v.id} value={v.id}>{v.nombre}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="col-start-2 row-start-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}
-                </label>
-                <input
-                  name="cuit"
-                  type="text"
-                  value={formulario.cuit}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required={usarFiscal && fiscal.camposRequeridos.cuit}
-                  readOnly={isReadOnly}
-                />
-              </div>
-              <div className="col-start-3 row-start-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Fecha</label>
-                <input
-                  name="fecha"
-                  type="date"
-                  value={formulario.fecha}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required
-                  readOnly={isReadOnly}
-                />
-              </div>
-              <div className="col-start-4 row-start-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Domicilio{" "}
-                  {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}
-                </label>
-                <input
-                  name="domicilio"
-                  type="text"
-                  value={formulario.domicilio}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required={usarFiscal && fiscal.camposRequeridos.domicilio}
-                  readOnly={isReadOnly}
-                />
-              </div>
-              {/* Fila 2 */}
-              <div className="col-start-1 row-start-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Sucursal *</label>
-                <select
-                  name="sucursalId"
-                  value={formulario.sucursalId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required
-                  disabled={isReadOnly}
-                >
-                  {sucursales.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-start-2 row-start-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Punto de Venta *</label>
-                <select
-                  name="puntoVentaId"
-                  value={formulario.puntoVentaId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required
-                  disabled={isReadOnly}
-                >
-                  {puntosVenta.map((pv) => (
-                    <option key={pv.id} value={pv.id}>
-                      {pv.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-start-3 row-start-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Plazo *</label>
-                <select
-                  name="plazoId"
-                  value={formulario.plazoId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required
-                  disabled={isReadOnly}
-                >
-                  <option value="">Seleccionar plazo...</option>
-                  {plazos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-start-4 row-start-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Vendedor *</label>
-                <select
-                  name="vendedorId"
-                  value={formulario.vendedorId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                  required
-                  disabled={isReadOnly}
-                >
-                  <option value="">Seleccionar vendedor...</option>
-                  {vendedores.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Fila 3 */}
-              <div className="col-start-1 row-start-3 flex flex-col justify-end">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
-                <ComprobanteDropdown
-                  opciones={opcionesComprobante}
-                  value={tipoComprobante}
-                  onChange={setTipoComprobante}
-                  disabled={isReadOnly}
-                  className="w-full"
-                />
-              </div>
-              <div className="col-start-2 row-start-3 flex flex-col justify-end">
-                <SumarDuplicar
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                />
-              </div>
-              <div className="col-start-3 row-start-3"></div>
-              <div className="col-start-4 row-start-3"></div>
             </div>
 
             {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg">
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                    />
-                  </svg>
-                </div>
-                <h4 className="text-xl font-bold text-slate-800">Ítems de la Venta</h4>
-              </div>
+            <div className="mb-6">
+              {/* Encabezado eliminado para maximizar espacio */}
 
-              <div className="flex flex-row items-center gap-4 w-full mb-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50">
-                <div className="min-w-[350px] w-[350px]">
+              <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
+                {/* Buscador de producto */}
+                <div className="min-w-[260px] w-[260px]">
                   <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
                 </div>
-                <div className="flex flex-row items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1 m-0">
-                      Descuento 1
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={formulario.descu1}
-                      onChange={(e) =>
-                        setFormulario((f) => ({
-                          ...f,
-                          descu1: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)),
-                        }))
-                      }
-                      className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                    />
-                    <span className="text-sm font-medium text-slate-600">%</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-slate-700 m-0">Descuento 2</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={formulario.descu2}
-                      onChange={(e) =>
-                        setFormulario((f) => ({
-                          ...f,
-                          descu2: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)),
-                        }))
-                      }
-                      className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                    />
-                    <span className="text-sm font-medium text-slate-600">%</span>
-                  </div>
-                  <div
-                    className="relative cursor-pointer"
-                    onMouseEnter={() => setMostrarTooltipDescuentos(true)}
-                    onMouseLeave={() => setMostrarTooltipDescuentos(false)}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth="1.5"
-                        stroke="currentColor"
-                        className="w-4 h-4 text-slate-600"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
-                        />
-                      </svg>
-                    </div>
-                    {mostrarTooltipDescuentos && (
-                      <div className="absolute left-10 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
-                        Los descuentos se aplican de manera sucesiva sobre el subtotal neto.
-                        <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
-                      </div>
-                    )}
-                  </div>
+
+                {/* Tipo de Comprobante */}
+                <div className="w-40">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
+                  <ComprobanteDropdown
+                    opciones={opcionesComprobante}
+                    value={tipoComprobante}
+                    onChange={setTipoComprobante}
+                    disabled={isReadOnly}
+                    className="w-full max-w-[120px]"
+                  />
+                </div>
+
+                {/* Acción por defecto duplicado */}
+                <div className="w-56">
+                  <SumarDuplicar
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                    disabled={isReadOnly}
+                  />
                 </div>
               </div>
             </div>
@@ -770,20 +698,18 @@ const VentaForm = ({
                   setAutoSumarDuplicados={setAutoSumarDuplicados}
                   bonificacionGeneral={formulario.bonificacionGeneral}
                   setBonificacionGeneral={(value) => setFormulario((f) => ({ ...f, bonificacionGeneral: value }))}
+                  descu1={formulario.descu1}
+                  descu2={formulario.descu2}
+                  descu3={formulario.descu3}
+                  setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+                  setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+                  setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+                  totales={totales}
                   modo="venta"
                   onRowsChange={handleRowsChange}
                 />
               )}
             </div>
-
-            {/* Bloque de totales y descuentos centralizado */}
-            <TotalesVisualizacion
-              bonificacionGeneral={formulario.bonificacionGeneral}
-              descu1={formulario.descu1}
-              descu2={formulario.descu2}
-              descu3={formulario.descu3}
-              totales={totales}
-            />
 
             <div className="mt-8 flex justify-end space-x-4">
               <button

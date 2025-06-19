@@ -42,11 +42,6 @@ function BuscadorProducto({ productos, onSelect }) {
   return (
     <div className="relative w-full max-w-md">
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
         <input
           type="text"
           value={busqueda}
@@ -54,7 +49,7 @@ function BuscadorProducto({ productos, onSelect }) {
           onFocus={() => { if (sugerencias.length > 0) setShowDropdown(true) }}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           placeholder="Buscar productos..."
-          className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 hover:shadow-md"
+          className="w-full px-4 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 hover:shadow-md"
           autoComplete="off"
           onKeyDown={e => {
             if (e.key === 'Enter') {
@@ -76,7 +71,7 @@ function BuscadorProducto({ productos, onSelect }) {
       </div>
       
       {showDropdown && sugerencias.length > 0 && (
-        <ul className="absolute z-30 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl mt-2 w-full max-h-64 overflow-auto shadow-2xl ring-1 ring-slate-200/50">
+        <ul className="absolute z-30 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl mt-2 w-full max-h-48 overflow-auto shadow-2xl ring-1 ring-slate-200/50">
           {sugerencias.map((p, idx) => (
             <li
               key={p.id}

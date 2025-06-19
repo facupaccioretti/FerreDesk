@@ -169,70 +169,31 @@ export function calcularTotalLinea(item, alicuotas) {
 
 export function TotalesVisualizacion({ bonificacionGeneral = 0, descu1 = 0, descu2 = 0, descu3 = 0, totales = {} }) {
   return (
-    <div className="mt-6 flex w-full justify-center">
-      <div className="w-full max-w-3xl bg-gradient-to-r from-slate-50 via-slate-100/80 to-slate-50 rounded-lg shadow-md border border-slate-300/50 px-6 py-3">
-        {/* Título compacto */}
-        <div className="flex items-center justify-center gap-2 mb-3 pb-2 border-b border-slate-300/50">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-4 h-4 text-slate-700"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 15.75V18a2.25 2.25 0 0 1-2.25 2.25h-9A2.25 2.25 0 0 1 2.25 18v-9A2.25 2.25 0 0 1 4.5 6.75h9a2.25 2.25 0 0 1 2.25 2.25V12M11.25 18h9l-3-3m0 0 3-3m-3 3H8.25"
-            />
-          </svg>
-          <h3 className="text-sm font-bold text-slate-800">Resumen de Totales</h3>
+    <div className="mt-4 flex w-full justify-center">
+      <div className="w-full max-w-3xl bg-gradient-to-r from-slate-50 via-slate-100/80 to-slate-50 rounded-md shadow-sm border border-slate-300/50 px-4 py-2">
+        {/* Encabezado simple */}
+        <div className="flex items-center justify-center mb-2 pb-1 border-b border-slate-300/50">
+          <h3 className="text-xs font-bold text-slate-800">Resumen de Totales</h3>
         </div>
 
-        {/* Layout horizontal compacto */}
-        <div className="space-y-2">
-          {/* Primera fila - Subtotal y descuentos */}
-          <div className="flex items-center justify-between gap-6 text-xs">
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">Subtotal s/IVA:</span>
-              <span className="text-slate-800 font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">Bonif. General:</span>
-              <span className="text-slate-700 font-bold text-base">{bonificacionGeneral}%</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">Descuento 1:</span>
-              <span className="text-slate-700 font-bold text-base">{descu1}%</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">Descuento 2:</span>
-              <span className="text-slate-700 font-bold text-base">{descu2}%</span>
-            </div>
-            {descu3 > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-slate-600 font-medium">Descuento 3:</span>
-                <span className="text-slate-700 font-bold text-base">{descu3}%</span>
-              </div>
-            )}
+        {/* Valores en un único renglón */}
+        <div className="flex items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-1">
+            <span className="text-slate-600 font-medium">Subtotal s/IVA:</span>
+            <span className="text-slate-800 font-bold">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
           </div>
-
-          {/* Segunda fila - Totales finales */}
-          <div className="flex items-center justify-between gap-6 text-xs pt-2 border-t border-slate-300/50">
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">Subtotal c/Descuentos:</span>
-              <span className="text-slate-800 font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-600 font-medium">IVA:</span>
-              <span className="text-slate-800 font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-medium">Total c/IVA:</span>
-              <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-3 py-1 rounded-md shadow-sm">
-                <span className="font-bold text-lg">${totales.total?.toFixed(2) ?? "0.00"}</span>
-              </div>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-600 font-medium">Subtotal c/Desc:</span>
+            <span className="text-slate-800 font-bold">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-600 font-medium">IVA:</span>
+            <span className="text-slate-800 font-bold">${totales.iva?.toFixed(2) ?? "0.00"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-600 font-medium">Total c/IVA:</span>
+            <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-2 py-0.5 rounded-md shadow-sm">
+              <span className="font-bold">${totales.total?.toFixed(2) ?? "0.00"}</span>
             </div>
           </div>
         </div>
