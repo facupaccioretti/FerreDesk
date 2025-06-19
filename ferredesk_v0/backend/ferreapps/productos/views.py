@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria
-from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria, VistaStockProducto
+from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer, VistaStockProductoSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -444,3 +444,10 @@ class FerreteriaAPIView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    """Provee list y retrieve para la vista de stock total por producto."""
+    queryset = VistaStockProducto.objects.all()
+    serializer_class = VistaStockProductoSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']

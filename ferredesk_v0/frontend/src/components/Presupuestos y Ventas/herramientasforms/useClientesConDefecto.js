@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useClientesAPI } from '../../utils/useClientesAPI';
+import { useClientesAPI } from '../../../utils/useClientesAPI';
 
 /**
  * Hook para obtener la lista de clientes combinando la lista general y el cliente por defecto (ID 1).

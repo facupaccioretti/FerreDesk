@@ -25,19 +25,5 @@ Presupuestos y Ventas
     La de debito entonces son recargos monetarios, no de items. Por ejemplo si hubo un cheque devuelto hay que permitir que el importe del cheque sea excento no tenga iva..
 
 
-18/06
-Presupuestos plantilla C esta mal la asignacion de letras
-
-Sacar agregar Vendedor de Clientes.
-
-
-codigo: ["cliente with this codigo already exists."]}
-codigo
-: 
-["cliente with this codigo already exists."] Errores al crear deberian mostrarse en el front, handleerrors
-
-
-Adaptar Paginador.js a NotasManager
-
 
 Revision General

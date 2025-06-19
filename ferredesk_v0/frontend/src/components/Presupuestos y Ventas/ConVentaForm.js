@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
-import BuscadorProducto from './BuscadorProducto';
-import ComprobanteDropdown from './ComprobanteDropdown';
+import BuscadorProducto from '../BuscadorProducto';
+import ComprobanteDropdown from '../ComprobanteDropdown';
 import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
-import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
+import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
@@ -281,6 +281,7 @@ const ConVentaForm = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!window.confirm("¿Está seguro de guardar los cambios?")) return;
     if (!itemsGridRef.current) return;
 
     try {

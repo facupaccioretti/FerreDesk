@@ -1,32 +1,32 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import Navbar from "./Navbar"
-import { useVentasAPI } from "../utils/useVentasAPI"
-import { useProductosAPI } from "../utils/useProductosAPI"
-import { useFamiliasAPI } from "../utils/useFamiliasAPI"
-import { useProveedoresAPI } from "../utils/useProveedoresAPI"
-import { useAlicuotasIVAAPI } from "../utils/useAlicuotasIVAAPI"
-import { useComprobantesAPI } from "../utils/useComprobantesAPI"
+import Navbar from "../Navbar"
+import { useVentasAPI } from "../../utils/useVentasAPI"
+import { useProductosAPI } from "../../utils/useProductosAPI"
+import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
+import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
+import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
+import { useComprobantesAPI } from "../../utils/useComprobantesAPI"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
-import { usePlazosAPI } from "../utils/usePlazosAPI"
-import { useVendedoresAPI } from "../utils/useVendedoresAPI"
-import VendedorForm from "./VendedorForm"
-import { useLocalidadesAPI } from "../utils/useLocalidadesAPI"
-import VendedoresTable from "./VendedoresTable"
+import { usePlazosAPI } from "../../utils/usePlazosAPI"
+import { useVendedoresAPI } from "../../utils/useVendedoresAPI"
+import VendedorForm from "../VendedorForm"
+import { useLocalidadesAPI } from "../../utils/useLocalidadesAPI"
+import VendedoresTable from "../VendedoresTable"
 import PresupuestoForm from "./PresupuestoForm"
 import VentaForm from "./VentaForm"
 import ItemsGrid from "./ItemsGrid"
-import { BotonEditar, BotonEliminar, BotonImprimir, BotonConvertir, BotonVerDetalle } from "./Botones"
+import { BotonEditar, BotonEliminar, BotonImprimir, BotonConvertir, BotonVerDetalle } from "../Botones"
 import PresupuestoVentaVista from "./herramientasforms/PresupuestoVentaVista"
-import { getCookie } from "../utils/csrf"
-import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "./ComprobanteIcono"
+import { getCookie } from "../../utils/csrf"
+import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
 import EditarPresupuestoForm from "./EditarPresupuestoForm"
 import ConversionModal from "./ConversionModal"
 import ConVentaForm from "./ConVentaForm"
-import Paginador from "./Paginador"
+import Paginador from "../Paginador"
 import FiltrosPresupuestos from "./herramientasforms/FiltrosPresupuestos"
-import { useVentaDetalleAPI } from "../utils/useVentaDetalleAPI"
+import { useVentaDetalleAPI } from "../../utils/useVentaDetalleAPI"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 
 const mainTabs = [
@@ -268,8 +268,11 @@ const PresupuestosManager = () => {
   }
 
   const handleEdit = (presupuesto) => {
+    if (!presupuesto || !presupuesto.id) return
     setEditPresupuesto(presupuesto)
-    openTab("editar", "Editar Presupuesto", presupuesto)
+    const key = `editar-${presupuesto.id}`
+    const label = `Editar ${presupuesto.numero || presupuesto.id}`
+    openTab(key, label, presupuesto)
   }
 
   const handleImprimir = async (presupuesto) => {
@@ -328,21 +331,39 @@ const PresupuestosManager = () => {
   const handleConversionConfirm = (selectedItems) => {
     const presupuesto = conversionModal.presupuesto
     const itemsSeleccionadosObjs = (presupuesto.items || []).filter((item) => selectedItems.includes(item.id))
-    const tabKey = `conventa-${presupuesto.id}-${Date.now()}`
-    setTabs((prev) => [
-      ...prev,
-      {
-        key: tabKey,
-        label: `Conversión a Venta #${presupuesto.numero || presupuesto.id}`,
-        closable: true,
-        data: {
-          presupuestoOrigen: presupuesto,
-          itemsSeleccionados: itemsSeleccionadosObjs,
-          itemsSeleccionadosIds: selectedItems,
+    const tabKey = `conventa-${presupuesto.id}`
+    setTabs((prev) => {
+      const existente = prev.find((t) => t.key === tabKey)
+      if (existente) {
+        // Actualizar los datos seleccionados y reutilizar la pestaña
+        return prev.map((t) =>
+          t.key === tabKey
+            ? {
+                ...t,
+                data: {
+                  presupuestoOrigen: presupuesto,
+                  itemsSeleccionados: itemsSeleccionadosObjs,
+                  itemsSeleccionadosIds: selectedItems,
+                },
+              }
+            : t,
+        )
+      }
+      return [
+        ...prev,
+        {
+          key: tabKey,
+          label: `Conversión a Venta #${presupuesto.numero || presupuesto.id}`,
+          closable: true,
+          data: {
+            presupuestoOrigen: presupuesto,
+            itemsSeleccionados: itemsSeleccionadosObjs,
+            itemsSeleccionadosIds: selectedItems,
+          },
+          tipo: "conventa",
         },
-        tipo: "conventa",
-      },
-    ])
+      ]
+    })
     setActiveTab(tabKey)
     setConversionModal({ open: false, presupuesto: null })
   }
@@ -891,10 +912,15 @@ const PresupuestosManager = () => {
               ) : activeTab.startsWith("editar") ? (
                 <EditarPresupuestoForm
                   onSave={async (payload) => {
-                    await updateVenta(editPresupuesto.id, {
+                    const idOriginal = activeTabData?.id || activeTabData?.ven_id
+                    if (!idOriginal) {
+                      alert("No se encontró el ID del presupuesto a editar.")
+                      return
+                    }
+                    await updateVenta(idOriginal, {
                       ...payload,
-                      tipoOriginal: editPresupuesto.tipo,
-                      estadoOriginal: editPresupuesto.estado,
+                      tipoOriginal: activeTabData?.tipo,
+                      estadoOriginal: activeTabData?.estado,
                     })
                     closeTab(activeTab)
                   }}

@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import BuscadorProducto from './BuscadorProducto';
+import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
-import ComprobanteDropdown from './ComprobanteDropdown';
-import { useAlicuotasIVAAPI } from '../utils/useAlicuotasIVAAPI';
+import ComprobanteDropdown from '../ComprobanteDropdown';
+import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
@@ -225,6 +225,7 @@ const EditarPresupuestoForm = ({
   // Guardar
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!window.confirm("¿Está seguro de guardar los cambios?")) return;
     if (!itemsGridRef.current) return;
     try {
       const itemsToSave = itemsGridRef.current.getItems();

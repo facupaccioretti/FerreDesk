@@ -1,6 +1,6 @@
 "use client"
 import React from 'react';
-import { useVentaDetalleAPI } from '../../utils/useVentaDetalleAPI';
+import { useVentaDetalleAPI } from '../../../utils/useVentaDetalleAPI';
 import { mapearVentaDetalle } from './MapeoVentaDetalle';
 import { PlantillaFacturaA } from './plantillasComprobantes/PlantillaFacturaA';
 import { PlantillaFacturaB } from './plantillasComprobantes/PlantillaFacturaB';

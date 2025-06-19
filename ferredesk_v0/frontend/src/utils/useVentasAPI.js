@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCookie } from '../utils/csrf';
-import { mapearCamposItem } from '../components/herramientasforms/mapeoItems';
+import { mapearCamposItem } from '../components/Presupuestos y Ventas/herramientasforms/mapeoItems';
 
 export function useVentasAPI() {
   const [ventas, setVentas] = useState([]);

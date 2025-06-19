@@ -22,6 +22,10 @@ const ProductosManager = () => {
 
   const [search, setSearch] = useState("")
   const [searchInactivos, setSearchInactivos] = useState("")
+  // Filtros de familia (nivel 1/2/3)
+  const [fam1Filtro, setFam1Filtro] = useState("")
+  const [fam2Filtro, setFam2Filtro] = useState("")
+  const [fam3Filtro, setFam3Filtro] = useState("")
 
   // Cargar estado de pestañas desde localStorage
   const [tabs, setTabs] = useState(() => {
@@ -55,8 +59,6 @@ const ProductosManager = () => {
 
   const [editStates, setEditStates] = useState({})
   const [expandedId, setExpandedId] = useState(null)
-  const [groupByFamilia, setGroupByFamilia] = useState(false)
-  const [selectedNivel, setSelectedNivel] = useState("1")
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null })
   const [user, setUser] = useState({ username: "ferreadmin" })
 
@@ -239,8 +241,21 @@ const ProductosManager = () => {
   window.setEditStatesProductosManager = setEditStates
 
   // Filtrar productos activos/inactivos con memo para rendimiento
-  const productosActivos = useMemo(() => productos.filter((p) => p.acti === "S"), [productos])
-  const productosInactivos = useMemo(() => productos.filter((p) => p.acti === "N"), [productos])
+  const productosActivosBase = useMemo(() => productos.filter((p) => p.acti === "S"), [productos])
+  const productosInactivosBase = useMemo(() => productos.filter((p) => p.acti === "N"), [productos])
+
+  const aplicaFiltrosFamilia = (prod) => {
+    const fam1 = prod.idfam1 && typeof prod.idfam1 === "object" ? prod.idfam1.id : prod.idfam1
+    const fam2 = prod.idfam2 && typeof prod.idfam2 === "object" ? prod.idfam2.id : prod.idfam2
+    const fam3 = prod.idfam3 && typeof prod.idfam3 === "object" ? prod.idfam3.id : prod.idfam3
+    if (fam1Filtro && String(fam1Filtro) !== String(fam1)) return false
+    if (fam2Filtro && String(fam2Filtro) !== String(fam2)) return false
+    if (fam3Filtro && String(fam3Filtro) !== String(fam3)) return false
+    return true
+  }
+
+  const productosActivos = useMemo(() => productosActivosBase.filter(aplicaFiltrosFamilia), [productosActivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
+  const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
@@ -297,10 +312,12 @@ const ProductosManager = () => {
                 setSearch={setSearch}
                 expandedId={expandedId}
                 setExpandedId={setExpandedId}
-                groupByFamilia={groupByFamilia}
-                setGroupByFamilia={setGroupByFamilia}
-                selectedNivel={selectedNivel}
-                setSelectedNivel={setSelectedNivel}
+                fam1Filtro={fam1Filtro}
+                setFam1Filtro={setFam1Filtro}
+                fam2Filtro={fam2Filtro}
+                setFam2Filtro={setFam2Filtro}
+                fam3Filtro={fam3Filtro}
+                setFam3Filtro={setFam3Filtro}
                 addFamilia={addFamilia}
                 updateFamilia={updateFamilia}
                 deleteFamilia={deleteFamilia}
@@ -322,10 +339,12 @@ const ProductosManager = () => {
                 setSearch={setSearchInactivos}
                 expandedId={expandedId}
                 setExpandedId={setExpandedId}
-                groupByFamilia={groupByFamilia}
-                setGroupByFamilia={setGroupByFamilia}
-                selectedNivel={selectedNivel}
-                setSelectedNivel={setSelectedNivel}
+                fam1Filtro={fam1Filtro}
+                setFam1Filtro={setFam1Filtro}
+                fam2Filtro={fam2Filtro}
+                setFam2Filtro={setFam2Filtro}
+                fam3Filtro={fam3Filtro}
+                setFam3Filtro={setFam3Filtro}
                 addFamilia={addFamilia}
                 updateFamilia={updateFamilia}
                 deleteFamilia={deleteFamilia}

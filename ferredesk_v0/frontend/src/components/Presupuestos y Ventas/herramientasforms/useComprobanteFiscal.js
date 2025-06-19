@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getCookie } from '../../utils/csrf';
+import { getCookie } from '../../../utils/csrf';
 
 // Funciones de validación reutilizables
 const validadores = {
