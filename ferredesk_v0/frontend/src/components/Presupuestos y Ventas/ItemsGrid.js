@@ -613,25 +613,7 @@ const ItemsGridPresupuesto = forwardRef(
     // Render con estética FerreDesk
     return (
       <div className="space-y-4 w-full">
-        {esPresupuesto && (
-          <div className="mb-2 p-4 bg-gradient-to-r from-blue-50 to-blue-100/80 border-l-4 border-blue-500 text-blue-800 rounded-xl shadow-sm">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="font-medium">
-                Este es un presupuesto. No se descuenta stock ni se valida disponibilidad. Las validaciones se aplicarán
-                al convertir a venta.
-              </span>
-            </div>
-          </div>
-        )}
-        {/* Encabezado organizado en grid */}
+        {/* Banner informativo removido para unificar diseño */}
         <div className="grid gap-4 mb-2 items-end" style={{gridTemplateColumns: 'auto auto auto 1fr'}}>
           {/* Bonificación general */}
           <div>

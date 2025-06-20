@@ -5,7 +5,7 @@ import ComprobanteDropdown from '../ComprobanteDropdown';
 import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
-import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
+import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
@@ -136,7 +136,6 @@ const ConVentaForm = ({
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(null);
 
-  const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false);
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
 
   // Usar el hook useFormularioDraft
@@ -398,7 +397,9 @@ const ConVentaForm = ({
   }
 
   return (
-    <form className="w-full py-6 px-8 bg-white rounded-xl shadow relative" onSubmit={handleSubmit}>
+    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit}>
+      {/* Gradiente decorativo superior */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
       {/* Badge de letra de comprobante */}
       {comprobanteLetra && (
         <div style={{ position: 'absolute', top: 12, right: 18, zIndex: 10 }}>
@@ -414,19 +415,29 @@ const ConVentaForm = ({
           {comprobanteRequisitos.mensaje}
         </div>
       )}
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+      <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </div>
         Conversión de Presupuesto a Venta
       </h3>
       {isReadOnly && (
-        <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
-          Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
+        <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span className="font-medium">Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.</span>
+          </div>
         </div>
       )}
-      {/* CABECERA: Grid 3 filas x 4 columnas */}
-      <div className="w-full mb-4 grid grid-cols-4 grid-rows-3 gap-4">
+      {/* CABECERA: 2 filas x 4 columnas (alineado con VentaForm) */}
+      <div className="w-full mb-4 grid grid-cols-4 grid-rows-2 gap-4">
         {/* Fila 1 */}
         <div className="col-start-1 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Cliente *</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
           {loadingClientes ? (
             <div className="text-gray-500">Cargando clientes...</div>
           ) : errorClientes ? (
@@ -436,7 +447,7 @@ const ConVentaForm = ({
               name="clienteId"
               value={formulario.clienteId}
               onChange={handleClienteChange}
-              className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+              className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
               required
               disabled={isReadOnly}
             >
@@ -448,7 +459,7 @@ const ConVentaForm = ({
           )}
         </div>
         <div className="col-start-2 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">
+          <label className="block text-base font-semibold text-slate-700 mb-2">
             CUIT {usarFiscal && fiscal.camposRequeridos.cuit && '*'}
           </label>
           <input
@@ -456,25 +467,25 @@ const ConVentaForm = ({
             type="text"
             value={formulario.cuit}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required={usarFiscal && fiscal.camposRequeridos.cuit}
             readOnly={isReadOnly}
           />
         </div>
         <div className="col-start-3 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Fecha</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
           <input
             name="fecha"
             type="date"
             value={formulario.fecha}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required
             readOnly={isReadOnly}
           />
         </div>
         <div className="col-start-4 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">
+          <label className="block text-base font-semibold text-slate-700 mb-2">
             Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && '*'}
           </label>
           <input
@@ -482,19 +493,19 @@ const ConVentaForm = ({
             type="text"
             value={formulario.domicilio}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required={usarFiscal && fiscal.camposRequeridos.domicilio}
             readOnly={isReadOnly}
           />
         </div>
         {/* Fila 2 */}
         <div className="col-start-1 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Sucursal *</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
           <select
             name="sucursalId"
             value={formulario.sucursalId}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required
             disabled={isReadOnly}
           >
@@ -504,12 +515,12 @@ const ConVentaForm = ({
           </select>
         </div>
         <div className="col-start-2 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Punto de Venta *</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
           <select
             name="puntoVentaId"
             value={formulario.puntoVentaId}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required
             disabled={isReadOnly}
           >
@@ -519,12 +530,12 @@ const ConVentaForm = ({
           </select>
         </div>
         <div className="col-start-3 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Plazo *</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
           <select
             name="plazoId"
             value={formulario.plazoId}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required
             disabled={isReadOnly}
           >
@@ -535,12 +546,12 @@ const ConVentaForm = ({
           </select>
         </div>
         <div className="col-start-4 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Vendedor *</label>
+          <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
           <select
             name="vendedorId"
             value={formulario.vendedorId}
             onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
             required
             disabled={isReadOnly}
           >
@@ -550,77 +561,34 @@ const ConVentaForm = ({
             ))}
           </select>
         </div>
-        {/* Fila 3 */}
-        <div className="col-start-1 row-start-3 flex flex-col justify-end">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Tipo de Comprobante *</label>
-          <ComprobanteDropdown
-            opciones={opcionesComprobante}
-            value={tipoComprobante}
-            onChange={setTipoComprobante}
-            disabled={isReadOnly}
-            className="w-full"
-          />
-        </div>
-        <div className="col-start-2 row-start-3 flex flex-col justify-end">
-          <SumarDuplicar
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-          />
-        </div>
-        <div className="col-start-3 row-start-3"></div>
-        <div className="col-start-4 row-start-3"></div>
       </div>
 
       {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
       <div className="mb-8">
         <h4 className="text-lg font-medium text-gray-800 mb-2">Ítems de la Venta</h4>
-        <div className="flex flex-row items-center gap-2 w-full mb-2">
-          <div className="min-w-[350px] w-[350px]">
+        <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
+          {/* Buscador reducido */}
+          <div className="min-w-[260px] w-[260px]">
             <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
           </div>
-          <div className="flex flex-row items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center gap-1 m-0">
-              Descuento 1
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              value={formulario.descu1}
-              onChange={(e) =>
-                setFormulario((f) => ({ ...f, descu1: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)) }))
-              }
-              className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+          {/* Tipo de comprobante */}
+          <div className="w-40">
+            <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
+            <ComprobanteDropdown
+              opciones={opcionesComprobante}
+              value={tipoComprobante}
+              onChange={setTipoComprobante}
+              disabled={isReadOnly}
+              className="w-full max-w-[120px]"
             />
-            <span className="text-sm">%</span>
-            <label className="text-sm font-medium text-gray-700 ml-4 m-0">Descuento 2</label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              value={formulario.descu2}
-              onChange={(e) =>
-                setFormulario((f) => ({ ...f, descu2: Math.max(0, Math.min(100, Number.parseFloat(e.target.value) || 0)) }))
-              }
-              className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+          </div>
+
+          {/* Acción duplicar / sumar */}
+          <div className="w-56">
+            <SumarDuplicar
+              autoSumarDuplicados={autoSumarDuplicados}
+              setAutoSumarDuplicados={setAutoSumarDuplicados}
             />
-            <span className="text-sm">%</span>
-            <span
-              className="relative cursor-pointer"
-              onMouseEnter={() => setMostrarTooltipDescuentos(true)}
-              onMouseLeave={() => setMostrarTooltipDescuentos(false)}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-gray-400 inline-block align-middle">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-              </svg>
-              {mostrarTooltipDescuentos && (
-                <span className="absolute left-6 top-1 z-20 bg-gray-800 text-white text-xs rounded px-2 py-1 shadow-lg whitespace-nowrap">
-                  Los descuentos se aplican de manera sucesiva sobre el subtotal neto.
-                </span>
-              )}
-            </span>
           </div>
         </div>
       </div>
@@ -647,21 +615,19 @@ const ConVentaForm = ({
             setAutoSumarDuplicados={setAutoSumarDuplicados}
             bonificacionGeneral={formulario.bonificacionGeneral}
             setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+            descu1={formulario.descu1}
+            descu2={formulario.descu2}
+            descu3={formulario.descu3}
+            setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+            setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+            setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+            totales={totales}
             modo="venta"
             onRowsChange={handleRowsChange}
             initialItems={formulario.items}
           />
         )}
       </div>
-
-      {/* Bloque de totales y descuentos centralizado */}
-      <TotalesVisualizacion
-        bonificacionGeneral={formulario.bonificacionGeneral}
-        descu1={formulario.descu1}
-        descu2={formulario.descu2}
-        descu3={formulario.descu3}
-        totales={totales}
-      />
 
       <div className="mt-8 flex justify-end space-x-3">
         <button

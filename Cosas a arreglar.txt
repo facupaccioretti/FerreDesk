@@ -29,3 +29,7 @@ Presupuestos y Ventas
 Revision General
 
 interlineado es gastar espacio al pedo
+
+arreglar draft para nueva grid y datos en venta
+adaptar resto de formualrios a ventaform
+    
