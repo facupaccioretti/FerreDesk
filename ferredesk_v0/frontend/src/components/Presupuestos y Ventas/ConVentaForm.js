@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
-import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -10,6 +10,7 @@ import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
+import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 
 const getInitialFormState = (presupuestoOrigen, itemsSeleccionados, sucursales = [], puntosVenta = [], productos = []) => {
   if (!presupuestoOrigen) return {
@@ -171,6 +172,23 @@ const ConVentaForm = ({
   });
 
   const itemsGridRef = useRef();
+
+  // =========================
+  // Selector de Clientes (Modal)
+  // =========================
+  const [selectorAbierto, setSelectorAbierto] = useState(false);
+  const abrirSelector = () => setSelectorAbierto(true);
+  const cerrarSelector = () => setSelectorAbierto(false);
+
+  // Callback reutilizable para aplicar datos del cliente al formulario
+  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+
+  // Bloqueo de envío accidental con tecla Enter
+  const bloquearEnterSubmit = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  };
 
   // Efecto para re-normalizar items cuando los productos llegan tarde
   useEffect(() => {
@@ -389,264 +407,327 @@ const ConVentaForm = ({
 
   // Renderizado condicional centralizado
   if (isLoading) {
-    return <div className="text-center py-4">Cargando...</div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Cargando formulario...</p>
+        </div>
+      </div>
+    );
   }
 
   if (loadingError) {
-    return <div className="text-center text-red-600 py-4">{loadingError}</div>;
+    return (
+      <div className="text-center py-8">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
+          <div className="text-red-600 font-medium mb-2">Error al cargar</div>
+          <p className="text-red-700 text-sm">{loadingError}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit}>
-      {/* Gradiente decorativo superior */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
-      {/* Badge de letra de comprobante */}
-      {comprobanteLetra && (
-        <div style={{ position: 'absolute', top: 12, right: 18, zIndex: 10 }}>
-          <div className="w-12 h-12 flex flex-col items-center justify-center border-2 border-gray-800 shadow-md bg-white rounded-lg">
-            <span className="text-3xl font-extrabold font-mono text-gray-900 leading-none">{comprobanteLetra}</span>
-            <span className="text-[10px] font-mono text-gray-700 mt-0.5">COD {comprobanteCodigoAfip || ''}</span>
-          </div>
-        </div>
-      )}
-      {/* Mensaje de requisitos solo si es factura */}
-      {usarFiscal && comprobanteRequisitos && comprobanteRequisitos.mensaje && (
-        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 mt-2 text-sm text-blue-700 bg-blue-100 px-4 py-2 rounded shadow">
-          {comprobanteRequisitos.mensaje}
-        </div>
-      )}
-      <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
-        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-        </div>
-        Conversión de Presupuesto a Venta
-      </h3>
-      {isReadOnly && (
-        <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span className="font-medium">Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.</span>
-          </div>
-        </div>
-      )}
-      {/* CABECERA: 2 filas x 4 columnas (alineado con VentaForm) */}
-      <div className="w-full mb-4 grid grid-cols-4 grid-rows-2 gap-4">
-        {/* Fila 1 */}
-        <div className="col-start-1 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-          {loadingClientes ? (
-            <div className="text-gray-500">Cargando clientes...</div>
-          ) : errorClientes ? (
-            <div className="text-red-600">{errorClientes}</div>
-          ) : (
-            <select
-              name="clienteId"
-              value={formulario.clienteId}
-              onChange={handleClienteChange}
-              className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-              required
-              disabled={isReadOnly}
-            >
-              <option value="">Seleccionar cliente...</option>
-              {clientesConDefecto.map(c => (
-                <option key={c.id} value={c.id}>{c.razon || c.nombre}</option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className="col-start-2 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">
-            CUIT {usarFiscal && fiscal.camposRequeridos.cuit && '*'}
-          </label>
-          <input
-            name="cuit"
-            type="text"
-            value={formulario.cuit}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required={usarFiscal && fiscal.camposRequeridos.cuit}
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-3 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
-          <input
-            name="fecha"
-            type="date"
-            value={formulario.fecha}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-4 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">
-            Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && '*'}
-          </label>
-          <input
-            name="domicilio"
-            type="text"
-            value={formulario.domicilio}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required={usarFiscal && fiscal.camposRequeridos.domicilio}
-            readOnly={isReadOnly}
-          />
-        </div>
-        {/* Fila 2 */}
-        <div className="col-start-1 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
-          <select
-            name="sucursalId"
-            value={formulario.sucursalId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            {sucursales.map(s => (
-              <option key={s.id} value={s.id}>{s.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-2 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
-          <select
-            name="puntoVentaId"
-            value={formulario.puntoVentaId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            {puntosVenta.map(pv => (
-              <option key={pv.id} value={pv.id}>{pv.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-3 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
-          <select
-            name="plazoId"
-            value={formulario.plazoId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar plazo...</option>
-            {plazos.map(p => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-4 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
-          <select
-            name="vendedorId"
-            value={formulario.vendedorId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar vendedor...</option>
-            {vendedores.map(v => (
-              <option key={v.id} value={v.id}>{v.nombre}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 py-6">
+      <div className="px-6">
+        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+          {/* Gradiente decorativo superior */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
 
-      {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
-      <div className="mb-8">
-        <h4 className="text-lg font-medium text-gray-800 mb-2">Ítems de la Venta</h4>
-        <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
-          {/* Buscador reducido */}
-          <div className="min-w-[260px] w-[260px]">
-            <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
-          </div>
-          {/* Tipo de comprobante */}
-          <div className="w-40">
-            <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
-            <ComprobanteDropdown
-              opciones={opcionesComprobante}
-              value={tipoComprobante}
-              onChange={setTipoComprobante}
-              disabled={isReadOnly}
-              className="w-full max-w-[120px]"
-            />
+          {/* Contenedor interior con padding igual a VentaForm */}
+          <div className="px-8 pt-4 pb-6">
+
+            {/* Badge de letra del comprobante */}
+            {comprobanteLetra && (
+              <div className="absolute top-6 right-6 z-10">
+                <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
+                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{comprobanteLetra}</span>
+                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {comprobanteCodigoAfip || ''}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Mensaje requisitos (solo factura) */}
+            {usarFiscal && comprobanteRequisitos && comprobanteRequisitos.mensaje && (
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 mt-4 text-sm text-blue-800 bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-3 rounded-xl shadow-lg border border-blue-200/50">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {comprobanteRequisitos.mensaje}
+                </div>
+              </div>
+            )}
+
+            {/* Título y estado */}
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
+                  </svg>
+                </div>
+                Conversión de Presupuesto a Venta
+              </h3>
+              {isReadOnly && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span className="font-medium">Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* CABECERA organizada en dos filas de 4 columnas */}
+            <div className="w-full mb-4">
+              {/* Fila 1: Cliente | CUIT | Domicilio | Fecha */}
+              <div className="grid grid-cols-4 gap-4 mb-3 items-end">
+                {/* Cliente */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
+                  {loadingClientes ? (
+                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+                      Cargando clientes...
+                    </div>
+                  ) : errorClientes ? (
+                    <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">
+                      {errorClientes}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
+                        readOnly
+                        disabled
+                        className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
+                      />
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={abrirSelector}
+                          className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
+                          title="Buscar en lista completa"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* CUIT */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}</label>
+                  <input
+                    name="cuit"
+                    type="text"
+                    value={formulario.cuit}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required={usarFiscal && fiscal.camposRequeridos.cuit}
+                    readOnly={isReadOnly}
+                  />
+                </div>
+
+                {/* Domicilio */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                  <input
+                    name="domicilio"
+                    type="text"
+                    value={formulario.domicilio}
+                    onChange={handleChange}
+                    className="compacto max-w-sm w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                    readOnly={isReadOnly}
+                  />
+                </div>
+
+                {/* Fecha */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
+                  <input
+                    name="fecha"
+                    type="date"
+                    value={formulario.fecha}
+                    onChange={handleChange}
+                    className="compacto max-w-[9rem] w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
+
+              {/* Fila 2: Sucursal | Punto de Venta | Plazo | Vendedor */}
+              <div className="grid grid-cols-4 gap-4 items-end">
+                {/* Sucursal */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
+                  <select
+                    name="sucursalId"
+                    value={formulario.sucursalId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    {sucursales.map(s => (<option key={s.id} value={s.id}>{s.nombre}</option>))}
+                  </select>
+                </div>
+
+                {/* Punto de Venta */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
+                  <select
+                    name="puntoVentaId"
+                    value={formulario.puntoVentaId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    {puntosVenta.map(pv => (<option key={pv.id} value={pv.id}>{pv.nombre}</option>))}
+                  </select>
+                </div>
+
+                {/* Plazo */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
+                  <select
+                    name="plazoId"
+                    value={formulario.plazoId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    <option value="">Seleccionar plazo...</option>
+                    {plazos.map(p => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+                  </select>
+                </div>
+
+                {/* Vendedor */}
+                <div className="w-full">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
+                  <select
+                    name="vendedorId"
+                    value={formulario.vendedorId}
+                    onChange={handleChange}
+                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                    required
+                    disabled={isReadOnly}
+                  >
+                    <option value="">Seleccionar vendedor...</option>
+                    {vendedores.map(v => (<option key={v.id} value={v.id}>{v.nombre}</option>))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
+            <div className="mb-8">
+              {/* Encabezado eliminado para alinear con VentaForm */}
+              <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
+                {/* Buscador reducido */}
+                <div className="min-w-[260px] w-[260px]">
+                  <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
+                </div>
+
+                {/* Tipo de comprobante */}
+                <div className="w-40">
+                  <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
+                  <ComprobanteDropdown
+                    opciones={opcionesComprobante}
+                    value={tipoComprobante}
+                    onChange={setTipoComprobante}
+                    disabled={isReadOnly}
+                    className="w-full max-w-[120px]"
+                  />
+                </div>
+
+                {/* Acción duplicar / sumar */}
+                <div className="w-56">
+                  <SumarDuplicar
+                    autoSumarDuplicados={autoSumarDuplicados}
+                    setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
+                <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
+              ) : errorProductos ? (
+                <div className="text-center text-red-600 py-4">{errorProductos}</div>
+              ) : errorFamilias ? (
+                <div className="text-center text-red-600 py-4">{errorFamilias}</div>
+              ) : errorProveedores ? (
+                <div className="text-center text-red-600 py-4">{errorProveedores}</div>
+              ) : errorAlicuotas ? (
+                <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
+              ) : (
+                <ItemsGrid
+                  key={gridKey}
+                  ref={itemsGridRef}
+                  productosDisponibles={productos}
+                  proveedores={proveedores}
+                  stockProveedores={stockProveedores}
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  bonificacionGeneral={formulario.bonificacionGeneral}
+                  setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+                  descu1={formulario.descu1}
+                  descu2={formulario.descu2}
+                  descu3={formulario.descu3}
+                  setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+                  setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+                  setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+                  totales={totales}
+                  modo="venta"
+                  onRowsChange={handleRowsChange}
+                  initialItems={formulario.items}
+                />
+              )}
+            </div>
+
+            <div className="mt-8 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+              >
+                {isReadOnly ? "Cerrar" : "Cancelar"}
+              </button>
+              {!isReadOnly && (
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Crear Venta
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Acción duplicar / sumar */}
-          <div className="w-56">
-            <SumarDuplicar
-              autoSumarDuplicados={autoSumarDuplicados}
-              setAutoSumarDuplicados={setAutoSumarDuplicados}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-8">
-        {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
-          <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
-        ) : errorProductos ? (
-          <div className="text-center text-red-600 py-4">{errorProductos}</div>
-        ) : errorFamilias ? (
-          <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-        ) : errorProveedores ? (
-          <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-        ) : errorAlicuotas ? (
-          <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
-        ) : (
-          <ItemsGrid
-            key={gridKey}
-            ref={itemsGridRef}
-            productosDisponibles={productos}
-            proveedores={proveedores}
-            stockProveedores={stockProveedores}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={formulario.bonificacionGeneral}
-            setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
-            descu1={formulario.descu1}
-            descu2={formulario.descu2}
-            descu3={formulario.descu3}
-            setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-            setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-            setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-            totales={totales}
-            modo="venta"
-            onRowsChange={handleRowsChange}
-            initialItems={formulario.items}
+          {/* Modal selector de clientes */}
+          <ClienteSelectorModal
+            abierto={selectorAbierto}
+            onCerrar={cerrarSelector}
+            clientes={clientesConDefecto}
+            onSeleccionar={handleClienteSelect}
+            cargando={loadingClientes}
+            error={errorClientes}
           />
-        )}
+        </form>
       </div>
-
-      <div className="mt-8 flex justify-end space-x-3">
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-        >
-          {isReadOnly ? "Cerrar" : "Cancelar"}
-        </button>
-        {!isReadOnly && (
-          <button
-            type="submit"
-            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Crear Venta
-          </button>
-        )}
-      </div>
-    </form>
+    </div>
   );
 };
 

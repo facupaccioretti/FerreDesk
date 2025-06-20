@@ -5,9 +5,11 @@ import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioFormulario, manejarCambioCliente } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
+import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
+import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -222,6 +224,25 @@ const EditarPresupuestoForm = ({
     alicuotas: alicuotasMap
   });
 
+  // =========================
+  // Selector de Clientes (Modal)
+  // =========================
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
+
+  const [selectorAbierto, setSelectorAbierto] = useState(false);
+  const abrirSelector = () => setSelectorAbierto(true);
+  const cerrarSelector = () => setSelectorAbierto(false);
+
+  // Callback para aplicar cliente al formulario
+  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+
+  // Previene envíos involuntarios con Enter
+  const bloquearEnterSubmit = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  };
+
   // Guardar
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -277,11 +298,16 @@ const EditarPresupuestoForm = ({
 
   const isReadOnly = formulario.estado === 'Cerrado';
 
+  // Determinar cliente actualmente seleccionado, considerando lista con cliente por defecto
+  const clienteSeleccionado = clientesConDefecto.find(c => String(c.id) === String(formulario.clienteId))
+    || clientes.find(c => String(c.id) === String(formulario.clienteId))
+    || clientesConDefecto.find(c => String(c.id) === '1'); // Cliente mostrador si todo falla
+
   if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>;
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>;
 
   return (
-    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit}>
+    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
       <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
@@ -307,21 +333,41 @@ const EditarPresupuestoForm = ({
         {/* Fila 1 */}
         <div className="col-start-1 row-start-1">
           <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-          <select
-            name="clienteId"
-            value={formulario.clienteId}
-            onChange={handleClienteChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar cliente...</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.razon || c.nombre}
-              </option>
-            ))}
-          </select>
+          {loadingClientes ? (
+            <div className="text-gray-500">Cargando clientes...</div>
+          ) : errorClientes ? (
+            <div className="text-red-600">{errorClientes}</div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
+                readOnly
+                disabled
+                className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={abrirSelector}
+                  className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
+                  title="Buscar en lista completa"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                    className="w-4 h-4 text-slate-600"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="col-start-2 row-start-1">
           <label className="block text-base font-semibold text-slate-700 mb-2">CUIT</label>
@@ -510,6 +556,16 @@ const EditarPresupuestoForm = ({
           </button>
         )}
       </div>
+
+      {/* Modal selector de clientes */}
+      <ClienteSelectorModal
+        abierto={selectorAbierto}
+        onCerrar={cerrarSelector}
+        clientes={clientesConDefecto}
+        onSeleccionar={handleClienteSelect}
+        cargando={loadingClientes}
+        error={errorClientes}
+      />
     </form>
   );
 };

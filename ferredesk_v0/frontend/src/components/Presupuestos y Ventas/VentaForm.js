@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarCambioCliente } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
@@ -12,6 +12,7 @@ import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
+import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -271,6 +272,23 @@ const VentaForm = ({
 
   const handleChange = manejarCambioFormulario(setFormulario)
   const handleClienteChange = manejarCambioCliente(setFormulario, clientes)
+  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
+
+  // Estado para modal selector de clientes
+  const [selectorAbierto, setSelectorAbierto] = useState(false)
+
+  const abrirSelector = () => setSelectorAbierto(true)
+  const cerrarSelector = () => setSelectorAbierto(false)
+  const onSeleccionarDesdeModal = (cli) => {
+    handleClienteSelect(cli)
+  }
+
+  // Bloquear envío de formulario al presionar Enter en cualquier campo
+  const bloquearEnterSubmit = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -399,6 +417,7 @@ const VentaForm = ({
         <form
           className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
+          onKeyDown={bloquearEnterSubmit}
         >
           {/* Gradiente decorativo superior */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
@@ -486,21 +505,44 @@ const VentaForm = ({
                       {errorClientes}
                     </div>
                   ) : (
-                    <select
-                      name="clienteId"
-                      value={formulario.clienteId}
-                      onChange={handleClienteChange}
-                      className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                      required
-                      disabled={isReadOnly}
-                    >
-                      <option value="">Seleccionar cliente...</option>
-                      {clientesConDefecto.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.razon || c.nombre}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ""}
+                        readOnly
+                        disabled
+                        className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
+                      />
+                      {/* Botón para abrir modal selector */}
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={abrirSelector}
+                          className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
+                          title="Buscar en lista completa"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                            className="w-4 h-4 text-slate-600"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M18.75 18.75l-3.5-3.5"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -731,6 +773,15 @@ const VentaForm = ({
           </div>
         </form>
       </div>
+      {/* Modal selector de clientes */}
+      <ClienteSelectorModal
+        abierto={selectorAbierto}
+        onCerrar={cerrarSelector}
+        clientes={clientesConDefecto}
+        onSeleccionar={onSeleccionarDesdeModal}
+        cargando={loadingClientes}
+        error={errorClientes}
+      />
     </div>
   )
 }

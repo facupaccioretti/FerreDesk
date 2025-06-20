@@ -36,4 +36,19 @@ export const manejarCambioCliente = (setForm, clientes) => (e) => {
     descu1: clienteSeleccionado?.descu1 || 0,
     descu2: clienteSeleccionado?.descu2 || 0
   }));
+};
+
+export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) => {
+  if (!clienteSeleccionado) return;
+  console.log('[manejarSeleccionClienteObjeto] Cliente seleccionado:', clienteSeleccionado);
+  setForm(prevForm => ({
+    ...prevForm,
+    clienteId: clienteSeleccionado.id,
+    cuit: clienteSeleccionado.cuit || '',
+    domicilio: clienteSeleccionado.domicilio || '',
+    plazoId: clienteSeleccionado.plazoId || clienteSeleccionado.plazo || '',
+    descu1: clienteSeleccionado.descu1 || 0,
+    descu2: clienteSeleccionado.descu2 || 0,
+    descu3: clienteSeleccionado.descu3 || 0,
+  }));
 }; 

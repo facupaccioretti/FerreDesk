@@ -4,13 +4,14 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarCambioCliente } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
+import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 
 const getStockProveedoresMap = (productos) => {
   const map = {}
@@ -83,8 +84,10 @@ const PresupuestoForm = ({
   errorProductos,
   errorFamilias,
   errorProveedores,
+  autoSumarDuplicados,
+  setAutoSumarDuplicados,
 }) => {
-  const { clientes, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI()
 
   // Función para normalizar items
@@ -253,31 +256,40 @@ const PresupuestoForm = ({
   // Reemplazar handleChange por manejarCambioFormulario
   const handleChange = manejarCambioFormulario(setFormulario)
 
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
+
+  const [selectorAbierto, setSelectorAbierto] = useState(false)
+  const abrirSelector = () => setSelectorAbierto(true)
+  const cerrarSelector = () => setSelectorAbierto(false)
+
+  // Bloquear Enter
+  const bloquearEnter = (e) => {
+    if (e.key === "Enter") e.preventDefault()
+  }
+
+  // =========================
+  // Seleccionar cliente mostrador por defecto (ID 1)
+  // =========================
   useEffect(() => {
-    if (!formulario.clienteId && clientes.length > 0) {
-      const mostrador = clientes.find((c) => String(c.id) === "1")
+    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+      const mostrador = clientesConDefecto.find(c => String(c.id) === '1')
       if (mostrador) {
-        setFormulario((prev) => ({
+        setFormulario(prev => ({
           ...prev,
           clienteId: mostrador.id,
-          cuit: mostrador.cuit || "",
-          domicilio: mostrador.domicilio || "",
-          plazoId: mostrador.plazoId || mostrador.plazo || "",
+          cuit: mostrador.cuit || '',
+          domicilio: mostrador.domicilio || '',
+          plazoId: mostrador.plazoId || mostrador.plazo || '',
         }))
       }
     }
-  }, [clientes, formulario.clienteId, setFormulario])
-
-  // Inicializar el estado correctamente
-  const [autoSumarDuplicados, setAutoSumarDuplicados] = useState("sumar")
-  const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
+  }, [clientesConDefecto, formulario.clienteId, setFormulario])
 
   if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>
 
   return (
-    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit}>
+    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnter}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
       <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
@@ -303,21 +315,23 @@ const PresupuestoForm = ({
           ) : errorClientes ? (
             <div className="text-red-600">{errorClientes}</div>
           ) : (
-            <select
-              name="clienteId"
-              value={formulario.clienteId}
-              onChange={manejarCambioCliente(setFormulario, clientes)}
-              className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-              required
-              disabled={isReadOnly}
-            >
-              <option value="">Seleccionar cliente...</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.razon || c.nombre}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={(() => {
+                  const cli = clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
+                  return cli ? cli.razon || cli.nombre : ""
+                })()}
+                readOnly
+                disabled
+                className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+              {!isReadOnly && (
+                <button type="button" onClick={abrirSelector} className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors" title="Buscar cliente">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" /></svg>
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="col-start-2 row-start-1">
@@ -503,6 +517,15 @@ const PresupuestoForm = ({
           </button>
         )}
       </div>
+      {/* Modal selector clientes */}
+      <ClienteSelectorModal
+        abierto={selectorAbierto}
+        onCerrar={cerrarSelector}
+        clientes={clientesConDefecto}
+        onSeleccionar={handleClienteSelect}
+        cargando={loadingClientes}
+        error={errorClientes}
+      />
     </form>
   )
 }
