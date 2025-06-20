@@ -11,9 +11,6 @@ export default function useProveedores() {
   const [expandedId, setExpandedId] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    setProveedores(mockProveedores);
-  }, []);
 
   // Draft
   useEffect(() => {

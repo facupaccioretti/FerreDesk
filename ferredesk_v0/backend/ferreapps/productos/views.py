@@ -35,7 +35,10 @@ class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti']
+    filterset_fields = [
+        'codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti',
+        'idfam1', 'idfam2', 'idfam3',
+    ]
 
     @transaction.atomic
     def perform_create(self, serializer):

@@ -11,9 +11,9 @@ import { useComprobantesAPI } from "../../utils/useComprobantesAPI"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { usePlazosAPI } from "../../utils/usePlazosAPI"
 import { useVendedoresAPI } from "../../utils/useVendedoresAPI"
-import VendedorForm from "../VendedorForm"
+import VendedorForm from "./VendedorForm"
 import { useLocalidadesAPI } from "../../utils/useLocalidadesAPI"
-import VendedoresTable from "../VendedoresTable"
+import VendedoresTable from "./VendedoresTable"
 import PresupuestoForm from "./PresupuestoForm"
 import VentaForm from "./VentaForm"
 import ItemsGrid from "./ItemsGrid"
@@ -571,7 +571,7 @@ const PresupuestosManager = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
       <Navbar user={user} onLogout={handleLogout} />
       <div className="py-8 px-4">
-        <div className="w-[1400px] mx-auto">
+        <div className="max-w-[1400px] w-full mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-3xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
           </div>

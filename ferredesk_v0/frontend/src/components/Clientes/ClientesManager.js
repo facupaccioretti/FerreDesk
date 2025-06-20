@@ -26,7 +26,7 @@ const ClientesManager = () => {
   }, [])
 
   // Hook centralizado de clientes (alta / edición / eliminación)
-  const { clientes, loading, error, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI()
+  const { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI()
 
   // Búsqueda
   const [search, setSearch] = useState("")
@@ -145,126 +145,146 @@ const ClientesManager = () => {
   const { categorias, setCategorias } = useCategoriasAPI()
   const { tiposIVA } = useTiposIVAAPI()
 
+  // ------------------------------------------------------------------
+  // Efecto: cada vez que cambia 'search' realizamos consulta filtrada al
+  // backend usando __icontains sobre razón y fantasía.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (search && search.trim() !== "") {
+        fetchClientes({ razon__icontains: search.trim(), fantasia__icontains: search.trim() })
+      } else {
+        fetchClientes()
+      }
+    }, 300) // Debounce simple
+    return () => clearTimeout(timeout)
+  }, [search])
+
   // ---------- Render ----------
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
       <Navbar user={user} onLogout={handleLogout} />
 
-      <div className="flex justify-between items-center px-6 py-4">
-        <h2 className="text-2xl font-bold text-slate-800">Gestión de Clientes</h2>
-      </div>
-
-      <div className="flex flex-1 px-6 gap-4 min-h-0">
-        <div className="flex-1 flex flex-col">
-          {/* Barra de pestañas */}
-          <div className="flex items-center border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
-            {tabs.map((tab) => (
-              <div
-                key={tab.key}
-                className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${
-                  activeTab === tab.key
-                    ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-                onClick={() => setActiveTab(tab.key)}
-                style={{ position: "relative" }}
-              >
-                {tab.label}
-                {tab.closable && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeTab(tab.key)
-                    }}
-                    className="ml-2 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                    title="Cerrar"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-
-            {/* Botón Nuevo Cliente solo en la tab de lista */}
-            {activeTab === "lista" && (
-              <div className="flex-1 flex justify-end mb-2">
-                <button
-                  onClick={() => openTab("nuevo", "Nuevo Cliente")}
-                  className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                >
-                  <span className="text-lg">+</span> Nuevo Cliente
-                </button>
-              </div>
-            )}
+      {/* Contenedor central con ancho máximo fijo al estilo de PresupuestosManager */}
+      <div className="py-8 px-4 flex-1 flex flex-col">
+        <div className="max-w-[1400px] w-full mx-auto flex flex-col flex-1">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-slate-800">Gestión de Clientes</h2>
           </div>
 
-          {/* Contenido de pestañas */}
-          <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
-            {activeTab === "lista" && (
-              <ClientesTable
-                clientes={clientesActivos}
-                onEdit={handleEditCliente}
-                onDelete={handleDeleteCliente}
-                search={search}
-                setSearch={setSearch}
-                expandedClientId={expandedClientId}
-                setExpandedClientId={setExpandedClientId}
-                barrios={barrios}
-                localidades={localidades}
-                provincias={provincias}
-                tiposIVA={tiposIVA}
-                transportes={transportes}
-                vendedores={vendedores}
-                plazos={plazos}
-                categorias={categorias}
-              />
-            )}
+          {/* Área principal: pestañas y contenido */}
+          <div className="flex flex-1 gap-4 min-h-0">
+            <div className="flex-1 flex flex-col">
+              {/* Barra de pestañas */}
+              <div className="flex items-center border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.key}
+                    className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${
+                      activeTab === tab.key
+                        ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                    onClick={() => setActiveTab(tab.key)}
+                    style={{ position: "relative" }}
+                  >
+                    {tab.label}
+                    {tab.closable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab.key)
+                        }}
+                        className="ml-2 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                        title="Cerrar"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
 
-            {activeTab === "inactivos" && (
-              <ClientesTable
-                clientes={clientesInactivos}
-                onEdit={handleEditCliente}
-                onDelete={handleDeleteCliente}
-                search={searchInactivos}
-                setSearch={setSearchInactivos}
-                expandedClientId={expandedClientId}
-                setExpandedClientId={setExpandedClientId}
-                barrios={barrios}
-                localidades={localidades}
-                provincias={provincias}
-                tiposIVA={tiposIVA}
-                transportes={transportes}
-                vendedores={vendedores}
-                plazos={plazos}
-                categorias={categorias}
-              />
-            )}
-
-            {activeTab === "nuevo" && (
-              <div className="flex justify-center items-center min-h-[60vh]">
-                <ClienteForm
-                  onSave={handleSaveCliente}
-                  onCancel={() => closeTab("nuevo")}
-                  initialData={editCliente}
-                  barrios={barrios}
-                  localidades={localidades}
-                  provincias={provincias}
-                  transportes={transportes}
-                  vendedores={vendedores}
-                  plazos={plazos}
-                  categorias={categorias}
-                  setBarrios={setBarrios}
-                  setLocalidades={setLocalidades}
-                  setProvincias={setProvincias}
-                  setTransportes={setTransportes}
-                  setVendedores={setVendedores}
-                  setPlazos={setPlazos}
-                  setCategorias={setCategorias}
-                  tiposIVA={tiposIVA}
-                  apiError={error}
-                />
+                {/* Botón Nuevo Cliente solo en la tab de lista */}
+                {activeTab === "lista" && (
+                  <div className="flex-1 flex justify-end mb-2">
+                    <button
+                      onClick={() => openTab("nuevo", "Nuevo Cliente")}
+                      className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-lg">+</span> Nuevo Cliente
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* Contenido de pestañas */}
+              <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
+                {activeTab === "lista" && (
+                  <ClientesTable
+                    clientes={clientesActivos}
+                    onEdit={handleEditCliente}
+                    onDelete={handleDeleteCliente}
+                    search={search}
+                    setSearch={setSearch}
+                    expandedClientId={expandedClientId}
+                    setExpandedClientId={setExpandedClientId}
+                    barrios={barrios}
+                    localidades={localidades}
+                    provincias={provincias}
+                    tiposIVA={tiposIVA}
+                    transportes={transportes}
+                    vendedores={vendedores}
+                    plazos={plazos}
+                    categorias={categorias}
+                  />
+                )}
+
+                {activeTab === "inactivos" && (
+                  <ClientesTable
+                    clientes={clientesInactivos}
+                    onEdit={handleEditCliente}
+                    onDelete={handleDeleteCliente}
+                    search={searchInactivos}
+                    setSearch={setSearchInactivos}
+                    expandedClientId={expandedClientId}
+                    setExpandedClientId={setExpandedClientId}
+                    barrios={barrios}
+                    localidades={localidades}
+                    provincias={provincias}
+                    tiposIVA={tiposIVA}
+                    transportes={transportes}
+                    vendedores={vendedores}
+                    plazos={plazos}
+                    categorias={categorias}
+                  />
+                )}
+
+                {activeTab === "nuevo" && (
+                  <div className="flex justify-center items-center min-h-[60vh]">
+                    <ClienteForm
+                      onSave={handleSaveCliente}
+                      onCancel={() => closeTab("nuevo")}
+                      initialData={editCliente}
+                      barrios={barrios}
+                      localidades={localidades}
+                      provincias={provincias}
+                      transportes={transportes}
+                      vendedores={vendedores}
+                      plazos={plazos}
+                      categorias={categorias}
+                      setBarrios={setBarrios}
+                      setLocalidades={setLocalidades}
+                      setProvincias={setProvincias}
+                      setTransportes={setTransportes}
+                      setVendedores={setVendedores}
+                      setPlazos={setPlazos}
+                      setCategorias={setCategorias}
+                      tiposIVA={tiposIVA}
+                      apiError={error}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx'; // Import the xlsx library
-import { getCookie } from '../utils/csrf'; // Ajusta el path si es necesario
+import { getCookie } from '../../utils/csrf'; // Ajusta el path si es necesario
 
 const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const fileInputRef = useRef();

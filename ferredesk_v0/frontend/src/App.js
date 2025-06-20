@@ -7,7 +7,7 @@ import Register from './components/Register';
 import ClientesManager from './components/Clientes/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
 import ProductosManager from './components/Productos/ProductosManager';
-import ProveedoresManager from './components/ProveedoresManager';
+import ProveedoresManager from './components/Proveedores/ProveedoresManager';
 import PresupuestosManager from './components/Presupuestos y Ventas/PresupuestosManager';
 import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';

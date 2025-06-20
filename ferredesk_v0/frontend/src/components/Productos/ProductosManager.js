@@ -15,7 +15,7 @@ const ProductosManager = () => {
   }, [])
 
   // Hooks API
-  const { productos, addProducto, updateProducto, deleteProducto, setProductos } = useProductosAPI()
+  const { productos, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos } = useProductosAPI()
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -257,116 +257,138 @@ const ProductosManager = () => {
   const productosActivos = useMemo(() => productosActivosBase.filter(aplicaFiltrosFamilia), [productosActivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
   const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
 
+  // ------------------------------------------------------------------
+  // Efecto: recarga productos desde el backend cuando cambian búsqueda o filtros
+  // de familia.  Delegamos la lógica de filtrado al servidor.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const filtros = {}
+      if (search && search.trim() !== "") filtros.deno__icontains = search.trim()
+      if (fam1Filtro) filtros.idfam1 = fam1Filtro
+      if (fam2Filtro) filtros.idfam2 = fam2Filtro
+      if (fam3Filtro) filtros.idfam3 = fam3Filtro
+      fetchProductos(filtros)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [search, fam1Filtro, fam2Filtro, fam3Filtro])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
       <Navbar user={user} onLogout={handleLogout} />
-      <div className="flex justify-between items-center px-6 py-4">
-        <h2 className="text-2xl font-bold text-slate-800">Gestión de Productos y Stock</h2>
-      </div>
-      <div className="flex flex-1 px-6 gap-4 min-h-0">
-        <div className="flex-1 flex flex-col">
-          {/* Tabs tipo browser */}
-          <div className="flex items-center border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
-            {tabs.map((tab) => (
-              <div
-                key={tab.key}
-                className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${activeTab === tab.key ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-                onClick={() => setActiveTab(tab.key)}
-                style={{ position: "relative" }}
-              >
-                {tab.label}
-                {tab.closable && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeTab(tab.key)
-                    }}
-                    className="ml-2 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                    title="Cerrar"
+
+      {/* Contenedor central con ancho máximo fijo */}
+      <div className="py-8 px-4 flex-1 flex flex-col">
+        <div className="max-w-[1400px] w-full mx-auto flex flex-col flex-1">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-slate-800">Gestión de Productos y Stock</h2>
+          </div>
+
+          <div className="flex flex-1 gap-4 min-h-0">
+            <div className="flex-1 flex flex-col">
+              {/* Tabs tipo browser */}
+              <div className="flex items-center border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.key}
+                    className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${activeTab === tab.key ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                    onClick={() => setActiveTab(tab.key)}
+                    style={{ position: "relative" }}
                   >
-                    ×
-                  </button>
+                    {tab.label}
+                    {tab.closable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab.key)
+                        }}
+                        className="ml-2 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                        title="Cerrar"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {/* Botón Nuevo Producto solo en la tab de lista */}
+                {activeTab === "lista" && (
+                  <div className="flex-1 flex justify-end mb-2">
+                    <button
+                      onClick={() => openTab("nuevo", "Nuevo Producto")}
+                      className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-lg">+</span> Nuevo Producto
+                    </button>
+                  </div>
                 )}
               </div>
-            ))}
-            {/* Botón Nuevo Producto solo en la tab de lista */}
-            {activeTab === "lista" && (
-              <div className="flex-1 flex justify-end mb-2">
-                <button
-                  onClick={() => openTab("nuevo", "Nuevo Producto")}
-                  className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                >
-                  <span className="text-lg">+</span> Nuevo Producto
-                </button>
+              <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
+                {activeTab === "lista" && (
+                  <ProductosTable
+                    productos={productosActivos}
+                    familias={familias}
+                    proveedores={proveedores}
+                    setProveedores={addProveedor}
+                    search={search}
+                    setSearch={setSearch}
+                    expandedId={expandedId}
+                    setExpandedId={setExpandedId}
+                    fam1Filtro={fam1Filtro}
+                    setFam1Filtro={setFam1Filtro}
+                    fam2Filtro={fam2Filtro}
+                    setFam2Filtro={setFam2Filtro}
+                    fam3Filtro={fam3Filtro}
+                    setFam3Filtro={setFam3Filtro}
+                    addFamilia={addFamilia}
+                    updateFamilia={updateFamilia}
+                    deleteFamilia={deleteFamilia}
+                    addProveedor={addProveedor}
+                    updateProveedor={updateProveedor}
+                    deleteProveedor={deleteProveedor}
+                    deleteProducto={deleteProducto}
+                    onEdit={handleEditProducto}
+                    onUpdateStock={handleUpdateStock}
+                  />
+                )}
+                {activeTab === "inactivos" && (
+                  <ProductosTable
+                    productos={productosInactivos}
+                    familias={familias}
+                    proveedores={proveedores}
+                    setProveedores={addProveedor}
+                    search={searchInactivos}
+                    setSearch={setSearchInactivos}
+                    expandedId={expandedId}
+                    setExpandedId={setExpandedId}
+                    fam1Filtro={fam1Filtro}
+                    setFam1Filtro={setFam1Filtro}
+                    fam2Filtro={fam2Filtro}
+                    setFam2Filtro={setFam2Filtro}
+                    fam3Filtro={fam3Filtro}
+                    setFam3Filtro={setFam3Filtro}
+                    addFamilia={addFamilia}
+                    updateFamilia={updateFamilia}
+                    deleteFamilia={deleteFamilia}
+                    addProveedor={addProveedor}
+                    updateProveedor={updateProveedor}
+                    deleteProveedor={deleteProveedor}
+                    deleteProducto={deleteProducto}
+                    onEdit={handleEditProducto}
+                    onUpdateStock={handleUpdateStock}
+                  />
+                )}
+                {(activeTab === "nuevo" || activeTab.startsWith("editar-")) && (
+                  <StockForm
+                    key={activeTab}
+                    stock={editStates[activeTab]}
+                    modo={activeTab === "nuevo" ? "nuevo" : "editar"}
+                    onSave={(data) => handleSaveProducto(data, activeTab)}
+                    onCancel={() => closeTab(activeTab)}
+                    proveedores={proveedores.filter((p) => !!p.id)}
+                    familias={familias.filter((f) => !!f.id)}
+                  />
+                )}
               </div>
-            )}
-          </div>
-          <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
-            {activeTab === "lista" && (
-              <ProductosTable
-                productos={productosActivos}
-                familias={familias}
-                proveedores={proveedores}
-                setProveedores={addProveedor}
-                search={search}
-                setSearch={setSearch}
-                expandedId={expandedId}
-                setExpandedId={setExpandedId}
-                fam1Filtro={fam1Filtro}
-                setFam1Filtro={setFam1Filtro}
-                fam2Filtro={fam2Filtro}
-                setFam2Filtro={setFam2Filtro}
-                fam3Filtro={fam3Filtro}
-                setFam3Filtro={setFam3Filtro}
-                addFamilia={addFamilia}
-                updateFamilia={updateFamilia}
-                deleteFamilia={deleteFamilia}
-                addProveedor={addProveedor}
-                updateProveedor={updateProveedor}
-                deleteProveedor={deleteProveedor}
-                deleteProducto={deleteProducto}
-                onEdit={handleEditProducto}
-                onUpdateStock={handleUpdateStock}
-              />
-            )}
-            {activeTab === "inactivos" && (
-              <ProductosTable
-                productos={productosInactivos}
-                familias={familias}
-                proveedores={proveedores}
-                setProveedores={addProveedor}
-                search={searchInactivos}
-                setSearch={setSearchInactivos}
-                expandedId={expandedId}
-                setExpandedId={setExpandedId}
-                fam1Filtro={fam1Filtro}
-                setFam1Filtro={setFam1Filtro}
-                fam2Filtro={fam2Filtro}
-                setFam2Filtro={setFam2Filtro}
-                fam3Filtro={fam3Filtro}
-                setFam3Filtro={setFam3Filtro}
-                addFamilia={addFamilia}
-                updateFamilia={updateFamilia}
-                deleteFamilia={deleteFamilia}
-                addProveedor={addProveedor}
-                updateProveedor={updateProveedor}
-                deleteProveedor={deleteProveedor}
-                deleteProducto={deleteProducto}
-                onEdit={handleEditProducto}
-                onUpdateStock={handleUpdateStock}
-              />
-            )}
-            {(activeTab === "nuevo" || activeTab.startsWith("editar-")) && (
-              <StockForm
-                key={activeTab}
-                stock={editStates[activeTab]}
-                modo={activeTab === "nuevo" ? "nuevo" : "editar"}
-                onSave={(data) => handleSaveProducto(data, activeTab)}
-                onCancel={() => closeTab(activeTab)}
-                proveedores={proveedores.filter((p) => !!p.id)}
-                familias={familias.filter((f) => !!f.id)}
-              />
-            )}
+            </div>
           </div>
         </div>
       </div>

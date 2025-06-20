@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import Paginador from "../Paginador"
+import React, { useState } from "react"
+import Tabla from "../Tabla"
 
 function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
   const [form, setForm] = useState({ razon: "", fantasia: "", domicilio: "", tel1: "", cuit: "" })
@@ -372,18 +372,6 @@ export default function ProductosTable({
     }
   }
 
-  // ------------------------------ Paginación ------------------------------
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(10)
-
-  // Reiniciar página cuando cambian búsqueda o modo
-  useEffect(() => {
-    setPaginaActual(1)
-  }, [search])
-
-  const indiceInicio = (paginaActual - 1) * itemsPorPagina
-  const productosPagina = productosFiltrados.slice(indiceInicio, indiceInicio + itemsPorPagina)
-
   return (
     <div className="flex flex-col h-full">
       {/* Filtros de familias */}
@@ -456,145 +444,150 @@ export default function ProductosTable({
         </button>
       </div>
 
-      <div className="overflow-auto flex-1">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Producto
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Código
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Familia
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Subfamilia
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Sub-subfamilia
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Stock</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-100">
-            {(productosPagina || []).map((product) => (
-              <React.Fragment key={product.id}>
-                <tr className="hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => toggleRow(product.id)}
-                        className={`flex items-center justify-center w-6 h-6 mx-1 text-slate-600 hover:text-orange-600 transition-all duration-200 ${expandedRows.has(product.id) ? "rotate-90" : "rotate-0"}`}
-                        aria-label={expandedRows.has(product.id) ? "Ocultar detalles" : "Mostrar detalles"}
-                        style={{ padding: 0 }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" className="block m-auto">
-                          <polygon points="5,3 15,10 5,17" />
-                        </svg>
-                      </button>
-                      <span className="text-sm font-medium text-slate-800">{product.deno}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600">{product.codvta}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600">
-                    {getFamiliaNombre(product.idfam1)}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600">
-                    {getFamiliaNombre(product.idfam2)}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600">
-                    {getFamiliaNombre(product.idfam3)}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600">
-                    {Number(product.stock_total ?? 0).toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-600 align-middle">
-                    <div className="flex items-center justify-center gap-2 h-full">
-                      <button
-                        onClick={() => onEdit(product)}
-                        title="Editar"
-                        className="transition-colors px-1 py-1 text-blue-500 hover:text-blue-700"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth="1.5"
-                          stroke="currentColor"
-                          className="w-4 h-4"
+      <div className="flex-1">
+        {/* Definición de columnas */}
+        {(() => {
+          const columnas = [
+            {
+              id: "nro",
+              titulo: "Nº",
+              align: "center",
+              render: (_, __, indiceBase) => <span className="text-xs text-slate-500 font-medium">{indiceBase + 1}</span>,
+            },
+            {
+              id: "deno",
+              titulo: "Producto",
+              render: (p) => <span className="text-sm font-medium text-slate-800">{p.deno}</span>,
+            },
+            {
+              id: "cod",
+              titulo: "Código",
+              render: (p) => <span className="text-sm text-slate-600">{p.codvta}</span>,
+            },
+            {
+              id: "fam1",
+              titulo: "Familia",
+              render: (p) => <span className="text-sm text-slate-600">{getFamiliaNombre(p.idfam1)}</span>,
+            },
+            {
+              id: "fam2",
+              titulo: "Subfamilia",
+              render: (p) => <span className="text-sm text-slate-600">{getFamiliaNombre(p.idfam2)}</span>,
+            },
+            {
+              id: "fam3",
+              titulo: "Sub-sub",
+              render: (p) => <span className="text-sm text-slate-600">{getFamiliaNombre(p.idfam3)}</span>,
+            },
+            {
+              id: "stock",
+              titulo: "Stock",
+              align: "right",
+              render: (p) => <span className="text-sm text-slate-600">{Number(p.stock_total ?? 0).toFixed(2)}</span>,
+            },
+            {
+              id: "acciones",
+              titulo: "Acciones",
+              align: "center",
+              render: (p) => (
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEdit(p)
+                    }}
+                    title="Editar"
+                    className="transition-colors px-1 py-1 text-blue-500 hover:text-blue-700"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      className="w-4 h-4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteProducto(p.id)
+                    }}
+                    title="Eliminar"
+                    className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      className="w-4 h-4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              ),
+            },
+          ]
+
+          return (
+            <Tabla
+              columnas={columnas}
+              datos={productosFiltrados}
+              valorBusqueda=""
+              onCambioBusqueda={() => {}}
+              mostrarBuscador={false}
+              renderFila={(p, idxVis, idxInicio) => {
+                const indiceGlobal = idxInicio + idxVis
+
+                const filaPrincipal = (
+                  <tr
+                    key={p.id}
+                    onClick={() => toggleRow(p.id)}
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    {columnas.map((col) => {
+                      let contenido
+                      if (col.id === "nro") {
+                        contenido = indiceGlobal + 1
+                      } else if (col.render) {
+                        contenido = col.render(p, idxVis, idxInicio)
+                      }
+                      return (
+                        <td
+                          key={col.id}
+                          className={`px-2 py-1 whitespace-nowrap text-sm ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProducto(product.id)}
-                        title="Eliminar"
-                        className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth="1.5"
-                          stroke="currentColor"
-                          className="w-4 h-4"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                {expandedRows.has(product.id) && (
-                  <tr>
-                    <td colSpan="7" className="px-0 py-0">
+                          {contenido}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+
+                if (!expandedRows.has(p.id)) {
+                  return filaPrincipal
+                }
+
+                const filaDetalle = (
+                  <tr key={`det-${p.id}`}>
+                    <td colSpan={columnas.length} className="px-0 py-0">
+                      {/* Contenedor y encabezado */}
                       <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-l-4 border-orange-500 mx-3 mb-2 rounded-lg shadow-sm">
                         <div className="p-4">
-                          {/* Header con información clave */}
-                          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
-                            <div className="flex items-center gap-4">
-                              <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                                <svg
-                                  className="w-4 h-4 text-orange-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                  />
-                                </svg>
-                                Detalles del Producto
-                              </h4>
-                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full font-medium">
-                                ID: {product.id}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm text-slate-600">Stock Total</div>
-                              <div className="text-lg font-bold text-slate-800">
-                                {Number(product.stock_total ?? 0).toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Contenido principal en grid compacto */}
+                          {/* Contenido principal detallado */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {/* Información Básica */}
                             <div className="bg-white rounded-lg p-3 border border-slate-200">
@@ -617,34 +610,32 @@ export default function ProductosTable({
                               <div className="space-y-1 text-xs">
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Código Compra:</span>
-                                  <span className="font-medium text-slate-700">{product.codcom || "N/A"}</span>
+                                  <span className="font-medium text-slate-700">{p.codcom || "N/A"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Unidad:</span>
-                                  <span className="font-medium text-slate-700">{product.unidad || "N/A"}</span>
+                                  <span className="font-medium text-slate-700">{p.unidad || "N/A"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Margen:</span>
-                                  <span className="font-medium text-slate-700">
-                                    {product.margen ? `${product.margen}%` : "N/A"}
-                                  </span>
+                                  <span className="font-medium text-slate-700">{p.margen ? `${p.margen}%` : "N/A"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Cant. Mínima:</span>
-                                  <span className="font-medium text-slate-700">{product.cantmin ?? "N/A"}</span>
+                                  <span className="font-medium text-slate-700">{p.cantmin ?? "N/A"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Estado:</span>
                                   <span
                                     className={`font-medium px-2 py-0.5 rounded-full text-xs ${
-                                      product.acti === "S"
+                                      p.acti === "S"
                                         ? "bg-green-100 text-green-800"
-                                        : product.acti === "N"
+                                        : p.acti === "N"
                                           ? "bg-red-100 text-red-800"
                                           : "bg-gray-100 text-gray-800"
                                     }`}
                                   >
-                                    {product.acti === "S" ? "Activo" : product.acti === "N" ? "Inactivo" : "N/A"}
+                                    {p.acti === "S" ? "Activo" : p.acti === "N" ? "Inactivo" : "N/A"}
                                   </span>
                                 </div>
                               </div>
@@ -671,35 +662,35 @@ export default function ProductosTable({
                               <div className="space-y-1 text-xs">
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Familia:</span>
-                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam1)}</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam1)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Subfamilia:</span>
-                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam2)}</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Sub-subfamilia:</span>
-                                  <span className="font-medium text-slate-700">{getFamiliaNombre(product.idfam3)}</span>
+                                  <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam3)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Alícuota IVA:</span>
                                   <span className="font-medium text-slate-700">
-                                    {product.idaliiva ? `${product.idaliiva.deno} (${product.idaliiva.porce}%)` : "N/A"}
+                                    {p.idaliiva ? `${p.idaliiva.deno} (${p.idaliiva.porce}%)` : "N/A"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Prov. Habitual:</span>
                                   <span
                                     className="font-medium text-slate-700 truncate"
-                                    title={product.proveedor_habitual?.razon}
+                                    title={p.proveedor_habitual?.razon}
                                   >
-                                    {product.proveedor_habitual?.razon || "N/A"}
+                                    {p.proveedor_habitual?.razon || "N/A"}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            {/* Stock por Proveedor */}
+                            {/* Stock (detalle por proveedor + total) */}
                             <div className="bg-white rounded-lg p-3 border border-slate-200">
                               <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
                                 <svg
@@ -715,12 +706,12 @@ export default function ProductosTable({
                                     d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
                                   />
                                 </svg>
-                                Stock por Proveedor
+                                Stock
                               </h5>
                               <div className="max-h-24 overflow-y-auto">
-                                {(product.stock_proveedores || []).length > 0 ? (
+                                {(p.stock_proveedores || []).length > 0 ? (
                                   <div className="space-y-1">
-                                    {product.stock_proveedores.map((sp, index) => (
+                                    {p.stock_proveedores.map((sp, index) => (
                                       <div
                                         key={index}
                                         className="flex justify-between items-center text-xs bg-slate-50 rounded p-2"
@@ -750,28 +741,23 @@ export default function ProductosTable({
                                   </div>
                                 )}
                               </div>
+                              {/* Línea de stock total */}
+                              <div className="mt-2 text-xs text-right font-semibold text-slate-700">
+                                Stock Total: {Number(p.stock_total ?? 0).toFixed(2)}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-        {/* Paginador */}
-        <Paginador
-          totalItems={productosFiltrados.length}
-          itemsPerPage={itemsPorPagina}
-          currentPage={paginaActual}
-          onPageChange={setPaginaActual}
-          onItemsPerPageChange={(n) => {
-            setItemsPorPagina(n)
-            setPaginaActual(1)
-          }}
-        />
+                )
+
+                return [filaPrincipal, filaDetalle]
+              }}
+            />
+          )
+        })()}
       </div>
       <ProveedoresModal
         open={showProvModal}

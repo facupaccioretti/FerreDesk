@@ -7,11 +7,16 @@ export function useProductosAPI() {
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchProductos = async () => {
+  const fetchProductos = async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/productos/stock/', { credentials: 'include' });
+      const params = new URLSearchParams();
+      Object.entries(filtros).forEach(([k,v])=>{
+        if (v !== undefined && v !== null && v !== '') params.append(k, v);
+      });
+      const url = params.toString() ? `/api/productos/stock/?${params.toString()}` : '/api/productos/stock/';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener productos');
       const data = await res.json();
       setProductos(Array.isArray(data) ? data : (data.results || []));
@@ -89,5 +94,5 @@ export function useProductosAPI() {
     fetchProductos();
   }, []);
 
-  return { productos, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto };
+  return { productos, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };
 }
