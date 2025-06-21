@@ -30,11 +30,9 @@ const BotonDuplicar = ({ onClick, tabIndex }) => (
   </button>
 )
 
-// Diccionario de alícuotas según la tabla proporcionada
-const ALICUOTAS = {
-  1: 0, // NO GRAVADO
-  2: 0, // EXENTO
-  3: 0, // 0%
+// Mapa de alícuotas por defecto, se utiliza solo si el backend aún no proveyó datos
+const ALICUOTAS_POR_DEFECTO = {
+  3: 0,   
   4: 10.5,
   5: 21,
   6: 27,
@@ -46,10 +44,11 @@ function getEmptyRow() {
     codigo: "",
     denominacion: "",
     unidad: "",
-    cantidad: 1,
+    cantidad: 0,          // Para genéricos comienza en 0
     precio: "",
     bonificacion: 0,
     producto: null,
+    idaliiva: 3,          // 0 % por defecto
   }
 }
 
@@ -114,6 +113,7 @@ const ItemsGridPresupuesto = forwardRef(
       descu2 = 0,
       descu3 = 0,
       totales = {},
+      alicuotas = {}, // Mapa { id: porcentaje }
       setDescu1 = () => {},
       setDescu2 = () => {},
       setDescu3 = () => {},
@@ -121,6 +121,9 @@ const ItemsGridPresupuesto = forwardRef(
     ref,
   ) => {
     const esPresupuesto = modo === "presupuesto"
+    // Combinar alícuotas del backend con un fallback seguro
+    const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
+
     const [rows, setRows] = useState(() => {
       if (Array.isArray(initialItems) && initialItems.length > 0) {
         // Detectar si los ítems ya están normalizados (todos tienen 'producto')
@@ -193,6 +196,7 @@ const ItemsGridPresupuesto = forwardRef(
                 cantidad,
                 bonificacion: 0,
                 producto: producto,
+                idaliiva: typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3),
                 proveedorId: proveedorId,
               }
               return [...prevRows, nuevoItem, getEmptyRow()]
@@ -215,6 +219,7 @@ const ItemsGridPresupuesto = forwardRef(
             cantidad,
             bonificacion: 0,
             producto: producto,
+            idaliiva: typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3),
             proveedorId: proveedorId,
           }
           if (!lastRow.producto && !lastRow.codigo) {
@@ -237,7 +242,10 @@ const ItemsGridPresupuesto = forwardRef(
     }, [rows])
 
     function isRowLleno(row) {
-      return !!row.producto
+      // Un renglón se considera completo si:
+      // 1) Tiene un producto seleccionado (ítem de stock)
+      // 2) Es un ítem genérico con descripción no vacía
+      return !!(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
     }
 
     function isRowVacio(row) {
@@ -300,17 +308,46 @@ const ItemsGridPresupuesto = forwardRef(
           onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "precio") {
-          newRows[idx] = {
-            ...newRows[idx],
-            precio: value,
+          const userInput = value; // `value` es ahora el string directo del input (precio final)
+          const fila = { ...newRows[idx] };
+
+          const esGenerico = !fila.producto;
+          let aliFinalId = fila.idaliiva ?? 3;
+
+          // Si es genérico, su precio es > 0 y su IVA es 0%, forzarlo a 21%
+          if (esGenerico && Number(userInput) > 0 && (aliFinalId === 3 || aliFinalId === 0)) {
+            aliFinalId = 5; // ID para 21%
+          } 
+          // NUEVO: Si es genérico y el precio se borra o es 0, reiniciar IVA a 0%
+          else if (esGenerico && (userInput === '' || Number(userInput) === 0)) {
+            aliFinalId = 3; // ID para 0%
           }
-          const updatedRows = ensureSoloUnEditable(newRows)
-          onRowsChange?.(updatedRows)
-          return updatedRows
+          
+          const aliFinalPorc = aliMap[aliFinalId] || 0;
+          
+          // Calcular el precio base (neto) a partir del input del usuario (precio final)
+          const precioBase = Number.parseFloat(userInput) / (1 + aliFinalPorc / 100);
+
+          // Actualizar la fila con el precio neto y la alícuota correcta
+          fila.precio = Number.isNaN(precioBase) ? "" : precioBase;
+          fila.idaliiva = aliFinalId;
+          
+          newRows[idx] = fila;
+          const updatedRows = ensureSoloUnEditable(newRows);
+          onRowsChange?.(updatedRows);
+          return updatedRows;
         } else if (field === "bonificacion") {
           newRows[idx] = {
             ...newRows[idx],
             [field]: value,
+          }
+          const updatedRows = ensureSoloUnEditable(newRows)
+          onRowsChange?.(updatedRows)
+          return updatedRows
+        } else if (field === "denominacion") {
+          newRows[idx] = {
+            ...newRows[idx],
+            denominacion: value,
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
@@ -342,39 +379,49 @@ const ItemsGridPresupuesto = forwardRef(
       ref,
       () => ({
         getItems: () => {
-          const items = rows
-            .filter((r) => r.producto && (r.codigo || r.producto.id))
+          return rows
+            .filter(r => isRowLleno(r)) // Usamos la función que ya sabe qué es una fila llena
             .map((row, idx) => {
-              const cantidad = Number.parseFloat(row.cantidad) || 0
-              const precio = Number.parseFloat(row.precio) || 0
-              const bonif = Number.parseFloat(row.bonificacion) || 0
-              const idaliiva =
-                row.producto.idaliiva && row.producto.idaliiva.id
-                  ? row.producto.idaliiva.id
-                  : typeof row.producto.idaliiva === "number"
-                    ? row.producto.idaliiva
-                    : row.idaliiva || 0
-              const margen = row.margen ?? row.vdi_margen ?? row.producto?.margen ?? 0
-              const item = {
-                vdi_orden: idx + 1,
-                vdi_idsto: row.producto.id,
-                vdi_idpro: row.proveedorId,
-                vdi_cantidad: cantidad,
-                vdi_costo: row.vdi_costo ?? 0,
-                vdi_margen: margen,
-                vdi_bonifica: bonif,
-                vdi_detalle1: row.denominacion || "",
-                vdi_detalle2: row.unidad || "",
-                vdi_idaliiva: idaliiva,
-                alicuotaIva: undefined,
-                codigo: row.codigo || String(row.producto.id),
-                producto: row.producto,
-                proveedorId: row.proveedorId,
+              const cantidad = Number.parseFloat(row.cantidad) || 0;
+              const bonif = Number.parseFloat(row.bonificacion) || 0;
+
+              if (row.producto) {
+                // --- LÓGICA PARA ÍTEM DE STOCK ---
+                const idaliiva = row.producto.idaliiva?.id ?? row.producto.idaliiva ?? row.idaliiva ?? 3;
+                const margen = row.margen ?? row.vdi_margen ?? row.producto.margen ?? 0;
+                
+                return {
+                  vdi_orden: idx + 1,
+                  vdi_idsto: row.producto.id,
+                  vdi_idpro: row.proveedorId,
+                  vdi_cantidad: cantidad,
+                  vdi_costo: row.vdi_costo ?? 0,
+                  vdi_margen: margen,
+                  vdi_bonifica: bonif,
+                  vdi_detalle1: row.denominacion || "",
+                  vdi_detalle2: row.unidad || "",
+                  vdi_idaliiva: idaliiva,
+                  codigo: row.codigo || String(row.producto.id),
+                  producto: row.producto,
+                  proveedorId: row.proveedorId,
+                };
+              } else {
+                // --- LÓGICA PARA ÍTEM GENÉRICO ---
+                return {
+                  vdi_orden: idx + 1,
+                  vdi_idsto: null,
+                  vdi_idpro: null,
+                  vdi_cantidad: cantidad,
+                  // Para genéricos, el precio de la fila es el costo base (neto)
+                  vdi_costo: Number.parseFloat(row.precio) || 0,
+                  vdi_margen: 0,
+                  vdi_bonifica: bonif,
+                  vdi_detalle1: row.denominacion || "",
+                  vdi_detalle2: row.unidad || "",
+                  vdi_idaliiva: row.idaliiva ?? 3,
+                };
               }
-              return item
-            })
-          console.log("[ItemsGrid.getItems] Ítems:", items)
-          return items
+            });
         },
         getRows: () => rows,
         handleAddItem,
@@ -450,18 +497,25 @@ const ItemsGridPresupuesto = forwardRef(
     // Eliminar ítem y dejar solo un renglón vacío si no quedan ítems
     const handleDeleteRow = (idx) => {
       setRows((rows) => {
-        const newRows = rows.filter((_, i) => i !== idx)
-        onRowsChange?.(newRows)
-        if (newRows.filter((r) => r.producto && r.codigo).length === 0) {
-          return [getEmptyRow()]
+        const newRows = rows.filter((_, i) => i !== idx);
+        onRowsChange?.(newRows);
+
+        // Si después de eliminar, no queda ninguna fila "llena" (ni de stock ni genérica),
+        // entonces reiniciamos la grilla a un único renglón vacío.
+        if (newRows.every(row => !isRowLleno(row))) {
+          return [getEmptyRow()];
         }
-        const last = newRows[newRows.length - 1]
-        if (last && last.producto) {
-          return [...newRows, getEmptyRow()]
+
+        // Si la última fila está llena, nos aseguramos de que haya una vacía debajo.
+        const last = newRows[newRows.length - 1];
+        if (last && isRowLleno(last)) {
+          return [...newRows, getEmptyRow()];
         }
-        return newRows
-      })
-    }
+        
+        // Si no, simplemente devolvemos las filas actualizadas (ej. el último ya era vacío).
+        return newRows;
+      });
+    };
 
     // 1. Reescribir isDuplicado para que sea robusto y solo resalte la celda de cantidad
     const getDuplicadoMap = () => {
@@ -524,6 +578,7 @@ const ItemsGridPresupuesto = forwardRef(
                     cantidad: row.cantidad || 1,
                     bonificacion: 0,
                     producto: prod,
+                    idaliiva: typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3),
                     proveedorId: proveedorId,
                   }
                   if (newRows.every(isRowLleno)) {
@@ -557,6 +612,7 @@ const ItemsGridPresupuesto = forwardRef(
                 cantidad: row.cantidad || 1,
                 bonificacion: 0,
                 producto: prod,
+                idaliiva: typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3),
                 proveedorId: proveedorHabitual ? proveedorHabitual.id : "",
               }
               if (newRows.every(isRowLleno)) {
@@ -609,6 +665,23 @@ const ItemsGridPresupuesto = forwardRef(
         onRowsChange(rows)
       }
     }, [rows, onRowsChange])
+
+    // Manejar cambio de alícuota en ítem genérico procurando mantener constante el precio final
+    const handleIvaChange = (idx, nuevoIdAli) => {
+      setRows(prevRows => {
+        const nuevos = [...prevRows]
+        const fila = { ...nuevos[idx] }
+        const aliViejo = aliMap[fila.idaliiva] || 0
+        const aliNuevo = aliMap[nuevoIdAli] || 0
+        const precioFinalConst = Number.parseFloat(fila.precio || 0) * (1 + aliViejo / 100)
+        const nuevoPrecioBase = precioFinalConst / (1 + aliNuevo / 100)
+        fila.idaliiva = nuevoIdAli
+        fila.precio = Number.isNaN(nuevoPrecioBase) ? 0 : nuevoPrecioBase
+        nuevos[idx] = fila
+        onRowsChange?.(nuevos)
+        return nuevos
+      })
+    }
 
     // Render con estética FerreDesk
     return (
@@ -761,7 +834,7 @@ const ItemsGridPresupuesto = forwardRef(
                     Código
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-48">
-                    Denominación
+                    Detalle
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-14">
                     Unidad
@@ -791,17 +864,10 @@ const ItemsGridPresupuesto = forwardRef(
               </thead>
               <tbody className="bg-white divide-y divide-slate-100">
                 {rows.map((row, idx) => {
+                  const aliPorcRow = aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0
                   const precioConIVA =
                     row.precio !== "" && row.precio !== undefined
-                      ? Number(
-                          (
-                            Number.parseFloat(row.precio) *
-                            (1 +
-                              (ALICUOTAS[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] ||
-                                0) /
-                                100)
-                          ).toFixed(2),
-                        )
+                      ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
                       : 0
                   const precioBonificado = precioConIVA * (1 - (Number.parseFloat(row.bonificacion) || 0) / 100)
 
@@ -831,10 +897,20 @@ const ItemsGridPresupuesto = forwardRef(
                         />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {/* Denominación solo lectura */}
-                        <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm">
-                          {row.denominacion || ""}
-                        </div>
+                        {row.producto ? (
+                          <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm">
+                            {row.denominacion || ""}
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={row.denominacion}
+                            onChange={(e) => handleRowChange(idx, "denominacion", e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                            placeholder="Detalle"
+                            aria-label="Detalle ítem genérico"
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">
                         {row.unidad || "-"}
@@ -845,7 +921,8 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.cantidad}
                           onChange={(e) => handleCantidadChange(idx, e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "cantidad")}
-                          min="1"
+                          /* Requerir al menos 1 si es ítem de stock o genérico con precio > 0 */
+                          min={row.producto || (Number(row.precio) > 0) ? 1 : 0}
                           className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
                           aria-label="Cantidad"
                           tabIndex={0}
@@ -858,21 +935,18 @@ const ItemsGridPresupuesto = forwardRef(
                           inputMode="decimal"
                           value={
                             row.precio !== "" && row.precio !== undefined
-                              ? Number((parseFloat(row.precio) * (1 + ((ALICUOTAS[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100))).toFixed(2))
+                              ? Number((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100)).toFixed(2))
                               : ""
                           }
                           onChange={(e) => {
-                            const aliPorc =
-                              ALICUOTAS[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0
-                            const precioBase = Number.parseFloat(e.target.value) / (1 + aliPorc / 100)
-                            handleRowChange(idx, "precio", isNaN(precioBase) ? "" : precioBase)
+                            handleRowChange(idx, "precio", e.target.value)
                           }}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
                           className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 appearance-none"
                           style={{
                             MozAppearance: 'textfield',
                             minWidth: '100%',
-                            width: `${Math.max(String(row.precio !== '' && row.precio !== undefined ? Number((parseFloat(row.precio)*(1+((ALICUOTAS[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100))).toFixed(2)) : '').length, 10)}ch`,
+                            width: `${Math.max(String(row.precio !== '' && row.precio !== undefined ? Number((parseFloat(row.precio)*(1+((aliMap[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100))).toFixed(2)) : '').length, 10)}ch`,
                           }}
                           aria-label="Precio Unitario"
                           tabIndex={0}
@@ -895,25 +969,41 @@ const ItemsGridPresupuesto = forwardRef(
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm font-medium">
-                          {row.producto ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}` : ""}
+                          {row.precio !== "" && row.precio !== undefined
+                            ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}`
+                            : ""}
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">
                         {(() => {
                           const alicuotaId = row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0
-                          const aliPorc = ALICUOTAS[alicuotaId] || 0
+                          if (!row.producto && Number(row.precio) > 0) {
+                            return (
+                              <select
+                                value={alicuotaId}
+                                onChange={(e) => handleIvaChange(idx, Number(e.target.value))}
+                                className="px-2 py-1 border border-slate-300 rounded-xl bg-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                              >
+                                {[3,4,5,6].filter(id=>aliMap[id]!==undefined).map(id => (
+                                  <option key={id} value={id}>{aliMap[id]}%</option>
+                                ))}
+                              </select>
+                            )
+                          }
+                          const aliPorc = aliMap[alicuotaId] || 0
                           return aliPorc + "%"
                         })()}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="px-3 py-2 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/50 text-emerald-800 font-bold text-sm shadow-sm">
-                          {row.producto
-                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`                            : ""}
+                          {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
+                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
+                            : ""}
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-center">
                         <div className="flex gap-[4px] justify-center">
-                          {row.producto && (
+                          {(row.producto || (row.denominacion && row.denominacion.trim() !== "")) && (
                             <>
                               <button
                                 onClick={() => handleDeleteRow(idx)}

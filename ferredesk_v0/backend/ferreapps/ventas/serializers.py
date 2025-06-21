@@ -125,6 +125,19 @@ class VentaSerializer(serializers.ModelSerializer):
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
 
+        # --- NUEVA VALIDACIÓN Y ASIGNACIÓN PARA ÍTEMS GENÉRICOS -------------------
+        for idx, it in enumerate(items_data, start=1):
+            if not it.get('vdi_idsto'):
+                if not it.get('vdi_detalle1'):
+                    raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
+                precio = Decimal(str(it.get('vdi_costo', 0)))
+                cantidad = Decimal(str(it.get('vdi_cantidad', 0)))
+                if precio > 0 and cantidad == 0:
+                    raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
+                if it.get('vdi_idaliiva') is None:
+                    it['vdi_idaliiva'] = 3  # 0% por defecto
+        # --------------------------------------------------------------------------
+
         # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
         # Crear los items base (sin campos calculados)
@@ -177,6 +190,21 @@ class VentaSerializer(serializers.ModelSerializer):
                 for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
                     item_data.pop(campo_calculado, None)
                 VentaDetalleItem.objects.create(**item_data)
+
+        # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS ---------------------------------
+        if items_data is not None:
+            for idx, it in enumerate(items_data, start=1):
+                if not it.get('vdi_idsto'):
+                    if not it.get('vdi_detalle1'):
+                        raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
+                    precio = Decimal(str(it.get('vdi_costo', 0)))
+                    cantidad = Decimal(str(it.get('vdi_cantidad', 0)))
+                    if precio > 0 and cantidad == 0:
+                        raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
+                    if it.get('vdi_idaliiva') is None:
+                        it['vdi_idaliiva'] = 3  # 0% por defecto
+        # --------------------------------------------------------------------------
+
         return instance
 
     def validate(self, data):

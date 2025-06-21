@@ -748,7 +748,9 @@ const VentaForm = ({
                   setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
                   totales={totales}
                   modo="venta"
+                  alicuotas={alicuotasMap}
                   onRowsChange={handleRowsChange}
+                  initialItems={formulario.items}
                 />
               )}
             </div>

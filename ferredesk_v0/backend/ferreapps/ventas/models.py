@@ -100,8 +100,8 @@ class VentaDetalleItem(models.Model):
         on_delete=models.CASCADE
     )
     vdi_orden = models.SmallIntegerField(db_column='VDI_ORDEN')
-    vdi_idsto = models.IntegerField(db_column='VDI_IDSTO')
-    vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True)
+    vdi_idsto = models.IntegerField(db_column='VDI_IDSTO', null=True, blank=True)
+    vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True, blank=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2, db_column='VDI_CANTIDAD')
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_COSTO')
     vdi_margen = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_MARGEN')

@@ -495,6 +495,7 @@ const PresupuestoForm = ({
             setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
             totales={totales}
             modo="presupuesto"
+            alicuotas={alicuotasMap}
             onRowsChange={handleRowsChange}
             initialItems={formulario.items}
           />

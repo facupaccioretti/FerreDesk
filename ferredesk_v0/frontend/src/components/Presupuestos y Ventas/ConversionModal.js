@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { Fragment, useState, useEffect } from "react";
+import { Dialog, Transition } from "@headlessui/react";
 import { formatearMoneda } from './herramientasforms/plantillasComprobantes/helpers';
 
 const ALICUOTAS = {
@@ -31,7 +32,7 @@ const ConversionModal = ({
   clientes,
   plazos,
   sucursales,
-  puntosVenta
+  puntosVenta,
 }) => {
   const [selectedItems, setSelectedItems] = useState([]);
 
@@ -67,125 +68,153 @@ const ConversionModal = ({
   const plazo = plazos?.find(p => p.id === (presupuesto?.plazoId || presupuesto?.ven_idpla))?.nombre || presupuesto?.plazoId || '-';
 
   return (
-    <div className="fixed inset-0 bg-gray-100/50 flex items-center justify-center z-50">
-      <div className="w-full max-w-5xl mx-auto bg-white rounded-xl overflow-hidden shadow-lg border border-gray-200">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-gray-900">
-              Convertir Presupuesto a Venta
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-red-500"
+    <Transition appear show={open} as={Fragment}>
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-gray-100/50" />
+        </Transition.Child>
+
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+              <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-xl bg-white text-left align-middle shadow-xl transition-all border border-gray-200">
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <Dialog.Title as="h2" className="text-2xl font-semibold text-gray-900">
+                      Convertir Presupuesto a Venta
+                    </Dialog.Title>
+                    <button
+                      onClick={onClose}
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
 
-        {/* Información General */}
-        <div className="p-6 pb-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Cliente</span>
-              <span className="block text-lg font-semibold text-gray-800">{cliente}</span>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Fecha</span>
-              <span className="block text-lg font-semibold text-gray-800">{presupuesto?.fecha}</span>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Vendedor</span>
-              <span className="block text-lg font-semibold text-gray-800">{vendedor}</span>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Sucursal</span>
-              <span className="block text-lg font-semibold text-gray-800">{sucursal}</span>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Punto de Venta</span>
-              <span className="block text-lg font-semibold text-gray-800">{puntoVenta}</span>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <span className="block text-sm font-medium text-gray-500 mb-1">Plazo</span>
-              <span className="block text-lg font-semibold text-gray-800">{plazo}</span>
-            </div>
-          </div>
-        </div>
+                <div className="p-6 pb-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Cliente</span>
+                      <span className="block text-lg font-semibold text-gray-800">{cliente}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Fecha</span>
+                      <span className="block text-lg font-semibold text-gray-800">{presupuesto?.fecha}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Vendedor</span>
+                      <span className="block text-lg font-semibold text-gray-800">{vendedor}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Sucursal</span>
+                      <span className="block text-lg font-semibold text-gray-800">{sucursal}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Punto de Venta</span>
+                      <span className="block text-lg font-semibold text-gray-800">{puntoVenta}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <span className="block text-sm font-medium text-gray-500 mb-1">Plazo</span>
+                      <span className="block text-lg font-semibold text-gray-800">{plazo}</span>
+                    </div>
+                  </div>
+                </div>
 
-        {/* Grilla minimalista de Items */}
-        <div className="px-6 pb-6">
-          <div className="mb-2">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Ítems</h3>
-          </div>
-          <div className="rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-200">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3"></th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Denominación</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Unit.</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {presupuesto?.items?.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleRowClick(item.id)}
-                    tabIndex={0}
-                    aria-label={`Seleccionar item ${item.denominacion}`}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleRowClick(item.id); }}
+                <div className="px-6 pb-6">
+                  <div className="mb-2">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Ítems</h3>
+                  </div>
+                  <div
+                    className="rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-200 max-h-[28rem] overflow-y-auto"
                   >
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <span
-                        role="checkbox"
-                        aria-checked={selectedItems.includes(item.id)}
-                        tabIndex={0}
-                        onClick={() => handleItemSelect(item.id, !selectedItems.includes(item.id))}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemSelect(item.id, !selectedItems.includes(item.id)); }}
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded-md border border-gray-300 transition-colors duration-150 cursor-pointer ${selectedItems.includes(item.id) ? 'bg-black' : 'bg-white'}`}
-                        style={{ minWidth: '20px', minHeight: '20px' }}
-                      >
-                        {selectedItems.includes(item.id) && (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M3.5 7.5L6 10L10.5 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_detalle1 || item.denominacion}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{item.vdi_cantidad || item.cantidad}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${formatearMoneda(item.precio_unitario_lista || item.precio)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_bonifica || item.bonificacion}%</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-bold">${formatearMoneda(item.vdi_importe_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    <table className="min-w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2"></th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nro.</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Detalle</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio Unit.</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bonif. %</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {presupuesto?.items?.map((item, idxItem) => (
+                          <tr
+                            key={item.id}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            onClick={() => handleRowClick(item.id)}
+                            tabIndex={0}
+                            aria-label={`Seleccionar item ${item.denominacion}`}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleRowClick(item.id); }}
+                          >
+                            <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                              <span
+                                role="checkbox"
+                                aria-checked={selectedItems.includes(item.id)}
+                                tabIndex={0}
+                                onClick={() => handleItemSelect(item.id, !selectedItems.includes(item.id))}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemSelect(item.id, !selectedItems.includes(item.id)); }}
+                                className={`inline-flex items-center justify-center w-5 h-5 rounded-md border border-gray-300 transition-colors duration-150 cursor-pointer ${selectedItems.includes(item.id) ? 'bg-black' : 'bg-white'}`}
+                                style={{ minWidth: '20px', minHeight: '20px' }}
+                              >
+                                {selectedItems.includes(item.id) && (
+                                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3.5 7.5L6 10L10.5 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-700">{idxItem + 1}</td>
+                            <td className="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-700">{item.codigo}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_detalle1 || item.denominacion}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">{item.vdi_cantidad || item.cantidad}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">${formatearMoneda(item.precio_unitario_lista || item.precio)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{item.vdi_bonifica || item.bonificacion}%</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-bold">${formatearMoneda(item.vdi_importe_total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => onConvertir(selectedItems)}
+                    disabled={selectedItems.length === 0}
+                    className="px-5 py-2 rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base transition-colors"
+                  >
+                    Convertir
+                  </button>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
-          <button
-            onClick={() => onConvertir(selectedItems)}
-            disabled={selectedItems.length === 0}
-            className="px-5 py-2 rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base transition-colors"
-          >
-            Convertir
-          </button>
-        </div>
-      </div>
-    </div>
+      </Dialog>
+    </Transition>
   );
 };
 
