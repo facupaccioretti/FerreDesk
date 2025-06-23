@@ -18,11 +18,10 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItem
-        # ATENCIÓN: Solo se deben exponer los campos base de la tabla física.
-        # Los campos calculados (vdi_importe, vdi_importe_total, vdi_ivaitem) solo existen en la vista y en el modelo de solo lectura.
+        # Solo los campos base de la tabla física
         fields = [
             'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
-            'vdi_costo', 'vdi_margen', 'vdi_bonifica',
+            'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final',
             'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
         ]
 
@@ -240,7 +239,7 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
 class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaIVAAlicuota
-        fields = '__all__'
+        fields = ['id', 'vdi_idve', 'ali_porce', 'neto_gravado', 'iva_total']
 
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()

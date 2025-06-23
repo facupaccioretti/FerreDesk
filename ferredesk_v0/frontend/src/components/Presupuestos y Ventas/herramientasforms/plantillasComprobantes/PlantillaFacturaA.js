@@ -96,7 +96,7 @@ const PlantillaFacturaA = ({ data }) => {
                 IVA
               </th>
               <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[140px]">
-                Total
+                Importe
               </th>
             </tr>
           </thead>
@@ -110,22 +110,22 @@ const PlantillaFacturaA = ({ data }) => {
                 <td className="px-4 py-3 text-left text-sm text-gray-900">{item.vdi_detalle1 ?? "-"}</td>
                 <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">{item.vdi_cantidad ?? 0}</td>
                 <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                  ${formatearMoneda(item.precio_unitario_lista)}
+                  ${formatearMoneda(item.precio_unitario_sin_iva || 0)}
                 </td>
                 <td className="px-4 py-3 text-center text-sm font-medium text-orange-600">
                   {formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3)}
                 </td>
-                <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
-                  ${formatearMoneda(item.precio_unitario_bonificado)}
+                <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
+                  ${formatearMoneda(item.precio_unitario_bonificado || 0)}
                 </td>
                 <td className="px-4 py-3 text-center text-sm font-medium text-gray-700">
                   {item.ali_porce ? `${item.ali_porce}%` : "-"}
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
-                  ${formatearMoneda(item.iva)}
+                  ${formatearMoneda(item.iva_monto || 0)}
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                  ${formatearMoneda(item.vdi_importe_total)}
+                  ${formatearMoneda(item.subtotal_neto || 0)}
                 </td>
               </tr>
             ))}

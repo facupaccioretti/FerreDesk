@@ -45,7 +45,8 @@ function getEmptyRow() {
     denominacion: "",
     unidad: "",
     cantidad: 0,          // Para genéricos comienza en 0
-    precio: "",
+    precio: "",              // Precio sin IVA (interno)
+    precioFinal: "",         // Precio unitario final con IVA que se muestra y envía
     bonificacion: 0,
     producto: null,
     idaliiva: 3,          // 0 % por defecto
@@ -70,6 +71,23 @@ function normalizeItemsIniciales(itemsIniciales, productosDisponibles = []) {
           ? item.margen
           : (prod?.margen ?? 0)
 
+    const aliId = (prod?.idaliiva?.id ?? prod?.idaliiva ?? item.vdi_idaliiva ?? 3)
+    const aliPorc = ALICUOTAS_POR_DEFECTO[aliId] ?? 0
+
+    const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null
+
+    const precioBaseCalculado = (() => {
+      if (precioFinalBD && Number(precioFinalBD) !== 0) {
+        // CORRECCIÓN: Usar división para obtener el precio base desde el precio final
+        const divisorIva = 1 + aliPorc / 100
+        return divisorIva > 0 ? precioFinalBD / divisorIva : 0
+      }
+      const precioDirecto = item.precio ?? item.vdi_importe ?? item.costo ?? 0
+      if (precioDirecto && Number(precioDirecto) !== 0) return precioDirecto
+      const costo = item.vdi_costo ?? item.costo ?? 0
+      return Number.parseFloat(costo) * (1 + Number.parseFloat(margen) / 100)
+    })()
+
     return {
       id: item.id || idx + 1,
       producto: prod,
@@ -77,12 +95,8 @@ function normalizeItemsIniciales(itemsIniciales, productosDisponibles = []) {
       denominacion: item.denominacion || prod?.deno || prod?.nombre || "",
       unidad: item.unidad || prod?.unidad || prod?.unidadmedida || "-",
       cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: (() => {
-        const precioDirecto = item.precio ?? item.vdi_importe ?? item.costo ?? 0
-        if (precioDirecto && Number(precioDirecto) !== 0) return precioDirecto
-        const costo = item.vdi_costo ?? item.costo ?? 0
-        return Number.parseFloat(costo) * (1 + Number.parseFloat(margen) / 100)
-      })(),
+      precio: precioBaseCalculado,
+      precioFinal: precioFinalBD || (precioBaseCalculado * (1 + aliPorc / 100)),
       bonificacion: item.bonificacion || item.vdi_bonifica || 0,
       proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || "",
       margen: margen,
@@ -128,7 +142,16 @@ const ItemsGridPresupuesto = forwardRef(
       if (Array.isArray(initialItems) && initialItems.length > 0) {
         // Detectar si los ítems ya están normalizados (todos tienen 'producto')
         const yaNormalizados = initialItems.every((it) => it.producto)
-        return yaNormalizados ? initialItems : normalizeItemsIniciales(initialItems, productosDisponibles)
+        let baseRows = yaNormalizados ? initialItems : normalizeItemsIniciales(initialItems, productosDisponibles)
+
+        // Verificar si ya existe un renglón vacío; si no, añadir uno para permitir nuevas cargas
+        const hayVacio = baseRows.some(
+          (row) => !row.producto && (!row.denominacion || row.denominacion.trim() === ""),
+        )
+        if (!hayVacio) {
+          baseRows = [...baseRows, getEmptyRow()]
+        }
+        return baseRows
       }
       return [getEmptyRow()]
     })
@@ -139,13 +162,36 @@ const ItemsGridPresupuesto = forwardRef(
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
 
+    // ------------------------------------------------------------
+    // Helper: determina el ID de proveedor habitual desde el objeto
+    // `producto` recibido. Se cubren los posibles formatos:
+    //   • producto.proveedor_habitual  (objeto)
+    //   • producto.proveedor_habitual_id (string | número)
+    //   • producto.proveedor_habitual  (id numérico directo)
+    // ------------------------------------------------------------
+    const getProveedorHabitualId = (producto) => {
+      if (!producto) return null
+      if (producto.proveedor_habitual && typeof producto.proveedor_habitual === 'object') {
+        return producto.proveedor_habitual.id
+      }
+      if (producto.proveedor_habitual_id !== undefined && producto.proveedor_habitual_id !== null) {
+        return producto.proveedor_habitual_id
+      }
+      if (producto.proveedor_habitual !== undefined && producto.proveedor_habitual !== null) {
+        return producto.proveedor_habitual
+      }
+      return null
+    }
+
     const getProveedoresProducto = useCallback(
       (productoId, proveedorHabitualId = null) => {
         if (!stockProveedores || !productoId) return []
         const proveedores = stockProveedores[productoId] || []
         let proveedorHabitual = null
-        if (proveedorHabitualId) {
-          proveedorHabitual = proveedores.find((sp) => sp.proveedor && sp.proveedor.id === proveedorHabitualId)
+        if (proveedorHabitualId !== null && proveedorHabitualId !== undefined && proveedorHabitualId !== '') {
+          proveedorHabitual = proveedores.find(
+            (sp) => sp.proveedor && String(sp.proveedor.id) === String(proveedorHabitualId),
+          )
         }
         if (!proveedorHabitual) {
           proveedorHabitual =
@@ -169,6 +215,13 @@ const ItemsGridPresupuesto = forwardRef(
 
     const addItemWithDuplicado = useCallback(
       (producto, proveedorId, cantidad = 1) => {
+        // Log al inicio para ver en qué estado llega el producto
+        console.debug("[ItemsGrid] addItemWithDuplicado - producto recibido", {
+          modo,
+          productoId: producto?.id,
+          proveedorId,
+          stockProveedor: stockProveedores?.[producto?.id] ?? "sin stockProveedores aún",
+        })
         const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id)
         if (idxExistente !== -1) {
           if (autoSumarDuplicados === "sumar") {
@@ -185,21 +238,43 @@ const ItemsGridPresupuesto = forwardRef(
             setRows((prevRows) => {
               const lastRow = prevRows[prevRows.length - 1]
               const proveedorInfo = getProveedoresProducto(producto.id, proveedorId)[0]
+              console.debug("[ItemsGrid] proveedorInfo calculado", { proveedorInfo })
+
+              // -------------------------------------------------------------
+              // Cálculo del precio base (sin IVA) y precio final (con IVA)
+              // 1) Si el backend ya provee un precio de venta, usarlo.
+              // 2) Caso contrario, generar precio = costo * (1 + margen/100).
+              // 3) Luego aplicar IVA según la alícuota para obtener precioFinal.
+              // -------------------------------------------------------------
+              const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
+              const costoNum = Number.parseFloat(proveedorInfo?.costo ?? 0) || 0
+              const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
+              const aliPorcTmp = aliMap[aliIdTmp] || 0
+
+              let precioBaseTmp = Number.parseFloat(proveedorInfo?.precio ?? 0) || 0
+              if (!precioBaseTmp) {
+                precioBaseTmp = costoNum * (1 + margenNum / 100)
+              }
+              // Redondear a 2 decimales
+              precioBaseTmp = Math.round(precioBaseTmp * 100) / 100
+              const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
+
               const nuevoItem = {
                 ...lastRow,
                 codigo: producto.codvta || producto.codigo || "",
                 denominacion: producto.deno || producto.nombre || "",
                 unidad: producto.unidad || producto.unidadmedida || "-",
-                precio: proveedorInfo?.precio || 0,
-                vdi_costo: proveedorInfo?.costo || 0,
-                margen: producto?.margen ?? 0,
+                precio: precioBaseTmp,
+                precioFinal: precioFinalTmp,
+                vdi_costo: costoNum,
+                margen: margenNum,
                 cantidad,
                 bonificacion: 0,
                 producto: producto,
-                idaliiva: typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3),
+                idaliiva: aliIdTmp,
                 proveedorId: proveedorId,
               }
-              return [...prevRows, nuevoItem, getEmptyRow()]
+              return [...prevRows.slice(0, idxExistente), nuevoItem, ...prevRows.slice(idxExistente)]
             })
             return
           }
@@ -208,18 +283,34 @@ const ItemsGridPresupuesto = forwardRef(
         setRows((prevRows) => {
           const lastRow = prevRows[prevRows.length - 1]
           const proveedorInfo = getProveedoresProducto(producto.id, proveedorId)[0]
+          console.debug("[ItemsGrid] proveedorInfo calculado", { proveedorInfo })
+
+          // --- Cálculo precio base / final (idéntico al bloque anterior) ---
+          const margenTmp = Number.parseFloat(producto?.margen ?? 0) || 0
+          const costoTmp = Number.parseFloat(proveedorInfo?.costo ?? 0) || 0
+          const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
+          const aliPorcTmp = aliMap[aliIdTmp] || 0
+
+          let precioBaseTmp = Number.parseFloat(proveedorInfo?.precio ?? 0) || 0
+          if (!precioBaseTmp) {
+            precioBaseTmp = costoTmp * (1 + margenTmp / 100)
+          }
+          precioBaseTmp = Math.round(precioBaseTmp * 100) / 100
+          const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
+
           const nuevoItem = {
             ...lastRow,
             codigo: producto.codvta || producto.codigo || "",
             denominacion: producto.deno || producto.nombre || "",
             unidad: producto.unidad || producto.unidadmedida || "-",
-            precio: proveedorInfo?.precio || 0,
-            vdi_costo: proveedorInfo?.costo || 0,
-            margen: producto?.margen ?? 0,
+            precio: precioBaseTmp,
+            precioFinal: precioFinalTmp,
+            vdi_costo: costoTmp,
+            margen: margenTmp,
             cantidad,
             bonificacion: 0,
             producto: producto,
-            idaliiva: typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3),
+            idaliiva: aliIdTmp,
             proveedorId: proveedorId,
           }
           if (!lastRow.producto && !lastRow.codigo) {
@@ -229,8 +320,16 @@ const ItemsGridPresupuesto = forwardRef(
           }
         })
       },
-      [getProveedoresProducto, autoSumarDuplicados],
+      [getProveedoresProducto, autoSumarDuplicados, stockProveedores, modo],
     )
+
+    // Log de llegada/actualización de stockProveedores
+    useEffect(() => {
+      console.debug(`[ItemsGrid] prop stockProveedores actualizado - modo ${modo}`, {
+        tieneDatos: !!stockProveedores,
+        keys: stockProveedores ? Object.keys(stockProveedores).length : 0,
+      })
+    }, [stockProveedores, modo])
 
     useEffect(() => {
       // Si el primer renglón es vacío y el input de código está vacío, enfocar automáticamente
@@ -305,37 +404,56 @@ const ItemsGridPresupuesto = forwardRef(
               : {}),
           }
           const updatedRows = ensureSoloUnEditable(newRows)
+          console.debug("[ItemsGrid] post-ensureSoloUnEditable (codigo) fila", updatedRows[idx])
           onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "precio") {
-          const userInput = value; // `value` es ahora el string directo del input (precio final)
-          const fila = { ...newRows[idx] };
+          const userInput = value
+          const fila = { ...newRows[idx] }
+          const esGenerico = !fila.producto
 
-          const esGenerico = !fila.producto;
-          let aliFinalId = fila.idaliiva ?? 3;
-
-          // Si es genérico, su precio es > 0 y su IVA es 0%, forzarlo a 21%
+          let aliFinalId = fila.idaliiva ?? 3
+          // Autoseleccionar IVA 21% para genéricos si se ingresa un precio
           if (esGenerico && Number(userInput) > 0 && (aliFinalId === 3 || aliFinalId === 0)) {
-            aliFinalId = 5; // ID para 21%
-          } 
-          // NUEVO: Si es genérico y el precio se borra o es 0, reiniciar IVA a 0%
-          else if (esGenerico && (userInput === '' || Number(userInput) === 0)) {
-            aliFinalId = 3; // ID para 0%
+            aliFinalId = 5 // ID para 21%
+          } else if (esGenerico && (userInput === "" || Number(userInput) === 0)) {
+            aliFinalId = 3 // ID para 0%
           }
-          
-          const aliFinalPorc = aliMap[aliFinalId] || 0;
-          
-          // Calcular el precio base (neto) a partir del input del usuario (precio final)
-          const precioBase = Number.parseFloat(userInput) / (1 + aliFinalPorc / 100);
 
-          // Actualizar la fila con el precio neto y la alícuota correcta
-          fila.precio = Number.isNaN(precioBase) ? "" : precioBase;
-          fila.idaliiva = aliFinalId;
-          
-          newRows[idx] = fila;
-          const updatedRows = ensureSoloUnEditable(newRows);
-          onRowsChange?.(updatedRows);
-          return updatedRows;
+          const aliFinalPorc = aliMap[aliFinalId] || 0
+          const userInputNum = Number.parseFloat(userInput) || 0
+
+          // ----------------- CORRECCIÓN DE FÓRMULA -----------------
+          // Si el usuario ingresa un precio FINAL (con IVA), para obtener
+          // el precio base sin IVA debemos DIVIDIR por (1 + IVA/100)
+          const divisorIVA = 1 + (aliFinalPorc / 100)
+          const precioBase = divisorIVA !== 0 ? (userInputNum / divisorIVA) : 0
+          // ---------------------------------------------------------
+
+          if (esGenerico) {
+            // Ítem genérico: el precio base pasa a ser también el costo.
+            fila.vdi_costo = Number.isFinite(precioBase) ? precioBase : 0
+            fila.margen = 0
+          } else {
+            // Ítem de stock: el costo permanece fijo; recalculamos margen.
+            const costo = Number.parseFloat(fila.vdi_costo ?? fila.producto?.costo ?? 0)
+            if (costo > 0) {
+              const margenNuevo = ((precioBase - costo) / costo) * 100
+              fila.margen = Number.isFinite(margenNuevo) ? Number(margenNuevo.toFixed(2)) : 0
+            } else {
+              fila.margen = 0
+            }
+          }
+
+          fila.precioFinal = userInputNum
+          // Guardar precio base con 4 decimales para evitar errores de redondeo
+          fila.precio = Number.isFinite(precioBase) ? Number(precioBase.toFixed(4)) : ""
+          fila.idaliiva = aliFinalId
+
+          newRows[idx] = fila
+          const updatedRows = ensureSoloUnEditable(newRows)
+          onRowsChange?.(updatedRows)
+          return updatedRows
         } else if (field === "bonificacion") {
           newRows[idx] = {
             ...newRows[idx],
@@ -360,7 +478,8 @@ const ItemsGridPresupuesto = forwardRef(
     const handleAddItem = useCallback(
       (producto) => {
         if (!producto) return
-        const proveedores = getProveedoresProducto(producto.id)
+        const proveedorHabitualId = getProveedorHabitualId(producto)
+        const proveedores = getProveedoresProducto(producto.id, proveedorHabitualId)
         const proveedor = proveedores[0] // Siempre será el proveedor habitual
         const proveedorId = proveedor ? proveedor.id : ""
         const cantidad = 1
@@ -398,6 +517,7 @@ const ItemsGridPresupuesto = forwardRef(
                   vdi_costo: row.vdi_costo ?? 0,
                   vdi_margen: margen,
                   vdi_bonifica: bonif,
+                  vdi_precio_unitario_final: row.precioFinal || null,
                   vdi_detalle1: row.denominacion || "",
                   vdi_detalle2: row.unidad || "",
                   vdi_idaliiva: idaliiva,
@@ -412,9 +532,9 @@ const ItemsGridPresupuesto = forwardRef(
                   vdi_idsto: null,
                   vdi_idpro: null,
                   vdi_cantidad: cantidad,
-                  // Para genéricos, el precio de la fila es el costo base (neto)
-                  vdi_costo: Number.parseFloat(row.precio) || 0,
+                  vdi_costo: Number.parseFloat(row.vdi_costo) || 0,
                   vdi_margen: 0,
+                  vdi_precio_unitario_final: row.precioFinal || null,
                   vdi_bonifica: bonif,
                   vdi_detalle1: row.denominacion || "",
                   vdi_detalle2: row.unidad || "",
@@ -426,41 +546,12 @@ const ItemsGridPresupuesto = forwardRef(
         getRows: () => rows,
         handleAddItem,
         getStockNegativo: () => stockNegativo,
+        _debugRows: () => {
+          console.debug("[ItemsGrid] rows internos", rows)
+        },
       }),
       [rows, handleAddItem, stockNegativo],
     )
-
-    // Actualizar precio automáticamente al cambiar proveedor
-    const handleProveedorChange = (idx, proveedorId) => {
-      setRows((prevRows) => {
-        const newRows = prevRows.map((row, i) => {
-          if (i !== idx) return row
-          const productoId = row.producto?.id
-          const proveedores = getProveedoresProducto(productoId)
-          const proveedor = proveedores.find((p) => String(p.id) === String(proveedorId))
-          const nuevoPrecio = proveedor ? proveedor.precio : 0
-          return { ...row, proveedorId, precio: nuevoPrecio }
-        })
-        onRowsChange?.(newRows)
-        return newRows
-      })
-      const row = rows[idx]
-      const productoId = row.producto?.id
-      const proveedores = getProveedoresProducto(productoId)
-      const proveedor = proveedores.find((p) => String(p.id) === String(proveedorId))
-      const totalStock = proveedor ? Number(proveedor.stock) : 0
-      const totalCantidad = rows.reduce((sum, r, i) => {
-        if (r.producto && r.producto.id === productoId && String(r.proveedorId) === String(proveedorId)) {
-          return sum + (i === idx ? Number(row.cantidad) : Number(r.cantidad))
-        }
-        return sum
-      }, 0)
-      if (totalCantidad > totalStock) {
-        setStockNegativo(true)
-      } else {
-        setStockNegativo(false)
-      }
-    }
 
     // handleCantidadChange: Si es presupuesto, solo setea cantidad, sin alertas ni modales
     const handleCantidadChange = (idx, cantidad) => {
@@ -478,7 +569,8 @@ const ItemsGridPresupuesto = forwardRef(
         return newRows
       })
       const row = rows[idx]
-      const proveedores = getProveedoresProducto(row.producto?.id)
+      const proveedorHabitualId = getProveedorHabitualId(row.producto)
+      const proveedores = getProveedoresProducto(row.producto?.id, proveedorHabitualId)
       const proveedor = proveedores[0] // Siempre será el proveedor habitual
       const totalStock = proveedor ? Number(proveedor.stock) : 0
       const totalCantidad = rows.reduce((sum, r, i) => {
@@ -537,6 +629,10 @@ const ItemsGridPresupuesto = forwardRef(
 
     // Definir handleRowKeyDown si no está definida
     const handleRowKeyDown = (e, idx, field) => {
+      console.debug("[Depuración] Datos en handleRowKeyDown al pulsar Enter:", {
+        stockProveedores,
+        productosDisponibles,
+      });
       if (e.key === "Enter" || (e.key === "Tab" && field === "bonificacion")) {
         const row = rows[idx]
         if (field === "codigo" && row.codigo) {
@@ -544,8 +640,16 @@ const ItemsGridPresupuesto = forwardRef(
             (p) => (p.codvta || p.codigo)?.toString().toLowerCase() === row.codigo.toLowerCase(),
           )
           if (prod) {
-            const proveedores = getProveedoresProducto(prod.id)
+            const proveedorHabitualId = getProveedorHabitualId(prod)
+            const proveedores = getProveedoresProducto(prod.id, proveedorHabitualId)
             const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
+            console.debug("[ItemsGrid] handleRowKeyDown - producto por código", {
+              modo,
+              prodId: prod?.id,
+              proveedorHabitual,
+              precioProveedor: proveedorHabitual?.precio,
+              costoProveedor: proveedorHabitual?.costo,
+            })
             const proveedorId = proveedorHabitual ? proveedorHabitual.id : ""
             const idxExistente = rows.findIndex(
               (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId,
@@ -599,20 +703,23 @@ const ItemsGridPresupuesto = forwardRef(
             // Si no es duplicado, autocompletar datos y agregar ítem
             setRows((prevRows) => {
               const newRows = [...prevRows]
-              const proveedores = getProveedoresProducto(prod.id)
-              const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
+              const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+              const aliPorc = aliMap[aliId] || 0
+              const precioBase = proveedorHabitual?.precio || 0
+              const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
               newRows[idx] = {
                 ...newRows[idx],
                 codigo: prod.codvta || prod.codigo || "",
                 denominacion: prod.deno || prod.nombre || "",
                 unidad: prod.unidad || prod.unidadmedida || "-",
-                precio: proveedorHabitual?.precio || 0,
+                precio: precioBase,
+                precioFinal: precioFinal,
                 vdi_costo: proveedorHabitual?.costo || 0,
                 margen: prod?.margen ?? 0,
                 cantidad: row.cantidad || 1,
                 bonificacion: 0,
                 producto: prod,
-                idaliiva: typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3),
+                idaliiva: aliId,
                 proveedorId: proveedorHabitual ? proveedorHabitual.id : "",
               }
               if (newRows.every(isRowLleno)) {
@@ -673,10 +780,17 @@ const ItemsGridPresupuesto = forwardRef(
         const fila = { ...nuevos[idx] }
         const aliViejo = aliMap[fila.idaliiva] || 0
         const aliNuevo = aliMap[nuevoIdAli] || 0
-        const precioFinalConst = Number.parseFloat(fila.precio || 0) * (1 + aliViejo / 100)
-        const nuevoPrecioBase = precioFinalConst / (1 + aliNuevo / 100)
+        const precioFinalConst = fila.precioFinal !== undefined && fila.precioFinal !== "" ? Number.parseFloat(fila.precioFinal) : Number.parseFloat(fila.precio || 0) * (1 + aliViejo / 100)
+        
+        // CORRECCIÓN: Usar división para obtener el precio base desde el precio final
+        const divisorIva = 1 + aliNuevo / 100
+        const nuevoPrecioBase = divisorIva > 0 ? precioFinalConst / divisorIva : 0
+
+        fila.precioFinal = precioFinalConst
+        // Actualizar la alícuota seleccionada para que el <select> muestre el valor correcto
         fila.idaliiva = nuevoIdAli
-        fila.precio = Number.isNaN(nuevoPrecioBase) ? 0 : nuevoPrecioBase
+        // Guardar precio base con 4 decimales para mayor precisión
+        fila.precio = Number.isNaN(nuevoPrecioBase) ? 0 : Number(nuevoPrecioBase.toFixed(4))
         nuevos[idx] = fila
         onRowsChange?.(nuevos)
         return nuevos
@@ -866,9 +980,11 @@ const ItemsGridPresupuesto = forwardRef(
                 {rows.map((row, idx) => {
                   const aliPorcRow = aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0
                   const precioConIVA =
-                    row.precio !== "" && row.precio !== undefined
-                      ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
-                      : 0
+                    row.precioFinal !== "" && row.precioFinal !== undefined
+                      ? Number(row.precioFinal)
+                      : (row.precio !== "" && row.precio !== undefined
+                          ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
+                          : 0)
                   const precioBonificado = precioConIVA * (1 - (Number.parseFloat(row.bonificacion) || 0) / 100)
 
                   return (
@@ -934,9 +1050,11 @@ const ItemsGridPresupuesto = forwardRef(
                           type="number"
                           inputMode="decimal"
                           value={
-                            row.precio !== "" && row.precio !== undefined
-                              ? Number((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100)).toFixed(2))
-                              : ""
+                            row.precioFinal !== "" && row.precioFinal !== undefined
+                              ? Number(row.precioFinal)
+                              : (row.precio !== "" && row.precio !== undefined
+                                  ? Math.round((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100)) * 100) / 100
+                                  : "")
                           }
                           onChange={(e) => {
                             handleRowChange(idx, "precio", e.target.value)
@@ -945,8 +1063,7 @@ const ItemsGridPresupuesto = forwardRef(
                           className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 appearance-none"
                           style={{
                             MozAppearance: 'textfield',
-                            minWidth: '100%',
-                            width: `${Math.max(String(row.precio !== '' && row.precio !== undefined ? Number((parseFloat(row.precio)*(1+((aliMap[row.idaliiva??row.producto?.idaliiva?.id??row.producto?.idaliiva??0]||0)/100))).toFixed(2)) : '').length, 10)}ch`,
+                            width: `${Math.max(String((row.precioFinal !== '' && row.precioFinal !== undefined ? row.precioFinal : (row.precio !== '' && row.precio !== undefined ? (Math.round((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100)) * 100) / 100) : ''))).toString().length, 10)}ch`,
                           }}
                           aria-label="Precio Unitario"
                           tabIndex={0}
@@ -969,8 +1086,8 @@ const ItemsGridPresupuesto = forwardRef(
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm font-medium">
-                          {row.precio !== "" && row.precio !== undefined
-                            ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}`
+                          {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
+                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
                             : ""}
                         </div>
                       </td>
@@ -1001,48 +1118,6 @@ const ItemsGridPresupuesto = forwardRef(
                             : ""}
                         </div>
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-center">
-                        <div className="flex gap-[4px] justify-center">
-                          {(row.producto || (row.denominacion && row.denominacion.trim() !== "")) && (
-                            <>
-                              <button
-                                onClick={() => handleDeleteRow(idx)}
-                                className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded-lg transition-all duration-200"
-                                title="Eliminar"
-                                aria-label="Eliminar fila"
-                                tabIndex={0}
-                                type="button"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  strokeWidth={1.5}
-                                  stroke="currentColor"
-                                  className="w-4 h-4"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                                  />
-                                </svg>
-                              </button>
-                              <div className="hover:bg-orange-50 p-1 rounded-lg transition-all duration-200">
-                                <BotonDuplicar
-                                  onClick={() => {
-                                    setRows((prevRows) => {
-                                      const nuevoItem = { ...row, id: Date.now() + Math.random() }
-                                      return [...prevRows.slice(0, idx + 1), nuevoItem, ...prevRows.slice(idx + 1)]
-                                    })
-                                  }}
-                                  tabIndex={0}
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </td>
                     </tr>
                   )
                 })}
@@ -1060,4 +1135,3 @@ export function ItemsGridVenta(props, ref) {
 }
 
 export default ItemsGridPresupuesto;
-

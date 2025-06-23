@@ -35,3 +35,5 @@ adaptar resto de formualrios a ventaform
     
 
 Todos genericos en grilla son iva 21
+
+

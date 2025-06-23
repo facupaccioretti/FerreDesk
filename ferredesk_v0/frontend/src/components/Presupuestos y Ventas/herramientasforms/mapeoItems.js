@@ -25,7 +25,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   // aunque el mapeo se hace explícitamente más abajo.
   /* eslint-disable no-unused-vars */
   const CAMPOS_BASE = [
-    'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
+    'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
   ];
   /* eslint-enable no-unused-vars */
   // Mapear solo los campos base
@@ -38,6 +38,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     vdi_costo: vdi_costo,
     vdi_margen: item.margen ?? item.vdi_margen ?? (item.producto?.margen ?? 0),
     vdi_bonifica: item.bonificacion ?? item.bonifica ?? item.vdi_bonifica ?? 0,
+    vdi_precio_unitario_final: item.precioFinal ?? item.vdi_precio_unitario_final ?? null,
     vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
     vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
     vdi_idaliiva: idaliiva,
@@ -46,7 +47,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   };
 
   // Eliminar cualquier campo calculado si accidentalmente se incluyó
-  const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem'];
+  const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem', 'precioFinal'];
   camposCalculados.forEach(campo => { delete camposMapeados[campo]; });
 
   if (esModificacion) {

@@ -84,11 +84,12 @@ const PresupuestoForm = ({
   errorProductos,
   errorFamilias,
   errorProveedores,
+  loadingAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
 }) => {
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
-  const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI()
+  const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
 
   // Función para normalizar items
   const normalizarItems = (items) => {
@@ -107,8 +108,11 @@ const PresupuestoForm = ({
         denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ""),
         unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ""),
         cantidad: item.cantidad || 1,
-        costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
-        bonificacion: item.vdi_bonifica || 0,
+        // Conservar costo y precios si ya existen para evitar que se borren en la primera carga
+        costo: item.costo || item.vdi_costo || (prod ? prod.costo ?? prod.precio ?? prod.preciovta ?? prod.preciounitario : 0),
+        precio: item.precio !== undefined ? item.precio : (item.vdi_importe ?? null),
+        precioFinal: item.precioFinal !== undefined ? item.precioFinal : (item.vdi_precio_unitario_final ?? null),
+        bonificacion: item.vdi_bonifica || item.bonificacion || 0,
         subtotal: item.subtotal || 0,
       }
     })
@@ -147,9 +151,43 @@ const PresupuestoForm = ({
     actualizarItems(rows)
   }
 
-  const stockProveedores = getStockProveedoresMap(productos)
+  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
 
   const itemsGridRef = useRef()
+
+  // ----------------- Estado de carga General ------------------
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadingError, setLoadingError] = useState(null)
+
+  // ------------------ Lógica de carga -------------------------
+  useEffect(() => {
+    // Si cualquiera de los recursos clave sigue cargando, mantener spinner
+    if (loadingClientes || loadingAlicuotasHook || loadingProductos || loadingProveedores) {
+      setIsLoading(true)
+      return
+    }
+
+    // Si hay errores en alguno, mostrar mensaje
+    if (errorClientes || errorAlicuotas || errorProductos || errorProveedores) {
+      setLoadingError(errorClientes || errorAlicuotas || errorProductos || errorProveedores)
+      setIsLoading(false)
+      return
+    }
+
+    setLoadingError(null)
+    setIsLoading(false)
+  }, [loadingClientes, loadingAlicuotasHook, loadingProductos, loadingProveedores, errorClientes, errorAlicuotas, errorProductos, errorProveedores])
+
+  // ------------------------------------------------------------
+  // LOG DE DIAGNÓSTICO: comparar con VentaForm
+  // ------------------------------------------------------------
+  useEffect(() => {
+    console.debug("[PresupuestoForm] stockProveedores listo", {
+      loadingProductos,
+      loadingProveedores,
+      keys: Object.keys(stockProveedores || {}).length,
+    })
+  }, [loadingProductos, loadingProveedores, stockProveedores])
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -285,8 +323,41 @@ const PresupuestoForm = ({
     }
   }, [clientesConDefecto, formulario.clienteId, setFormulario])
 
+  // ------------------------------------------------------------
+  // Garantizar que autoSumarDuplicados tenga un valor por defecto
+  // antes de la primera interacción (mismo comportamiento que VentaForm)
+  // ------------------------------------------------------------
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados("sumar")
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados])
+
   if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>
+
+  // ---------- Spinner / Error antes del render principal ---------
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Cargando formulario...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadingError) {
+    return (
+      <div className="text-center py-8">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
+          <div className="text-red-600 font-medium mb-2">Error al cargar</div>
+          <p className="text-red-700 text-sm">{loadingError}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnter}>

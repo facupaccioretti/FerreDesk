@@ -107,7 +107,6 @@ const PlantillaFacturaC = ({ data }) => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {data.items?.map((item, idx) => {
-              const alicuota = 1 + (parseFloat(item.ali_porce) || 0) / 100;
               return (
               <tr
                 key={idx}
@@ -117,16 +116,16 @@ const PlantillaFacturaC = ({ data }) => {
                 <td className="px-4 py-3 text-left text-sm text-gray-900">{item.vdi_detalle1 ?? "-"}</td>
                 <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">{item.vdi_cantidad ?? 0}</td>
                 <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                  ${formatearMoneda((item.precio_unitario_lista || 0) * alicuota)}
+                  ${formatearMoneda(item.vdi_precio_unitario_final || 0)}
                 </td>
                 <td className="px-4 py-3 text-center text-sm font-medium text-orange-600">
                   {formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3)}
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
-                  ${formatearMoneda((item.precio_unitario_bonificado || 0) * alicuota)}
+                  ${formatearMoneda(item.precio_unitario_bonificado_con_iva || 0)}
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                  ${formatearMoneda((item.vdi_importe_total || 0) * alicuota)}
+                  ${formatearMoneda(item.total_item || 0)}
                 </td>
               </tr>
             )})}

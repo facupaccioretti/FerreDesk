@@ -104,7 +104,8 @@ class VentaDetalleItem(models.Model):
     vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True, blank=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2, db_column='VDI_CANTIDAD')
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_COSTO')
-    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_MARGEN')
+    vdi_margen = models.DecimalField(max_digits=10, decimal_places=2, db_column='VDI_MARGEN')
+    vdi_precio_unitario_final = models.DecimalField(max_digits=15, decimal_places=2, db_column='VDI_PRECIO_UNITARIO_FINAL', null=True, blank=True)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_BONIFICA')
     vdi_detalle1 = models.CharField(max_length=40, db_column='VDI_DETALLE1', null=True)
     vdi_detalle2 = models.CharField(max_length=40, db_column='VDI_DETALLE2', null=True)
@@ -152,11 +153,11 @@ class VentaDetalleItemCalculado(models.Model):
     id = models.BigAutoField(primary_key=True)
     vdi_idve = models.IntegerField()
     vdi_orden = models.SmallIntegerField()
-    vdi_idsto = models.IntegerField()
-    vdi_idpro = models.IntegerField()
+    vdi_idsto = models.IntegerField(null=True)
+    vdi_idpro = models.IntegerField(null=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2)
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3)
-    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2)
+    vdi_margen = models.DecimalField(max_digits=10, decimal_places=2)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2)
     vdi_detalle1 = models.CharField(max_length=40, null=True)
     vdi_detalle2 = models.CharField(max_length=40, null=True)
@@ -164,16 +165,38 @@ class VentaDetalleItemCalculado(models.Model):
     codigo = models.CharField(max_length=40, null=True)
     unidad = models.CharField(max_length=20, null=True)
     ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
-    precio_unitario_lista = models.DecimalField(max_digits=13, decimal_places=2)
-    precio_unitario_bonificado = models.DecimalField(max_digits=13, decimal_places=2)
-    vdi_importe_total = models.DecimalField(max_digits=15, decimal_places=2)
-    iva = models.DecimalField(max_digits=15, decimal_places=2)
+    vdi_precio_unitario_final = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    precio_unitario_bonificado_con_iva = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    # Precio unitario sin IVA que la vista expone y necesita la plantilla A
+    precio_unitario_sin_iva = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    
+    # Nuevos campos calculados según la lógica de Recalculos.md
+    precio_unitario_bonificado = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    subtotal_neto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    iva_monto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    total_item = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    margen_monto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    margen_porcentaje = models.DecimalField(max_digits=10, decimal_places=4, null=True)
+    ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2, null=True)
+    ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2, null=True)
 
     class Meta:
         managed = False
         db_table = 'VENTADETALLEITEM_CALCULADO'
 
 class VentaIVAAlicuota(models.Model):
+    """Modelo de solo lectura para la vista VENTAIVA_ALICUOTA.
+
+    Coincide exactamente con las columnas presentes en la vista tras la
+    refactorización de precios:
+
+    • id               – PK artificial generada por la vista.
+    • vdi_idve         – FK a la venta.
+    • ali_porce        – Porcentaje de alícuota (21, 10.5, etc.).
+    • neto_gravado     – Neto gravado para esa alícuota, ya con descuentos.
+    • iva_total        – IVA total calculado para esa alícuota.
+    """
+
     id = models.BigIntegerField(primary_key=True)
     vdi_idve = models.IntegerField()
     ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
@@ -181,7 +204,7 @@ class VentaIVAAlicuota(models.Model):
     iva_total = models.DecimalField(max_digits=15, decimal_places=2)
 
     class Meta:
-        managed = False
+        managed = False  # Es una vista SQL, no una tabla administrada por Django
         db_table = 'VENTAIVA_ALICUOTA'
 
 class VentaCalculada(models.Model):

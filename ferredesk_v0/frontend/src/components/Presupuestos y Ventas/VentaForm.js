@@ -147,7 +147,18 @@ const VentaForm = ({
   })
 
   const itemsGridRef = useRef()
-  const stockProveedores = getStockProveedoresMap(productos)
+  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+
+  // ------------------------------------------------------------
+  // LOG DE DIAGNÓSTICO: ¿Cuándo se arma stockProveedores y qué trae?
+  // ------------------------------------------------------------
+  useEffect(() => {
+    console.debug("[VentaForm] stockProveedores listo", {
+      loadingProductos,
+      loadingProveedores,
+      keys: Object.keys(stockProveedores || {}).length,
+    })
+  }, [loadingProductos, loadingProveedores, stockProveedores])
 
   // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
   const comprobantesVenta = comprobantes.filter((c) => (c.tipo || "").toLowerCase() !== "presupuesto")

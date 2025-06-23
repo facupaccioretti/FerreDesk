@@ -173,12 +173,6 @@ const ProductosManager = () => {
         await addProducto(data)
       }
       closeTab(key)
-      // Recargar la lista de productos para actualizar la vista en tiempo real
-      await fetch("/api/productos/", { credentials: "include" })
-        .then((res) => res.json())
-        .then((data) => {
-          setProductos(data)
-        })
     } catch (err) {
       throw err
     }
