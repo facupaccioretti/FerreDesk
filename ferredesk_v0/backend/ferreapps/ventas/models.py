@@ -78,6 +78,16 @@ class Venta(models.Model):
     # usa para determinar su caducidad automática.
     ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)
 
+    # NUEVO CAMPO: Define la relación M2M para asociar comprobantes.
+    # Usado principalmente para que una Nota de Crédito pueda referenciar a una o más Facturas.
+    comprobantes_asociados = models.ManyToManyField(
+        'self',
+        through='ComprobanteAsociacion',
+        symmetrical=False,
+        # Este related_name permite, desde una factura, encontrar fácilmente las NCs que la afectan.
+        related_name='notas_de_credito_que_la_afectan'
+    )
+
     class Meta:
         db_table = 'VENTA'
         unique_together = ['ven_punto', 'ven_numero', 'comprobante']
@@ -246,3 +256,38 @@ class VentaCalculada(models.Model):
     class Meta:
         managed = False
         db_table = 'VENTA_CALCULADO'
+
+# NUEVO MODELO
+class ComprobanteAsociacion(models.Model):
+    """
+    Tabla intermedia que asocia una Nota de Crédito (origen) con
+    una o más Facturas (destino) a las que anula.
+    """
+    # La Nota de Crédito que se está creando.
+    nota_credito = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        # Desde una NC, se puede acceder a las facturas que anula.
+        related_name='facturas_anuladas'
+    )
+    # La Factura que está siendo anulada por la Nota de Crédito.
+    factura_afectada = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        # Desde una Factura, se puede acceder a las NCs que la afectan.
+        related_name='notas_de_credito_recibidas'
+    )
+
+    class Meta:
+        db_table = 'VENTA_COMPROBANTE_ASOCIACION'
+        # Se actualiza la restricción de unicidad con los nuevos nombres de campo.
+        unique_together = ('nota_credito', 'factura_afectada')
+        verbose_name = 'Asociación de Comprobante'
+        verbose_name_plural = 'Asociaciones de Comprobantes'
+
+    def __str__(self):
+        # Usamos try-except para evitar errores si los objetos relacionados aún no están guardados
+        try:
+            return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+        except Exception:
+            return f"Asociación pendiente de guardado"

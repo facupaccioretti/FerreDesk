@@ -31,9 +31,10 @@ Revision General
 interlineado es gastar espacio al pedo
 
 arreglar draft para nueva grid y datos en venta
-adaptar resto de formualrios a ventaform
-    
 
-Todos genericos en grilla son iva 21
+
+Arreglar editarpresu y conventaform para nuevas vistas y genericos
+
+
 
 

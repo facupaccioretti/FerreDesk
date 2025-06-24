@@ -15,6 +15,20 @@ class ComprobanteSerializer(serializers.ModelSerializer):
         model = Comprobante
         fields = '__all__'
 
+class VentaAsociadaSerializer(serializers.ModelSerializer):
+    numero_formateado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Venta
+        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante']
+
+    def get_numero_formateado(self, obj):
+        if obj.ven_punto is not None and obj.ven_numero is not None:
+            letra = getattr(obj.comprobante, 'letra', '')
+            # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
+            return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
+        return None
+
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItem
@@ -34,6 +48,14 @@ class VentaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
     cliente_nombre = serializers.SerializerMethodField()
     vendedor_nombre = serializers.SerializerMethodField()
+
+    # CAMPO DE LECTURA: Muestra info de los comprobantes asociados a esta venta/NC.
+    comprobantes_asociados = VentaAsociadaSerializer(many=True, read_only=True)
+    # CAMPO DE ESCRITURA: Recibe una lista de IDs para asociar al crear/editar una NC.
+    comprobantes_asociados_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+    
     # ATENCIÓN: No exponer campos calculados como ven_impneto, ven_total, iva_desglose, etc. Estos solo existen en la vista y en el modelo de solo lectura.
 
     class Meta:
@@ -96,6 +118,8 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
+        comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
+
         # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
         if dias_validez is not None:
@@ -139,6 +163,11 @@ class VentaSerializer(serializers.ModelSerializer):
 
         # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
+
+        # Asociar comprobantes (para Notas de Crédito)
+        if comprobantes_asociados_ids:
+            venta.comprobantes_asociados.set(comprobantes_asociados_ids)
+
         # Crear los items base (sin campos calculados)
         for item_data in items_data:
             item_data['vdi_idve'] = venta
@@ -149,6 +178,8 @@ class VentaSerializer(serializers.ModelSerializer):
         return venta
 
     def update(self, instance, validated_data):
+        comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', None)
+
         # Validación de unicidad excluyendo el propio registro
         ven_punto = validated_data.get('ven_punto', instance.ven_punto)
         ven_numero = validated_data.get('ven_numero', instance.ven_numero)
@@ -167,6 +198,10 @@ class VentaSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Actualizar la relación M2M si se proporcionaron IDs
+        if comprobantes_asociados_ids is not None:
+            instance.comprobantes_asociados.set(comprobantes_asociados_ids)
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
         items_data = self.initial_data.get('items', [])

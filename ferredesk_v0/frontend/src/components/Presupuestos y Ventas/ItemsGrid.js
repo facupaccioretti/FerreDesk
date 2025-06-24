@@ -2,33 +2,7 @@
 
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
 import { TotalesVisualizacion } from "./herramientasforms/useCalculosFormulario"
-
-// Componente del botón duplicar con estética FerreDesk
-const BotonDuplicar = ({ onClick, tabIndex }) => (
-  <button
-    onClick={onClick}
-    className="text-sky-600 hover:text-sky-800 transition-colors duration-200"
-    title="Duplicar"
-    aria-label="Duplicar fila"
-    tabIndex={tabIndex}
-    type="button"
-  >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-      className="w-5 h-5"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
-      />
-    </svg>
-  </button>
-)
+import { BotonDuplicar, BotonEliminar } from "../Botones"
 
 // Mapa de alícuotas por defecto, se utiliza solo si el backend aún no proveyó datos
 const ALICUOTAS_POR_DEFECTO = {
@@ -56,8 +30,6 @@ function getEmptyRow() {
 function normalizeItemsIniciales(itemsIniciales, productosDisponibles = []) {
   if (!Array.isArray(itemsIniciales)) return []
   return itemsIniciales.map((item, idx) => {
-    // LOG: item crudo antes de normalizar
-    console.debug("[ItemsGrid/normalizeItemsIniciales] Ítem crudo:", { idx, item })
     // Si el ítem ya tiene 'producto', se asume normalizado
     if (item.producto) return { ...item, id: item.id || idx + 1 }
     // Caso contrario, intentar reconstruir usando la lista de productos
@@ -215,13 +187,6 @@ const ItemsGridPresupuesto = forwardRef(
 
     const addItemWithDuplicado = useCallback(
       (producto, proveedorId, cantidad = 1) => {
-        // Log al inicio para ver en qué estado llega el producto
-        console.debug("[ItemsGrid] addItemWithDuplicado - producto recibido", {
-          modo,
-          productoId: producto?.id,
-          proveedorId,
-          stockProveedor: stockProveedores?.[producto?.id] ?? "sin stockProveedores aún",
-        })
         const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id)
         if (idxExistente !== -1) {
           if (autoSumarDuplicados === "sumar") {
@@ -238,7 +203,6 @@ const ItemsGridPresupuesto = forwardRef(
             setRows((prevRows) => {
               const lastRow = prevRows[prevRows.length - 1]
               const proveedorInfo = getProveedoresProducto(producto.id, proveedorId)[0]
-              console.debug("[ItemsGrid] proveedorInfo calculado", { proveedorInfo })
 
               // -------------------------------------------------------------
               // Cálculo del precio base (sin IVA) y precio final (con IVA)
@@ -283,7 +247,6 @@ const ItemsGridPresupuesto = forwardRef(
         setRows((prevRows) => {
           const lastRow = prevRows[prevRows.length - 1]
           const proveedorInfo = getProveedoresProducto(producto.id, proveedorId)[0]
-          console.debug("[ItemsGrid] proveedorInfo calculado", { proveedorInfo })
 
           // --- Cálculo precio base / final (idéntico al bloque anterior) ---
           const margenTmp = Number.parseFloat(producto?.margen ?? 0) || 0
@@ -324,12 +287,7 @@ const ItemsGridPresupuesto = forwardRef(
     )
 
     // Log de llegada/actualización de stockProveedores
-    useEffect(() => {
-      console.debug(`[ItemsGrid] prop stockProveedores actualizado - modo ${modo}`, {
-        tieneDatos: !!stockProveedores,
-        keys: stockProveedores ? Object.keys(stockProveedores).length : 0,
-      })
-    }, [stockProveedores, modo])
+    useEffect(() => {}, [stockProveedores, modo])
 
     useEffect(() => {
       // Si el primer renglón es vacío y el input de código está vacío, enfocar automáticamente
@@ -404,7 +362,6 @@ const ItemsGridPresupuesto = forwardRef(
               : {}),
           }
           const updatedRows = ensureSoloUnEditable(newRows)
-          console.debug("[ItemsGrid] post-ensureSoloUnEditable (codigo) fila", updatedRows[idx])
           onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "precio") {
@@ -546,9 +503,7 @@ const ItemsGridPresupuesto = forwardRef(
         getRows: () => rows,
         handleAddItem,
         getStockNegativo: () => stockNegativo,
-        _debugRows: () => {
-          console.debug("[ItemsGrid] rows internos", rows)
-        },
+        _debugRows: () => {},
       }),
       [rows, handleAddItem, stockNegativo],
     )
@@ -609,6 +564,19 @@ const ItemsGridPresupuesto = forwardRef(
       });
     };
 
+    const handleDuplicarRow = (idx) => {
+      setRows((prevRows) => {
+        const rowToDuplicate = { ...prevRows[idx], id: Date.now() + Math.random() };
+        const newRows = [
+          ...prevRows.slice(0, idx + 1),
+          rowToDuplicate,
+          ...prevRows.slice(idx + 1),
+        ];
+        onRowsChange?.(newRows);
+        return newRows;
+      });
+    };
+
     // 1. Reescribir isDuplicado para que sea robusto y solo resalte la celda de cantidad
     const getDuplicadoMap = () => {
       const map = {}
@@ -629,10 +597,6 @@ const ItemsGridPresupuesto = forwardRef(
 
     // Definir handleRowKeyDown si no está definida
     const handleRowKeyDown = (e, idx, field) => {
-      console.debug("[Depuración] Datos en handleRowKeyDown al pulsar Enter:", {
-        stockProveedores,
-        productosDisponibles,
-      });
       if (e.key === "Enter" || (e.key === "Tab" && field === "bonificacion")) {
         const row = rows[idx]
         if (field === "codigo" && row.codigo) {
@@ -643,13 +607,6 @@ const ItemsGridPresupuesto = forwardRef(
             const proveedorHabitualId = getProveedorHabitualId(prod)
             const proveedores = getProveedoresProducto(prod.id, proveedorHabitualId)
             const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
-            console.debug("[ItemsGrid] handleRowKeyDown - producto por código", {
-              modo,
-              prodId: prod?.id,
-              proveedorHabitual,
-              precioProveedor: proveedorHabitual?.precio,
-              costoProveedor: proveedorHabitual?.costo,
-            })
             const proveedorId = proveedorHabitual ? proveedorHabitual.id : ""
             const idxExistente = rows.findIndex(
               (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId,
@@ -657,8 +614,9 @@ const ItemsGridPresupuesto = forwardRef(
             if (idxExistente !== -1) {
               if (autoSumarDuplicados === "sumar") {
                 setRows((rows) => {
+                  const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1;
                   const newRows = rows.map((r, i) =>
-                    i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + Number(row.cantidad) } : r,
+                    i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r,
                   )
                   newRows[idx] = getEmptyRow()
                   return ensureSoloUnEditable(newRows)
@@ -963,7 +921,7 @@ const ItemsGridPresupuesto = forwardRef(
                     Bonif. %
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
-                    Precio Bonificado
+                    Precio Unit Bonif.
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-20">
                     IVA %
@@ -1087,7 +1045,7 @@ const ItemsGridPresupuesto = forwardRef(
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm font-medium">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
-                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
+                            ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}`
                             : ""}
                         </div>
                       </td>
@@ -1116,6 +1074,16 @@ const ItemsGridPresupuesto = forwardRef(
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
                             ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
                             : ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {isRowLleno(row) && (
+                            <>
+                              <BotonDuplicar onClick={() => handleDuplicarRow(idx)} />
+                              <BotonEliminar onClick={() => handleDeleteRow(idx)} />
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
