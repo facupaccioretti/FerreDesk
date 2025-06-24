@@ -1,0 +1,101 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+La bonificación es particular de un ítem, distinta de un descuento que se aplica sobre el total de la venta antes de aplicarle el IVA.
+
+Cambios en VENTADETALLEITEM
+Modificar VDI_IMPORTE a campo calculado
+
+Ya no será un valor escrito a mano: pasará a calcularse siempre como
+(VDI_COSTO * (1 + VDI_MARGEN/100)) * (1 - VDI_BONIFICA/100).
+
+Sigue siendo el importe unitario, pero se centraliza la fórmula en la vista, no en un trigger ni en código externo.
+
+Agregar VDI_IMPORTE_TOTAL calculado
+
+Será el importe total por ítem, resultado de multiplicar VDI_IMPORTE por VDI_CANTIDAD.
+
+Cada ítem referenciasu alícuota vía VDI_IDALIIVA a la tabla maestra ALICUOTASIVA.
+
+Cambios en VENTA
+Modificar VEN_IMPNETO a campo calculado
+
+Será un campo calculado en la vista resumen, tomando la suma de todos los VDI_IMPORTE_TOTAL de esa venta y aplicando en cascada los descuentos VEN_DESCU1 y VEN_DESCU2:
+(subtotal ítems) * (1 - descu1/100) * (1 - descu2/100).
+
+
+El desglose de IVA se hará dinámicamente, con una vista que agrupa por ID de alícuota.
+
+Modificar VEN_TOTAL
+
+Será calculado en la vista como VEN_IMPNETO más la suma de todos los IVAs de la venta.
+
+Nuevas Vistas :
+A. VENTADETALLEITEM_CALCULADO
+Tablas origen: VENTADETALLEITEM (campos base) y ALICUOTASIVA (ALI_CODIGO, ALI_PORCE).
+
+Relación: VDI_IDALIIVA → ALI_CODIGO.
+
+Campos que expone:
+• VDI_IMPORTE: costo con margen y bonificación.
+• VDI_IMPORTE_TOTAL: VDI_IMPORTE * VDI_CANTIDAD.
+• VDI_IVAITEM:   
+
+Uso: fuente única de datos de detalle, sin columnas fijas de IVA.
+
+B. VENTAIVA_ALICUOTA
+Tabla origen: VENTADETALLEITEM_CALCULADO
+
+Relación: agrupa por VDI_IDVENTA (venta) y ALI_CODIGO.
+
+Campo que expone: IVA_TOTAL, suma de VDI_IVAITEM para cada alícuota.
+
+Uso: obtener, para cada venta y cada alícuota, el total de IVA.
+
+C. VENTA_CALCULADO
+Subtotal bruto
+Suma todos los VDI_IMPORTE_TOTAL de la venta (desde la vista A).
+Aplicación de descuentos
+Al subtotal bruto se le aplican en cascada VEN_DESCU1 y luego VEN_DESCU2 para obtener el importe neto.
+Esto es el VEN_IMPNETO: el valor sobre el que luego se cargará el IVA.
+
+Suma de IVAs discriminados
+
+En la vista C necesitamos partir de los totales de IVA que computó la vista B, y esa vista B devuelve una fila por cada combinación (VEN_ID, ALI_CODIGO) con su IVA_TOTAL. Entonces, para calcular el IVA_GLOBAL de la venta:
+
+Extraemos de la vista B todas las filas donde VEN_ID = X, cada una con su ALI_CODIGO y su IVA_TOTAL.
+
+Ignoramos el ALI_CODIGO a la hora de sumar, porque lo que buscamos es el total acumulado de IVA sin fijarnos en la tasa concreta.
+
+Hacemos SUM(IVA_TOTAL) sobre todas esas filas, y ese resultado es el IVA_GLOBAL que se suma al neto.
+Desde la vista B se extrae para esa misma venta cada fila “(ALI_CODIGO, IVA_TOTAL)”, y se suman todos los IVA_TOTAL para obtener el IVA global de la venta.
+
+Cálculo del total final
+Al importe neto resultante de los descuentos se le suma el IVA global, produciendo VEN_TOTAL.
+
+
+VENTADETALLEITEM (TABLA)
+vdi_importe → Sí se expone en la tabla, se calcula en la vista A (VENTADETALLEITEM_CALCULADO)
+vdi_importe_total → Sí se expone en la tabla, se calcula en la vista A
+vdi_ivaitem → Nuevo campo a exponer en la tabla, se calcula en la vista A
+
+
+La vista B (VENTAIVA_ALICUOTA) no inventa nuevos identificadores:
+Usa los existentes (ven_id y ali_codigo) para agrupar y calcular.
+El único campo "nuevo" (en el sentido de que no existe como columna física en ninguna tabla) es iva_total.
+
+
+VENTA (TABLA)
+ven_impneto → Sí se expone en la tabla, se calcula en la vista C (VENTA_CALCULADO)
+ven_total → Sí se expone en la tabla, se calcula en la vista C
+ven_iva21 → Sí se expone en la tabla, se calcula en la vista C
+ven_iva105 → Sí se expone en la tabla, se calcula en la vista C
+ven_iva27 → Sí se expone en la tabla, se calcula en la vista C
+iva_global → Nuevo campo a exponer en la tabla, se calcula en la vista C
+subtotal_bruto → Nuevo campo a exponer en la tabla, se calcula en la vista C
+iva_desglose → Nuevo o existente, se calcula en la vista C (si no existía, se agrega como campo calculado)
+
+
+

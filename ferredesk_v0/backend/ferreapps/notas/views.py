@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import Nota
 from .serializers import NotaSerializer
 from rest_framework.exceptions import NotFound
+from django.db import transaction  # Para transacciones atómicas
 
 # Create your views here.
 
@@ -48,10 +49,13 @@ class NotaViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    @transaction.atomic
     def perform_create(self, serializer):
+        """Crear una nota dentro de una transacción atómica."""
         serializer.save(usuario=self.request.user)
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def marcar_importante(self, request, pk=None):
         nota = self.get_object()
         nota.es_importante = not nota.es_importante
@@ -59,6 +63,7 @@ class NotaViewSet(viewsets.ModelViewSet):
         return Response({'status': 'nota actualizada'})
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def archivar(self, request, pk=None):
         nota = self.get_object()
         if nota.estado == 'AC':
@@ -67,6 +72,7 @@ class NotaViewSet(viewsets.ModelViewSet):
         return Response({'status': 'nota archivada'})
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def restaurar(self, request, pk=None):
         nota = self.get_object()
         if nota.estado == 'AR':
@@ -81,6 +87,7 @@ class NotaViewSet(viewsets.ModelViewSet):
             raise NotFound('Nota no encontrada para eliminación')
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def eliminar(self, request, pk=None):
         try:
             nota = self.get_object_for_eliminar(pk)

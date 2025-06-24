@@ -91,4 +91,7 @@ Follow these rules when you write code:
 Por ultimo, te guias mucho en los principios SOLID para crear codigo
 La creacion de codigo siempre es en español
 
+No te apuras al eliminar solo las definiciones, si no tambien todas las referencias.
+Debes ser mucho más meticuloso y revisar cada handler y cada función para asegurarme de que no quede lógica residual.
+
 Para crear carpetas/archivos vas a dar explicaciones claras y siempre pedir consentimiento

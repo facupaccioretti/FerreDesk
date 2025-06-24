@@ -22,3 +22,39 @@
 .animate-float {
   animation: float infinite ease-in-out;
 }
+
+/* ============================
+   Estilos compactos FerreDesk
+   ---------------------------
+   Estas utilidades reducen el espaciado y el tamaño tipográfico en el
+   formulario de Venta (clase `venta-form`) y en la grilla de ítems
+   (clase `items-grid`). Permite aprovechar mejor el espacio en pantallas
+   reducidas sin sacrificar legibilidad.
+*/
+
+.venta-form input:not([type='checkbox']),
+.venta-form select,
+.venta-form textarea {
+  @apply px-2 py-1 text-xs rounded-lg;
+}
+
+.venta-form label {
+  @apply text-xs mb-1 font-semibold text-slate-700;
+}
+
+/* Reducir paddings dentro de botones del formulario */
+.venta-form button {
+  @apply px-3 py-2 text-sm;
+}
+
+/* Grilla de ítems compacta */
+.items-grid th,
+.items-grid td {
+  @apply px-2 py-1 text-xs;
+}
+
+.items-grid input {
+  @apply px-2 py-1 text-xs;
+}
+
+/* Fin estilos compactos */

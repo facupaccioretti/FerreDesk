@@ -4,13 +4,14 @@ import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
 import Register from './components/Register';
-import ClientesManager from './components/ClientesManager';
+import ClientesManager from './components/Clientes/ClientesManager';
 import PrivateRoute from './components/PrivateRoute';
-import ProductosManager from './components/ProductosManager';
-import ProveedoresManager from './components/ProveedoresManager';
-import PresupuestosManager from './components/PresupuestosManager';
+import ProductosManager from './components/Productos/ProductosManager';
+import ProveedoresManager from './components/Proveedores/ProveedoresManager';
+import PresupuestosManager from './components/Presupuestos y Ventas/PresupuestosManager';
 import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
+import ConfiguracionManager from './components/ConfiguracionManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <NotasAlertasNotificaciones />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/configuracion"
+          element={
+            <PrivateRoute>
+              <ConfiguracionManager />
             </PrivateRoute>
           }
         />
