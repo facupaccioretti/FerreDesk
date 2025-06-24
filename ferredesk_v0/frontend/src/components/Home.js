@@ -125,7 +125,7 @@ const cards = [
   },
   {
     label: "Notas",
-    description: "Gestión de notas personales",
+    description: "Gestión de notas y recordatorios",
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -146,30 +146,6 @@ const cards = [
     gradient: "from-yellow-50 to-yellow-100/60",
     borderColor: "border-yellow-300/50",
     hoverGradient: "hover:from-yellow-100 hover:to-yellow-200/60",
-  },
-  {
-    label: "Notas",
-    description: "Gestión de notas y recordatorios",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-        className="w-7 h-7"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-        />
-      </svg>
-    ),
-    iconColor: "text-indigo-700",
-    gradient: "from-indigo-50 to-indigo-100/60",
-    borderColor: "border-indigo-300/50",
-    hoverGradient: "hover:from-indigo-100 hover:to-indigo-200/60",
   },
   {
     label: "Alertas",
@@ -245,27 +221,6 @@ const cards = [
   },
 ]
 
-const SITUACION_IVA_LABELS = {
-  RI: "Responsable Inscripto",
-  MO: "Monotributista",
-}
-
-// Función para obtener el valor de una cookie por nombre
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== "") {
-    const cookies = document.cookie.split(";")
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
-
 // Tarjeta individual del panel principal, memoizada para evitar renders innecesarios
 const TarjetaDashboard = memo(function TarjetaDashboard({ card, onClick }) {
   return (
@@ -303,11 +258,6 @@ const TarjetaDashboard = memo(function TarjetaDashboard({ card, onClick }) {
 
 const Home = () => {
   const [user, setUser] = useState(null)
-  const [ferreteria, setFerreteria] = useState(null)
-  const [editIva, setEditIva] = useState(false)
-  const [newIva, setNewIva] = useState("RI")
-  const [loadingIva, setLoadingIva] = useState(false)
-  const [feedback, setFeedback] = useState("")
 
   useEffect(() => {
     document.title = "Panel Principal FerreDesk"
@@ -318,14 +268,6 @@ const Home = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data.status === "success") setUser(data.user)
-      })
-    fetch("/api/ferreteria/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.situacion_iva) {
-          setFerreteria(data)
-          setNewIva(data.situacion_iva)
-        }
       })
   }, [])
 
@@ -356,38 +298,6 @@ const Home = () => {
     setUser(null)
     window.location.href = "/login"
   }, [])
-
-  const handleIvaChange = async () => {
-    if (
-      !window.confirm(
-        "¿Estás seguro de cambiar la situación fiscal del negocio? Esto afectará la emisión de comprobantes.",
-      )
-    )
-      return
-    setLoadingIva(true)
-    setFeedback("")
-    try {
-      const csrftoken = getCookie("csrftoken")
-      const res = await fetch("/api/ferreteria/", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": csrftoken,
-        },
-        credentials: "include",
-        body: JSON.stringify({ situacion_iva: newIva }),
-      })
-      if (!res.ok) throw new Error("Error al actualizar situación fiscal")
-      const data = await res.json()
-      setFerreteria(data)
-      setEditIva(false)
-      setFeedback("Situación fiscal actualizada correctamente.")
-    } catch (e) {
-      setFeedback("Error al actualizar situación fiscal.")
-    } finally {
-      setLoadingIva(false)
-    }
-  }
 
   // Memoizo la lista de tarjetas para que no se regenere en cada render
   const tarjetasUI = useMemo(
@@ -421,71 +331,6 @@ const Home = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">{tarjetasUI}</div>
             </div>
           </div>
-
-          {/* Situación fiscal - positioned at bottom right */}
-          {user && user.is_staff && ferreteria && (
-            <div className="fixed bottom-6 right-6 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-300/60 p-5 max-w-xs ring-1 ring-slate-200/50">
-              <div className="flex flex-col">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-800">Situación Fiscal</h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Actual:{" "}
-                    <span className="font-semibold text-orange-700">
-                      {SITUACION_IVA_LABELS[ferreteria.situacion_iva] || ferreteria.situacion_iva}
-                    </span>
-                  </p>
-                </div>
-
-                {editIva ? (
-                  <div className="mt-3 space-y-3">
-                    <select
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                      value={newIva}
-                      onChange={(e) => setNewIva(e.target.value)}
-                      disabled={loadingIva}
-                    >
-                      <option value="RI">Responsable Inscripto</option>
-                      <option value="MO">Monotributista</option>
-                    </select>
-                    <div className="flex space-x-2">
-                      <button
-                        className="px-3 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 text-sm font-semibold flex-1 shadow-lg hover:shadow-xl"
-                        onClick={handleIvaChange}
-                        disabled={loadingIva}
-                      >
-                        {loadingIva ? "Guardando..." : "Guardar"}
-                      </button>
-                      <button
-                        className="px-3 py-2 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition-all duration-200 text-sm font-semibold"
-                        onClick={() => {
-                          setEditIva(false)
-                          setNewIva(ferreteria.situacion_iva)
-                        }}
-                        disabled={loadingIva}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    className="mt-3 px-3 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 text-sm font-semibold shadow-lg hover:shadow-xl"
-                    onClick={() => setEditIva(true)}
-                  >
-                    Cambiar Situación Fiscal
-                  </button>
-                )}
-
-                {feedback && (
-                  <div
-                    className={`mt-3 text-sm font-medium ${feedback.includes("Error") ? "text-red-600" : "text-emerald-600"}`}
-                  >
-                    {feedback}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

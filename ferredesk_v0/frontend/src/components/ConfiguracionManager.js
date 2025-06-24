@@ -574,7 +574,7 @@ const ConfiguracionManager = () => {
           <div className="max-w-6xl mx-auto">
             {/* Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-extrabold text-slate-800 text-center mb-2 drop-shadow-sm">
+              <h1 className="text-3xl font-extrabold text-slate-800 text-center mb-2">
                 Configuración del Sistema
               </h1>
               <p className="text-slate-600 text-center">
@@ -583,7 +583,7 @@ const ConfiguracionManager = () => {
             </div>
 
             {/* Tabs */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-300/60 shadow-xl mb-8">
+            <div className="bg-white/80 rounded-2xl border border-slate-300/60 shadow-xl mb-8">
               <div className="flex flex-wrap gap-2 p-6 border-b border-slate-200">
                 {tabs.map((tab) => (
                   <TabButton

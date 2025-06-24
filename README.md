@@ -14,7 +14,7 @@
 |---------------|------------------------------------|
 | Interfaz      | React + Tailwind                   |
 | Backend       | Django                             |
-| Base de datos | PostgreSQL                         |
+| Base de datos | Sqlite/PostgreSQL                  |
 
 
 ## 📊 Funcionalidades esperadas
