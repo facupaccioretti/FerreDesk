@@ -7,6 +7,9 @@ from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
     VendedorSerializer, PlazoSerializer, CategoriaClienteSerializer, ClienteSerializer
 )
+from django.db import transaction
+from django.utils.decorators import method_decorator
+from django_filters.rest_framework import DjangoFilterBackend
 
 # Create your views here.
 
@@ -42,9 +45,21 @@ class CategoriaClienteViewSet(viewsets.ModelViewSet):
     queryset = CategoriaCliente.objects.all()
     serializer_class = CategoriaClienteSerializer
 
+@method_decorator(transaction.atomic, name='dispatch')
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.exclude(id=1)
     serializer_class = ClienteSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = [
+        'codigo',      # Código numérico interno
+        'razon',       # Razón social
+        'fantasia',    # Nombre comercial
+        'cuit',        # CUIT
+        'activo',      # Estado (A/I)
+        'vendedor',    # Vendedor asignado (id)
+        'plazo',       # Plazo de pago (id)
+        'categoria',   # Categoría de cliente (id)
+    ]
 
     @action(detail=False, methods=['get'])
     def cliente_por_defecto(self, request):

@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria
-from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria, VistaStockProducto
+from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer, VistaStockProductoSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -15,22 +15,30 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import JSONParser
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from django.utils.decorators import method_decorator
 
 # Create your views here.
 
 # Aquí se agregarán las vistas para el ABM de stock y proveedores
 
+# Aseguramos que cualquier operación sobre proveedores se realice dentro de una transacción atómica
+@method_decorator(transaction.atomic, name='dispatch')
 class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo', 'razon', 'fantasia', 'acti']
 
+# Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
+@method_decorator(transaction.atomic, name='dispatch')
 class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti']
+    filterset_fields = [
+        'codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti',
+        'idfam1', 'idfam2', 'idfam3',
+    ]
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -40,6 +48,8 @@ class StockViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+# Atomicidad para las relaciones entre productos y proveedores
+@method_decorator(transaction.atomic, name='dispatch')
 class StockProveViewSet(viewsets.ModelViewSet):
     queryset = StockProve.objects.all()
     serializer_class = StockProveSerializer
@@ -271,16 +281,26 @@ def asociar_codigo_proveedor(request):
 @permission_classes([permissions.IsAuthenticated])
 def codigos_lista_proveedor(request, proveedor_id):
     from .models import PrecioProveedorExcel
-    # Buscar la última lista cargada
-    qs = PrecioProveedorExcel.objects.filter(proveedor_id=proveedor_id).order_by('-fecha_carga')
-    if not qs.exists():
+
+    # 1. Encontrar el registro más reciente para obtener el nombre del último archivo cargado
+    ultimo_registro = PrecioProveedorExcel.objects.filter(proveedor_id=proveedor_id).order_by('-fecha_carga').first()
+
+    if not ultimo_registro:
         return Response({'codigos': []})
-    ultima = qs.first()
-    # Buscar todos los códigos con el mismo nombre de archivo y fecha (ignorando milisegundos)
-    codigos = list(qs.filter(
-        nombre_archivo=ultima.nombre_archivo,
-        fecha_carga__date=ultima.fecha_carga.date()
-    ).values_list('codigo_producto_excel', flat=True))
+
+    # 2. Obtener el nombre del archivo de ese último registro
+    ultimo_nombre_archivo = ultimo_registro.nombre_archivo
+
+    # 3. Devolver todos los códigos asociados a ese nombre de archivo, ignorando la fecha.
+    # Esto soluciona el problema de la zona horaria y respeta la lógica de que
+    # la última lista cargada es la única válida.
+    codigos = list(
+        PrecioProveedorExcel.objects.filter(
+            proveedor_id=proveedor_id,
+            nombre_archivo=ultimo_nombre_archivo
+        ).values_list('codigo_producto_excel', flat=True)
+    )
+    
     return Response({'codigos': codigos})
 
 @api_view(['POST'])
@@ -437,3 +457,10 @@ class FerreteriaAPIView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    """Provee list y retrieve para la vista de stock total por producto."""
+    queryset = VistaStockProducto.objects.all()
+    serializer_class = VistaStockProductoSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']

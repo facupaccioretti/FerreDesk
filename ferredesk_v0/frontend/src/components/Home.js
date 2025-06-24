@@ -118,10 +118,34 @@ const cards = [
         />
       </svg>
     ),
-    iconColor: "text-amber-700",
-    gradient: "from-amber-50 to-amber-100/60",
-    borderColor: "border-amber-300/50",
-    hoverGradient: "hover:from-amber-100 hover:to-amber-200/60",
+    iconColor: "text-red-700",
+    gradient: "from-red-50 to-red-100/60",
+    borderColor: "border-red-300/50",
+    hoverGradient: "hover:from-red-100 hover:to-red-200/60",
+  },
+  {
+    label: "Notas",
+    description: "Gestión de notas personales",
+    icon: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={1.5}
+        stroke="currentColor"
+        className="w-7 h-7"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M3 5.25v13.5c0 .621.504 1.125 1.125 1.125h15.75A1.125 1.125 0 0 0 21 18.75V8.25a.375.375 0 0 0-.111-.264l-5.625-5.625A.375.375 0 0 0 15 2.25H4.125A1.125 1.125 0 0 0 3 3.375Zm12.75-1.5V8.25h5.25"
+        />
+      </svg>
+    ),
+    iconColor: "text-yellow-700",
+    gradient: "from-yellow-50 to-yellow-100/60",
+    borderColor: "border-yellow-300/50",
+    hoverGradient: "hover:from-yellow-100 hover:to-yellow-200/60",
   },
   {
     label: "Notas",
@@ -324,7 +348,7 @@ const Home = () => {
     if (label === "Notas") {
       window.open("/dashboard/notas", "_blank")
     }
-    // Las tarjetas de Alertas y Dashboards no redirigen por ahora (solo visuales)
+
     // Puedes agregar navegación para otras tarjetas aquí
   }, [])
 

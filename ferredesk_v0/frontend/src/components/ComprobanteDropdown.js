@@ -47,14 +47,14 @@ export default function ComprobanteDropdown({ opciones = [], value, onChange, di
     <div className="relative w-full" ref={dropdownRef}>
       <button
         type="button"
-        className={`relative w-full bg-white border border-slate-300 rounded-xl shadow-sm pl-4 pr-12 py-3 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 hover:border-slate-400 hover:shadow-md ${disabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
+        className={`relative w-full bg-white border border-slate-300 rounded-lg shadow-sm pl-3 pr-8 py-2 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 hover:border-slate-400 hover:shadow-md text-sm ${disabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         disabled={disabled}
       >
         <div className="flex items-center">
-          <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 mr-3 shadow-sm ring-1 ring-slate-200/50">
+          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 mr-2 shadow-sm ring-1 ring-slate-200/50">
             {icon}
           </span>
           <div>
@@ -74,7 +74,7 @@ export default function ComprobanteDropdown({ opciones = [], value, onChange, di
       </button>
 
       {isOpen && (
-        <div className="absolute z-20 mt-2 w-full bg-white/95 backdrop-blur-sm shadow-2xl max-h-80 rounded-xl overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30">
+        <div className="absolute z-20 mt-1 w-full bg-white/95 backdrop-blur-sm shadow-2xl max-h-80 rounded-lg overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-sm">
           <ul className="py-2 divide-y divide-slate-100/50" role="listbox">
             {Object.entries(groups).map(([groupName, options]) => (
               <li key={groupName} className="px-2 py-2">
@@ -92,7 +92,7 @@ export default function ComprobanteDropdown({ opciones = [], value, onChange, di
                     return (
                       <li
                         key={option.value}
-                        className={`relative cursor-pointer select-none py-3 pl-4 pr-10 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/80 rounded-lg transition-all duration-200 ${isSelected ? "bg-gradient-to-r from-orange-100 to-orange-50 ring-1 ring-orange-200/50" : ""}`}
+                        className={`relative cursor-pointer select-none py-2 pl-3 pr-8 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/80 rounded-lg transition-all duration-200 ${isSelected ? "bg-gradient-to-r from-orange-100 to-orange-50 ring-1 ring-orange-200/50" : ""}`}
                         role="option"
                         aria-selected={isSelected}
                         onClick={() => {
@@ -102,7 +102,7 @@ export default function ComprobanteDropdown({ opciones = [], value, onChange, di
                       >
                         <div className="flex items-center">
                           <span
-                            className={`flex items-center justify-center w-9 h-9 rounded-xl mr-3 shadow-sm transition-all duration-200 ${isSelected ? "bg-gradient-to-br from-orange-100 to-orange-200 ring-1 ring-orange-300/50" : "bg-gradient-to-br from-slate-100 to-slate-200 ring-1 ring-slate-200/50"}`}
+                            className={`flex items-center justify-center w-6 h-6 rounded-lg mr-2 shadow-sm transition-all duration-200 ${isSelected ? "bg-gradient-to-br from-orange-100 to-orange-200 ring-1 ring-orange-300/50" : "bg-gradient-to-br from-slate-100 to-slate-200 ring-1 ring-slate-200/50"}`}
                           >
                             {optIcon}
                           </span>
@@ -115,8 +115,8 @@ export default function ComprobanteDropdown({ opciones = [], value, onChange, di
                           </div>
                         </div>
                         {isSelected && (
-                          <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-orange-600">
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-orange-600">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                             </svg>
                           </span>

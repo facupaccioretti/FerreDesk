@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,16 +63,36 @@ class StockSerializer(serializers.ModelSerializer):
     idfam3_id = serializers.PrimaryKeyRelatedField(queryset=Familia.objects.all(), source='idfam3', write_only=True, required=False)
     idaliiva = AlicuotaIVASerializer(read_only=True)
     idaliiva_id = serializers.PrimaryKeyRelatedField(queryset=AlicuotaIVA.objects.all(), source='idaliiva', write_only=True, required=False)
+    stock_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
         fields = [
             'id', 'codvta', 'codcom', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva', 'idaliiva_id',
             'idfam1', 'idfam1_id', 'idfam2', 'idfam2_id', 'idfam3', 'idfam3_id',
-            'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores'
+            'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores',
+            'stock_total',
         ]
+
+    def get_stock_total(self, obj):
+        """Obtiene el stock total desde la vista VISTA_STOCK_PRODUCTO para el producto dado."""
+        from .models import VistaStockProducto  # Import local para evitar dependencias circulares en migraciones
+        vista = VistaStockProducto.objects.filter(id=obj.id).values_list('stock_total', flat=True).first()
+        return vista if vista is not None else 0
 
 class FerreteriaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ferreteria
-        fields = '__all__' 
+        fields = '__all__'
+
+class VistaStockProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VistaStockProducto
+        fields = [
+            'id',
+            'denominacion',
+            'codigo_venta',
+            'cantidad_minima',
+            'stock_total',
+            'necesita_reposicion',
+        ] 

@@ -264,4 +264,28 @@ class ProductoTempID(models.Model):
     def __str__(self):
         return f"TempID {self.id} ({self.fecha_creacion})"
 
+# ------------------------------
+# Modelo para la vista SQL 'vista_stock_producto'
+# ------------------------------
+class VistaStockProducto(models.Model):
+    """Representa la vista que contiene el stock total calculado para cada producto
+    junto con la cantidad mínima definida y una bandera que indica si requiere
+    reposición (1 = sí, 0 = no). Este modelo es *no gestionado* porque la vista
+    es creada/destruida mediante migraciones personalizadas y no debe ser
+    alterada por el ORM.
+    """
+
+    id = models.IntegerField(primary_key=True)
+    denominacion = models.CharField(max_length=50)
+    codigo_venta = models.CharField(max_length=15)
+    cantidad_minima = models.IntegerField(null=True, blank=True)
+    stock_total = models.DecimalField(max_digits=15, decimal_places=2)
+    necesita_reposicion = models.IntegerField()
+
+    class Meta:
+        managed = False  # Importante: Django no debe crear/alterar la vista
+        db_table = 'VISTA_STOCK_PRODUCTO'
+        verbose_name = 'Vista de Stock de Producto'
+        verbose_name_plural = 'Vistas de Stock de Productos'
+
 

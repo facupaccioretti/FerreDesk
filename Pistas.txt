@@ -1,0 +1,22 @@
+Descripción del Hecho: En PresupuestoForm, y únicamente en este formulario, el primer ítem 
+que se agrega a la grilla muestra "$0" en la columna "Precio Unitario".
+Detalle del Desencadenante: Este error ocurre exclusivamente cuando el ítem se agrega escribiendo su 
+código directamente en la celda de la grilla y presionando la tecla "Enter".
+Comportamiento Correcto (Contraste): Si el mismo ítem se agrega utilizando el 
+componente BuscadorProducto, el precio unitario se muestra correctamente desde el primer momento.
+Comportamiento en Cargas Posteriores: Cualquier ítem agregado después del primero 
+(ya sea por código o por buscador) funciona correctamente y muestra su precio. 
+Si se eliminan todos los ítems y se recarga la página, el ciclo se repite: la primera carga por código vuelve a fallar.
+Implicación Directa: Esto nos dice que existen dos flujos de código diferentes para agregar un ítem: 
+uno para el buscador (addItemWithDuplicado) y otro para la entrada por código (handleRowKeyDown). 
+El error reside en el camino que toma handleRowKeyDown y su interacción específica con PresupuestoForm.
+
+
+escripción del Hecho: El formulario VentaForm utiliza el mismo componente ItemsGrid que PresupuestoForm.
+Detalle del Comportamiento: En VentaForm, el flujo que falla en el otro formulario aquí funciona a la perfección. Es decir, si escribes un código de producto en la celda y presionas "Enter", el precio unitario se carga y se muestra correctamente, incluso en el primer ítem.
+Implicación Directa: Esta es la pista crucial. Demuestra de forma lógica que no puede haber un error inherente y simple en la lógica de ItemsGrid, porque si lo hubiera, fallaría en ambos formularios. La causa del problema debe residir en las diferencias entre PresupuestoForm y VentaForm. 
+
+
+Descripción del Hecho: Los logs que colocamos confirmaron que, al presionar "Enter" con el código "1005", la función handleRowKeyDown dentro de ItemsGrid recibe un objeto proveedorHabitual perfectamente formado y con los datos correctos: precio: 140 y costo: 100.
+Detalle del Comportamiento: Este log se dispara de manera idéntica tanto en PresupuestoForm (modo "presupuesto") como en VentaForm (modo "venta").
+Implicación Directa: El problema no es la falta de datos de entrada. La

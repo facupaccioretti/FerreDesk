@@ -78,6 +78,16 @@ class Venta(models.Model):
     # usa para determinar su caducidad automática.
     ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)
 
+    # NUEVO CAMPO: Define la relación M2M para asociar comprobantes.
+    # Usado principalmente para que una Nota de Crédito pueda referenciar a una o más Facturas.
+    comprobantes_asociados = models.ManyToManyField(
+        'self',
+        through='ComprobanteAsociacion',
+        symmetrical=False,
+        # Este related_name permite, desde una factura, encontrar fácilmente las NCs que la afectan.
+        related_name='notas_de_credito_que_la_afectan'
+    )
+
     class Meta:
         db_table = 'VENTA'
         unique_together = ['ven_punto', 'ven_numero', 'comprobante']
@@ -100,11 +110,12 @@ class VentaDetalleItem(models.Model):
         on_delete=models.CASCADE
     )
     vdi_orden = models.SmallIntegerField(db_column='VDI_ORDEN')
-    vdi_idsto = models.IntegerField(db_column='VDI_IDSTO')
-    vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True)
+    vdi_idsto = models.IntegerField(db_column='VDI_IDSTO', null=True, blank=True)
+    vdi_idpro = models.IntegerField(db_column='VDI_IDPRO', null=True, blank=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2, db_column='VDI_CANTIDAD')
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3, db_column='VDI_COSTO')
-    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_MARGEN')
+    vdi_margen = models.DecimalField(max_digits=10, decimal_places=2, db_column='VDI_MARGEN')
+    vdi_precio_unitario_final = models.DecimalField(max_digits=15, decimal_places=2, db_column='VDI_PRECIO_UNITARIO_FINAL', null=True, blank=True)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_BONIFICA')
     vdi_detalle1 = models.CharField(max_length=40, db_column='VDI_DETALLE1', null=True)
     vdi_detalle2 = models.CharField(max_length=40, db_column='VDI_DETALLE2', null=True)
@@ -152,11 +163,11 @@ class VentaDetalleItemCalculado(models.Model):
     id = models.BigAutoField(primary_key=True)
     vdi_idve = models.IntegerField()
     vdi_orden = models.SmallIntegerField()
-    vdi_idsto = models.IntegerField()
-    vdi_idpro = models.IntegerField()
+    vdi_idsto = models.IntegerField(null=True)
+    vdi_idpro = models.IntegerField(null=True)
     vdi_cantidad = models.DecimalField(max_digits=9, decimal_places=2)
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3)
-    vdi_margen = models.DecimalField(max_digits=4, decimal_places=2)
+    vdi_margen = models.DecimalField(max_digits=10, decimal_places=2)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2)
     vdi_detalle1 = models.CharField(max_length=40, null=True)
     vdi_detalle2 = models.CharField(max_length=40, null=True)
@@ -164,16 +175,38 @@ class VentaDetalleItemCalculado(models.Model):
     codigo = models.CharField(max_length=40, null=True)
     unidad = models.CharField(max_length=20, null=True)
     ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
-    precio_unitario_lista = models.DecimalField(max_digits=13, decimal_places=2)
-    precio_unitario_bonificado = models.DecimalField(max_digits=13, decimal_places=2)
-    vdi_importe_total = models.DecimalField(max_digits=15, decimal_places=2)
-    iva = models.DecimalField(max_digits=15, decimal_places=2)
+    vdi_precio_unitario_final = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    precio_unitario_bonificado_con_iva = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    # Precio unitario sin IVA que la vista expone y necesita la plantilla A
+    precio_unitario_sin_iva = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    
+    # Nuevos campos calculados según la lógica de Recalculos.md
+    precio_unitario_bonificado = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    subtotal_neto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    iva_monto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    total_item = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    margen_monto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
+    margen_porcentaje = models.DecimalField(max_digits=10, decimal_places=4, null=True)
+    ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2, null=True)
+    ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2, null=True)
 
     class Meta:
         managed = False
         db_table = 'VENTADETALLEITEM_CALCULADO'
 
 class VentaIVAAlicuota(models.Model):
+    """Modelo de solo lectura para la vista VENTAIVA_ALICUOTA.
+
+    Coincide exactamente con las columnas presentes en la vista tras la
+    refactorización de precios:
+
+    • id               – PK artificial generada por la vista.
+    • vdi_idve         – FK a la venta.
+    • ali_porce        – Porcentaje de alícuota (21, 10.5, etc.).
+    • neto_gravado     – Neto gravado para esa alícuota, ya con descuentos.
+    • iva_total        – IVA total calculado para esa alícuota.
+    """
+
     id = models.BigIntegerField(primary_key=True)
     vdi_idve = models.IntegerField()
     ali_porce = models.DecimalField(max_digits=5, decimal_places=2)
@@ -181,7 +214,7 @@ class VentaIVAAlicuota(models.Model):
     iva_total = models.DecimalField(max_digits=15, decimal_places=2)
 
     class Meta:
-        managed = False
+        managed = False  # Es una vista SQL, no una tabla administrada por Django
         db_table = 'VENTAIVA_ALICUOTA'
 
 class VentaCalculada(models.Model):
@@ -223,3 +256,38 @@ class VentaCalculada(models.Model):
     class Meta:
         managed = False
         db_table = 'VENTA_CALCULADO'
+
+# NUEVO MODELO
+class ComprobanteAsociacion(models.Model):
+    """
+    Tabla intermedia que asocia una Nota de Crédito (origen) con
+    una o más Facturas (destino) a las que anula.
+    """
+    # La Nota de Crédito que se está creando.
+    nota_credito = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        # Desde una NC, se puede acceder a las facturas que anula.
+        related_name='facturas_anuladas'
+    )
+    # La Factura que está siendo anulada por la Nota de Crédito.
+    factura_afectada = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        # Desde una Factura, se puede acceder a las NCs que la afectan.
+        related_name='notas_de_credito_recibidas'
+    )
+
+    class Meta:
+        db_table = 'VENTA_COMPROBANTE_ASOCIACION'
+        # Se actualiza la restricción de unicidad con los nuevos nombres de campo.
+        unique_together = ('nota_credito', 'factura_afectada')
+        verbose_name = 'Asociación de Comprobante'
+        verbose_name_plural = 'Asociaciones de Comprobantes'
+
+    def __str__(self):
+        # Usamos try-except para evitar errores si los objetos relacionados aún no están guardados
+        try:
+            return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+        except Exception:
+            return f"Asociación pendiente de guardado"

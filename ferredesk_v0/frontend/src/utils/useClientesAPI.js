@@ -7,11 +7,19 @@ export function useClientesAPI() {
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchClientes = async () => {
+  const fetchClientes = async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/clientes/clientes/', { credentials: 'include' });
+      // Construir querystring si hay filtros
+      const params = new URLSearchParams();
+      Object.entries(filtros).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value);
+        }
+      });
+      const url = params.toString() ? `/api/clientes/clientes/?${params.toString()}` : '/api/clientes/clientes/';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener clientes');
       const data = await res.json();
       setClientes(Array.isArray(data) ? data : (data.results || []));
@@ -40,8 +48,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -63,8 +73,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -85,8 +97,10 @@ export function useClientesAPI() {
         throw new Error(errorMsg);
       }
       await fetchClientes();
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   };
 
@@ -105,9 +119,11 @@ export function useClientesAPI() {
     }
   }, []);
 
+  const clearError = () => setError(null);
+
   useEffect(() => {
     fetchClientes();
   }, []);
 
-  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto };
+  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
 }

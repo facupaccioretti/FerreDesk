@@ -15,14 +15,27 @@ class ComprobanteSerializer(serializers.ModelSerializer):
         model = Comprobante
         fields = '__all__'
 
+class VentaAsociadaSerializer(serializers.ModelSerializer):
+    numero_formateado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Venta
+        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante']
+
+    def get_numero_formateado(self, obj):
+        if obj.ven_punto is not None and obj.ven_numero is not None:
+            letra = getattr(obj.comprobante, 'letra', '')
+            # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
+            return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
+        return None
+
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaDetalleItem
-        # ATENCIÓN: Solo se deben exponer los campos base de la tabla física.
-        # Los campos calculados (vdi_importe, vdi_importe_total, vdi_ivaitem) solo existen en la vista y en el modelo de solo lectura.
+        # Solo los campos base de la tabla física
         fields = [
             'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
-            'vdi_costo', 'vdi_margen', 'vdi_bonifica',
+            'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final',
             'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
         ]
 
@@ -35,6 +48,14 @@ class VentaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
     cliente_nombre = serializers.SerializerMethodField()
     vendedor_nombre = serializers.SerializerMethodField()
+
+    # CAMPO DE LECTURA: Muestra info de los comprobantes asociados a esta venta/NC.
+    comprobantes_asociados = VentaAsociadaSerializer(many=True, read_only=True)
+    # CAMPO DE ESCRITURA: Recibe una lista de IDs para asociar al crear/editar una NC.
+    comprobantes_asociados_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+    
     # ATENCIÓN: No exponer campos calculados como ven_impneto, ven_total, iva_desglose, etc. Estos solo existen en la vista y en el modelo de solo lectura.
 
     class Meta:
@@ -97,6 +118,8 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
+        comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
+
         # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
         if dias_validez is not None:
@@ -125,8 +148,26 @@ class VentaSerializer(serializers.ModelSerializer):
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
 
+        # --- NUEVA VALIDACIÓN Y ASIGNACIÓN PARA ÍTEMS GENÉRICOS -------------------
+        for idx, it in enumerate(items_data, start=1):
+            if not it.get('vdi_idsto'):
+                if not it.get('vdi_detalle1'):
+                    raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
+                precio = Decimal(str(it.get('vdi_costo', 0)))
+                cantidad = Decimal(str(it.get('vdi_cantidad', 0)))
+                if precio > 0 and cantidad == 0:
+                    raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
+                if it.get('vdi_idaliiva') is None:
+                    it['vdi_idaliiva'] = 3  # 0% por defecto
+        # --------------------------------------------------------------------------
+
         # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
+
+        # Asociar comprobantes (para Notas de Crédito)
+        if comprobantes_asociados_ids:
+            venta.comprobantes_asociados.set(comprobantes_asociados_ids)
+
         # Crear los items base (sin campos calculados)
         for item_data in items_data:
             item_data['vdi_idve'] = venta
@@ -137,6 +178,8 @@ class VentaSerializer(serializers.ModelSerializer):
         return venta
 
     def update(self, instance, validated_data):
+        comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', None)
+
         # Validación de unicidad excluyendo el propio registro
         ven_punto = validated_data.get('ven_punto', instance.ven_punto)
         ven_numero = validated_data.get('ven_numero', instance.ven_numero)
@@ -155,6 +198,10 @@ class VentaSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Actualizar la relación M2M si se proporcionaron IDs
+        if comprobantes_asociados_ids is not None:
+            instance.comprobantes_asociados.set(comprobantes_asociados_ids)
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
         items_data = self.initial_data.get('items', [])
@@ -177,6 +224,21 @@ class VentaSerializer(serializers.ModelSerializer):
                 for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
                     item_data.pop(campo_calculado, None)
                 VentaDetalleItem.objects.create(**item_data)
+
+        # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS ---------------------------------
+        if items_data is not None:
+            for idx, it in enumerate(items_data, start=1):
+                if not it.get('vdi_idsto'):
+                    if not it.get('vdi_detalle1'):
+                        raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
+                    precio = Decimal(str(it.get('vdi_costo', 0)))
+                    cantidad = Decimal(str(it.get('vdi_cantidad', 0)))
+                    if precio > 0 and cantidad == 0:
+                        raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
+                    if it.get('vdi_idaliiva') is None:
+                        it['vdi_idaliiva'] = 3  # 0% por defecto
+        # --------------------------------------------------------------------------
+
         return instance
 
     def validate(self, data):
@@ -212,7 +274,7 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
 class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = VentaIVAAlicuota
-        fields = '__all__'
+        fields = ['id', 'vdi_idve', 'ali_porce', 'neto_gravado', 'iva_total']
 
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()

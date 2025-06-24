@@ -100,25 +100,40 @@ class VentaViewSet(viewsets.ModelViewSet):
         permitir_stock_negativo = data.get('permitir_stock_negativo', False)
         tipo_comprobante = data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')
+        es_nota_credito = (tipo_comprobante == 'nota_credito')
         errores_stock = []
         stock_actualizado = []
         if not es_presupuesto:
             for item in items:
                 id_stock = item.get('vdi_idsto')
-                id_proveedor = item.get('vdi_idpro')
                 cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
-                if not id_stock or not id_proveedor:
-                    errores_stock.append(f"Falta stock o proveedor en item: {item}")
+
+                # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
+                if not id_stock:
                     continue
+
+                # Si es un producto real, DEBE tener un proveedor.
+                id_proveedor = item.get('vdi_idpro')
+                if not id_proveedor:
+                    errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
+                    continue
+                    
                 try:
                     stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
                 except StockProve.DoesNotExist:
                     errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
                     continue
-                if stockprove.cantidad < cantidad and not permitir_stock_negativo:
-                    errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
-                    continue
-                stockprove.cantidad -= cantidad
+                
+                if es_nota_credito:
+                    # Para notas de crédito, el stock se devuelve (suma).
+                    stockprove.cantidad += cantidad
+                else:
+                    # Para ventas normales, el stock se descuenta (resta).
+                    if stockprove.cantidad < cantidad and not permitir_stock_negativo:
+                        errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
+                        continue
+                    stockprove.cantidad -= cantidad
+
                 stockprove.save()
                 stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
             if errores_stock:
@@ -129,33 +144,49 @@ class VentaViewSet(viewsets.ModelViewSet):
         cliente = Cliente.objects.filter(id=cliente_id).first()
         situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+        
         comprobante = None
-        if tipo_comprobante == 'presupuesto':
+        comprobante_id_enviado = data.get('comprobante_id')
+
+        if tipo_comprobante == 'nota_credito' and comprobante_id_enviado:
+            comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado).first()
+            if comprobante_obj:
+                comprobante = {
+                    "id": comprobante_obj.id, "activo": comprobante_obj.activo,
+                    "codigo_afip": comprobante_obj.codigo_afip, "descripcion": comprobante_obj.descripcion,
+                    "letra": comprobante_obj.letra, "tipo": comprobante_obj.tipo,
+                    "nombre": comprobante_obj.nombre
+                }
+        elif tipo_comprobante == 'presupuesto':
             comprobante_obj = Comprobante.objects.filter(codigo_afip='9997').first()
-            comprobante = {
-                "id": comprobante_obj.id,
-                "activo": comprobante_obj.activo,
-                "codigo_afip": comprobante_obj.codigo_afip,
-                "descripcion": comprobante_obj.descripcion,
-                "letra": comprobante_obj.letra,
-                "tipo": comprobante_obj.tipo,
-                "nombre": comprobante_obj.nombre,
-            } if comprobante_obj else None
+            if comprobante_obj:
+                comprobante = {
+                    "id": comprobante_obj.id,
+                    "activo": comprobante_obj.activo,
+                    "codigo_afip": comprobante_obj.codigo_afip,
+                    "descripcion": comprobante_obj.descripcion,
+                    "letra": comprobante_obj.letra,
+                    "tipo": comprobante_obj.tipo,
+                    "nombre": comprobante_obj.nombre,
+                }
         elif tipo_comprobante == 'venta':
             comprobante_obj = Comprobante.objects.filter(codigo_afip='9999').first()
-            comprobante = {
-                "id": comprobante_obj.id,
-                "activo": comprobante_obj.activo,
-                "codigo_afip": comprobante_obj.codigo_afip,
-                "descripcion": comprobante_obj.descripcion,
-                "letra": comprobante_obj.letra,
-                "tipo": comprobante_obj.tipo,
-                "nombre": comprobante_obj.nombre,
-            } if comprobante_obj else None
+            if comprobante_obj:
+                comprobante = {
+                    "id": comprobante_obj.id,
+                    "activo": comprobante_obj.activo,
+                    "codigo_afip": comprobante_obj.codigo_afip,
+                    "descripcion": comprobante_obj.descripcion,
+                    "letra": comprobante_obj.letra,
+                    "tipo": comprobante_obj.tipo,
+                    "nombre": comprobante_obj.nombre,
+                }
         else:
             comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+        
         if not comprobante:
             return Response({'detail': 'No se encontró comprobante válido para la venta. Verifique la configuración de comprobantes y letras.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         data['comprobante_id'] = comprobante["codigo_afip"]
 
         punto_venta = data.get('ven_punto')
