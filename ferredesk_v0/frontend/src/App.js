@@ -11,6 +11,7 @@ import ProveedoresManager from './components/ProveedoresManager';
 import PresupuestosManager from './components/PresupuestosManager';
 import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
+import ConfiguracionManager from './components/ConfiguracionManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <NotasAlertasNotificaciones />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/configuracion"
+          element={
+            <PrivateRoute>
+              <ConfiguracionManager />
             </PrivateRoute>
           }
         />

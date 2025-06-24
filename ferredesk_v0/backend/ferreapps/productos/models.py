@@ -19,6 +19,95 @@ class Ferreteria(models.Model):
         help_text='Condición fiscal del negocio/emisor para comprobantes.'
     )
     
+    # Configuración Fiscal
+    alicuota_iva_por_defecto = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=21.00,
+        help_text='Alícuota de IVA por defecto para productos'
+    )
+    
+    # Punto de Venta (ARCA)
+    punto_venta_arca = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text='Punto de venta ARCA para comprobantes fiscales'
+    )
+    
+    # CUIT/CUIL
+    cuit_cuil = models.CharField(
+        max_length=13,
+        blank=True,
+        null=True,
+        help_text='CUIT/CUIL de la empresa'
+    )
+    
+    # Razón Social
+    razon_social = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text='Razón social de la empresa'
+    )
+    
+    # Logo de la Empresa
+    logo_empresa = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text='Logo de la empresa para comprobantes'
+    )
+    
+    # Configuración de Notificaciones
+    notificaciones_email = models.BooleanField(
+        default=True,
+        help_text='Activar notificaciones por email'
+    )
+    notificaciones_stock_bajo = models.BooleanField(
+        default=True,
+        help_text='Notificar cuando el stock esté bajo'
+    )
+    notificaciones_vencimientos = models.BooleanField(
+        default=True,
+        help_text='Notificar vencimientos próximos'
+    )
+    notificaciones_pagos_pendientes = models.BooleanField(
+        default=True,
+        help_text='Notificar pagos pendientes'
+    )
+    
+    # Configuración de Sistema
+    permitir_stock_negativo = models.BooleanField(
+        default=False,
+        help_text='Permitir que el stock de productos sea negativo'
+    )
+    
+    # Configuración de Comprobantes
+    comprobante_por_defecto = models.CharField(
+        max_length=2,
+        choices=[
+            ('FA', 'Factura A'),
+            ('FB', 'Factura B'),
+            ('FC', 'Factura C'),
+            ('BA', 'Boleta A'),
+            ('BB', 'Boleta B'),
+            ('BC', 'Boleta C'),
+        ],
+        default='FA',
+        help_text='Tipo de comprobante por defecto'
+    )
+    
+    # Configuración de Precios
+    margen_ganancia_por_defecto = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=30.00,
+        help_text='Margen de ganancia por defecto en porcentaje'
+    )
+
+    # Configuración de Impresión
+    
     def __str__(self):
         return self.nombre
 

@@ -3,9 +3,35 @@ from .models import Ferreteria, Categoria, Producto, PrecioProveedorExcel
 
 @admin.register(Ferreteria)
 class FerreteriaAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'direccion', 'telefono', 'email', 'activa')
-    list_filter = ('activa',)
+    list_display = ('nombre', 'direccion', 'telefono', 'email', 'situacion_iva', 'activa')
+    list_filter = ('activa', 'situacion_iva')
     search_fields = ('nombre', 'direccion', 'email')
+    
+    fieldsets = (
+        ('Información del Negocio', {
+            'fields': ('nombre', 'direccion', 'telefono', 'email', 'activa')
+        }),
+        ('Configuración Fiscal', {
+            'fields': ('situacion_iva', 'alicuota_iva_por_defecto', 'comprobante_por_defecto')
+        }),
+        ('Configuración de Precios', {
+            'fields': ('margen_ganancia_por_defecto',)
+        }),
+        ('Notificaciones', {
+            'fields': (
+                'notificaciones_email', 
+                'notificaciones_stock_bajo', 
+                'notificaciones_vencimientos', 
+                'notificaciones_pagos_pendientes'
+            )
+        }),
+        ('Información del Sistema', {
+            'fields': ('fecha_creacion',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ('fecha_creacion',)
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
