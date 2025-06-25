@@ -31,6 +31,7 @@
   import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
   import FacturaSelectorModal from "./herramientasforms/FacturaSelectorModal"
   import NotaCreditoForm from "./NotaCreditoForm"
+  import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
 
   const mainTabs = [
     { key: "presupuestos", label: "Presupuestos y Ventas", closable: false },
@@ -763,12 +764,35 @@
                             if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
                               numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
                             }
+                            
+                            // Lógica para el nuevo tooltip
+                            const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
+                            const facturasAnuladas = p.facturas_anuladas || []
+                            const tieneNotasCredito = notasCreditoAsociadas.length > 0
+                            const tieneFacturasAnuladas = facturasAnuladas.length > 0
+
                             return (
                               <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                                 {/* Comprobante */}
                                 <td className="px-3 py-3 whitespace-nowrap">
-                                  <div className="flex items-center gap-2 text-slate-700">
-                                    {icon} <span className="font-medium">{label}</span>
+                                  <div className="flex items-center">
+                                    <div className="flex items-center gap-2 text-slate-700">
+                                      {icon} <span className="font-medium">{label}</span>
+                                    </div>
+                                    {/* Renderizar tooltip si hay notas de crédito asociadas a la factura */}
+                                    {tieneNotasCredito && (
+                                      <ComprobanteAsociadoTooltip
+                                        documentos={notasCreditoAsociadas}
+                                        titulo="Notas de Crédito Asociadas"
+                                      />
+                                    )}
+                                    {/* Renderizar tooltip si la NC anula facturas */}
+                                    {tieneFacturasAnuladas && (
+                                      <ComprobanteAsociadoTooltip
+                                        documentos={facturasAnuladas}
+                                        titulo="Facturas que Anula"
+                                      />
+                                    )}
                                   </div>
                                 </td>
                                 {/* Número */}

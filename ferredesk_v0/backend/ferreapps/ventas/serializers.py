@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
-    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada, ComprobanteAsociacion
 )
 from django.db import models
 from ferreapps.productos.models import AlicuotaIVA
@@ -17,10 +17,12 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 
 class VentaAsociadaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
+    comprobante = ComprobanteSerializer(read_only=True)
+    ven_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Venta
-        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante']
+        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante', 'ven_total']
 
     def get_numero_formateado(self, obj):
         if obj.ven_punto is not None and obj.ven_numero is not None:
@@ -28,6 +30,14 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
             # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
             return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
         return None
+    
+    def get_ven_total(self, obj):
+        try:
+            # Busca el total en la vista calculada para evitar N+1 queries
+            venta_calculada = VentaCalculada.objects.get(ven_id=obj.ven_id)
+            return venta_calculada.ven_total
+        except VentaCalculada.DoesNotExist:
+            return None
 
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,6 +58,10 @@ class VentaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
     cliente_nombre = serializers.SerializerMethodField()
     vendedor_nombre = serializers.SerializerMethodField()
+
+    # NUEVOS CAMPOS PARA EL TOOLTIP
+    notas_credito_que_la_anulan = serializers.SerializerMethodField()
+    facturas_anuladas = serializers.SerializerMethodField()
 
     # CAMPO DE LECTURA: Muestra info de los comprobantes asociados a esta venta/NC.
     comprobantes_asociados = VentaAsociadaSerializer(many=True, read_only=True)
@@ -110,6 +124,24 @@ class VentaSerializer(serializers.ModelSerializer):
             return vendedor.nombre if hasattr(vendedor, 'nombre') else str(vendedor)
         except Exception:
             return ''
+
+    def get_notas_credito_que_la_anulan(self, obj):
+        """
+        Si 'obj' es una Factura, devuelve las Notas de Crédito que la anulan.
+        """
+        # obj es una instancia de Venta. Se consulta directamente la tabla de asociación.
+        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
+        ncs = [asc.nota_credito for asc in asociaciones]
+        return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
+
+    def get_facturas_anuladas(self, obj):
+        """
+        Si 'obj' es una Nota de Crédito, devuelve las Facturas que anula.
+        """
+        # obj es una instancia de Venta. Se consulta directamente la tabla de asociación.
+        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
+        facturas = [asc.factura_afectada for asc in asociaciones]
+        return VentaAsociadaSerializer(facturas, many=True, context=self.context).data
 
     def validate_items(self, value):
         if not value:
@@ -279,6 +311,9 @@ class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()
     comprobante = serializers.SerializerMethodField()
+    # NUEVOS CAMPOS PARA EL TOOLTIP
+    notas_credito_que_la_anulan = serializers.SerializerMethodField()
+    facturas_anuladas = serializers.SerializerMethodField()
 
     class Meta:
         model = VentaCalculada
@@ -309,4 +344,27 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
             'codigo_afip': obj.comprobante_codigo_afip,
             'descripcion': obj.comprobante_descripcion,
             'activo': obj.comprobante_activo,
-        } 
+        }
+
+    # MÉTODOS NUEVOS PARA EL TOOLTIP (Implementación segura)
+    def get_notas_credito_que_la_anulan(self, obj):
+        """
+        Si 'obj' es una Factura (desde la vista VentaCalculada),
+        devuelve las Notas de Crédito que la anulan.
+        """
+        # Consulta directa a la tabla de asociación para evitar errores de related_name
+        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
+        # De cada asociación, obtenemos la nota de crédito que la originó
+        ncs = [asc.nota_credito for asc in asociaciones]
+        return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
+
+    def get_facturas_anuladas(self, obj):
+        """
+        Si 'obj' es una Nota de Crédito (desde la vista VentaCalculada),
+        devuelve las Facturas que anula.
+        """
+        # Consulta directa a la tabla de asociación
+        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
+        # De cada asociación, obtenemos la factura que fue afectada
+        facturas = [asc.factura_afectada for asc in asociaciones]
+        return VentaAsociadaSerializer(facturas, many=True, context=self.context).data 
