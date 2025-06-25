@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
@@ -10,6 +10,7 @@ import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
+import { normalizarItems } from './herramientasforms/normalizadorItems';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -21,64 +22,8 @@ const getStockProveedoresMap = (productos) => {
   return map;
 };
 
-const normalizarItems = (items, productosDisponibles = []) => {
-  // Alineado con la lógica de ConVentaForm para garantizar coherencia de datos
-  if (!Array.isArray(items)) return [];
-  return items.map((item, idx) => {
-    const prod = item.producto || productosDisponibles.find(p => String(p.id) === String(item.vdi_idsto || item.idSto || item.idsto || item.id));
-
-    // DEBUG LOG: estado crudo del ítem
-    console.debug('[EditarPresupuestoForm/normalizarItems] Ítem crudo:', { idx, item });
-
-    const margen = (item.vdi_margen && Number(item.vdi_margen) !== 0)
-                  ? item.vdi_margen
-                  : (item.margen && Number(item.margen) !== 0)
-                  ? item.margen
-                  : (prod?.margen ?? 0);
-
-    let precioBase =
-      item.precio ??
-      item.costo ??
-      item.precio_unitario_lista ??
-      item.vdi_importe ??
-      prod?.precio ??
-      prod?.preciovta ??
-      prod?.preciounitario ??
-      0;
-
-    console.debug('[EditarPresupuestoForm/normalizarItems] Márgenes/Precio preliminar', { idx, margen, precioBase });
-
-    // Si sigue sin valor, calcular basado en costo + margen
-    if (!precioBase || Number(precioBase) === 0) {
-      const costo = item.vdi_costo ?? item.costo ?? prod?.costo ?? 0;
-      precioBase = parseFloat(costo) * (1 + parseFloat(margen) / 100);
-    }
-
-    const obj = {
-      id: item.id || idx + 1,
-      producto: prod,
-      codigo: item.codigo || item.codvta || prod?.codvta || prod?.codigo || '',
-      denominacion: item.denominacion || item.vdi_detalle1 || prod?.deno || prod?.nombre || '',
-      unidad: item.unidad || item.vdi_detalle2 || prod?.unidad || prod?.unidadmedida || '-',
-      cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: precioBase,
-      vdi_costo: item.vdi_costo ?? item.costo ?? 0,
-      margen: margen,
-      bonificacion: item.bonificacion || item.vdi_bonifica || 0,
-      proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
-      idaliiva: (prod?.idaliiva && typeof prod.idaliiva === 'object') ? prod.idaliiva.id : (prod?.idaliiva ?? item.vdi_idaliiva ?? null),
-      subtotal: item.subtotal || 0,
-    };
-
-    // El log final debe ser después de crear el objeto pero antes de devolverlo
-    console.debug('[EditarPresupuestoForm/normalizarItems] Ítem normalizado:', { idx, obj });
-
-    return obj;
-  });
-};
-
 // Función para mapear los campos del backend a los nombres del formulario
-const mapearCamposPresupuesto = (data, productos) => {
+const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
   if (!data) return {};
   console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos recibidos:', data);
   const mapeado = {
@@ -104,7 +49,7 @@ const mapearCamposPresupuesto = (data, productos) => {
     ven_vdocomvta: data.ven_vdocomvta ?? 0,
     ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? normalizarItems(data.items, productos) : [],
+    items: Array.isArray(data.items) ? normalizarItems(data.items, { productos, alicuotasMap }) : [],
   };
   console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos mapeados:', mapeado);
   return mapeado;
@@ -151,6 +96,20 @@ const EditarPresupuestoForm = ({
     tipoComprobante,
     comprobanteId: initialData?.comprobante_id
   });
+
+  const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
+  const stockProveedores = getStockProveedoresMap(productos);
+
+  // Calcular el mapa de alícuotas y memorizarlo para evitar re-renders innecesarios
+  const alicuotasMap = useMemo(() => {
+    return Array.isArray(alicuotas)
+      ? alicuotas.reduce((acc, ali) => {
+          acc[ali.id] = parseFloat(ali.porce) || 0;
+          return acc;
+        }, {})
+      : {};
+  }, [alicuotas]);
+
   // Hook unificado de estado con soporte de borrador
   const {
     formulario,
@@ -161,11 +120,11 @@ const EditarPresupuestoForm = ({
     claveAlmacenamiento: initialData && initialData.id ? `editarPresupuestoDraft_${initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
     combinarConValoresPorDefecto: (data) => {
-      const base = mapearCamposPresupuesto(data, productos);
+      const base = mapearCamposPresupuesto(data, productos, alicuotasMap);
       return { ...base, __checksum: generarChecksum(data) };
     },
-    parametrosPorDefecto: [productos],
-    normalizarItems: (items) => normalizarItems(items, productos),
+    parametrosPorDefecto: [productos, alicuotasMap],
+    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap }),
     validarBorrador: (saved, datosOriginales) => {
       // Se considera válido solo si el checksum coincide
       return saved?.__checksum === generarChecksum(datosOriginales);
@@ -185,20 +144,17 @@ const EditarPresupuestoForm = ({
 
   const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
 
-  const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
-  const stockProveedores = getStockProveedoresMap(productos);
-
   // Efecto: cuando llegan los productos (o cambian) volver a normalizar ítems sin producto
   useEffect(() => {
     if (!Array.isArray(productos) || productos.length === 0) return;
     if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
     const faltanProductos = formulario.items?.some(it => !it.producto);
     if (faltanProductos) {
-      const itemsNormalizados = normalizarItems(formulario.items, productos);
+      const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap });
       actualizarItems(itemsNormalizados);
       setGridKey(Date.now()); // Forzar remount de la grilla
     }
-  }, [productos]);
+  }, [productos, alicuotasMap]);
 
   // Agregar producto desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -206,14 +162,6 @@ const EditarPresupuestoForm = ({
       itemsGridRef.current.handleAddItem(producto);
     }
   };
-
-  // Calcular el mapa de alícuotas
-  const alicuotasMap = (Array.isArray(alicuotas)
-    ? alicuotas.reduce((acc, ali) => {
-        acc[ali.id] = parseFloat(ali.porce) || 0;
-        return acc;
-      }, {})
-    : {});
 
   // Calcular los totales usando el hook centralizado
   const { totales } = useCalculosFormulario(formulario.items, {
@@ -251,14 +199,20 @@ const EditarPresupuestoForm = ({
     try {
       const itemsToSave = itemsGridRef.current.getItems();
       console.log('[EditarPresupuestoForm/handleSubmit] Formulario actual:', formulario);
-      console.log('[EditarPresupuestoForm/handleSubmit] ComprobanteId:', formulario.comprobanteId);
+      
+      const comprobanteSeleccionado = comprobantes.find(c => String(c.id) === String(formulario.comprobanteId))
+        || comprobantes.find(c => String(c.codigo_afip) === String(formulario.comprobanteId))
+        || comprobantes.find(c => c.codigo_afip === '9997'); // Fallback Presupuesto
+      const comprobanteCodigoAfip = comprobanteSeleccionado ? comprobanteSeleccionado.codigo_afip : '9997';
+
+      console.log('[EditarPresupuestoForm/handleSubmit] ComprobanteId:', formulario.comprobanteId, '-> Código AFIP:', comprobanteCodigoAfip);
       
       let payload = {
         ven_id: parseInt(formulario.id),
         ven_estado: formulario.estado || 'AB',
         ven_tipo: formulario.tipo || 'Presupuesto',
         tipo_comprobante: 'presupuesto',
-        comprobante_id: formulario.comprobanteId || '',
+        comprobante_id: comprobanteCodigoAfip,
         ven_numero: Number.parseInt(formulario.numero, 10) || 1,
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,

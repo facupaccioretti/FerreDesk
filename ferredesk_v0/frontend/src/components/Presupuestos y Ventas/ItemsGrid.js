@@ -49,13 +49,19 @@ function normalizeItemsIniciales(itemsIniciales, productosDisponibles = []) {
     const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null
 
     const precioBaseCalculado = (() => {
+      // 1. Si el precio base ya viene calculado, usarlo. Previene doble normalización.
+      if (item.precio !== undefined && item.precio !== null && Number(item.precio) !== 0) {
+        return item.precio;
+      }
+      // 2. Si hay un precio final en la BD, calcular el base a partir de él.
       if (precioFinalBD && Number(precioFinalBD) !== 0) {
-        // CORRECCIÓN: Usar división para obtener el precio base desde el precio final
         const divisorIva = 1 + aliPorc / 100
         return divisorIva > 0 ? precioFinalBD / divisorIva : 0
       }
-      const precioDirecto = item.precio ?? item.vdi_importe ?? item.costo ?? 0
-      if (precioDirecto && Number(precioDirecto) !== 0) return precioDirecto
+      // 3. Si no hay precio final, intentar con un precio directo (que puede ser costo).
+      const precioDirecto = item.vdi_importe ?? item.costo ?? 0
+      if (precioDirecto && Number(precioDirecto) !== 0) return precioDirecto;
+      // 4. Como último recurso, calcularlo desde el costo del producto + margen.
       const costo = item.vdi_costo ?? item.costo ?? 0
       return Number.parseFloat(costo) * (1 + Number.parseFloat(margen) / 100)
     })()
