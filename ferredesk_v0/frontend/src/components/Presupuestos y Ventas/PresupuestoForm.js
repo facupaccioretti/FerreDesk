@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
@@ -12,6 +12,7 @@ import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
+import { normalizarItems } from './herramientasforms/normalizadorItems'
 
 const getStockProveedoresMap = (productos) => {
   const map = {}
@@ -91,42 +92,6 @@ const PresupuestoForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
   const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
 
-  // Función para normalizar items
-  const normalizarItems = (items) => {
-    return items.map((item, idx) => {
-      // Si ya tiene producto, dejarlo
-      if (item.producto) return { ...item, id: item.id || idx + 1 }
-      // Buscar producto por código si es posible
-      let prod = null
-      if (item.codigo || item.codvta) {
-        prod = productos.find((p) => (p.codvta || p.codigo)?.toString() === (item.codigo || item.codvta)?.toString())
-      }
-      return {
-        id: item.id || idx + 1,
-        producto: prod || undefined,
-        codigo: item.codigo || item.codvta || (prod ? prod.codvta || prod.codigo : ""),
-        denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ""),
-        unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ""),
-        cantidad: item.cantidad || 1,
-        // Conservar costo y precios si ya existen para evitar que se borren en la primera carga
-        costo: item.costo || item.vdi_costo || (prod ? prod.costo ?? prod.precio ?? prod.preciovta ?? prod.preciounitario : 0),
-        precio: item.precio !== undefined ? item.precio : (item.vdi_importe ?? null),
-        precioFinal: item.precioFinal !== undefined ? item.precioFinal : (item.vdi_precio_unitario_final ?? null),
-        bonificacion: item.vdi_bonifica || item.bonificacion || 0,
-        subtotal: item.subtotal || 0,
-      }
-    })
-  }
-
-  // Usar el hook useFormularioDraft
-  const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
-    claveAlmacenamiento: "presupuestoFormDraft",
-    datosIniciales: initialData,
-    combinarConValoresPorDefecto: mergeWithDefaults,
-    parametrosPorDefecto: [sucursales, puntosVenta],
-    normalizarItems,
-  })
-
   const alicuotasMap = useMemo(
     () =>
       Array.isArray(alicuotas)
@@ -137,6 +102,24 @@ const PresupuestoForm = ({
         : {},
     [alicuotas],
   )
+
+  // Función wrapper para normalizar items usando el normalizador unificado
+  const normalizarItemsPresupuesto = (items) => {
+    return normalizarItems(items, { 
+      productos, 
+      modo: 'presupuesto', 
+      alicuotasMap 
+    })
+  }
+
+  // Usar el hook useFormularioDraft
+  const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+    claveAlmacenamiento: "presupuestoFormDraft",
+    datosIniciales: initialData,
+    combinarConValoresPorDefecto: mergeWithDefaults,
+    parametrosPorDefecto: [sucursales, puntosVenta],
+    normalizarItems: normalizarItemsPresupuesto,
+  })
 
   const { totales } = useCalculosFormulario(formulario.items, {
     bonificacionGeneral: formulario.bonificacionGeneral,

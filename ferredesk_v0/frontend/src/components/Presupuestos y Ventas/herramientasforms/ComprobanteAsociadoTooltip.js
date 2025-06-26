@@ -69,26 +69,26 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
       {visible && (
         <div
           ref={tooltipRef}
-          className="absolute z-30 w-80 left-full ml-3 -mt-2 bg-white rounded-xl shadow-2xl border border-slate-200/80"
+          className="absolute z-50 w-64 left-full ml-2 -mt-2 bg-white rounded-lg shadow-2xl border border-slate-200/80"
           role="tooltip"
         >
           {/* Header */}
-          <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-t-xl">
+          <div className="flex justify-between items-center p-2 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-t-lg">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-              <h4 className="font-bold text-sm text-slate-800">{titulo}</h4>
-              <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded-full font-mono">
+              <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
+              <h4 className="font-bold text-xs text-slate-800">{titulo}</h4>
+              <span className="text-xs text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded-full font-mono">
                 {documentos.length}
               </span>
             </div>
             <button
               onClick={() => setVisible(false)}
-              className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition-all duration-150"
+              className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1 rounded transition-all duration-150"
               aria-label="Cerrar tooltip"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
+                className="h-3 w-3"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -99,8 +99,8 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
           </div>
 
           {/* Content */}
-          <div className="max-h-64 overflow-y-auto p-2">
-            <div className="space-y-1">
+          <div className="max-h-40 overflow-y-auto p-1">
+            <div className="space-y-0.5">
               {documentos.map((doc, index) => {
                 const esNotaCredito = doc.comprobante?.tipo?.toLowerCase().includes("nota de crédito")
                 const totalStyle = esNotaCredito ? "text-red-700 font-bold" : "text-emerald-700 font-bold"
@@ -108,12 +108,12 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
 
                 return (
                   <div key={doc.ven_id || doc.id} className="group">
-                    <div className="flex items-center justify-between p-3 bg-slate-50/50 hover:bg-slate-100/80 rounded-lg transition-all duration-200 border border-transparent hover:border-slate-200/50">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0"></div>
+                    <div className="flex items-center justify-between p-2 bg-slate-50/50 hover:bg-slate-100/80 rounded transition-all duration-200 border border-transparent hover:border-slate-200/50">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="w-1 h-1 rounded-full bg-orange-500 flex-shrink-0"></div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono font-bold text-slate-800 text-sm">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="font-mono font-bold text-slate-800 text-xs">
                               {doc.numero_formateado || `#${doc.ven_id || doc.id}`}
                             </span>
                           </div>
@@ -130,7 +130,7 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
 
                       {doc.ven_total != null && (
                         <div className="text-right flex-shrink-0">
-                          <span className={`${totalStyle} text-sm font-mono`}>
+                          <span className={`${totalStyle} text-xs font-mono`}>
                             {totalPrefijo}${formatearMoneda(doc.ven_total)}
                           </span>
                         </div>
@@ -139,21 +139,11 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
 
                     {/* Separador sutil entre elementos */}
                     {index < documentos.length - 1 && (
-                      <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mx-4 my-1"></div>
+                      <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mx-2 my-0.5"></div>
                     )}
                   </div>
                 )
               })}
-            </div>
-          </div>
-
-          {/* Footer simplificado */}
-          <div className="p-3 border-t border-slate-100 bg-slate-50/30 rounded-b-xl">
-            <div className="flex items-center justify-center text-xs text-slate-600">
-              <span className="font-mono text-slate-500">
-                Total: {documentos.length} documento{documentos.length !== 1 ? "s" : ""} relacionado
-                {documentos.length !== 1 ? "s" : ""}
-              </span>
             </div>
           </div>
         </div>

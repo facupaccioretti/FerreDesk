@@ -13,7 +13,8 @@
  * @returns {Object} Item mapeado SOLO con campos base
  */
 export const mapearCamposItem = (item, idx, esModificacion = false) => {
-  console.log('[mapearCamposItem] Recibe:', item, 'idx:', idx);
+  console.log('[mapearCamposItem] Recibiendo item para mapear:', JSON.parse(JSON.stringify(item)));
+
   let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
   if (idaliiva && typeof idaliiva === 'object') {
     idaliiva = idaliiva.id;
@@ -45,6 +46,8 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     // ATENCIÓN: No incluir campos como 'cuit' o 'domicilio' en los ítems. Estos solo corresponden a la cabecera de la venta.
     // Si necesitas esos datos, agrégalos en el objeto principal de la venta, nunca en los ítems.
   };
+
+  console.log('[mapearCamposItem] Devolviendo item mapeado:', JSON.parse(JSON.stringify(camposMapeados)));
 
   // Eliminar cualquier campo calculado si accidentalmente se incluyó
   const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem', 'precioFinal'];

@@ -105,10 +105,9 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def get_numero_formateado(self, obj):
         if obj.ven_punto is not None and obj.ven_numero is not None:
-            letra = getattr(obj.comprobante, 'letra', None)
-            if letra:
-                return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}"
-            return f"{obj.ven_punto:04d}-{obj.ven_numero:08d}"
+            letra = getattr(obj.comprobante, 'letra', '')
+            # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
+            return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
         return None
 
     def get_cliente_nombre(self, obj):

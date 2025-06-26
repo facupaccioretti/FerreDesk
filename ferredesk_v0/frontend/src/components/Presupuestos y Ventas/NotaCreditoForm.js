@@ -83,7 +83,7 @@ const NotaCreditoForm = ({
   onSave,
   onCancel,
   clienteSeleccionado,
-  facturasAsociadas,
+  facturasAsociadas = [],
   comprobantes,
   plazos,
   vendedores,

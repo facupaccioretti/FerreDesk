@@ -27,67 +27,6 @@ function getEmptyRow() {
   }
 }
 
-function normalizeItemsIniciales(itemsIniciales, productosDisponibles = []) {
-  if (!Array.isArray(itemsIniciales)) return []
-  return itemsIniciales.map((item, idx) => {
-    // Si el ítem ya tiene 'producto', se asume normalizado
-    if (item.producto) return { ...item, id: item.id || idx + 1 }
-    // Caso contrario, intentar reconstruir usando la lista de productos
-    const prod = productosDisponibles.find((p) => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id))
-
-    // Determinar margen con precedencia correcta
-    const margen =
-      item.vdi_margen && Number(item.vdi_margen) !== 0
-        ? item.vdi_margen
-        : item.margen && Number(item.margen) !== 0
-          ? item.margen
-          : (prod?.margen ?? 0)
-
-    const aliId = (prod?.idaliiva?.id ?? prod?.idaliiva ?? item.vdi_idaliiva ?? 3)
-    const aliPorc = ALICUOTAS_POR_DEFECTO[aliId] ?? 0
-
-    const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null
-
-    const precioBaseCalculado = (() => {
-      // 1. Si el precio base ya viene calculado, usarlo. Previene doble normalización.
-      if (item.precio !== undefined && item.precio !== null && Number(item.precio) !== 0) {
-        return item.precio;
-      }
-      // 2. Si hay un precio final en la BD, calcular el base a partir de él.
-      if (precioFinalBD && Number(precioFinalBD) !== 0) {
-        const divisorIva = 1 + aliPorc / 100
-        return divisorIva > 0 ? precioFinalBD / divisorIva : 0
-      }
-      // 3. Si no hay precio final, intentar con un precio directo (que puede ser costo).
-      const precioDirecto = item.vdi_importe ?? item.costo ?? 0
-      if (precioDirecto && Number(precioDirecto) !== 0) return precioDirecto;
-      // 4. Como último recurso, calcularlo desde el costo del producto + margen.
-      const costo = item.vdi_costo ?? item.costo ?? 0
-      return Number.parseFloat(costo) * (1 + Number.parseFloat(margen) / 100)
-    })()
-
-    return {
-      id: item.id || idx + 1,
-      producto: prod,
-      codigo: item.codigo || prod?.codvta || prod?.codigo || "",
-      denominacion: item.denominacion || prod?.deno || prod?.nombre || "",
-      unidad: item.unidad || prod?.unidad || prod?.unidadmedida || "-",
-      cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: precioBaseCalculado,
-      precioFinal: precioFinalBD || (precioBaseCalculado * (1 + aliPorc / 100)),
-      bonificacion: item.bonificacion || item.vdi_bonifica || 0,
-      proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || "",
-      margen: margen,
-      vdi_costo: item.vdi_costo || item.costo || prod?.costo || 0,
-      subtotal: item.subtotal || 0,
-      idaliiva:
-        prod?.idaliiva && typeof prod.idaliiva === "object"
-          ? prod.idaliiva.id
-          : (prod?.idaliiva ?? item.vdi_idaliiva ?? null),
-    }
-  })
-}
-
 const ItemsGridPresupuesto = forwardRef(
   (
     {
@@ -112,15 +51,25 @@ const ItemsGridPresupuesto = forwardRef(
     },
     ref,
   ) => {
+    // LOG NUEVO: Loggear las props recibidas cada vez que cambian
+    useEffect(() => {
+      console.log('[ItemsGrid] Props recibidas:', {
+        initialItems: JSON.parse(JSON.stringify(initialItems ?? null)),
+        productosDisponibles,
+        modo,
+      });
+    }, [initialItems, productosDisponibles, modo]);
+
     const esPresupuesto = modo === "presupuesto"
     // Combinar alícuotas del backend con un fallback seguro
     const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
 
     const [rows, setRows] = useState(() => {
+      // Se elimina la doble normalización. Se confía en que los items que llegan
+      // a través de `initialItems` ya fueron procesados por el hook `normalizarItems`
+      // en el formulario contenedor (e.g., EditarPresupuestoForm).
       if (Array.isArray(initialItems) && initialItems.length > 0) {
-        // Detectar si los ítems ya están normalizados (todos tienen 'producto')
-        const yaNormalizados = initialItems.every((it) => it.producto)
-        let baseRows = yaNormalizados ? initialItems : normalizeItemsIniciales(initialItems, productosDisponibles)
+        let baseRows = [...initialItems];
 
         // Verificar si ya existe un renglón vacío; si no, añadir uno para permitir nuevas cargas
         const hayVacio = baseRows.some(
@@ -129,7 +78,8 @@ const ItemsGridPresupuesto = forwardRef(
         if (!hayVacio) {
           baseRows = [...baseRows, getEmptyRow()]
         }
-        return baseRows
+        console.log('[ItemsGrid] rows iniciales (sin re-normalización):', JSON.parse(JSON.stringify(baseRows)));
+        return baseRows;
       }
       return [getEmptyRow()]
     })
@@ -369,6 +319,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
+          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "precio") {
           const userInput = value
@@ -416,6 +367,7 @@ const ItemsGridPresupuesto = forwardRef(
           newRows[idx] = fila
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
+          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "bonificacion") {
           newRows[idx] = {
@@ -424,6 +376,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
+          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "denominacion") {
           newRows[idx] = {
@@ -432,6 +385,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
+          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         }
         return newRows
@@ -757,6 +711,7 @@ const ItemsGridPresupuesto = forwardRef(
         fila.precio = Number.isNaN(nuevoPrecioBase) ? 0 : Number(nuevoPrecioBase.toFixed(4))
         nuevos[idx] = fila
         onRowsChange?.(nuevos)
+        console.log(`[ItemsGrid] Cambio en fila ${idx}, campo idaliiva:`, JSON.parse(JSON.stringify(nuevos[idx])));
         return nuevos
       })
     }

@@ -25,7 +25,8 @@ const getStockProveedoresMap = (productos) => {
 // Función para mapear los campos del backend a los nombres del formulario
 const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
   if (!data) return {};
-  console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos recibidos:', data);
+  // LOG NUEVO: Loggear los datos crudos recibidos del backend
+  console.log('[EditarPresupuestoForm] initialData recibido:', JSON.parse(JSON.stringify(data)));
   const mapeado = {
     id: data.ven_id ?? data.id ?? '',
     clienteId: data.ven_idcli ?? data.clienteId ?? '',
@@ -51,7 +52,8 @@ const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
     copia: data.ven_copia ?? data.copia ?? 1,
     items: Array.isArray(data.items) ? normalizarItems(data.items, { productos, alicuotasMap }) : [],
   };
-  console.log('[EditarPresupuestoForm/mapearCamposPresupuesto] Datos mapeados:', mapeado);
+  // LOG NUEVO: Loggear los datos mapeados y normalizados
+  console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
   return mapeado;
 };
 
@@ -198,6 +200,7 @@ const EditarPresupuestoForm = ({
     if (!itemsGridRef.current) return;
     try {
       const itemsToSave = itemsGridRef.current.getItems();
+      console.log('[EditarPresupuestoForm/handleSubmit] Items recibidos desde la grilla:', JSON.parse(JSON.stringify(itemsToSave)));
       console.log('[EditarPresupuestoForm/handleSubmit] Formulario actual:', formulario);
       
       const comprobanteSeleccionado = comprobantes.find(c => String(c.id) === String(formulario.comprobanteId))
@@ -256,6 +259,13 @@ const EditarPresupuestoForm = ({
   const clienteSeleccionado = clientesConDefecto.find(c => String(c.id) === String(formulario.clienteId))
     || clientes.find(c => String(c.id) === String(formulario.clienteId))
     || clientesConDefecto.find(c => String(c.id) === '1'); // Cliente mostrador si todo falla
+
+  // LOG NUEVO: Loggear los items que se pasan al grid
+  useEffect(() => {
+    if (formulario && Array.isArray(formulario.items)) {
+      console.log('[EditarPresupuestoForm] Items pasados al grid:', JSON.parse(JSON.stringify(formulario.items)));
+    }
+  }, [formulario]);
 
   if (loadingAlicuotas) return <div>Cargando alícuotas de IVA...</div>;
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>;

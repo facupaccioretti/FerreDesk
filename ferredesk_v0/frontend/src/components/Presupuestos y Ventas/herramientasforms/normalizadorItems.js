@@ -19,6 +19,14 @@ const ALICUOTAS_POR_DEFECTO = {
  */
 export function normalizarItems(itemsSeleccionados = [], { productos = [], modo = 'venta', alicuotasMap = {} } = {}) {
   if (!Array.isArray(itemsSeleccionados)) return [];
+
+  // Helper: devuelve el valor solo si no es string vacío ni null/undefined
+  const valorNoVacio = (val) => {
+    if (val === null || val === undefined) return undefined;
+    if (typeof val === 'string' && val.trim() === '') return undefined;
+    return val;
+  };
+
   return itemsSeleccionados.map((item, idx) => {
     // Generación de ID más robusta para nuevos ítems en el frontend.
     // Si el ítem ya tiene un ID (ej. viene de la BD), se mantiene.
@@ -39,12 +47,35 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     } // Si no es un producto de stock, margen ya es 0 por defecto.
 
     // Alícuota id y porcentaje (prioriza alicuotasMap de la API, fallback a ALICUOTAS_POR_DEFECTO)
-    const idaliivaRaw = prod?.idaliiva ?? item.vdi_idaliiva ?? null;
-    const idaliiva = idaliivaRaw && typeof idaliivaRaw === 'object' ? idaliivaRaw.id : idaliivaRaw;
+    const idaliivaRawTmp = item.idaliiva ?? prod?.idaliiva ?? item.vdi_idaliiva ?? null;
+    const idAliVal = (idaliivaRawTmp && typeof idaliivaRawTmp === 'object') ? idaliivaRawTmp.id : idaliivaRawTmp;
+    const idaliiva = Number(idAliVal) || 0;
     const aliPorc = alicuotasMap[idaliiva] ?? ALICUOTAS_POR_DEFECTO[idaliiva] ?? 0;
 
     // Lógica robusta para determinar precioBase (sin IVA) y precioFinal (con IVA)
     const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null; // Precio final si viene de la base de datos
+
+    // Para ítems genéricos, el precio de entrada es el final. No se calcula base.
+    const esGenerico = !prod;
+    if (esGenerico) {
+        return {
+            id: itemId,
+            producto: null,
+            codigo: valorNoVacio(item.vdi_detalle1) ? '-' : '',
+            denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? '',
+            unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? item.unidadmedida ?? '-',
+            cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
+            // Para genéricos, el precio y precioFinal son el mismo valor que se edita.
+            precio: Number(precioFinalBD || 0),
+            precioFinal: Number(precioFinalBD || 0),
+            // El costo de un genérico es su propio precio de venta sin IVA.
+            vdi_costo: (precioFinalBD && (1 + aliPorc / 100) > 0) ? precioFinalBD / (1 + aliPorc / 100) : 0,
+            margen: 0,
+            bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
+            proveedorId: null,
+            idaliiva,
+        };
+    }
 
     let precioBase = (() => {
       // 1. Si el precio base ya viene explícitamente en el ítem (del formulario), usarlo.
@@ -81,9 +112,11 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     return {
       id: itemId,
       producto: prod,
-      codigo: item.codigo ?? prod?.codvta ?? prod?.codigo ?? '',
-      denominacion: item.denominacion ?? item.vdi_detalle1 ?? prod?.deno ?? prod?.nombre ?? '',
-      unidad: item.unidad ?? item.vdi_detalle2 ?? prod?.unidad ?? prod?.unidadmedida ?? '-',
+      codigo: prod
+        ? valorNoVacio(item.codigo) ?? prod?.codvta ?? prod?.codigo ?? ''
+        : (valorNoVacio(item.vdi_detalle1) ? '-' : ''),
+      denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? prod?.deno ?? prod?.nombre ?? '',
+      unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? prod?.unidad ?? prod?.unidadmedida ?? '-',
       cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
       precio: Number(precioBase.toFixed(4)), // Redondeo a 4 decimales para precio sin IVA (interno)
       precioFinal: precioFinal, // Ya está redondeado a 2 decimales para el precio con IVA (mostrar)
