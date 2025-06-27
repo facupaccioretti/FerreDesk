@@ -73,11 +73,50 @@ class VentaFilter(FilterSet):
             'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_total', 'ven_punto', 'ven_numero'
         ]
 
+class VentaCalculadaFilter(FilterSet):
+    ven_fecha = DateFromToRangeFilter(field_name='ven_fecha')
+    ven_idcli = NumberFilter(field_name='ven_idcli')
+    ven_idvdo = NumberFilter(field_name='ven_idvdo')
+    comprobante_tipo = CharFilter(field_name='comprobante_tipo', lookup_expr='iexact')
+    comprobante_letra = CharFilter(field_name='comprobante_letra', lookup_expr='iexact')
+
+    class Meta:
+        model = VentaCalculada  # Vista SQL (managed = False)
+        fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra']
+
 class VentaViewSet(viewsets.ModelViewSet):
+    """ViewSet principal para Ventas.
+
+    • list  -> usa la vista calculada (VENTA_CALCULADO) para incluir los totales.
+    • otras -> continúan usando el modelo base `Venta`.
+    """
+
+    # Configuración por defecto (para acciones distintas de list)
     queryset = Venta.objects.all()
     serializer_class = VentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
+
+    # --- Selección dinámica de queryset / serializer / filterset --------
+    def get_queryset(self):
+        if getattr(self, 'action', None) == 'list':
+            # Aseguramos que el filtro use el modelo adecuado para la vista
+            self.filterset_class = VentaCalculadaFilter
+            # Orden inverso por fecha e ID para traer los más recientes primero
+            return VentaCalculada.objects.all().order_by('-ven_fecha', '-ven_id')
+        # Restablecemos el filtro original para otras acciones
+        self.filterset_class = VentaFilter
+        return super().get_queryset()
+
+    def get_serializer_class(self):
+        if getattr(self, 'action', None) == 'list':
+            return VentaCalculadaSerializer
+        return super().get_serializer_class()
+
+    def get_filterset_class(self):
+        if getattr(self, 'action', None) == 'list':
+            return VentaCalculadaFilter
+        return super().get_filterset_class()
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):

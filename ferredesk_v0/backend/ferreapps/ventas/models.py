@@ -231,6 +231,8 @@ class VentaCalculada(models.Model):
     comprobante_activo = models.BooleanField(null=True)
     ven_punto = models.SmallIntegerField()
     ven_numero = models.IntegerField()
+    # Número formateado completo (ej.: "A 0001-00000042") expuesto por la vista.
+    numero_formateado = models.CharField(max_length=20, null=True)
     ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2)
     ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2)
     ven_descu3 = models.DecimalField(max_digits=4, decimal_places=2)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCookie } from './csrf';
 
-export function useClientesAPI() {
+export function useClientesAPI(filtrosIniciales = {}) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -122,7 +122,8 @@ export function useClientesAPI() {
   const clearError = () => setError(null);
 
   useEffect(() => {
-    fetchClientes();
+    fetchClientes(filtrosIniciales);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };

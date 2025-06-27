@@ -1,6 +1,6 @@
   "use client"
 
-  import { useState, useEffect, useMemo } from "react"
+  import { useState, useEffect, useMemo, useCallback, useRef } from "react"
   import Navbar from "../Navbar"
   import { useVentasAPI } from "../../utils/useVentasAPI"
   import { useProductosAPI } from "../../utils/useProductosAPI"
@@ -26,12 +26,11 @@
   import ConVentaForm from "./ConVentaForm"
   import Paginador from "../Paginador"
   import FiltrosPresupuestos from "./herramientasforms/FiltrosPresupuestos"
-  import { useVentaDetalleAPI } from "../../utils/useVentaDetalleAPI"
-  import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
   import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
   import FacturaSelectorModal from "./herramientasforms/FacturaSelectorModal"
   import NotaCreditoForm from "./NotaCreditoForm"
   import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
+  import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 
   const mainTabs = [
     { key: "presupuestos", label: "Presupuestos y Ventas", closable: false },
@@ -92,14 +91,6 @@
         Abierto
       </span>
     )
-  }
-
-  // Componente para mostrar el total correcto desde la vista calculada
-  function CeldaTotalVenta({ idVenta }) {
-    const { ventaCalculada, cargando, error } = useVentaDetalleAPI(idVenta)
-    if (cargando) return <span className="text-slate-500">...</span>
-    if (error) return <span className="text-red-500">Err</span>
-    return <span className="font-semibold text-slate-800">${formatearMoneda(ventaCalculada?.ven_total)}</span>
   }
 
   const PresupuestosManager = () => {
@@ -487,83 +478,102 @@
       }
     }
 
-    // Normalizar datos de ventas/presupuestos para la grilla
-    const normalizarVenta = (venta) => {
-      let tipo = ""
-      const comprobanteObj = venta.comprobante && typeof venta.comprobante === "object" ? venta.comprobante : null
-      if (!comprobanteObj) return null // Si no hay comprobante, no se puede clasificar
+    // Mapas para accesos O(1)
+    const productosPorId = useMemo(() => {
+      const m = new Map()
+      productos.forEach((p) => m.set(p.id, p))
+      return m
+    }, [productos])
 
-      // Determinar tipo SOLO por comprobante
-      if (
-        (comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === "presupuesto") ||
-        comprobanteObj.codigo_afip === "9997"
-      ) {
-        tipo = "Presupuesto"
-      } else {
-        tipo = "Venta"
-      }
+    const clientesPorId = useMemo(() => {
+      const m = new Map()
+      clientes.forEach((c) => m.set(c.id, c))
+      return m
+    }, [clientes])
 
-      const estado = venta.estado || (venta.ven_estado === "AB" ? "Abierto" : venta.ven_estado === "CE" ? "Cerrado" : "")
-      const items = (venta.items || venta.detalle || venta.productos || []).map((item) => {
-        const producto = productos.find((p) => p.id === (item.vdi_idsto || item.producto?.id))
-        const cantidad = Number.parseFloat(item.vdi_cantidad || item.cantidad || 0)
-        const costo = Number.parseFloat(item.vdi_importe || item.precio || item.costo || 0)
-        const bonificacion = Number.parseFloat(item.vdi_bonifica || item.bonificacion || 0)
-        const subtotalSinIva = costo * cantidad * (1 - bonificacion / 100)
-        const alicuotaIva = producto ? Number.parseFloat(producto.aliiva?.porce || producto.aliiva || 0) || 0 : 0
-        const iva = subtotalSinIva * (alicuotaIva / 100)
+    // Función normalizadora memorizada
+    const normalizarVenta = useCallback(
+      (venta) => {
+        const comprobanteObj = typeof venta.comprobante === "object" ? venta.comprobante : null
+        if (!comprobanteObj) return null
+
+        const esPresupuesto =
+          (comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === "presupuesto") ||
+          comprobanteObj.codigo_afip === "9997"
+
+        const tipo = esPresupuesto ? "Presupuesto" : "Venta"
+        const estado = venta.estado || (venta.ven_estado === "AB" ? "Abierto" : venta.ven_estado === "CE" ? "Cerrado" : "")
+
+        const items = (venta.items || venta.detalle || venta.productos || []).map((item) => {
+          const producto = productosPorId.get(item.vdi_idsto || item.producto?.id) || null
+          const cantidad = Number.parseFloat(item.vdi_cantidad || item.cantidad || 0)
+          const costo = Number.parseFloat(item.vdi_importe || item.precio || item.costo || 0)
+          const bonificacion = Number.parseFloat(item.vdi_bonifica || item.bonificacion || 0)
+          const subtotalSinIva = costo * cantidad * (bonificacion ? 1 - bonificacion / 100 : 1)
+          const alicuotaIva = producto ? Number.parseFloat(producto.aliiva?.porce || producto.aliiva || 0) || 0 : 0
+          const iva = subtotalSinIva * (alicuotaIva / 100)
+          return {
+            ...item,
+            producto,
+            codigo: producto?.codvta || producto?.codigo || item.codigo || item.codvta || item.id || "-",
+            denominacion: producto?.deno || producto?.nombre || item.denominacion || item.nombre || "",
+            unidad: producto?.unidad || producto?.unidadmedida || item.unidad || item.unidadmedida || "-",
+            cantidad,
+            precio: costo,
+            bonificacion,
+            alicuotaIva,
+            iva,
+          }
+        })
+
         return {
-          ...item,
-          producto,
-          codigo: producto?.codvta || producto?.codigo || item.codigo || item.codvta || item.id || "-",
-          denominacion: producto?.deno || producto?.nombre || item.denominacion || item.nombre || "",
-          unidad: producto?.unidad || producto?.unidadmedida || item.unidad || item.unidadmedida || "-",
-          cantidad,
-          precio: costo,
-          bonificacion,
-          alicuotaIva,
-          iva,
+          ...venta,
+          tipo,
+          estado,
+          letra: comprobanteObj.letra || venta.letra || "",
+          numero: venta.numero_formateado || venta.ven_numero || venta.numero || "",
+          cliente:
+            clientesPorId.get(venta.ven_idcli)?.razon ||
+            (venta.ven_idcli === 1 || venta.ven_idcli === "1" ? "Cliente Mostrador" : "") ||
+            venta.cliente ||
+            "",
+          fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
+          id: venta.id || venta.ven_id || venta.pk,
+          items,
+          plazoId: venta.ven_idpla || venta.plazoId || "",
+          vendedorId: venta.ven_idvdo || venta.vendedorId || "",
+          sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
+          puntoVentaId: venta.ven_punto || venta.puntoVentaId || 1,
+          bonificacionGeneral: venta.ven_bonificacion_general ?? venta.bonificacionGeneral ?? 0,
+          descu1: venta.ven_descu1 || venta.descu1 || 0,
+          descu2: venta.ven_descu2 || venta.descu2 || 0,
+          descu3: venta.ven_descu3 || venta.descu3 || 0,
+          copia: venta.ven_copia || venta.copia || 1,
+          cae: venta.ven_cae || venta.cae || "",
+          comprobante: comprobanteObj,
+          total: venta.total || venta.ven_total || venta.importe_total || 0,
         }
-      })
-      return {
-        ...venta,
-        tipo,
-        estado,
-        letra: comprobanteObj.letra || venta.letra || "",
-        numero: venta.numero_formateado || venta.ven_numero || venta.numero || "",
-        cliente:
-          clientes.find((c) => c.id === venta.ven_idcli)?.razon ||
-          (venta.ven_idcli === 1 || venta.ven_idcli === "1" ? "Cliente Mostrador" : "") ||
-          venta.cliente ||
-          "",
-        fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
-        id: venta.id || venta.ven_id || venta.pk,
-        items,
-        plazoId: venta.ven_idpla || venta.plazoId || "",
-        vendedorId: venta.ven_idvdo || venta.vendedorId || "",
-        sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
-        puntoVentaId: venta.ven_punto || venta.puntoVentaId || 1,
-        bonificacionGeneral: venta.ven_bonificacion_general ?? venta.bonificacionGeneral ?? 0,
-        descu1: venta.ven_descu1 || venta.descu1 || 0,
-        descu2: venta.ven_descu2 || venta.descu2 || 0,
-        descu3: venta.ven_descu3 || venta.descu3 || 0,
-        copia: venta.ven_copia || venta.copia || 1,
-        cae: venta.ven_cae || venta.cae || "",
-        comprobante: comprobanteObj,
-        total: venta.total || venta.ven_total || venta.importe_total || 0,
-      }
-    }
+      },
+      [productosPorId, clientesPorId]
+    )
 
-    // Normalizar datos de ventas/presupuestos para la grilla
-    const ventasNormalizadas = ventas.map(normalizarVenta).filter(Boolean)
+    const ventasNormalizadas = useMemo(() => {
+      return ventas.map(normalizarVenta).filter(Boolean)
+    }, [ventas, normalizarVenta])
 
     // Usar directamente ventasNormalizadas para la paginación
     const totalItems = ventasNormalizadas.length
     const datosPagina = ventasNormalizadas.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina)
 
+    // Persistencia en localStorage con debounce para evitar escrituras en cada render
+    const persistTimeout = useRef(null)
     useEffect(() => {
-      localStorage.setItem("presupuestosTabs", JSON.stringify(tabs))
-      localStorage.setItem("presupuestosActiveTab", activeTab)
+      clearTimeout(persistTimeout.current)
+      persistTimeout.current = setTimeout(() => {
+        localStorage.setItem("presupuestosTabs", JSON.stringify(tabs))
+        localStorage.setItem("presupuestosActiveTab", activeTab)
+      }, 300)
+      return () => clearTimeout(persistTimeout.current)
     }, [tabs, activeTab])
 
     const handleFiltroChange = (filtros) => {
@@ -810,7 +820,7 @@
                                 <td className="px-3 py-1 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
                                 {/* Total */}
                                 <td className="px-3 py-1 whitespace-nowrap">
-                                  <CeldaTotalVenta idVenta={p.id} />
+                                  <span className="font-semibold text-slate-800">${formatearMoneda(p.total)}</span>
                                 </td>
                                 {/* Acciones */}
                                 <td className="px-3 py-1 whitespace-nowrap">

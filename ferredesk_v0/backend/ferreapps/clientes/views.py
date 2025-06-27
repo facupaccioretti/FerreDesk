@@ -68,6 +68,12 @@ class ClienteViewSet(viewsets.ModelViewSet):
         # Queryset base excluyendo el cliente por defecto (id=1)
         queryset = Cliente.objects.exclude(id=1).select_related('iva')
         
+        # Filtro opcional: solo clientes con movimientos en la tabla VENTA
+        if self.request.query_params.get('con_ventas') == '1':
+            from ferreapps.ventas.models import Venta
+            ids_con_ventas = Venta.objects.values_list('ven_idcli', flat=True).distinct()
+            queryset = queryset.filter(id__in=ids_con_ventas)
+        
         # Parámetro de búsqueda de texto libre
         termino_busqueda = self.request.query_params.get('search', '')
         

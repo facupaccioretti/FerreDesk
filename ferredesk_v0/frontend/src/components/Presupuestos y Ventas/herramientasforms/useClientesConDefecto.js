@@ -6,7 +6,12 @@ import { useClientesAPI } from '../../../utils/useClientesAPI';
  * Devuelve { clientes, loading, error }.
  */
 export function useClientesConDefecto() {
-  const { clientes: clientesGenerales, loading: loadingGenerales, error: errorGenerales, fetchClientePorDefecto } = useClientesAPI();
+  const {
+    clientes: clientesGenerales,
+    loading: loadingGenerales,
+    error: errorGenerales,
+    fetchClientePorDefecto,
+  } = useClientesAPI({ con_ventas: 1 });
   const [clientePorDefecto, setClientePorDefecto] = useState(null);
   const [loadingDefecto, setLoadingDefecto] = useState(false);
   const [errorDefecto, setErrorDefecto] = useState(null);
