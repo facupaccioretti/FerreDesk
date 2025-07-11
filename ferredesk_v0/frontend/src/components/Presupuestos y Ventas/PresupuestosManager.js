@@ -259,7 +259,7 @@
     const handleNuevaVenta = () => {
       const newKey = `nueva-venta-${Date.now()}`
       setTabs((prev) => {
-        const newTabs = [...prev, { key: newKey, label: "Nueva Venta", closable: true }]
+        const newTabs = [...prev, { key: newKey, label: "Nueva Factura", closable: true }]
         console.log("[handleNuevaVenta] Tabs después de agregar:", newTabs)
         return newTabs
       })
@@ -361,7 +361,7 @@
           ...prev,
           {
             key: tabKey,
-            label: `Conversión a Venta #${presupuesto.numero || presupuesto.id}`,
+            label: `Conversión a Factura #${presupuesto.numero || presupuesto.id}`,
             closable: true,
             data: {
               presupuestoOrigen: presupuesto,
@@ -407,9 +407,9 @@
         closeTab(tabKey)
         // Mostrar mensaje de éxito
         if (data.presupuesto === null) {
-          alert("Venta creada correctamente. El presupuesto fue eliminado por no tener items restantes.")
+          alert("Factura creada correctamente. El presupuesto fue eliminado por no tener items restantes.")
         } else {
-          alert("Venta creada correctamente. El presupuesto fue actualizado con los items restantes.")
+          alert("Factura creada correctamente. El presupuesto fue actualizado con los items restantes.")
         }
       } catch (err) {
         alert("Error al convertir: " + (err.message || ""))
@@ -720,7 +720,7 @@
                         onClick={handleNuevaVenta}
                         className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
                       >
-                        <span className="text-lg">+</span> Nueva Venta
+                        <span className="text-lg">+</span> Nueva Factura
                       </button>
                       <button
                         onClick={handleNuevaNotaCredito}

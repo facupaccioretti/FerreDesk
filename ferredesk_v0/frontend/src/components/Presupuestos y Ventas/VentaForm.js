@@ -26,7 +26,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   puntoVentaId: puntosVenta[0]?.id || "",
   fecha: new Date().toISOString().split("T")[0],
   estado: "Abierto",
-  tipo: "Venta",
+  tipo: "Factura Interna",
   items: [],
   bonificacionGeneral: 0,
   total: 0,
@@ -166,12 +166,12 @@ const VentaForm = ({
   // Efecto de inicialización sincronizada
   useEffect(() => {
     if (!inicializado && comprobantesVenta.length > 0) {
-      const comprobanteVenta = comprobantesVenta.find((c) => (c.tipo || "").toLowerCase() === "venta")
-      if (comprobanteVenta) {
-        setTipoComprobante("venta")
-        setComprobanteId(comprobanteVenta.id)
+      const comprobanteFacturaInterna = comprobantesVenta.find((c) => (c.tipo || "").toLowerCase() === "factura_interna")
+      if (comprobanteFacturaInterna) {
+        setTipoComprobante("factura_interna")
+        setComprobanteId(comprobanteFacturaInterna.id)
       } else {
-        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || "venta")
+        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || "factura_interna")
         setComprobanteId(comprobantesVenta[0].id)
       }
       setInicializado(true)
@@ -319,12 +319,12 @@ const VentaForm = ({
       limpiarBorrador()
 
       // Determinar el tipo de comprobante como string fijo
-      // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "venta"
+      // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "factura_interna"
       const tipoComprobanteSeleccionado =
         comprobantesVenta.find((c) => c.id === comprobanteId) &&
         (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
           ? "factura"
-          : "venta"
+          : "factura_interna"
       // Usar el codigo_afip del comprobante como comprobante_id
       const comprobanteCodigoAfip = comprobantesVenta.find((c) => c.id === comprobanteId)
         ? comprobantesVenta.find((c) => c.id === comprobanteId).codigo_afip
@@ -395,7 +395,7 @@ const VentaForm = ({
 
   // Opciones fijas para el dropdown
   const opcionesComprobante = [
-    { value: "venta", label: "Venta", tipo: "venta", letra: "V" },
+    { value: "factura_interna", label: "Factura Interna", tipo: "factura_interna", letra: "I" },
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
 
@@ -438,7 +438,7 @@ const VentaForm = ({
             {letraComprobanteMostrar && (
               <div className="absolute top-6 right-6 z-10">
                 <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
-                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">
+                  <span className="text-2xl font-extrabold font-serif text-slate-900 leading-none">
                     {letraComprobanteMostrar}
                   </span>
                   <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">
@@ -477,7 +477,7 @@ const VentaForm = ({
                     />
                   </svg>
                 </div>
-                {initialData ? (isReadOnly ? "Ver Venta" : "Editar Venta") : "Nueva Venta"}
+                {initialData ? (isReadOnly ? "Ver Factura" : "Editar Factura") : "Nueva Factura"}
               </h3>
 
               {isReadOnly && (
@@ -492,7 +492,7 @@ const VentaForm = ({
                       />
                     </svg>
                     <span className="font-medium">
-                      Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
+                      Este comprobante está cerrado y no puede ser editado. Solo lectura.
                     </span>
                   </div>
                 </div>

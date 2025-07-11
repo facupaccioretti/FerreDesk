@@ -22,7 +22,7 @@ from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
-from .utils import asignar_comprobante
+from .utils import asignar_comprobante, _construir_respuesta_comprobante
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 
 # Diccionario de alícuotas (igual que en el frontend)
@@ -184,47 +184,29 @@ class VentaViewSet(viewsets.ModelViewSet):
         situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
         
-        comprobante = None
+        # Obtener el comprobante apropiado según el tipo y cliente
         comprobante_id_enviado = data.get('comprobante_id')
-
-        if tipo_comprobante == 'nota_credito' and comprobante_id_enviado:
-            comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado).first()
-            if comprobante_obj:
-                comprobante = {
-                    "id": comprobante_obj.id, "activo": comprobante_obj.activo,
-                    "codigo_afip": comprobante_obj.codigo_afip, "descripcion": comprobante_obj.descripcion,
-                    "letra": comprobante_obj.letra, "tipo": comprobante_obj.tipo,
-                    "nombre": comprobante_obj.nombre
-                }
-        elif tipo_comprobante == 'presupuesto':
-            comprobante_obj = Comprobante.objects.filter(codigo_afip='9997').first()
-            if comprobante_obj:
-                comprobante = {
-                    "id": comprobante_obj.id,
-                    "activo": comprobante_obj.activo,
-                    "codigo_afip": comprobante_obj.codigo_afip,
-                    "descripcion": comprobante_obj.descripcion,
-                    "letra": comprobante_obj.letra,
-                    "tipo": comprobante_obj.tipo,
-                    "nombre": comprobante_obj.nombre,
-                }
-        elif tipo_comprobante == 'venta':
-            comprobante_obj = Comprobante.objects.filter(codigo_afip='9999').first()
-            if comprobante_obj:
-                comprobante = {
-                    "id": comprobante_obj.id,
-                    "activo": comprobante_obj.activo,
-                    "codigo_afip": comprobante_obj.codigo_afip,
-                    "descripcion": comprobante_obj.descripcion,
-                    "letra": comprobante_obj.letra,
-                    "tipo": comprobante_obj.tipo,
-                    "nombre": comprobante_obj.nombre,
-                }
+        
+        # Si el frontend envió un comprobante específico, lo usamos (validando que exista)
+        if comprobante_id_enviado:
+            comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
+            if not comprobante_obj:
+                return Response({
+                    'detail': f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            comprobante = _construir_respuesta_comprobante(comprobante_obj)
         else:
-            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+            # Si no se envió un comprobante específico, utilizar la función asignar_comprobante
+            try:
+                comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+            except ValidationError as e:
+                return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         if not comprobante:
-            return Response({'detail': 'No se encontró comprobante válido para la venta. Verifique la configuración de comprobantes y letras.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'detail': 'No se encontró comprobante válido para la operación. '
+                          'Verifique la configuración de comprobantes y letras.'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         data['comprobante_id'] = comprobante["codigo_afip"]
 

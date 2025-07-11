@@ -38,7 +38,7 @@ const PlantillaFacturaC = ({ data }) => {
         </div>
         {/* Centro: letra, código, tipo, número, fecha */}
         <div className="centro text-center flex flex-col items-center justify-center bg-white rounded-lg p-4 shadow-sm border-2 border-purple-200">
-          <div className="letra-comprobante text-5xl font-black text-purple-600 leading-none mb-1">
+          <div className="letra-comprobante text-5xl font-black font-serif text-purple-600 leading-none mb-1">
             {letraComprobante}
           </div>
           <div className="codigo-comprobante text-xs font-semibold text-gray-500 mb-2">
@@ -47,7 +47,7 @@ const PlantillaFacturaC = ({ data }) => {
             )}
           </div>
           <div className="tipo-comprobante text-xl font-bold uppercase text-gray-800 mb-1">
-            {tipoComprobante || ""}
+            {(tipoComprobante || "").replace(/_/g, ' ')}
           </div>
           <div className="numero-comprobante text-lg font-bold tracking-wider text-purple-700 mb-2">
             {data.numero_formateado || "0000-00000001"}
