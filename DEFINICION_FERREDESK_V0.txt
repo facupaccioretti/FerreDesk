@@ -1,0 +1,297 @@
+# FERREDESK V0 - SISTEMA INTEGRAL DE GESTIÓN PARA FERRETERÍAS
+
+## DEFINICIÓN GENERAL
+
+FerreDesk v0 es un sistema integral de gestión empresarial específicamente diseñado para ferreterías y comercios similares que operan bajo la normativa fiscal argentina. El sistema combina una moderna interfaz web desarrollada en React con un robusto backend en Django, proporcionando una solución completa para la administración comercial, fiscal y operativa de establecimientos de venta de materiales, herramientas y productos ferreteros.
+
+## OBJETIVOS PRINCIPALES DEL SISTEMA
+
+### 1. CUMPLIMIENTO FISCAL ARGENTINO AUTOMATIZADO
+- **Objetivo**: Garantizar el cumplimiento total de las obligaciones fiscales argentinas de manera automática y transparente para el usuario.
+- **Propósito**: Eliminar errores manuales en la facturación fiscal, asegurar la correcta discriminación de IVA según tipo de comprobante, y mantener la trazabilidad completa de todas las operaciones comerciales.
+
+### 2. GESTIÓN INTELIGENTE DE PRECIOS Y MÁRGENES
+- **Objetivo**: Implementar un sistema de precios basado en costo + margen + IVA que permita control granular de la rentabilidad.
+- **Propósito**: Facilitar la toma de decisiones comerciales mediante el análisis automático de márgenes, costos y rentabilidad por producto, proveedor y categoría.
+
+### 3. CONTROL INTEGRAL DE INVENTARIO
+- **Objetivo**: Proporcionar visibilidad completa del stock, movimientos y disponibilidad de productos en tiempo real.
+- **Propósito**: Optimizar la gestión de compras, prevenir faltantes críticos, y mantener niveles óptimos de inventario según la demanda histórica.
+
+### 4. AUTOMATIZACIÓN DE PROCESOS COMERCIALES
+- **Objetivo**: Digitalizar y automatizar todos los procesos desde la cotización hasta la facturación final.
+- **Propósito**: Reducir tiempos operativos, minimizar errores humanos, y mejorar la experiencia del cliente mediante procesos más eficientes.
+
+### 5. INTELIGENCIA DE NEGOCIO INTEGRADA
+- **Objetivo**: Generar información estratégica automática para la toma de decisiones empresariales.
+- **Propósito**: Transformar datos operativos en insights accionables sobre rentabilidad, tendencias de venta, performance de productos y eficiencia operativa.
+
+## MÓDULOS PRINCIPALES Y SUS PROPÓSITOS
+
+### MÓDULO DE GESTIÓN DE PRODUCTOS
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/Productos/ProductosManager.js`
+
+**Propósito Central**: Administrar el catálogo completo de productos con enfoque en trazabilidad, categorización inteligente y gestión multi-proveedor.
+
+**Objetivos Específicos**:
+- **Catalogación Inteligente**: Organizar productos en familias jerárquicas (FAM1, FAM2, FAM3) para facilitar búsquedas y análisis por categorías.
+- **Gestión Multi-Proveedor**: Permitir que un mismo producto tenga múltiples proveedores con diferentes códigos, precios y disponibilidades.
+- **Control de Stock en Tiempo Real**: Mantener información actualizada de existencias, ubicaciones y movimientos de inventario.
+- **Gestión de Precios Dinámicos**: Calcular precios automáticamente basados en costo, margen y alícuotas de IVA configurables.
+- **Trazabilidad Completa**: Registrar historial de movimientos, cambios de precios y actualizaciones de proveedores.
+
+**Componentes Clave**:
+- `ProductosTable.js`: Visualización tabular con filtros avanzados y expansión de detalles
+- `StockForm.js`: Formulario integral para creación/edición de productos
+- `AsociarCodigoProveedorModal.js`: Herramienta para vincular códigos de productos entre diferentes proveedores
+
+### MÓDULO DE GESTIÓN DE CLIENTES
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/Clientes/ClientesManager.js`
+
+**Propósito Central**: Administrar la base de clientes con enfoque en cumplimiento fiscal y personalización comercial.
+
+**Objetivos Específicos**:
+- **Cumplimiento Fiscal**: Almacenar y validar datos fiscales (CUIT, condición IVA, domicilio fiscal) necesarios para facturación.
+- **Segmentación Comercial**: Categorizar clientes para aplicar políticas comerciales diferenciadas (descuentos, plazos, precios especiales).
+- **Gestión de Crédito**: Controlar límites crediticios, plazos de pago y historial de cumplimiento.
+- **Geolocalización**: Organizar clientes por barrios, localidades y provincias para optimización logística.
+- **Historial Comercial**: Mantener registro completo de transacciones y comportamiento de compra.
+
+**Componentes Clave**:
+- `ClienteForm.js`: Formulario con validaciones fiscales automáticas
+- `ClientesTable.js`: Vista tabular con filtros geográficos y comerciales
+- `ClienteSelectorModal.js`: Selector rápido para procesos de venta
+
+### MÓDULO DE GESTIÓN DE PROVEEDORES
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/Proveedores/ProveedoresManager.js`
+
+**Propósito Central**: Administrar la cadena de suministro con enfoque en automatización de actualizaciones y análisis de costos.
+
+**Objetivos Específicos**:
+- **Actualización Automática de Precios**: Importar listas de precios desde archivos Excel con mapeo inteligente de productos.
+- **Análisis Comparativo**: Evaluar costos entre diferentes proveedores para optimizar compras.
+- **Gestión de Códigos**: Mantener equivalencias entre códigos internos y códigos de proveedores.
+- **Historial de Precios**: Registrar evolución de costos para análisis de tendencias.
+- **Control de Calidad**: Evaluar performance de proveedores (tiempos de entrega, calidad, cumplimiento).
+
+**Componentes Clave**:
+- `ProveedorForm.js`: Formulario de alta/modificación de proveedores
+- `ListaPreciosModal.js`: Herramienta de importación masiva de precios desde Excel
+- `HistorialListasModal.js`: Visualización de histórico de actualizaciones
+
+### MÓDULO DE VENTAS Y FACTURACIÓN
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/Presupuestos y Ventas/PresupuestosManager.js`
+
+**Propósito Central**: Gestionar el ciclo completo de ventas desde cotización hasta facturación, con cumplimiento fiscal automático.
+
+**Objetivos Específicos**:
+- **Flujo de Venta Integral**: Presupuesto → Conversión → Factura → Nota de Crédito en un proceso fluido.
+- **Cumplimiento Fiscal Automático**: Determinar automáticamente tipo de comprobante (A, B, C, I) según cliente y configuración.
+- **Cálculos Precisos**: Aplicar correctamente IVA, descuentos, bonificaciones y márgenes según normativa argentina.
+- **Gestión por Pestañas**: Permitir trabajo simultáneo en múltiples presupuestos/ventas sin pérdida de datos.
+- **Impresión Fiscal**: Generar comprobantes con formato oficial para diferentes tipos fiscales.
+
+**Componentes Clave**:
+- `PresupuestoForm.js`: Formulario principal de cotización
+- `VentaForm.js`: Formulario de facturación con validaciones fiscales
+- `EditarPresupuestoForm.js`: Modificación de presupuestos existentes
+- `NotaCreditoForm.js`: Gestión de anulaciones y devoluciones
+- `ConVentaForm.js`: Conversión de presupuestos a facturas
+- `ItemsGrid.js`: Grilla inteligente de productos con cálculos automáticos
+
+### SISTEMA DE PLANTILLAS DE COMPROBANTES
+**Directorio**: `ferredesk_v0/frontend/src/components/Presupuestos y Ventas/herramientasforms/plantillasComprobantes/`
+
+**Propósito Central**: Generar comprobantes fiscales con formato específico según tipo y normativa argentina.
+
+**Objetivos Específicos**:
+- **Diferenciación Fiscal**: Aplicar formato específico según tipo de comprobante (A discrimina IVA, B/C incluyen IVA).
+- **Cálculos Precisos**: Mostrar correctamente importes netos, IVA discriminado/incluido, totales.
+- **Cumplimiento Legal**: Incluir toda la información requerida por AFIP en cada tipo de comprobante.
+- **Presentación Profesional**: Generar documentos con diseño claro y profesional.
+
+**Componentes Especializados**:
+- `PlantillaFacturaA.js`: Comprobantes con IVA discriminado para responsables inscriptos
+- `PlantillaFacturaB.js`: Comprobantes con IVA incluido para responsables inscriptos
+- `PlantillaFacturaC.js`: Comprobantes para consumidores finales
+
+### SISTEMA DE GESTIÓN DE ESTADOS
+**Archivos de Hooks**: `ferredesk_v0/frontend/src/utils/use*API.js`
+
+**Propósito Central**: Proporcionar interfaz unificada para comunicación con backend y gestión de estados de la aplicación.
+
+**Objetivos Específicos**:
+- **Abstracción de API**: Simplificar llamadas al backend mediante hooks personalizados.
+- **Gestión de Estado Reactiva**: Mantener sincronización automática entre frontend y backend.
+- **Manejo de Errores Centralizado**: Proporcionar feedback consistente al usuario.
+- **Optimización de Performance**: Implementar caché inteligente y actualizaciones eficientes.
+- **Tipado Consistente**: Mantener estructura de datos coherente en toda la aplicación.
+
+### MOTOR DE CÁLCULOS FINANCIEROS
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/Presupuestos y Ventas/herramientasforms/useCalculosFormulario.js`
+
+**Propósito Central**: Realizar todos los cálculos financieros y fiscales de manera precisa y conforme a la normativa argentina.
+
+**Objetivos Específicos**:
+- **Precisión Decimal**: Manejar cálculos con precisión requerida para operaciones comerciales (hasta 4 decimales).
+- **Aplicación Correcta de IVA**: Calcular IVA según alícuotas vigentes y tipo de comprobante.
+- **Gestión de Descuentos**: Aplicar descuentos por ítem, generales y bonificaciones en orden correcto.
+- **Cálculo de Márgenes**: Determinar rentabilidad automáticamente basada en costos y precios finales.
+- **Redondeos Fiscales**: Aplicar redondeos según normativa para presentación en comprobantes.
+
+### SISTEMA DE CONFIGURACIÓN EMPRESARIAL
+**Archivo Principal**: `ferredesk_v0/frontend/src/components/ConfiguracionManager.js`
+
+**Propósito Central**: Centralizar la configuración de parámetros operativos y fiscales de la empresa.
+
+**Objetivos Específicos**:
+- **Información Fiscal**: Configurar datos de la empresa (CUIT, razón social, domicilio fiscal).
+- **Parámetros Operativos**: Definir puntos de venta, numeraciones, alícuotas de IVA.
+- **Personalización**: Adaptar el sistema a las necesidades específicas de cada ferretería.
+- **Políticas Comerciales**: Configurar descuentos automáticos, márgenes por defecto, plazos estándar.
+- **Seguridad**: Gestionar permisos de usuarios y accesos a funcionalidades.
+
+### BACKEND - MODELOS DE DATOS
+**Archivo Principal**: `ferredesk_v0/backend/ferreapps/ventas/models.py`
+
+**Propósito Central**: Definir la estructura de datos que garantiza integridad, trazabilidad y cumplimiento fiscal.
+
+**Objetivos Específicos de Modelos Clave**:
+
+**Modelo Venta**:
+- Almacenar transacciones comerciales con referencia fiscal completa
+- Mantener relación con comprobantes AFIP mediante código oficial
+- Registrar datos temporales para auditorías (fecha, hora, usuario)
+- Soportar asociaciones entre comprobantes (notas de crédito ↔ facturas)
+
+**Modelo VentaDetalleItem**:
+- Registrar productos vendidos con trazabilidad completa hasta proveedor
+- Almacenar estructura de precios (costo + margen + bonificación = precio final)
+- Mantener referencia a alícuotas de IVA para cálculos fiscales precisos
+
+**Modelo Comprobante**:
+- Catalogar tipos de comprobantes según códigos AFIP
+- Definir comportamiento fiscal (discriminar IVA, incluir IVA, etc.)
+- Asociar letras fiscales con tipos de operación
+
+**Modelo ComprobanteAsociacion**:
+- Gestionar relaciones entre comprobantes (NC que anulan facturas)
+- Garantizar trazabilidad para auditorías fiscales
+- Validar consistencia de letras fiscales en asociaciones
+
+### VISTAS CALCULADAS DE BASE DE DATOS
+**Archivos**: `ferredesk_v0/backend/ferreapps/ventas/migrations/0023_*.py` y posteriores
+
+**Propósito Central**: Proporcionar cálculos automáticos y consistentes para reportes y visualizaciones en tiempo real.
+
+**Objetivos Específicos**:
+
+**Vista VENTADETALLEITEM_CALCULADO**:
+- Calcular precios finales aplicando fórmulas estándar (costo × (1 + margen) × (1 - bonificación))
+- Determinar importes de IVA por ítem según alícuota correspondiente
+- Proporcionar datos listos para visualización sin cálculos en frontend
+
+**Vista VENTAIVA_ALICUOTA**:
+- Agrupar importes por alícuota de IVA para cumplimiento fiscal
+- Calcular totales netos gravados por tipo de IVA
+- Facilitar generación de reportes fiscales automáticos
+
+**Vista VENTA_CALCULADO**:
+- Consolidar totales de venta aplicando descuentos generales en orden correcto
+- Incluir información de comprobante para presentación fiscal
+- Proporcionar números formateados para impresión oficial
+
+## PRINCIPIOS ARQUITECTÓNICOS
+
+### 1. SEPARACIÓN DE RESPONSABILIDADES
+- **Frontend**: Interfaz de usuario, validaciones de entrada, presentación de datos
+- **Backend**: Lógica de negocio, validaciones fiscales, persistencia de datos
+- **Base de Datos**: Integridad referencial, cálculos automáticos mediante vistas
+
+### 2. CUMPLIMIENTO FISCAL POR DISEÑO
+- Toda funcionalidad considera normativa argentina desde el diseño inicial
+- Validaciones automáticas impiden generación de comprobantes fiscalmente incorrectos
+- Trazabilidad completa para auditorías
+
+### 3. ESCALABILIDAD Y MANTENIBILIDAD
+- Componentes modulares y reutilizables
+- Hooks personalizados para lógica compartida
+- Estructura de datos normalizada y extensible
+
+### 4. EXPERIENCIA DE USUARIO OPTIMIZADA
+- Interfaz intuitiva que minimiza curva de aprendizaje
+- Automatización de tareas repetitivas
+- Feedback inmediato y manejo de errores comprensible
+
+### 5. INTEGRIDAD DE DATOS
+- Validaciones en múltiples capas (frontend, backend, base de datos)
+- Transacciones atómicas para operaciones críticas
+- Backup automático y recuperación de datos
+
+## FLUJOS DE TRABAJO PRINCIPALES
+
+### FLUJO DE VENTA COMPLETO
+1. **Creación de Presupuesto**: Cliente solicita cotización → se genera presupuesto con vigencia
+2. **Ajuste y Negociación**: Modificación de cantidades, precios o descuentos según negociación
+3. **Conversión a Venta**: Confirmación del cliente → conversión automática a factura
+4. **Facturación Fiscal**: Generación de comprobante según tipo de cliente y operación
+5. **Gestión Post-Venta**: Emisión de notas de crédito si corresponde, seguimiento de cobros
+
+### FLUJO DE ACTUALIZACIÓN DE PRECIOS
+1. **Recepción de Lista**: Proveedor envía nueva lista de precios (Excel/CSV)
+2. **Importación Automática**: Sistema mapea productos y detecta cambios
+3. **Validación**: Revisión de incrementos significativos o productos nuevos
+4. **Aplicación Selectiva**: Actualización de precios por categoría o proveedor específico
+5. **Impacto en Márgenes**: Recálculo automático de márgenes y precios de venta
+
+### FLUJO DE CONTROL DE STOCK
+1. **Monitoreo Continuo**: Alertas automáticas por stock bajo o productos faltantes
+2. **Proyección de Demanda**: Análisis de histórico para anticipar necesidades
+3. **Gestión de Compras**: Generación automática de órdenes según puntos de reposición
+4. **Recepción**: Actualización de stock al recibir mercadería
+5. **Auditoría**: Conciliación periódica entre stock físico y sistematizado
+
+## BENEFICIOS OPERATIVOS ESPERADOS
+
+### PARA EL NEGOCIO
+- **Reducción de Errores**: Automatización elimina errores manuales en facturación y cálculos
+- **Mejora de Márgenes**: Control granular de precios optimiza rentabilidad
+- **Cumplimiento Fiscal**: Eliminación de riesgos por incorrecta emisión de comprobantes
+- **Eficiencia Operativa**: Reducción de tiempos en procesos comerciales y administrativos
+- **Toma de Decisiones**: Información estratégica disponible en tiempo real
+
+### PARA LOS USUARIOS
+- **Interface Intuitiva**: Curva de aprendizaje mínima por diseño familiar tipo navegador
+- **Trabajo Multitarea**: Gestión simultánea de múltiples presupuestos/ventas
+- **Automatización**: Reducción de tareas repetitivas y cálculos manuales
+- **Información Consolidada**: Vista única de toda la información del cliente/producto
+- **Movilidad**: Acceso desde cualquier dispositivo con navegador web
+
+### PARA LA GESTIÓN
+- **Visibilidad Total**: Dashboard con indicadores clave de performance
+- **Control de Inventario**: Información precisa de stock y rotación
+- **Análisis de Rentabilidad**: Reportes automáticos por producto, proveedor, período
+- **Gestión de Clientes**: Segmentación automática y análisis de comportamiento
+- **Escalabilidad**: Sistema preparado para crecimiento del negocio
+
+## TECNOLOGÍAS Y ESTÁNDARES
+
+### FRONTEND
+- **React 18**: Framework principal para interfaz de usuario
+- **TailwindCSS**: Sistema de diseño utilitario para UI consistente
+- **React Hooks**: Gestión de estado moderna y eficiente
+- **Responsive Design**: Adaptación automática a diferentes dispositivos
+
+### BACKEND
+- **Django 5.0**: Framework web robusto con ORM integrado
+- **Django REST Framework**: API REST para comunicación frontend-backend
+- **SQLite/PostgreSQL**: Base de datos con soporte para transacciones ACID
+- **Python 3.x**: Lenguaje principal con amplio ecosistema
+
+### ESTÁNDARES DE CALIDAD
+- **Código en Español**: Nombres descriptivos y documentación en idioma local
+- **Principios SOLID**: Arquitectura mantenible y extensible
+- **Validación Multicapa**: Seguridad y consistencia en todos los niveles
+- **Testing Automatizado**: Pruebas unitarias e integración para calidad continua
+
+FerreDesk v0 representa una solución integral que combina las mejores prácticas de desarrollo de software con un profundo conocimiento del negocio ferretero argentino, resultando en una herramienta que no solo automatiza procesos sino que potencia el crecimiento y la eficiencia operativa del negocio. 
