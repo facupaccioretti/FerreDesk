@@ -70,6 +70,7 @@ const PresupuestoForm = ({
   tiposComprobante,
   tipoComprobante,
   setTipoComprobante,
+  clientes,
   plazos,
   vendedores,
   sucursales,
@@ -88,6 +89,7 @@ const PresupuestoForm = ({
   loadingAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
+  tabKey = `presupuesto-${Date.now()}` // Valor por defecto en caso de que no se pase
 }) => {
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
   const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
@@ -114,7 +116,7 @@ const PresupuestoForm = ({
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
-    claveAlmacenamiento: "presupuestoFormDraft",
+    claveAlmacenamiento: `presupuestoFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],

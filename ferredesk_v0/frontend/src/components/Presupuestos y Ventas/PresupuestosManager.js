@@ -1,5 +1,5 @@
   "use client"
-
+  // linea 252 revisar --> setTipoComprobante(4) Forzar tipoComprobante a 4 para presupuesto. Por cambios en la bd
   import { useState, useEffect, useMemo, useCallback, useRef } from "react"
   import Navbar from "../Navbar"
   import { useVentasAPI } from "../../utils/useVentasAPI"
@@ -132,8 +132,8 @@
       updateVendedor,
       deleteVendedor,
     } = useVendedoresAPI()
-    const sucursales = [{ id: 1, nombre: "Casa Central" }] // Ajusta según tu negocio
-    const puntosVenta = [{ id: 1, nombre: "PV 1" }] // Ajusta según tu negocio
+    const sucursales = [{ id: 1, nombre: "Casa Central" }]
+    const puntosVenta = [{ id: 1, nombre: "PV 1" }]
     const [comprobanteTipo, setComprobanteTipo] = useState("")
     const [comprobanteLetra, setComprobanteLetra] = useState("")
     // Inicializar rango de fechas: hoy y 30 días atrás
@@ -166,19 +166,17 @@
               restoredTabs = [mainTab, ...restoredTabs]
             }
           })
-          console.log("[INIT] Tabs restauradas desde localStorage:", restoredTabs)
           return restoredTabs
         }
       } catch (e) {
         console.error("[INIT] Error restaurando tabs:", e)
       }
-      console.log("[INIT] Tabs por defecto:", [...mainTabs])
       return [...mainTabs]
     })
     const [activeTab, setActiveTab] = useState(() => {
       return localStorage.getItem("presupuestosActiveTab") || "presupuestos"
     })
-    const [editPresupuesto, setEditPresupuesto] = useState(null)
+   
 
     // Memorizar los datos para la pestaña activa para evitar re-renders innecesarios
     const activeTabData = useMemo(() => {
@@ -227,11 +225,13 @@
           const idPres = tab?.data?.id || tab?.data?.ven_id || null
           if (idPres) localStorage.removeItem(`editarPresupuestoDraft_${idPres}`)
         } else if (key.startsWith("nuevo-")) {
-          localStorage.removeItem("presupuestoFormDraft")
+          localStorage.removeItem(`presupuestoFormDraft_${key}`)
         } else if (key.startsWith("nueva-venta-")) {
-          localStorage.removeItem("ventaFormDraft")
+          localStorage.removeItem(`ventaFormDraft_${key}`)
         } else if (key.startsWith("conventa-")) {
           localStorage.removeItem(`conVentaFormDraft_${key}`)
+        } else if (key.startsWith("nota-credito-")) {
+          localStorage.removeItem(`notaCreditoFormDraft_${key}`)
         }
       } catch (err) {
         console.warn("[closeTab] No se pudo limpiar borrador:", err)
@@ -246,11 +246,8 @@
     const handleNuevo = () => {
       const newKey = `nuevo-${Date.now()}`
       setTabs((prev) => {
-        const newTabs = [...prev, { key: newKey, label: "Nuevo Presupuesto", closable: true }]
-        console.log("[handleNuevo] Tabs después de agregar:", newTabs)
-        return newTabs
+        return [...prev, { key: newKey, label: "Nuevo Presupuesto", closable: true }]
       })
-      setEditPresupuesto(null)
       setActiveTab(newKey)
       setTipoComprobante(4) // Forzar tipoComprobante a 4 para presupuesto
       localStorage.removeItem("presupuestoFormDraft")
@@ -259,9 +256,7 @@
     const handleNuevaVenta = () => {
       const newKey = `nueva-venta-${Date.now()}`
       setTabs((prev) => {
-        const newTabs = [...prev, { key: newKey, label: "Nueva Factura", closable: true }]
-        console.log("[handleNuevaVenta] Tabs después de agregar:", newTabs)
-        return newTabs
+        return [...prev, { key: newKey, label: "Nueva Factura", closable: true }]
       })
       setActiveTab(newKey)
       setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
@@ -269,18 +264,55 @@
     }
 
     const handleNuevaNotaCredito = () => {
+      // Agregar validación de comprobantes NC disponibles
+      const tiposNC = ['nota_credito', 'nota_credito_interna'];
+      const comprobantesNC = comprobantes.filter(c => tiposNC.includes(c.tipo));
+      
+      if (comprobantesNC.length === 0) {
+        alert('No hay comprobantes de Nota de Crédito configurados en el sistema.\n' +
+              'Contacte al administrador para configurar los tipos de comprobante necesarios.');
+        return;
+      }
+      
       // Reiniciar estados relacionados
       setClienteParaNC(null)
       setFacturasParaNC([])
       setModalClienteNCAbierto(true)
     }
 
-    const handleEdit = (presupuesto) => {
+    const handleEdit = async (presupuesto) => {
       if (!presupuesto || !presupuesto.id) return
-      setEditPresupuesto(presupuesto)
-      const key = `editar-${presupuesto.id}`
-      const label = `Editar ${presupuesto.numero || presupuesto.id}`
-      openTab(key, label, presupuesto)
+      
+      try {
+        // Obtener cabecera completa con items desde el endpoint de detalle
+        const [cabecera, itemsDetalle] = await Promise.all([
+          fetch(`/api/ventas/${presupuesto.id}/`).then(async (res) => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ detail: "Error al cargar cabecera" }))
+              throw new Error(err.detail)
+            }
+            return res.json()
+          }),
+          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${presupuesto.id}`).then(async (res) => {
+            if (!res.ok) return []
+            return res.json()
+          }),
+        ])
+
+        // Combinar cabecera con items calculados
+        const presupuestoCompleto = {
+          ...cabecera,
+          items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
+        }
+
+        const key = `editar-${presupuesto.id}`
+        const label = `Editar ${presupuesto.numero || presupuesto.id}`
+        openTab(key, label, presupuestoCompleto)
+        
+      } catch (error) {
+        console.error('Error al cargar presupuesto para edición:', error)
+        alert('Error al cargar el presupuesto: ' + error.message)
+      }
     }
 
     const handleImprimir = async (presupuesto) => {
@@ -584,7 +616,6 @@
       setClienteId(filtros.clienteId)
       setVendedorId(filtros.vendedorId)
       const params = {}
-      // Ya no hay filtro rápido, solo filtramos por comprobanteTipo si está presente
       if (filtros.comprobanteTipo) params["comprobante_tipo"] = filtros.comprobanteTipo
       if (filtros.comprobanteLetra) params["comprobante_letra"] = filtros.comprobanteLetra
       if (filtros.fechaDesde) params["ven_fecha_after"] = filtros.fechaDesde
@@ -775,7 +806,7 @@
                               numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
                             }
                             
-                            // Lógica para el nuevo tooltip
+                            // Lógica para mostrar tooltips de comprobantes asociados
                             const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
                             const facturasAnuladas = p.facturas_anuladas || []
                             const tieneNotasCredito = notasCreditoAsociadas.length > 0
@@ -917,6 +948,7 @@
                   !activeTab.startsWith("editar-vendedor") &&
                   (activeTab.startsWith("nueva-venta-") ? (
                     <VentaForm
+                      key={activeTab}
                       onSave={async (payload) => {
                         await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
                         closeTab(activeTab)
@@ -950,9 +982,11 @@
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
                       ItemsGrid={ItemsGrid}
+                      tabKey={activeTab}
                     />
                   ) : activeTab.startsWith("vista-") ? (
                     <PresupuestoVentaVista
+                      key={activeTab}
                       data={tabs.find((t) => t.key === activeTab)?.data}
                       clientes={clientes}
                       vendedores={vendedores}
@@ -969,6 +1003,7 @@
                     />
                   ) : activeTab.startsWith("editar") ? (
                     <EditarPresupuestoForm
+                      key={activeTab}
                       onSave={async (payload) => {
                         const idOriginal = activeTabData?.id || activeTabData?.ven_id
                         if (!idOriginal) {
@@ -983,7 +1018,7 @@
                         closeTab(activeTab)
                       }}
                       onCancel={() => closeTab(activeTab)}
-                      initialData={activeTabData || editPresupuesto}
+                      initialData={activeTabData}
                       comprobantes={comprobantes}
                       tiposComprobante={tiposComprobante}
                       tipoComprobante={tipoComprobante}
@@ -1051,12 +1086,13 @@
                     />
                   ) : (
                     <PresupuestoForm
+                      key={activeTab}
                       onSave={async (payload) => {
                         await addVenta({ ...payload, tipo: "Presupuesto", estado: "Abierto" })
                         closeTab(activeTab)
                       }}
                       onCancel={() => closeTab(activeTab)}
-                      initialData={activeTabData || editPresupuesto}
+                      initialData={activeTabData}
                       readOnlyOverride={false}
                       comprobantes={comprobantes}
                       tiposComprobante={tiposComprobante}
@@ -1084,6 +1120,7 @@
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
                       ItemsGrid={ItemsGrid}
+                      tabKey={activeTab}
                     />
                   ))}
                 {tabs.map(
@@ -1095,7 +1132,6 @@
                         presupuestoOrigen={tab.data.presupuestoOrigen}
                         itemsSeleccionados={tab.data.itemsSeleccionados}
                         onSave={(payload, tk) => {
-                          console.info("[PresupuestosManager] onSave de ConVentaForm, tabKey:", tk)
                           handleConVentaFormSave(payload, tk)
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
@@ -1154,7 +1190,7 @@
             setModalClienteNCAbierto(false)
             // Abrir selección de facturas
             setModalFacturasNCAbierto(true)
-            console.log("[Nota de Crédito] Cliente seleccionado:", cli)
+
           }}
         />
 

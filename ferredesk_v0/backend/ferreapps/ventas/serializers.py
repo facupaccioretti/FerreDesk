@@ -151,6 +151,65 @@ class VentaSerializer(serializers.ModelSerializer):
         items_data = self.initial_data.get('items', [])
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
 
+        # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
+        tipo_comprobante = self.initial_data.get('tipo_comprobante')
+        if tipo_comprobante in ['nota_credito', 'nota_credito_interna'] and comprobantes_asociados_ids:
+            facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
+            
+            if facturas_asociadas.exists():
+                letras_facturas = set(facturas_asociadas.values_list('comprobante__letra', flat=True))
+                
+                # Validar que todas las facturas tengan la misma letra
+                if len(letras_facturas) > 1:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Todas las facturas asociadas deben tener la misma letra. '
+                            f'Se encontraron letras: {", ".join(sorted(letras_facturas))}'
+                        ]
+                    })
+                
+                letra_facturas = letras_facturas.pop() if letras_facturas else None
+                
+                # Determinar automáticamente el tipo de NC según la letra de las facturas
+                if letra_facturas == 'I':
+                    # Facturas internas requieren NC interna
+                    validated_data['tipo_comprobante'] = 'nota_credito_interna'
+                    # Buscar comprobante NC interna
+                    try:
+                        comprobante_nc_interna = Comprobante.objects.get(
+                            tipo='nota_credito_interna', 
+                            letra='NC'
+                        )
+                        validated_data['comprobante_id'] = comprobante_nc_interna.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                'No se encontró comprobante de tipo nota_credito_interna configurado'
+                            ]
+                        })
+                elif letra_facturas in ['A', 'B', 'C']:
+                    # Facturas fiscales requieren NC fiscal con misma letra
+                    validated_data['tipo_comprobante'] = 'nota_credito'
+                    # Buscar comprobante NC con la letra correspondiente
+                    try:
+                        comprobante_nc = Comprobante.objects.get(
+                            tipo='nota_credito', 
+                            letra=letra_facturas
+                        )
+                        validated_data['comprobante_id'] = comprobante_nc.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                f'No se encontró comprobante de Nota de Crédito {letra_facturas} configurado'
+                            ]
+                        })
+                else:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Letra de factura no soportada para Notas de Crédito: {letra_facturas}'
+                        ]
+                    })
+
         # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
         if dias_validez is not None:

@@ -80,10 +80,45 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
   // Helpers de selección
   const getId = (fac) => fac.id ?? fac.ven_id ?? fac.idventa ?? fac.vdi_idve ?? fac.vdi_id ?? null
 
+  // Validación en tiempo real de letras
+  const validarSeleccionLetras = (nuevasFacturas) => {
+    if (nuevasFacturas.length <= 1) return { valido: true };
+    
+    const letras = [...new Set(nuevasFacturas.map(f => f.comprobante?.letra))];
+    
+    if (letras.length > 1) {
+      return {
+        valido: false,
+        mensaje: `No se pueden seleccionar facturas de distinto tipo.\n` +
+                 `Facturas encontradas: ${letras.join(', ')}\n\n` +
+                 `Una Nota de Crédito solo puede anular facturas del mismo tipo.`
+      };
+    }
+    
+    return { valido: true };
+  };
+
+  // Modificar toggleSeleccion para incluir validación
   const toggleSeleccion = (fac) => {
     const id = getId(fac)
     if (id === null) return
-    setSeleccionadas((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]))
+    
+    const nuevasSeleccionadas = seleccionadas.includes(id)
+      ? seleccionadas.filter(s => s !== id)
+      : [...seleccionadas, id];
+    
+    // Obtener facturas correspondientes a las nuevas selecciones
+    const facturasNuevas = facturas.filter(f => nuevasSeleccionadas.includes(getId(f)));
+    
+    // Validar consistencia de letras
+    const validacion = validarSeleccionLetras(facturasNuevas);
+    
+    if (!validacion.valido) {
+      alert(validacion.mensaje);
+      return; // No actualizar selección si es inválida
+    }
+    
+    setSeleccionadas(nuevasSeleccionadas);
   }
   const estaSeleccionada = (fac) => seleccionadas.includes(getId(fac))
 

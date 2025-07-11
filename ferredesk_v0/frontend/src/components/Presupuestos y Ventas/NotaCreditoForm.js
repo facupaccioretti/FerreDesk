@@ -151,18 +151,42 @@ const NotaCreditoForm = ({
     return map;
   }, [productos]);
 
-  // Lógica mejorada para encontrar el comprobante de NC correcto
-  const letraFacturaOriginal = facturasAsociadas?.[0]?.comprobante?.letra;
-  const comprobanteNC = useMemo(() => {
-    if (!letraFacturaOriginal) {
-      // Fallback a la primera NC que encuentre si no hay facturas de referencia
+  // Lógica mejorada para determinar el tipo de NC automáticamente
+  const determinarTipoNC = useMemo(() => {
+    if (!facturasAsociadas || facturasAsociadas.length === 0) {
+      // Sin facturas asociadas, usar NC genérica
       return comprobantes.find(c => c.tipo === 'nota_credito');
     }
-    // Busca la NC que coincida en tipo 'nota_credito' y letra con la factura original
-    return comprobantes.find(c =>
-      c.tipo === 'nota_credito' && c.letra === letraFacturaOriginal
-    );
-  }, [comprobantes, letraFacturaOriginal]);
+    
+    // Obtener letras de todas las facturas asociadas
+    const letrasFacturas = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
+    
+    // Validar que todas tengan la misma letra
+    if (letrasFacturas.length > 1) {
+      console.error('Facturas con letras inconsistentes:', letrasFacturas);
+      return null; // Error, se manejará en el render
+    }
+    
+    const letraFactura = letrasFacturas[0];
+    
+    // Determinar tipo de NC según letra de factura
+    if (letraFactura === 'I') {
+      // Factura Interna → NC Interna
+      return comprobantes.find(c => 
+        c.tipo === 'nota_credito_interna' && c.letra === 'NC'
+      );
+    } else if (['A', 'B', 'C'].includes(letraFactura)) {
+      // Factura fiscal → NC fiscal con misma letra
+      return comprobantes.find(c => 
+        c.tipo === 'nota_credito' && c.letra === letraFactura
+      );
+    }
+    
+    // Fallback
+    return comprobantes.find(c => c.tipo === 'nota_credito');
+  }, [comprobantes, facturasAsociadas]);
+
+  const comprobanteNC = determinarTipoNC;
   
   const comprobanteIdNC = comprobanteNC?.id || null;
   const codigoAfipNC = comprobanteNC?.codigo_afip || '';
@@ -176,8 +200,31 @@ const NotaCreditoForm = ({
 
   const handleChange = manejarCambioFormulario(setFormulario);
 
+  // Validación de consistencia de letras
+  const validarConsistenciaLetras = () => {
+    if (!facturasAsociadas || facturasAsociadas.length === 0) return true;
+    
+    const letrasFacturas = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
+    
+    if (letrasFacturas.length > 1) {
+      alert(`Error: Todas las facturas asociadas deben tener la misma letra.\n` +
+            `Se encontraron letras: ${letrasFacturas.join(', ')}\n\n` +
+            `Según la normativa argentina, una Nota de Crédito solo puede anular ` +
+            `facturas de una misma letra.`);
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validar consistencia de letras antes de continuar
+    if (!validarConsistenciaLetras()) {
+      return;
+    }
+    
     if (!formulario.clienteId) {
       alert("No se ha seleccionado un cliente.");
       return;
@@ -203,9 +250,9 @@ const NotaCreditoForm = ({
       ven_tipo: "Nota de Crédito", // Tipo de operación explícito
       permitir_stock_negativo: true, // CRÍTICO: Permite que la lógica de suma de stock no falle
 
-      // Datos del formulario
-      comprobante_id: codigoAfipNC, // Usar el código AFIP para consistencia con VentaForm
-      tipo_comprobante: 'nota_credito',
+      // NUEVO: Enviar tipo determinado automáticamente
+      tipo_comprobante: comprobanteNC?.tipo || 'nota_credito',
+      comprobante_id: comprobanteNC?.codigo_afip || '',
       comprobantes_asociados_ids: (formulario.facturasAsociadas || []).map(f => f.id || f.ven_id),
       
       ven_fecha: formulario.fecha,

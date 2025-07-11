@@ -80,6 +80,7 @@ const VentaForm = ({
   errorAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
+  tabKey = `venta-${Date.now()}` // Valor por defecto en caso de que no se pase
 }) => {
   // Estados para manejar la carga
   const [isLoading, setIsLoading] = useState(true)
@@ -120,7 +121,7 @@ const VentaForm = ({
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
-    claveAlmacenamiento: "ventaFormDraft",
+    claveAlmacenamiento: `ventaFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
@@ -325,10 +326,19 @@ const VentaForm = ({
         (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
           ? "factura"
           : "factura_interna"
-      // Usar el codigo_afip del comprobante como comprobante_id
-      const comprobanteCodigoAfip = comprobantesVenta.find((c) => c.id === comprobanteId)
-        ? comprobantesVenta.find((c) => c.id === comprobanteId).codigo_afip
-        : ""
+      
+      // CORREGIDO: Usar el código AFIP determinado por la lógica fiscal
+      // En lugar del código del comprobante seleccionado manualmente
+      let comprobanteCodigoAfip = ""
+      if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
+        // Si hay lógica fiscal activa, usar el código AFIP determinado automáticamente
+        comprobanteCodigoAfip = fiscal.comprobanteFiscal.codigo_afip
+      } else {
+        // Si no hay lógica fiscal, usar el código del comprobante seleccionado manualmente
+        comprobanteCodigoAfip = comprobantesVenta.find((c) => c.id === comprobanteId)
+          ? comprobantesVenta.find((c) => c.id === comprobanteId).codigo_afip
+          : ""
+      }
 
       // Definir constantes descriptivas para valores por defecto
       // Estado cerrado para ventas
