@@ -45,7 +45,6 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
           ? Number(item.margen)
           : Number(prod?.margen || 0);
     } // Si no es un producto de stock, margen ya es 0 por defecto.
-
     // CORRECCIÓN: Priorizar IVA histórico del detalle de venta para mantener integridad fiscal
     // Para ítems originales, usar el IVA que tenía al momento de la venta, no el actual del producto
     const idaliivaRawTmp = item.vdi_idaliiva ?? item.idaliiva ?? prod?.idaliiva ?? null;
