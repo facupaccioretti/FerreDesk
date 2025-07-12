@@ -173,7 +173,6 @@ class VentaSerializer(serializers.ModelSerializer):
                 # Determinar automáticamente el tipo de NC según la letra de las facturas
                 if letra_facturas == 'I':
                     # Facturas internas requieren NC interna
-                    validated_data['tipo_comprobante'] = 'nota_credito_interna'
                     # Buscar comprobante NC interna
                     try:
                         comprobante_nc_interna = Comprobante.objects.get(
@@ -189,7 +188,6 @@ class VentaSerializer(serializers.ModelSerializer):
                         })
                 elif letra_facturas in ['A', 'B', 'C']:
                     # Facturas fiscales requieren NC fiscal con misma letra
-                    validated_data['tipo_comprobante'] = 'nota_credito'
                     # Buscar comprobante NC con la letra correspondiente
                     try:
                         comprobante_nc = Comprobante.objects.get(

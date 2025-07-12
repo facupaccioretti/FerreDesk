@@ -613,3 +613,246 @@ def recalcular_totales_presupuesto(presupuesto):
     # En la etapa de presupuesto no se agrega IVA
     presupuesto.ven_impneto = neto.quantize(Decimal('0.01'))
     presupuesto.ven_total = neto.quantize(Decimal('0.01'))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def convertir_factura_interna_a_fiscal(request):
+    """
+    Convierte una factura interna a factura fiscal.
+    Diferencia clave: items originales NO descontan stock nuevamente.
+    """
+    try:
+        data = request.data
+        factura_interna_id = data.get('factura_interna_origen')
+        items_seleccionados = data.get('items_seleccionados', [])
+        tipo_conversion = data.get('tipo_conversion')
+        
+        # Validar tipo de conversión
+        if tipo_conversion != 'factura_i_factura':
+            return Response({'detail': 'Tipo de conversión inválido'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Obtener factura interna original
+        try:
+            factura_interna = Venta.objects.select_for_update().get(
+                ven_id=factura_interna_id,
+                comprobante__tipo='factura_interna'
+            )
+        except Venta.DoesNotExist:
+            return Response({'detail': 'Factura interna no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Preparar datos de la nueva factura fiscal (IDÉNTICO A VENTAFORM)
+        venta_data = data.copy()
+        venta_data.pop('factura_interna_origen', None)
+        venta_data.pop('items_seleccionados', None)
+        venta_data.pop('tipo_conversion', None)
+        venta_data.pop('conversion_metadata', None)
+        
+        venta_data['ven_estado'] = 'CE'  # Estado Cerrado para factura fiscal
+        
+        # === USAR EL MISMO FLUJO QUE VentaViewSet.create() ===
+        
+        items = venta_data.get('items', [])
+        if not items:
+            return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- Asignar bonificación general a los ítems sin bonificación particular ---
+        bonif_general = venta_data.get('bonificacionGeneral', 0)
+        try:
+            bonif_general = float(bonif_general)
+        except Exception:
+            bonif_general = 0
+        for item in items:
+            bonif = item.get('vdi_bonifica')
+            if not bonif or float(bonif) == 0:
+                item['vdi_bonifica'] = bonif_general
+
+        # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
+        # CORREGIDO: Consultar configuración de la ferretería para stock negativo
+        ferreteria = Ferreteria.objects.first()
+        permitir_stock_negativo = getattr(ferreteria, 'permitir_stock_negativo', False)
+        
+        tipo_comprobante = venta_data.get('tipo_comprobante')
+        es_presupuesto = (tipo_comprobante == 'presupuesto')
+        es_nota_credito = (tipo_comprobante == 'nota_credito')
+        errores_stock = []
+        stock_actualizado = []
+        
+        if not es_presupuesto:
+            for item in items:
+                id_stock = item.get('vdi_idsto')
+                cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+
+                # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
+                if not id_stock:
+                    continue
+
+                # NUEVO: Si tiene idOriginal, proviene de factura interna - NO descontar stock
+                if item.get('idOriginal'):
+                    print(f"LOG: Item original {item.get('idOriginal')} - NO descuenta stock")
+                    continue
+
+                # Si es un producto real NUEVO, DEBE tener un proveedor y SÍ descontamos stock.
+                id_proveedor = item.get('vdi_idpro')
+                if not id_proveedor:
+                    errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
+                    continue
+                    
+                try:
+                    stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                except StockProve.DoesNotExist:
+                    errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
+                    continue
+                
+                if es_nota_credito:
+                    # Para notas de crédito, el stock se devuelve (suma).
+                    stockprove.cantidad += cantidad
+                else:
+                    # Para ventas normales, el stock se descuenta (resta).
+                    if stockprove.cantidad < cantidad and not permitir_stock_negativo:
+                        errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
+                        continue
+                    stockprove.cantidad -= cantidad
+
+                stockprove.save()
+                stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                print(f"LOG: Item nuevo - Stock descontado: {cantidad} para stock_id {id_stock}")
+                
+            if errores_stock:
+                return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
+
+        # === LÓGICA DE COMPROBANTE (IDÉNTICA AL MÉTODO CREATE) ===
+        cliente_id = venta_data.get('ven_idcli')
+        cliente = Cliente.objects.filter(id=cliente_id).first()
+        situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
+        tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+        
+        # Obtener el comprobante apropiado según el tipo y cliente
+        comprobante_id_enviado = venta_data.get('comprobante_id')
+        
+        # Si el frontend envió un comprobante específico, lo usamos (validando que exista)
+        if comprobante_id_enviado:
+            comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
+            if not comprobante_obj:
+                return Response({
+                    'detail': f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            comprobante = _construir_respuesta_comprobante(comprobante_obj)
+        else:
+            # Si no se envió un comprobante específico, utilizar la función asignar_comprobante
+            try:
+                comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+            except ValidationError as e:
+                return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not comprobante:
+            return Response({
+                'detail': 'No se encontró comprobante válido para la operación. '
+                          'Verifique la configuración de comprobantes y letras.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        venta_data['comprobante_id'] = comprobante["codigo_afip"]
+
+        # === LÓGICA DE NUMERACIÓN (IDÉNTICA AL MÉTODO CREATE) ===
+        punto_venta = venta_data.get('ven_punto')
+        if not punto_venta:
+            return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        intentos = 0
+        max_intentos = 10
+        nueva_factura = None
+        
+        while intentos < max_intentos:
+            ultima_venta = Venta.objects.filter(
+                ven_punto=punto_venta,
+                comprobante_id=comprobante["codigo_afip"]
+            ).order_by('-ven_numero').first()
+            nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
+            venta_data['ven_numero'] = nuevo_numero
+            
+            # === USAR VENTASERIALIZER EXACTAMENTE COMO EN CREATE() ===
+            venta_serializer = VentaSerializer(data=venta_data)
+            try:
+                venta_serializer.is_valid(raise_exception=True)
+                
+                # DEBUGGING: Log detallado de los items antes de guardar
+                items_debug = venta_data.get('items', [])
+                print(f"DEBUG - Total items a procesar: {len(items_debug)}")
+                for i, item in enumerate(items_debug):
+                    print(f"DEBUG - Item {i}: vdi_precio_unitario_final = {item.get('vdi_precio_unitario_final')}")
+                    print(f"DEBUG - Item {i}: precioFinal = {item.get('precioFinal')}")
+                    print(f"DEBUG - Item {i}: idOriginal = {item.get('idOriginal')}")
+                
+                nueva_factura = venta_serializer.save()
+                print(f"LOG: Factura fiscal creada con ID {nueva_factura.pk}")
+                break
+            except IntegrityError as e:
+                if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                    intentos += 1
+                    continue  # Reintentar con el siguiente número
+                else:
+                    print("DEBUG - Error de integridad:", e)
+                    raise
+        else:
+            print("DEBUG - No se pudo asignar un número único de factura tras varios intentos.")
+            return Response({'detail': 'No se pudo asignar un número único de factura tras varios intentos.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        print("LOG: Antes de gestionar la factura interna original")
+        
+        # === LÓGICA DE GESTIÓN DE FACTURA INTERNA (igual que presupuestos) ===
+        
+        # Obtener items de la factura interna
+        items_factura_interna = list(factura_interna.items.all())
+        ids_items_factura_interna = [str(item.id) for item in items_factura_interna]
+        print(f"DEBUG - IDs items factura interna: {ids_items_factura_interna}")
+        
+        # Validar que los ítems seleccionados pertenecen a la factura interna
+        if not all(str(i) in ids_items_factura_interna for i in items_seleccionados):
+            print("DEBUG - Algunos ítems seleccionados no pertenecen a la factura interna")
+            return Response({'detail': 'Algunos ítems seleccionados no pertenecen a la factura interna.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Convertir ambos arrays de IDs a int para comparar correctamente
+        ids_items_factura_interna_int = [int(i.id) for i in items_factura_interna]
+        items_seleccionados_int = [int(i) for i in items_seleccionados]
+        print(f"DEBUG - ids_items_factura_interna_int: {ids_items_factura_interna_int}")
+        print(f"DEBUG - items_seleccionados_int: {items_seleccionados_int}")
+        
+        # === LÓGICA DE GESTIÓN DE FACTURA INTERNA (igual que presupuestos) ===
+        if set(items_seleccionados_int) == set(ids_items_factura_interna_int):
+            print("DEBUG - Se seleccionaron todos los ítems, eliminando factura interna")
+            factura_interna.delete()
+            print("LOG: Factura interna eliminada")
+            factura_interna_result = None
+        else:
+            print("DEBUG - Se dejan ítems no seleccionados en la factura interna")
+            items_restantes = [item for item in items_factura_interna if int(item.id) not in items_seleccionados_int]
+            factura_interna.items.set(items_restantes)
+            # Eliminar físicamente los ítems seleccionados de la factura interna
+            ids_a_eliminar = [item.id for item in items_factura_interna if int(item.id) in items_seleccionados_int]
+            if ids_a_eliminar:
+                VentaDetalleItem.objects.filter(id__in=ids_a_eliminar).delete()
+            # Si no quedan ítems, eliminar la factura interna
+            if not items_restantes:
+                print("LOG: Factura interna quedó vacía tras conversión, eliminando factura interna")
+                factura_interna.delete()
+                factura_interna_result = None
+            else:
+                # Recalcular totales y guardar (usando la misma función que presupuestos)
+                recalcular_totales_presupuesto(factura_interna)  # Funciona igual para facturas internas
+                factura_interna.save()
+                factura_interna_result = VentaSerializer(factura_interna).data
+        
+        # Respuesta exitosa (IDÉNTICA AL MÉTODO CREATE)
+        response_data = VentaSerializer(nueva_factura).data
+        response_data['stock_actualizado'] = stock_actualizado
+        response_data['comprobante_letra'] = comprobante["letra"]
+        response_data['comprobante_nombre'] = comprobante["nombre"]
+        response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+        response_data['factura_interna'] = factura_interna_result
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        print("DEBUG - Error en convertir_factura_interna_a_fiscal:", str(e))
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -369,21 +369,34 @@
     }
 
     const handleConversionConfirm = (selectedItems) => {
-      const presupuesto = conversionModal.presupuesto
-      const itemsSeleccionadosObjs = (presupuesto.items || []).filter((item) => selectedItems.includes(item.id))
-      const tabKey = `conventa-${presupuesto.id}`
+      const datos = conversionModal.presupuesto
+      const itemsSeleccionadosObjs = (datos.items || []).filter((item) => selectedItems.includes(item.id))
+      
+      // Detectar tipo de conversión
+      const esConversionFacturaI = datos.tipoConversion === 'factura_i_factura'
+      const tipoTab = esConversionFacturaI ? 'conv-factura-i' : 'conventa'
+      const labelPrefix = esConversionFacturaI ? 'Conv. Factura Interna' : 'Conversión a Factura'
+      
+      const tabKey = `${tipoTab}-${datos.id}`
+      
       setTabs((prev) => {
         const existente = prev.find((t) => t.key === tabKey)
         if (existente) {
-          // Actualizar los datos seleccionados y reutilizar la pestaña
           return prev.map((t) =>
             t.key === tabKey
               ? {
                   ...t,
                   data: {
-                    presupuestoOrigen: presupuesto,
-                    itemsSeleccionados: itemsSeleccionadosObjs,
+                    [esConversionFacturaI ? 'facturaInternaOrigen' : 'presupuestoOrigen']: datos,
+                    itemsSeleccionados: itemsSeleccionadosObjs.map(item => ({
+                      ...item,
+                      // Marcar items originales para bloqueo
+                      esBloqueado: esConversionFacturaI,
+                      noDescontarStock: esConversionFacturaI,
+                      idOriginal: esConversionFacturaI ? item.id : null
+                    })),
                     itemsSeleccionadosIds: selectedItems,
+                    tipoConversion: datos.tipoConversion || 'presupuesto_venta'
                   },
                 }
               : t,
@@ -393,14 +406,20 @@
           ...prev,
           {
             key: tabKey,
-            label: `Conversión a Factura #${presupuesto.numero || presupuesto.id}`,
+            label: `${labelPrefix} #${datos.numero || datos.id}`,
             closable: true,
             data: {
-              presupuestoOrigen: presupuesto,
-              itemsSeleccionados: itemsSeleccionadosObjs,
+              [esConversionFacturaI ? 'facturaInternaOrigen' : 'presupuestoOrigen']: datos,
+              itemsSeleccionados: itemsSeleccionadosObjs.map(item => ({
+                ...item,
+                esBloqueado: esConversionFacturaI,
+                noDescontarStock: esConversionFacturaI,
+                idOriginal: esConversionFacturaI ? item.id : null
+              })),
               itemsSeleccionadosIds: selectedItems,
+              tipoConversion: datos.tipoConversion || 'presupuesto_venta'
             },
-            tipo: "conventa",
+            tipo: tipoTab,
           },
         ]
       })
@@ -450,6 +469,46 @@
 
     const handleConVentaFormCancel = (tabKey) => {
       closeTab(tabKey)
+    }
+
+    // Handler específico para conversiones de facturas internas
+    const handleConVentaFormSaveFacturaI = async (payload, tabKey, endpoint) => {
+      try {
+        const csrftoken = getCookie("csrftoken")
+        const response = await fetch(endpoint || "/api/convertir-factura-interna/", {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          credentials: "include",
+        })
+
+        if (!response.ok) {
+          let msg = "No se pudo convertir la factura interna"
+          try {
+            const data = await response.json()
+            msg = data.detail || msg
+          } catch {}
+          throw new Error(msg)
+        }
+
+        const data = await response.json()
+
+        // Actualizar listas
+        await fetchVentas()
+        closeTab(tabKey)
+        
+        // Mensaje de éxito específico según lo que pasó con la factura interna original
+        if (data.factura_interna === null) {
+          alert("Factura fiscal creada correctamente. La factura interna fue eliminada por no tener ítems restantes.")
+        } else {
+          alert("Factura fiscal creada correctamente. La factura interna fue actualizada con los ítems restantes.")
+        }
+      } catch (err) {
+        alert("Error al convertir factura interna: " + (err.message || ""))
+      }
     }
 
     const handleDelete = async (id) => {
@@ -624,6 +683,63 @@
       if (filtros.vendedorId) params["ven_idvdo"] = filtros.vendedorId
       fetchVentas(params)
     }
+
+    // Función para detectar si una factura interna puede convertirse
+    const esFacturaInternaConvertible = (item) => {
+      const esFacturaInterna = item.comprobante_tipo === 'factura_interna' || 
+        (item.comprobante_nombre && item.comprobante_nombre.toLowerCase().includes('interna'));
+      return esFacturaInterna;
+    };
+
+    // Handler específico para conversión de facturas internas
+    const handleConvertirFacturaI = async (facturaInterna) => {
+      if (!facturaInterna || !facturaInterna.id || (isFetchingForConversion && fetchingPresupuestoId === facturaInterna.id)) return;
+
+      setFetchingPresupuestoId(facturaInterna.id);
+      setIsFetchingForConversion(true);
+
+      try {
+        const [cabecera, itemsDetalle] = await Promise.all([
+          fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ detail: "Error cabecera" }));
+              throw new Error(err.detail);
+            }
+            return res.json();
+          }),
+          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${facturaInterna.id}`).then(async (res) => {
+            if (!res.ok) return [];
+            return res.json();
+          }),
+        ]);
+
+        const facturaInternaConDetalle = {
+          ...(cabecera.venta || facturaInterna),
+          items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
+        };
+
+        const itemsConId = facturaInternaConDetalle.items.map((it, idx) => ({
+          ...it,
+          id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
+        }));
+
+        // Marcar que es conversión de factura interna
+        setConversionModal({ 
+          open: true, 
+          presupuesto: { 
+            ...facturaInternaConDetalle, 
+            items: itemsConId,
+            tipoConversion: 'factura_i_factura'
+          } 
+        });
+      } catch (error) {
+        console.error("Error al obtener detalle para conversión:", error);
+        alert(error.message);
+      } finally {
+        setIsFetchingForConversion(false);
+        setFetchingPresupuestoId(null);
+      }
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
@@ -868,6 +984,21 @@
                                             isFetchingForConversion && fetchingPresupuestoId === p.id
                                               ? "Cargando..."
                                               : "Convertir"
+                                          }
+                                        />
+                                        <BotonEliminar onClick={() => handleDelete(p.id)} />
+                                      </>
+                                    ) : esFacturaInternaConvertible(p) ? (
+                                      <>
+                                        <BotonImprimir onClick={() => handleImprimir(p)} />
+                                        <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                        <BotonConvertir
+                                          onClick={() => handleConvertirFacturaI(p)}
+                                          disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
+                                          title={
+                                            isFetchingForConversion && fetchingPresupuestoId === p.id
+                                              ? "Cargando..."
+                                              : "Convertir factura interna a factura fiscal"
                                           }
                                         />
                                         <BotonEliminar onClick={() => handleDelete(p.id)} />
@@ -1133,6 +1264,47 @@
                         itemsSeleccionados={tab.data.itemsSeleccionados}
                         onSave={(payload, tk) => {
                           handleConVentaFormSave(payload, tk)
+                        }}
+                        onCancel={() => handleConVentaFormCancel(tab.key)}
+                        comprobantes={comprobantes}
+                        ferreteria={null}
+                        clientes={clientes}
+                        plazos={plazos}
+                        vendedores={vendedores}
+                        sucursales={sucursales}
+                        puntosVenta={puntosVenta}
+                        loadingComprobantes={loadingComprobantes}
+                        errorComprobantes={errorComprobantes}
+                        productos={productos}
+                        loadingProductos={loadingProductos}
+                        familias={familias}
+                        loadingFamilias={loadingFamilias}
+                        proveedores={proveedores}
+                        loadingProveedores={loadingProveedores}
+                        alicuotas={alicuotas}
+                        loadingAlicuotas={loadingAlicuotas}
+                        errorProductos={errorProductos}
+                        errorFamilias={errorFamilias}
+                        errorProveedores={errorProveedores}
+                        errorAlicuotas={errorAlicuotas}
+                        autoSumarDuplicados={autoSumarDuplicados}
+                        setAutoSumarDuplicados={setAutoSumarDuplicados}
+                        tabKey={tab.key}
+                      />
+                    ),
+                )}
+                {tabs.map(
+                  (tab) =>
+                    activeTab === tab.key &&
+                    tab.tipo === "conv-factura-i" && (
+                      <ConVentaForm
+                        key={tab.key}
+                        facturaInternaOrigen={tab.data.facturaInternaOrigen}
+                        tipoConversion={tab.data.tipoConversion}
+                        itemsSeleccionados={tab.data.itemsSeleccionados}
+                        itemsSeleccionadosIds={tab.data.itemsSeleccionadosIds}
+                        onSave={(payload, tk, endpoint) => {
+                          handleConVentaFormSaveFacturaI(payload, tk, endpoint)
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}

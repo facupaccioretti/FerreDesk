@@ -43,6 +43,10 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
     vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
     vdi_idaliiva: idaliiva,
+    // NUEVO: Preservar metadatos de conversión para el backend
+    ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
+    ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
+    ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
     // ATENCIÓN: No incluir campos como 'cuit' o 'domicilio' en los ítems. Estos solo corresponden a la cabecera de la venta.
     // Si necesitas esos datos, agrégalos en el objeto principal de la venta, nunca en los ítems.
   };

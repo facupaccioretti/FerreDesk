@@ -38,6 +38,14 @@ const ConversionModal = ({
 }) => {
   const [selectedItems, setSelectedItems] = useState([])
 
+  // Detectar tipo de conversión
+  const esConversionFacturaI = presupuesto?.tipoConversion === 'factura_i_factura'
+  
+  // Textos dinámicos según el tipo de conversión
+  const titulo = esConversionFacturaI ? 'Convertir a Factura Fiscal' : 'Convertir a Venta'
+  const subtituloItems = esConversionFacturaI ? 'Ítems de la Factura Interna' : 'Ítems del Presupuesto'
+  const textoBoton = esConversionFacturaI ? 'Convertir a Factura' : 'Convertir a Venta'
+
   // Inicializar items seleccionados cuando se abre el modal
   useEffect(() => {
     if (open && presupuesto?.items) {
@@ -138,7 +146,7 @@ const ConversionModal = ({
                         </svg>
                       </div>
                       <Dialog.Title as="h2" className="text-xl font-bold text-slate-800">
-                        Convertir a Venta
+                        {titulo}
                       </Dialog.Title>
                     </div>
                     <button
@@ -195,7 +203,7 @@ const ConversionModal = ({
                 {/* Tabla de items compacta */}
                 <div className="px-5 py-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-slate-800">Ítems del Presupuesto</h3>
+                    <h3 className="text-base font-semibold text-slate-800">{subtituloItems}</h3>
                     <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
                       {selectedItems.length} de {presupuesto?.items?.length || 0} seleccionados
                     </span>
@@ -306,7 +314,7 @@ const ConversionModal = ({
                               {item.vdi_cantidad || item.cantidad}
                             </td>
                             <td className="px-3 py-2 text-sm text-slate-700 font-medium text-right">
-                              ${formatearMoneda(item.precio_unitario_lista || item.precio)}
+                              ${formatearMoneda(item.precioFinal ?? item.vdi_precio_unitario_final ?? item.precio)}
                             </td>
                             <td className="px-3 py-2 text-sm text-slate-600 text-center">
                               {item.vdi_bonifica || item.bonificacion}%
@@ -335,7 +343,7 @@ const ConversionModal = ({
                       disabled={selectedItems.length === 0}
                       className="px-5 py-2 rounded-lg text-white bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:transform-none"
                     >
-                      Convertir a Venta
+                      {textoBoton}
                     </button>
                   </div>
                 </div>

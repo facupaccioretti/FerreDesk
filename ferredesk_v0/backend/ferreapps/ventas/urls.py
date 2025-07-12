@@ -24,4 +24,5 @@ router.register(r'venta-calculada', VentaCalculadaViewSet)
 
 urlpatterns = router.urls + [
     path('convertir-presupuesto/', views.convertir_presupuesto_a_venta, name='convertir_presupuesto_a_venta'),
+    path('convertir-factura-interna/', views.convertir_factura_interna_a_fiscal, name='convertir_factura_interna'),
 ] 

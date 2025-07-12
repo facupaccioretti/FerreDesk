@@ -215,7 +215,7 @@ const EditarPresupuestoForm = ({
         ven_estado: formulario.estado || 'AB',
         ven_tipo: formulario.tipo || 'Presupuesto',
         tipo_comprobante: 'presupuesto',
-        comprobante_id: comprobanteCodigoAfip,
+        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
         ven_numero: Number.parseInt(formulario.numero, 10) || 1,
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,

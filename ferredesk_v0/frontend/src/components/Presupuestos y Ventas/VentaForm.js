@@ -327,18 +327,8 @@ const VentaForm = ({
           ? "factura"
           : "factura_interna"
       
-      // CORREGIDO: Usar el código AFIP determinado por la lógica fiscal
-      // En lugar del código del comprobante seleccionado manualmente
-      let comprobanteCodigoAfip = ""
-      if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
-        // Si hay lógica fiscal activa, usar el código AFIP determinado automáticamente
-        comprobanteCodigoAfip = fiscal.comprobanteFiscal.codigo_afip
-      } else {
-        // Si no hay lógica fiscal, usar el código del comprobante seleccionado manualmente
-        comprobanteCodigoAfip = comprobantesVenta.find((c) => c.id === comprobanteId)
-          ? comprobantesVenta.find((c) => c.id === comprobanteId).codigo_afip
-          : ""
-      }
+      // HÍBRIDO: Enviar solo el TIPO al backend, no código AFIP específico
+      // El backend ejecutará su propia lógica fiscal autoritaria
 
       // Definir constantes descriptivas para valores por defecto
       // Estado cerrado para ventas
@@ -350,8 +340,8 @@ const VentaForm = ({
       const payload = {
         ven_estado: ESTADO_VENTA_CERRADA, // Estado cerrado
         ven_tipo: TIPO_VENTA, // Tipo de operación
-        tipo_comprobante: tipoComprobanteSeleccionado, // "venta" o "factura"
-        comprobante_id: comprobanteCodigoAfip, // Código AFIP del comprobante
+        tipo_comprobante: tipoComprobanteSeleccionado, // "factura" o "factura_interna"
+        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante, // Número de comprobante
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1, // Sucursal
         ven_fecha: formulario.fecha, // Fecha

@@ -46,8 +46,9 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
           : Number(prod?.margen || 0);
     } // Si no es un producto de stock, margen ya es 0 por defecto.
 
-    // Alícuota id y porcentaje (prioriza alicuotasMap de la API, fallback a ALICUOTAS_POR_DEFECTO)
-    const idaliivaRawTmp = item.idaliiva ?? prod?.idaliiva ?? item.vdi_idaliiva ?? null;
+    // CORRECCIÓN: Priorizar IVA histórico del detalle de venta para mantener integridad fiscal
+    // Para ítems originales, usar el IVA que tenía al momento de la venta, no el actual del producto
+    const idaliivaRawTmp = item.vdi_idaliiva ?? item.idaliiva ?? prod?.idaliiva ?? null;
     const idAliVal = (idaliivaRawTmp && typeof idaliivaRawTmp === 'object') ? idaliivaRawTmp.id : idaliivaRawTmp;
     const idaliiva = Number(idAliVal) || 0;
     const aliPorc = alicuotasMap[idaliiva] ?? ALICUOTAS_POR_DEFECTO[idaliiva] ?? 0;
@@ -74,6 +75,10 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
             bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
             proveedorId: null,
             idaliiva,
+            // NUEVO: Preservar metadatos de conversión si existen
+            ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
+            ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
+            ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
         };
     }
 
@@ -112,9 +117,9 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     return {
       id: itemId,
       producto: prod,
-      codigo: prod
-        ? valorNoVacio(item.codigo) ?? prod?.codvta ?? prod?.codigo ?? ''
-        : (valorNoVacio(item.vdi_detalle1) ? '-' : ''),
+      // CORRECCIÓN: Mejorar mapeo de código para items originales
+      // Priorizar código del item, luego del producto, considerando diferentes campos fuente
+      codigo: valorNoVacio(item.codigo) ?? valorNoVacio(item.codvta) ?? prod?.codvta ?? prod?.codigo ?? '',
       denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? prod?.deno ?? prod?.nombre ?? '',
       unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? prod?.unidad ?? prod?.unidadmedida ?? '-',
       cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
@@ -128,6 +133,10 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
       bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
       proveedorId: item.vdi_idpro ?? item.proveedorId ?? null,
       idaliiva,
+      // NUEVO: Preservar metadatos de conversión si existen
+      ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
+      ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
+      ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
     };
   });
 }

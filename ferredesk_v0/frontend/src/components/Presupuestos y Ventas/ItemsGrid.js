@@ -53,11 +53,6 @@ const ItemsGridPresupuesto = forwardRef(
   ) => {
     // LOG NUEVO: Loggear las props recibidas cada vez que cambian
     useEffect(() => {
-      console.log('[ItemsGrid] Props recibidas:', {
-        initialItems: JSON.parse(JSON.stringify(initialItems ?? null)),
-        productosDisponibles,
-        modo,
-      });
     }, [initialItems, productosDisponibles, modo]);
 
     const esPresupuesto = modo === "presupuesto"
@@ -78,7 +73,6 @@ const ItemsGridPresupuesto = forwardRef(
         if (!hayVacio) {
           baseRows = [...baseRows, getEmptyRow()]
         }
-        console.log('[ItemsGrid] rows iniciales (sin re-normalización):', JSON.parse(JSON.stringify(baseRows)));
         return baseRows;
       }
       return [getEmptyRow()]
@@ -89,6 +83,9 @@ const ItemsGridPresupuesto = forwardRef(
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
+  const [mostrarTooltipOriginal, setMostrarTooltipOriginal] = useState({})
+  const [posicionTooltip, setPosicionTooltip] = useState({ x: 0, y: 0 })
+  const tooltipRefs = useRef({})
 
     // ------------------------------------------------------------
     // Helper: determina el ID de proveedor habitual desde el objeto
@@ -143,7 +140,9 @@ const ItemsGridPresupuesto = forwardRef(
 
     const addItemWithDuplicado = useCallback(
       (producto, proveedorId, cantidad = 1) => {
-        const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id)
+        // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
+        // para que "Sumar Cantidades" no funcione con items originales
+        const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id && !r.esBloqueado && !r.idOriginal)
         if (idxExistente !== -1) {
           if (autoSumarDuplicados === "sumar") {
             setRows((rows) =>
@@ -319,7 +318,6 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
-          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "precio") {
           const userInput = value
@@ -367,7 +365,6 @@ const ItemsGridPresupuesto = forwardRef(
           newRows[idx] = fila
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
-          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "bonificacion") {
           newRows[idx] = {
@@ -376,7 +373,6 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
-          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         } else if (field === "denominacion") {
           newRows[idx] = {
@@ -385,7 +381,6 @@ const ItemsGridPresupuesto = forwardRef(
           }
           const updatedRows = ensureSoloUnEditable(newRows)
           onRowsChange?.(updatedRows)
-          console.log(`[ItemsGrid] Cambio en fila ${idx}, campo ${field}:`, JSON.parse(JSON.stringify(newRows[idx])));
           return updatedRows
         }
         return newRows
@@ -501,8 +496,30 @@ const ItemsGridPresupuesto = forwardRef(
       }
     }
 
+    // Funciones para manejar el tooltip flotante
+    const handleMouseEnterTooltip = (idx, event) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setPosicionTooltip({
+        x: rect.left + rect.width / 2, // Centro del indicador
+        y: rect.bottom + 5 // Debajo del indicador
+      });
+      setMostrarTooltipOriginal(prev => ({...prev, [idx]: true}));
+    };
+
+    const handleMouseLeaveTooltip = (idx) => {
+      setMostrarTooltipOriginal(prev => ({...prev, [idx]: false}));
+    };
+
     // Eliminar ítem y dejar solo un renglón vacío si no quedan ítems
     const handleDeleteRow = (idx) => {
+      const row = rows[idx];
+      
+      // NUEVO: Verificar si el item está bloqueado
+      if (row.esBloqueado) {
+        alert('Este ítem proviene del comprobante original y no puede ser eliminado para mantener la trazabilidad de la conversión.');
+        return;
+      }
+      
       setRows((rows) => {
         const newRows = rows.filter((_, i) => i !== idx);
         onRowsChange?.(newRows);
@@ -568,8 +585,10 @@ const ItemsGridPresupuesto = forwardRef(
             const proveedores = getProveedoresProducto(prod.id, proveedorHabitualId)
             const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
             const proveedorId = proveedorHabitual ? proveedorHabitual.id : ""
+            // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
+            // para que "Sumar Cantidades" no funcione con items originales
             const idxExistente = rows.findIndex(
-              (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId,
+              (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId && !r.esBloqueado && !r.idOriginal,
             )
             if (idxExistente !== -1) {
               if (autoSumarDuplicados === "sumar") {
@@ -589,20 +608,37 @@ const ItemsGridPresupuesto = forwardRef(
               if (autoSumarDuplicados === "duplicar") {
                 setRows((prevRows) => {
                   const newRows = [...prevRows]
-                  newRows[idx] = {
+                  
+                  // ⭐ CORRECCIÓN: Calcular precio final igual que para items nuevos
+                  const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+                  const aliPorc = aliMap[aliId] || 0
+                  const precioBase = proveedorHabitual?.precio || 0
+                  const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+                  
+                  const itemCargado = {
                     ...newRows[idx],
                     codigo: prod.codvta || prod.codigo || "",
                     denominacion: prod.deno || prod.nombre || "",
                     unidad: prod.unidad || prod.unidadmedida || "-",
-                    precio: proveedorHabitual?.precio || 0,
+                    precio: precioBase,
+                    precioFinal: precioFinal, // ⭐ NUEVO: Agregar precioFinal calculado
                     vdi_costo: proveedorHabitual?.costo || 0,
                     margen: prod?.margen ?? 0,
                     cantidad: row.cantidad || 1,
                     bonificacion: 0,
                     producto: prod,
-                    idaliiva: typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3),
+                    idaliiva: aliId,
                     proveedorId: proveedorId,
                   }
+                  console.log('[ItemsGrid] ENTER presionado - Ítem DUPLICADO cargado:', {
+                    codigo: itemCargado.codigo,
+                    denominacion: itemCargado.denominacion,
+                    precio: itemCargado.precio,
+                    precioFinal: itemCargado.precioFinal,
+                    cantidad: itemCargado.cantidad,
+                    producto: prod.id
+                  })
+                  newRows[idx] = itemCargado
                   if (newRows.every(isRowLleno)) {
                     newRows.push(getEmptyRow())
                   }
@@ -625,7 +661,7 @@ const ItemsGridPresupuesto = forwardRef(
               const aliPorc = aliMap[aliId] || 0
               const precioBase = proveedorHabitual?.precio || 0
               const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
-              newRows[idx] = {
+              const itemCargado = {
                 ...newRows[idx],
                 codigo: prod.codvta || prod.codigo || "",
                 denominacion: prod.deno || prod.nombre || "",
@@ -640,6 +676,16 @@ const ItemsGridPresupuesto = forwardRef(
                 idaliiva: aliId,
                 proveedorId: proveedorHabitual ? proveedorHabitual.id : "",
               }
+              console.log('[ItemsGrid] ENTER presionado - Ítem NUEVO cargado:', {
+                codigo: itemCargado.codigo,
+                denominacion: itemCargado.denominacion,
+                precio: itemCargado.precio,
+                precioFinal: itemCargado.precioFinal,
+                cantidad: itemCargado.cantidad,
+                producto: prod.id,
+                proveedorId: itemCargado.proveedorId
+              })
+              newRows[idx] = itemCargado
               if (newRows.every(isRowLleno)) {
                 newRows.push(getEmptyRow())
               }
@@ -711,7 +757,6 @@ const ItemsGridPresupuesto = forwardRef(
         fila.precio = Number.isNaN(nuevoPrecioBase) ? 0 : Number(nuevoPrecioBase.toFixed(4))
         nuevos[idx] = fila
         onRowsChange?.(nuevos)
-        console.log(`[ItemsGrid] Cambio en fila ${idx}, campo idaliiva:`, JSON.parse(JSON.stringify(nuevos[idx])));
         return nuevos
       })
     }
@@ -912,6 +957,8 @@ const ItemsGridPresupuesto = forwardRef(
                       className={`transition-colors duration-200 hover:bg-slate-50/50 ${
                         isDuplicado(row, idx)
                           ? "bg-gradient-to-r from-red-50 to-red-100/50 border-l-4 border-red-400"
+                          : row.esBloqueado
+                          ? "bg-blue-50"
                           : ""
                       }`}
                     >
@@ -924,10 +971,16 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.codigo}
                           onChange={(e) => handleRowChange(idx, "codigo", e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                            row.esBloqueado 
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                          }`}
                           placeholder="Código"
                           aria-label="Código producto"
-                          tabIndex={0}
+                          tabIndex={row.esBloqueado ? -1 : 0}
+                          disabled={row.esBloqueado}
+                          readOnly={row.esBloqueado}
                           ref={(el) => (codigoRefs.current[idx] = el)}
                         />
                       </td>
@@ -941,9 +994,15 @@ const ItemsGridPresupuesto = forwardRef(
                             type="text"
                             value={row.denominacion}
                             onChange={(e) => handleRowChange(idx, "denominacion", e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                              row.esBloqueado 
+                                ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
+                                : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                            }`}
                             placeholder="Detalle"
                             aria-label="Detalle ítem genérico"
+                            disabled={row.esBloqueado}
+                            readOnly={row.esBloqueado}
                           />
                         )}
                       </td>
@@ -958,9 +1017,15 @@ const ItemsGridPresupuesto = forwardRef(
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "cantidad")}
                           /* Requerir al menos 1 si es ítem de stock o genérico con precio > 0 */
                           min={row.producto || (Number(row.precio) > 0) ? 1 : 0}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                            row.esBloqueado 
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                          }`}
                           aria-label="Cantidad"
-                          tabIndex={0}
+                          tabIndex={row.esBloqueado ? -1 : 0}
+                          disabled={row.esBloqueado}
+                          readOnly={row.esBloqueado}
                           ref={(el) => (cantidadRefs.current[idx] = el)}
                         />
                       </td>
@@ -979,13 +1044,18 @@ const ItemsGridPresupuesto = forwardRef(
                             handleRowChange(idx, "precio", e.target.value)
                           }}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
-                          className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 appearance-none"
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${
+                            row.esBloqueado 
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                          }`}
                           style={{
-                            MozAppearance: 'textfield',
-                            width: `${Math.max(String((row.precioFinal !== '' && row.precioFinal !== undefined ? row.precioFinal : (row.precio !== '' && row.precio !== undefined ? (Math.round((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100)) * 100) / 100) : ''))).toString().length, 10)}ch`,
+                            MozAppearance: 'textfield'
                           }}
                           aria-label="Precio Unitario"
-                          tabIndex={0}
+                          tabIndex={row.esBloqueado ? -1 : 0}
+                          disabled={row.esBloqueado}
+                          readOnly={row.esBloqueado}
                           placeholder={row.producto ? "" : ""}
                         />
                       </td>
@@ -998,9 +1068,15 @@ const ItemsGridPresupuesto = forwardRef(
                           min="0"
                           max="100"
                           step="0.01"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                            row.esBloqueado 
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                          }`}
                           aria-label="Bonificación particular"
-                          tabIndex={0}
+                          tabIndex={row.esBloqueado ? -1 : 0}
+                          disabled={row.esBloqueado}
+                          readOnly={row.esBloqueado}
                         />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
@@ -1013,12 +1089,14 @@ const ItemsGridPresupuesto = forwardRef(
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">
                         {(() => {
                           const alicuotaId = row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0
-                          if (!row.producto && Number(row.precio) > 0) {
+                          // CORRECCIÓN: Items bloqueados siempre muestran IVA fijo, no dropdown
+                          // Solo items genéricos NO bloqueados muestran el dropdown
+                          if (!row.producto && Number(row.precio) > 0 && !row.esBloqueado) {
                             return (
                               <select
                                 value={alicuotaId}
                                 onChange={(e) => handleIvaChange(idx, Number(e.target.value))}
-                                className="px-2 py-1 border border-slate-300 rounded-xl bg-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                className="px-2 py-1 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                               >
                                 {[3,4,5,6].filter(id=>aliMap[id]!==undefined).map(id => (
                                   <option key={id} value={id}>{aliMap[id]}%</option>
@@ -1026,6 +1104,7 @@ const ItemsGridPresupuesto = forwardRef(
                               </select>
                             )
                           }
+                          // Para items de stock o items bloqueados, mostrar solo el porcentaje fijo
                           const aliPorc = aliMap[alicuotaId] || 0
                           return aliPorc + "%"
                         })()}
@@ -1041,8 +1120,32 @@ const ItemsGridPresupuesto = forwardRef(
                         <div className="flex items-center justify-center gap-2">
                           {isRowLleno(row) && (
                             <>
-                              <BotonDuplicar onClick={() => handleDuplicarRow(idx)} />
-                              <BotonEliminar onClick={() => handleDeleteRow(idx)} />
+                              {row.esBloqueado ? (
+                                <div 
+                                  className="flex items-center gap-1 text-xs text-blue-600 font-medium cursor-pointer"
+                                  onMouseEnter={(e) => handleMouseEnterTooltip(idx, e)}
+                                  onMouseLeave={() => handleMouseLeaveTooltip(idx)}
+                                >
+                                  <span>Original</span>
+                                  <div className="w-4 h-4 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center transition-colors duration-200">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth="1.5"
+                                      stroke="currentColor"
+                                      className="w-2.5 h-2.5 text-blue-600"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <BotonDuplicar onClick={() => handleDuplicarRow(idx)} />
+                                  <BotonEliminar onClick={() => handleDeleteRow(idx)} />
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -1053,7 +1156,23 @@ const ItemsGridPresupuesto = forwardRef(
               </tbody>
             </table>
           </div>
-        </div>
+                </div>
+
+        {/* Tooltip flotante global para items originales */}
+        {Object.values(mostrarTooltipOriginal).some(Boolean) && (
+          <div 
+            className="fixed z-[9999] bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none whitespace-nowrap"
+            style={{
+              left: `${posicionTooltip.x}px`,
+              top: `${posicionTooltip.y}px`, // Debajo del indicador
+              transform: 'translateX(-50%)' // Centrado horizontalmente
+            }}
+          >
+            Ítem original de factura interna - No editable, no se puede eliminar ni duplicar
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-b-4 border-b-slate-800"></div>
+          </div>
+        )}
+        
       </div>
     )
   },

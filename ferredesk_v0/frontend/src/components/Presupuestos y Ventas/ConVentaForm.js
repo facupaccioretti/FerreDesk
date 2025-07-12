@@ -17,6 +17,8 @@ const ConVentaForm = ({
   onSave,
   onCancel,
   presupuestoOrigen,
+  facturaInternaOrigen,  // NUEVO: para conversiones de facturas internas
+  tipoConversion,        // NUEVO: 'presupuesto_venta' | 'factura_i_factura'
   itemsSeleccionados,
   itemsSeleccionadosIds,
   comprobantes,
@@ -62,6 +64,10 @@ const ConVentaForm = ({
       : {}
   ), [alicuotasIVA]);
 
+  // Determinar origen de datos
+  const origenDatos = facturaInternaOrigen || presupuestoOrigen;
+  const esConversionFacturaI = tipoConversion === 'factura_i_factura';
+
   // Usar el hook useFormularioDraft
   const { 
     formulario, 
@@ -70,7 +76,7 @@ const ConVentaForm = ({
     actualizarItems 
   } = useFormularioDraft({
     claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
-    datosIniciales: presupuestoOrigen,
+    datosIniciales: origenDatos,
     combinarConValoresPorDefecto: (data) => {
       if (!data) return {
         numero: '',
@@ -108,12 +114,21 @@ const ConVentaForm = ({
         fecha: new Date().toISOString().split('T')[0],
         estado: 'Abierto',
         tipo: 'Venta',
-        items: normalizarItems(itemsSeleccionados, { productos, alicuotasMap, modo: 'venta' }),
+        items: normalizarItems(itemsSeleccionados, { 
+          productos, 
+          alicuotasMap, 
+          modo: 'venta',
+          // NUEVO: metadata para conversión de facturas internas
+          metadataConversion: esConversionFacturaI ? {
+            tipoConversion: 'factura_i_factura',
+            facturaInternaOrigenId: facturaInternaOrigen?.id
+          } : null
+        }),
         cae: '',
         total: 0,
       };
     },
-    parametrosPorDefecto: [productos, alicuotasMap, presupuestoOrigen, itemsSeleccionados, sucursales, puntosVenta],
+    parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
     normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap, modo: 'venta' }),
     validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
   });
@@ -179,17 +194,27 @@ const ConVentaForm = ({
   // Efecto de inicialización sincronizada (similar a VentaForm)
   useEffect(() => {
     if (!inicializado && comprobantesVenta.length > 0) {
-      const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
-      if (compFactura) {
-        setTipoComprobante('factura');
-        setComprobanteId(compFactura.id);
+      // Si es conversión de factura interna, forzar tipo 'factura'
+      if (esConversionFacturaI) {
+        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
+        if (compFactura) {
+          setTipoComprobante('factura');
+          setComprobanteId(compFactura.id);
+        }
       } else {
-        setTipoComprobante('venta');
-        setComprobanteId(comprobantesVenta[0].id);
+        // Para presupuestos, lógica normal
+        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
+        if (compFactura) {
+          setTipoComprobante('factura');
+          setComprobanteId(compFactura.id);
+        } else {
+          setTipoComprobante('venta');
+          setComprobanteId(comprobantesVenta[0].id);
+        }
       }
       setInicializado(true);
     }
-  }, [inicializado, comprobantesVenta]);
+  }, [inicializado, comprobantesVenta, esConversionFacturaI]);
 
   // Mantener comprobanteId sincronizado con tipoComprobante (segunda fase)
   useEffect(() => {
@@ -199,9 +224,9 @@ const ConVentaForm = ({
     }
   }, [tipoComprobante, comprobantesVenta, comprobanteId]);
 
-  // Obtener comprobante seleccionado y su código AFIP
+  // HÍBRIDO: useComprobanteFiscal solo para preview visual
+  // El backend ejecutará su propia lógica fiscal autoritaria
   const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-  const comprobanteCodigoAfip = compSeleccionado?.codigo_afip || '';
 
   // Calcular el número de comprobante basado en el último número del comprobante seleccionado
   const numeroComprobante = useMemo(() => {
@@ -274,7 +299,7 @@ const ConVentaForm = ({
         ven_estado: ESTADO_VENTA_CERRADA,
         ven_tipo: TIPO_VENTA,
         tipo_comprobante: tipoComprobante,
-        comprobante_id: comprobanteCodigoAfip,
+        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
         ven_sucursal: formulario.sucursalId || 1,
         ven_fecha: formulario.fecha,
@@ -293,15 +318,32 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        presupuesto_origen: presupuestoOrigen.id,
-        items_seleccionados: idsSeleccionados,
         permitir_stock_negativo: false
       };
+
+      // NUEVO: Incluir metadata de conversión para facturas internas
+      if (esConversionFacturaI) {
+        payload.factura_interna_origen = facturaInternaOrigen.id;
+        payload.tipo_conversion = 'factura_i_factura';
+        payload.items_seleccionados = idsSeleccionados;
+        payload.conversion_metadata = {
+          items_originales: items.filter(item => item.idOriginal).map(item => ({
+            id_original: item.idOriginal,
+            no_descontar_stock: item.noDescontarStock
+          }))
+        };
+      } else {
+        payload.presupuesto_origen = presupuestoOrigen.id;
+        payload.items_seleccionados = idsSeleccionados;
+      }
 
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
 
-      await onSave(payload, tabKey);
+      // Llamar al endpoint apropiado
+      const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
+      
+      await onSave(payload, tabKey, endpoint);
       onCancel();
     } catch (error) {
       console.error('Error al guardar venta:', error);
@@ -320,11 +362,21 @@ const ConVentaForm = ({
     }
   };
 
-  // Opciones fijas para el dropdown
-  const opcionesComprobante = [
-    { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
-    { value: 'factura', label: 'Factura', tipo: 'factura' }
-  ];
+  // Opciones dinámicas para el dropdown según tipo de conversión
+  const opcionesComprobante = useMemo(() => {
+    // Si es conversión de factura interna, solo permitir factura
+    if (esConversionFacturaI) {
+      return [
+        { value: 'factura', label: 'Factura', tipo: 'factura' }
+      ];
+    }
+    
+    // Si es conversión de presupuesto, permitir ambas opciones
+    return [
+      { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
+      { value: 'factura', label: 'Factura', tipo: 'factura' }
+    ];
+  }, [esConversionFacturaI]);
 
   const isReadOnly = formulario.estado === 'Cerrado';
 
@@ -398,7 +450,7 @@ const ConVentaForm = ({
               <div className="absolute top-6 right-6 z-10">
                 <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
                   <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{comprobanteLetra}</span>
-                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {comprobanteCodigoAfip || ''}</span>
+                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {usarFiscal && fiscal.comprobanteFiscal ? fiscal.comprobanteFiscal.codigo_afip : (compSeleccionado?.codigo_afip || '')}</span>
                 </div>
               </div>
             )}
@@ -423,7 +475,7 @@ const ConVentaForm = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
                   </svg>
                 </div>
-                Conversión de Presupuesto a Venta
+{esConversionFacturaI ? 'Conversión de Factura Interna a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
@@ -601,7 +653,7 @@ const ConVentaForm = ({
                     opciones={opcionesComprobante}
                     value={tipoComprobante}
                     onChange={setTipoComprobante}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || esConversionFacturaI}
                     className="w-full max-w-[120px]"
                   />
                 </div>

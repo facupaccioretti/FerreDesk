@@ -61,6 +61,19 @@ const REQUISITOS_POR_TIPO = {
   }
 };
 
+/**
+ * Hook híbrido para lógica fiscal de comprobantes
+ * 
+ * PROPÓSITO:
+ * - Frontend: Preview visual en tiempo real (badge, validaciones)
+ * - Backend: Lógica fiscal autoritaria (determina comprobante final)
+ * 
+ * FLUJO:
+ * 1. Frontend muestra preview usando este hook
+ * 2. Frontend envía solo TIPO al backend (no código AFIP)
+ * 3. Backend ejecuta su propia lógica fiscal independientemente
+ * 4. Si hay discrepancia, el backend siempre gana
+ */
 export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const [letra, setLetra] = useState('');
   const [codigoAfip, setCodigoAfip] = useState('');
