@@ -10,7 +10,7 @@ from .serializers import (
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 
 # Create your views here.
 
@@ -106,6 +106,21 @@ class ClienteViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         except Cliente.DoesNotExist:
             return Response({'error': 'Cliente por defecto no encontrado'}, status=404)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un cliente
+        tiene movimientos comerciales asociados.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El cliente no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
 
 class BarrioList(generics.ListAPIView):
     queryset = Barrio.objects.all()

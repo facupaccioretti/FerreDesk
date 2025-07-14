@@ -112,9 +112,16 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def get_cliente_nombre(self, obj):
         try:
-            cliente = Cliente.objects.get(id=obj.ven_idcli)
-            return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
-        except Cliente.DoesNotExist:
+            # Después de la migración 0045, ven_idcli es un ForeignKey (objeto Cliente)
+            # Antes era un IntegerField (ID)
+            if hasattr(obj.ven_idcli, 'razon'):
+                # Es un objeto Cliente (ForeignKey)
+                return obj.ven_idcli.razon if hasattr(obj.ven_idcli, 'razon') else str(obj.ven_idcli)
+            else:
+                # Es un ID (IntegerField) - caso legacy
+                cliente = Cliente.objects.get(id=obj.ven_idcli)
+                return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
+        except (Cliente.DoesNotExist, AttributeError):
             return ''
 
     def get_vendedor_nombre(self, obj):

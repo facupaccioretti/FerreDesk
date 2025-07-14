@@ -92,7 +92,12 @@ export function useClientesAPI(filtrosIniciales = {}) {
         let errorMsg = 'Error al eliminar cliente';
         try {
           const data = await res.json();
-          errorMsg = data.detail || JSON.stringify(data);
+          // Manejo específico para el error de restricción de movimientos comerciales
+          if (data.error && data.error.includes('movimientos comerciales')) {
+            errorMsg = data.error;
+          } else {
+            errorMsg = data.detail || data.error || JSON.stringify(data);
+          }
         } catch (e) {}
         throw new Error(errorMsg);
       }

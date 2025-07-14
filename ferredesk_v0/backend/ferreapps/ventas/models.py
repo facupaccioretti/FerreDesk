@@ -62,7 +62,12 @@ class Venta(models.Model):
     ven_vdocomvta = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMVTA')
     ven_vdocomcob = models.DecimalField(max_digits=4, decimal_places=2, db_column='VEN_VDOCOMCOB')
     ven_estado = models.CharField(max_length=2, db_column='VEN_ESTADO', null=True, blank=True)
-    ven_idcli = models.IntegerField(db_column='VEN_IDCLI')
+    ven_idcli = models.ForeignKey(
+        'clientes.Cliente',
+        on_delete=models.PROTECT,
+        db_column='VEN_IDCLI',
+        related_name='ventas'
+    )
     ven_cuit = models.CharField(max_length=20, db_column='VEN_CUIT', blank=True, null=True)
     ven_domicilio = models.CharField(max_length=100, db_column='VEN_DOMICILIO', blank=True, null=True)
     ven_idpla = models.IntegerField(db_column='VEN_IDPLA')
