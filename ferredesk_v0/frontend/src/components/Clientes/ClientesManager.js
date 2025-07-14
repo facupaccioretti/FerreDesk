@@ -28,6 +28,14 @@ const ClientesManager = () => {
   // Hook centralizado de clientes (alta / edición / eliminación)
   const { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI()
 
+  // Mostrar errores como alert nativo del navegador
+  useEffect(() => {
+    if (error) {
+      window.alert(error)
+      clearError()
+    }
+  }, [error, clearError])
+
   // Búsqueda
   const [search, setSearch] = useState("")
   const [searchInactivos, setSearchInactivos] = useState("")
@@ -158,6 +166,8 @@ const ClientesManager = () => {
     }, 300) // Debounce simple
     return () => clearTimeout(timeout)
   }, [search])
+
+  // Eliminar cualquier renderizado visual de error relacionado a 'error' en la UI
 
   // ---------- Render ----------
   return (

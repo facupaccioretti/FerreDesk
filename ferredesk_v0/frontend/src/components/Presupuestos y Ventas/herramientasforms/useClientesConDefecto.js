@@ -11,6 +11,7 @@ export function useClientesConDefecto() {
     loading: loadingGenerales,
     error: errorGenerales,
     fetchClientePorDefecto,
+    clearError
   } = useClientesAPI({ con_ventas: 1 });
   const [clientePorDefecto, setClientePorDefecto] = useState(null);
   const [loadingDefecto, setLoadingDefecto] = useState(false);
@@ -23,6 +24,18 @@ export function useClientesConDefecto() {
       .catch(err => setErrorDefecto(err?.message || 'Error al cargar cliente por defecto'))
       .finally(() => setLoadingDefecto(false));
   }, [fetchClientePorDefecto]);
+
+  // Mostrar errores como alert nativo
+  useEffect(() => {
+    if (errorGenerales) {
+      window.alert(errorGenerales);
+      clearError();
+    }
+    if (errorDefecto) {
+      window.alert(errorDefecto);
+      setErrorDefecto(null);
+    }
+  }, [errorGenerales, errorDefecto, clearError]);
 
   // Combinar ambas listas, evitando duplicados por ID
   const clientes = [
