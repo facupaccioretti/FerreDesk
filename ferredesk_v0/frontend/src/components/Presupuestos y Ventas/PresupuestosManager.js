@@ -878,24 +878,24 @@
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px" }}>
-                        <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
+                        <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
                           <tr>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               Comprobante
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               N°
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               Fecha
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               Cliente
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               Total
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
                               Acciones
                             </th>
                           </tr>
@@ -929,7 +929,7 @@
                             const tieneFacturasAnuladas = facturasAnuladas.length > 0
 
                             return (
-                              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                              <tr key={p.id} className="hover:bg-slate-100">
                                 {/* Comprobante */}
                                 <td className="px-3 py-1 whitespace-nowrap">
                                   <div className="flex items-center">

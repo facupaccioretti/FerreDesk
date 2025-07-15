@@ -6,6 +6,7 @@ import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -96,26 +97,11 @@ const VentaForm = ({
   const [comprobanteId, setComprobanteId] = useState("")
 
   // Función para normalizar items
-  const normalizarItems = (items) => {
-    return items.map((item, idx) => {
-      // Si ya tiene producto, dejarlo
-      if (item.producto) return { ...item, id: item.id || idx + 1 }
-      // Buscar producto por código si es posible
-      let prod = null
-      if (item.codigo || item.codvta) {
-        prod = productos.find((p) => (p.codvta || p.codigo)?.toString() === (item.codigo || item.codvta)?.toString())
-      }
-      return {
-        id: item.id || idx + 1,
-        producto: prod || undefined,
-        codigo: item.codigo || item.codvta || (prod ? prod.codvta || prod.codigo : ""),
-        denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ""),
-        unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ""),
-        cantidad: item.cantidad || 1,
-        costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
-        bonificacion: item.vdi_bonifica || 0,
-        subtotal: item.subtotal || 0,
-      }
+  const normalizarItemsVenta = (items) => {
+    return normalizarItems(items, { 
+      productos, 
+      modo: 'venta', 
+      alicuotasMap 
     })
   }
 
@@ -125,7 +111,7 @@ const VentaForm = ({
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
-    normalizarItems,
+    normalizarItems: normalizarItemsVenta,
   })
 
   const alicuotasMap = useMemo(
@@ -191,21 +177,7 @@ const VentaForm = ({
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados])
 
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
-  useEffect(() => {
-    if (!formulario.clienteId && clientesConDefecto.length > 0) {
-      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
-      if (mostrador) {
-        setFormulario((prev) => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || "",
-          domicilio: mostrador.domicilio || "",
-          plazoId: mostrador.plazoId || mostrador.plazo || "",
-        }))
-      }
-    }
-  }, [clientesConDefecto, formulario.clienteId, setFormulario])
+
 
   // Sincronizar comprobanteId con el tipo de comprobante seleccionado
   useEffect(() => {
@@ -236,8 +208,7 @@ const VentaForm = ({
   // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
   const clienteSeleccionado =
     clientes.find((c) => String(c.id) === String(formulario.clienteId)) ||
-    clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId)) ||
-    clientesConDefecto.find((c) => String(c.id) === "1") // Mostrador por defecto
+    clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
 
   // Construir objeto para validación fiscal con datos actuales del formulario
   const clienteParaFiscal = useMemo(() => {
@@ -398,6 +369,22 @@ const VentaForm = ({
     { value: "factura_interna", label: "Factura Interna", tipo: "factura_interna", letra: "I" },
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
+
+  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  useEffect(() => {
+    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
+      if (mostrador) {
+        setFormulario((prev) => ({
+          ...prev,
+          clienteId: mostrador.id,
+          cuit: mostrador.cuit || "",
+          domicilio: mostrador.domicilio || "",
+          plazoId: mostrador.plazoId || mostrador.plazo || "",
+        }))
+      }
+    }
+  }, [clientesConDefecto, formulario.clienteId, setFormulario])
 
   // Renderizado condicional al final
   if (isLoading) {

@@ -24,6 +24,13 @@ function getEmptyRow() {
     bonificacion: 0,
     producto: null,
     idaliiva: 3,          // 0 % por defecto
+    // CORRECCIÓN: Inicializar explícitamente todos los campos de ID como null
+    proveedorId: null,
+    vdi_idsto: null,
+    vdi_idpro: null,
+    idSto: null,
+    vdi_costo: null,
+    margen: null,
   }
 }
 
@@ -312,7 +319,10 @@ const ItemsGridPresupuesto = forwardRef(
                   precio: "",
                   cantidad: 1,
                   bonificacion: 0,
-                  proveedorId: "",
+                  proveedorId: null, // <--- null en vez de ""
+                  id: null,         // <--- null en vez de ""
+                  idSto: null,      // <--- null en vez de ""
+                  vdi_idsto: null,  // <--- null en vez de ""
                 }
               : {}),
           }
@@ -393,7 +403,7 @@ const ItemsGridPresupuesto = forwardRef(
         const proveedorHabitualId = getProveedorHabitualId(producto)
         const proveedores = getProveedoresProducto(producto.id, proveedorHabitualId)
         const proveedor = proveedores[0] // Siempre será el proveedor habitual
-        const proveedorId = proveedor ? proveedor.id : ""
+        const proveedorId = proveedor ? proveedor.id : null
         const cantidad = 1
         const totalStock = proveedor ? Number(proveedor.stock) : 0
         if (cantidad > totalStock) {
@@ -584,7 +594,7 @@ const ItemsGridPresupuesto = forwardRef(
             const proveedorHabitualId = getProveedorHabitualId(prod)
             const proveedores = getProveedoresProducto(prod.id, proveedorHabitualId)
             const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
-            const proveedorId = proveedorHabitual ? proveedorHabitual.id : ""
+            const proveedorId = proveedorHabitual ? proveedorHabitual.id : null
             // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
             // para que "Sumar Cantidades" no funcione con items originales
             const idxExistente = rows.findIndex(
@@ -674,7 +684,7 @@ const ItemsGridPresupuesto = forwardRef(
                 bonificacion: 0,
                 producto: prod,
                 idaliiva: aliId,
-                proveedorId: proveedorHabitual ? proveedorHabitual.id : "",
+                proveedorId: proveedorHabitual ? proveedorHabitual.id : null,
               }
               console.log('[ItemsGrid] ENTER presionado - Ítem NUEVO cargado:', {
                 codigo: itemCargado.codigo,

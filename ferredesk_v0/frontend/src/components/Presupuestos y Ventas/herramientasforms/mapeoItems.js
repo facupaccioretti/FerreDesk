@@ -19,7 +19,16 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   if (idaliiva && typeof idaliiva === 'object') {
     idaliiva = idaliiva.id;
   }
-  const vdi_costo = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? 0);
+  
+  // VALOR POR DEFECTO PARA COSTOS INVÁLIDOS
+  const COSTO_POR_DEFECTO = 0;
+  
+  const vdi_costo = (() => {
+    const valor = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? COSTO_POR_DEFECTO);
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : COSTO_POR_DEFECTO;
+  })();
+  
   console.log('[mapearCamposItem] vdi_costo calculado:', vdi_costo);
 
   // Lista de campos permitidos. Se mantiene como referencia estática
@@ -33,8 +42,8 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   const camposMapeados = {
     vdi_idve: item.vdi_idve ?? null,
     vdi_orden: idx + 1,
-    vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
-    vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
+    vdi_idsto: (item.producto?.id && item.producto?.id !== '') ? item.producto?.id : (item.idSto && item.idSto !== '') ? item.idSto : (item.vdi_idsto && item.vdi_idsto !== '') ? item.vdi_idsto : (item.idsto && item.idsto !== '') ? item.idsto : null,
+    vdi_idpro: (item.proveedorId && item.proveedorId !== '') ? item.proveedorId : (item.idPro && item.idPro !== '') ? item.idPro : (item.vdi_idpro && item.vdi_idpro !== '') ? item.vdi_idpro : null,
     vdi_cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
     vdi_costo: vdi_costo,
     vdi_margen: item.margen ?? item.vdi_margen ?? (item.producto?.margen ?? 0),

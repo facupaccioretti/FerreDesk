@@ -3,6 +3,7 @@ import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { normalizarItems } from './herramientasforms/normalizadorItems';
 import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
@@ -36,48 +37,31 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
 };
 
 // Función de normalización adaptada para Nota de Crédito
-function normalizarItems(itemsSeleccionados, productosDisponibles = []) {
-  if (!Array.isArray(itemsSeleccionados)) return [];
-  return itemsSeleccionados.map((item, idx) => {
-    let prod = item.producto || (productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id))) || null;
-
-    // Para NC, el margen suele ser 0, y el costo es el precio de devolución.
-    const margen = item.margen ?? 0;
-    
-    // El precio base es el que se ingresa en la grilla.
-    let precioBase = item.precio || item.costo || 0;
-
-    if (!precioBase && prod?.costo) {
-      precioBase = parseFloat(prod.costo) * (1 + parseFloat(margen) / 100);
-    }
-
-    // Asegurar que idaliiva sea numérico
-    const idaliivaRaw = prod?.idaliiva ?? item.vdi_idaliiva ?? item.idaliiva ?? null;
-    const idaliiva = (idaliivaRaw && typeof idaliivaRaw === 'object') ? idaliivaRaw.id : idaliivaRaw;
-
-    const costoFinal = item.costo ?? item.vdi_costo ?? precioBase ?? 0;
-
-    const obj = {
-      id: item.id || idx + Date.now(),
-      producto: prod,
-      codigo: item.codigo || prod?.codvta || '',
-      denominacion: item.denominacion || prod?.deno || item.detalle1 || '',
-      unidad: item.unidad || prod?.unidad || '-',
-      cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: precioBase,
-      // CRÍTICO: Asegurar que el costo se mapee desde el precio para genéricos.
-      costo: costoFinal,
-      vdi_costo: costoFinal,
-      margen: margen,
-      bonificacion: item.bonificacion || item.vdi_bonifica || 0,
-      proveedorId: item.proveedorId || item.vdi_idpro || null,
-      idaliiva: idaliiva,
-      precioFinal: item.precioFinal, // Mantener el precio con IVA que calcula la grilla
-    };
-
-    return obj;
+function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
+  return normalizarItems(itemsSeleccionados, { 
+    productos: productosDisponibles, 
+    modo: 'nota_credito', 
+    alicuotasMap 
   });
 }
+
+// Definir constantes descriptivas para tipos y letras de comprobantes
+const TIPO_NOTA_CREDITO = 'nota_credito';
+const TIPO_NOTA_CREDITO_INTERNA = 'nota_credito_interna';
+const LETRAS_FISCALES = ['A', 'B', 'C'];
+const LETRA_INTERNA = 'I';
+
+// Utilidad para determinar el tipo de nota de crédito y la letra según las facturas asociadas
+const obtenerTipoYLetraNotaCredito = (facturasAsociadas) => {
+  if (!facturasAsociadas || facturasAsociadas.length === 0) {
+    return { tipo: TIPO_NOTA_CREDITO, letra: null };
+  }
+  const letras = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
+  if (letras.length > 1) return { tipo: null, letra: null };
+  if (letras[0] === LETRA_INTERNA) return { tipo: TIPO_NOTA_CREDITO_INTERNA, letra: LETRA_INTERNA };
+  if (LETRAS_FISCALES.includes(letras[0])) return { tipo: TIPO_NOTA_CREDITO, letra: letras[0] };
+  return { tipo: TIPO_NOTA_CREDITO, letra: letras[0] };
+};
 
 const NotaCreditoForm = ({
   onSave,
@@ -111,7 +95,7 @@ const NotaCreditoForm = ({
     datosIniciales: getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos),
     combinarConValoresPorDefecto: (data) => ({ ...getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos), ...data }),
     parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItems(items, productos),
+    normalizarItems: (items) => normalizarItemsNC(items, productos, alicuotasMap),
     validarBorrador: (borradorGuardado) => {
       return borradorGuardado.clienteId === clienteSeleccionado?.id;
     }
@@ -152,41 +136,13 @@ const NotaCreditoForm = ({
   }, [productos]);
 
   // Lógica mejorada para determinar el tipo de NC automáticamente
-  const determinarTipoNC = useMemo(() => {
-    if (!facturasAsociadas || facturasAsociadas.length === 0) {
-      // Sin facturas asociadas, usar NC genérica
-      return comprobantes.find(c => c.tipo === 'nota_credito');
-    }
-    
-    // Obtener letras de todas las facturas asociadas
-    const letrasFacturas = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
-    
-    // Validar que todas tengan la misma letra
-    if (letrasFacturas.length > 1) {
-      console.error('Facturas con letras inconsistentes:', letrasFacturas);
-      return null; // Error, se manejará en el render
-    }
-    
-    const letraFactura = letrasFacturas[0];
-    
-    // Determinar tipo de NC según letra de factura
-    if (letraFactura === 'I') {
-      // Factura Interna → NC Interna
-      return comprobantes.find(c => 
-        c.tipo === 'nota_credito_interna' && c.letra === 'NC'
-      );
-    } else if (['A', 'B', 'C'].includes(letraFactura)) {
-      // Factura fiscal → NC fiscal con misma letra
-      return comprobantes.find(c => 
-        c.tipo === 'nota_credito' && c.letra === letraFactura
-      );
-    }
-    
-    // Fallback
-    return comprobantes.find(c => c.tipo === 'nota_credito');
-  }, [comprobantes, facturasAsociadas]);
+  const { tipo: tipoNotaCredito, letra: letraNotaCredito } = useMemo(() => obtenerTipoYLetraNotaCredito(facturasAsociadas), [facturasAsociadas]);
 
-  const comprobanteNC = determinarTipoNC;
+  const comprobanteNC = useMemo(() => {
+    if (!tipoNotaCredito) return null;
+    // Buscar comprobante que coincida con tipo y letra
+    return comprobantes.find(c => c.tipo === tipoNotaCredito && (letraNotaCredito ? c.letra === letraNotaCredito : true));
+  }, [comprobantes, tipoNotaCredito, letraNotaCredito]);
   
   const comprobanteIdNC = comprobanteNC?.id || null;
   const codigoAfipNC = comprobanteNC?.codigo_afip || '';

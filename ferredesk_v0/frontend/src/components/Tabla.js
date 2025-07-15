@@ -1,44 +1,20 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
+import { Search, ArrowUpDown } from "lucide-react"
 import Paginador from "./Paginador"
 
 // -----------------------------------------------------------------------------
-// Constantes de estilo
+// Constantes de estilo FerreDesk
 // -----------------------------------------------------------------------------
-// Espaciados básicos aplicados a todas las celdas.  Mantener aquí para que un
-// cambio visual se propague de inmediato a todas las tablas.
-const ESPACIO_HORIZONTAL_CELDA = "px-2"  // Clase Tailwind para padding-x
-const ESPACIO_VERTICAL_CELDA   = "py-1"  // Clase Tailwind para padding-y
+const ESPACIO_HORIZONTAL_CELDA = "px-3"
+const ESPACIO_VERTICAL_CELDA = "py-2"
 
-// Clases comunes que comparten todas las celdas (texto pequeño y «nowrap» para
-// un diseño compacto).
-const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700`
+const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
 
 // -----------------------------------------------------------------------------
-// Tabla genérica y compacta
+// Tabla genérica con estética FerreDesk
 // -----------------------------------------------------------------------------
-/**
- * Componente de tabla genérico y compacto.
- *
- * Props principales:
- *  - columnas: Array<{
- *      id: string                 // clave del dato (ignorar si usa render)
- *      titulo: string             // encabezado visible
- *      ancho?: string             // ej. '120px' (Tailwind permite 'w-24', etc.)
- *      align?: 'left'|'center'|'right'
- *      render?: (fila, indiceVisible, indiceGlobal) => ReactNode  // celda custom
- *      // NOTA: si deseas manejar filas de detalle, define renderFila en Tabla
- *    }>
- *  - datos: Array<Object>         // filas a renderizar
- *  - valorBusqueda: string        // término de búsqueda
- *  - onCambioBusqueda: Function   // callback al cambiar búsqueda
- *  - filasPorPaginaInicial: number
- *  - opcionesFilasPorPagina: number[]
- *  - renderFila?: (fila, indiceVisible, indiceGlobal) => ReactNode | ReactNode[]
- *                 // Si se provee, Tabla delega completamente el render de las
- *                 // filas a esta función, permitiendo filas adicionales.
- */
 const Tabla = ({
   columnas = [],
   datos = [],
@@ -50,62 +26,81 @@ const Tabla = ({
   renderFila = null,
   mostrarBuscador = true,
 }) => {
-  // ---------------------------------------------------------------------------
-  // Estado de búsqueda, página actual y filas por página
-  // ---------------------------------------------------------------------------
   const [paginaActual, setPaginaActual] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
+  const [ordenAscendente, setOrdenAscendente] = useState(false)
 
-  // Reiniciar a página 1 cuando cambian el término de búsqueda o la fuente de datos
   useEffect(() => {
     setPaginaActual(1)
   }, [valorBusqueda, datos])
 
-  // ---------------------------------------------------------------------------
-  // Filtro rápido: convierte fila a string y busca «valorBusqueda»
-  // ---------------------------------------------------------------------------
   const datosFiltrados = useMemo(() => {
-    if (!valorBusqueda) return datos
-    const termino = valorBusqueda.toLowerCase()
-    return datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
-  }, [datos, valorBusqueda])
+    let datosProcesados = datos
 
-  // ---------------------------------------------------------------------------
-  // Paginación (si está habilitada)
-  // ---------------------------------------------------------------------------
+    if (valorBusqueda) {
+      const termino = valorBusqueda.toLowerCase()
+      datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
+    }
+
+    return datosProcesados.sort((a, b) => {
+      const idA = a.id || 0
+      const idB = b.id || 0
+      return ordenAscendente ? idA - idB : idB - idA
+    })
+  }, [datos, valorBusqueda, ordenAscendente])
+
   const indiceInicio = (paginaActual - 1) * filasPorPagina
   const datosVisibles = paginadorVisible
     ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina)
     : datosFiltrados
 
-  // ---------------------------------------------------------------------------
-  // Renderizado
-  // ---------------------------------------------------------------------------
   return (
-    <div className="flex flex-col h-full">
-      {/* Buscador */}
-      {mostrarBuscador && (
-        <div className="mb-3">
-          <input
-            type="text"
-            placeholder="Buscar…"
-            className="pl-3 pr-3 py-2 w-full rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-            value={valorBusqueda}
-            onChange={(e) => onCambioBusqueda(e.target.value)}
-          />
-        </div>
-      )}
+    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm">
+      {/* Header con buscador y controles */}
+      <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
+        <div className="flex items-center justify-between gap-4">
+          {/* Buscador */}
+          {mostrarBuscador && (
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar en tabla..."
+                className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
+                value={valorBusqueda}
+                onChange={(e) => onCambioBusqueda(e.target.value)}
+              />
+            </div>
+          )}
 
-      {/* Tabla */}
-      <div className="overflow-auto flex-1">
+          {/* Control de ordenamiento */}
+          <button
+            onClick={() => setOrdenAscendente(!ordenAscendente)}
+            className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
+            title={
+              ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
+            }
+          >
+            <ArrowUpDown
+              className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
+            />
+            <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Contenedor de tabla */}
+      <div className="flex-1 overflow-auto">
         <table className="min-w-full">
           {/* Encabezado */}
-          <thead>
-            <tr className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
               {columnas.map((col) => (
                 <th
                   key={col.id}
-                  className={`${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]} ${CLASES_CELDA_BASE} font-semibold text-xs tracking-wider uppercase`}
+                  className={`${
+                    { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
+                  } ${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} font-semibold text-xs tracking-wider uppercase text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
                   {col.titulo}
@@ -115,7 +110,7 @@ const Tabla = ({
           </thead>
 
           {/* Cuerpo */}
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="divide-y-2 divide-slate-300">
             {datosVisibles.map((fila, idxVisible) => {
               const indiceGlobal = indiceInicio + idxVisible
 
@@ -126,15 +121,15 @@ const Tabla = ({
 
               // Renderizado por defecto por columnas
               return (
-                <tr key={fila.id || indiceGlobal} className="hover:bg-slate-50 transition-colors">
+                <tr key={fila.id || indiceGlobal}>
                   {columnas.map((col) => {
-                    const contenido = col.render
-                      ? col.render(fila, idxVisible, indiceInicio)
-                      : fila[col.id]
+                    const contenido = col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]
                     return (
                       <td
                         key={col.id}
-                        className={`${CLASES_CELDA_BASE} ${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]}`}
+                        className={`${CLASES_CELDA_BASE} bg-white hover:bg-slate-700 hover:text-white transition-colors duration-100 ${
+                          { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
+                        }`}
                         style={col.ancho ? { width: col.ancho } : undefined}
                       >
                         {contenido}
@@ -144,23 +139,43 @@ const Tabla = ({
                 </tr>
               )
             })}
+
+            {/* Estado vacío */}
+            {datosVisibles.length === 0 && (
+              <tr>
+                <td
+                  colSpan={columnas.length}
+                  className="text-center py-12 text-slate-500 bg-gradient-to-b from-slate-50/50 to-white/80"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Search className="w-5 h-5 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-medium">No se encontraron resultados</p>
+                    {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Paginador */}
       {paginadorVisible && (
-        <Paginador
-          totalItems={datosFiltrados.length}
-          itemsPerPage={filasPorPagina}
-          currentPage={paginaActual}
-          onPageChange={setPaginaActual}
-          onItemsPerPageChange={(n) => {
-            setFilasPorPagina(n)
-            setPaginaActual(1)
-          }}
-          opcionesItemsPorPagina={opcionesFilasPorPagina}
-        />
+        <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
+          <Paginador
+            totalItems={datosFiltrados.length}
+            itemsPerPage={filasPorPagina}
+            currentPage={paginaActual}
+            onPageChange={setPaginaActual}
+            onItemsPerPageChange={(n) => {
+              setFilasPorPagina(n)
+              setPaginaActual(1)
+            }}
+            opcionesItemsPorPagina={opcionesFilasPorPagina}
+          />
+        </div>
       )}
     </div>
   )
@@ -174,4 +189,4 @@ Tabla.defaultProps = {
   mostrarBuscador: true,
 }
 
-export default Tabla; 
+export default Tabla

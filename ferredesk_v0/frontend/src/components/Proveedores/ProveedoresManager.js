@@ -326,7 +326,7 @@ const ProveedoresManager = () => {
                       const filaPrincipal = (
                         <tr
                           key={p.id}
-                          className="hover:bg-slate-50 transition-colors cursor-pointer"
+                          className="hover:bg-slate-100 transition-colors cursor-pointer"
                           onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
                         >
                           {/* Celda enumeración */}

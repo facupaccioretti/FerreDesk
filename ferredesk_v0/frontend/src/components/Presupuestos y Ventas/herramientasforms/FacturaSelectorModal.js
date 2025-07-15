@@ -9,7 +9,8 @@ export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del mod
 export const MIN_CARACTERES_BUSQUEDA = 1 // Mínimo de caracteres para que se active filtrado
 // Array de posibles nombres para el tipo de comprobante "Factura" que la API podría esperar.
 // Se utiliza el primer valor para la petición directa, los demás son para un posible filtrado local de respaldo.
-export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura"]
+export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna"]
+export const LETRA_FACTURA_INTERNA = 'I';
 
 /**
  * FacturaSelectorModal
@@ -45,11 +46,10 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     setCargando(true)
     setError(null)
     try {
-      // Construimos una URL que filtra directamente en el backend
+      // Traer facturas fiscales e internas
       const params = new URLSearchParams({
         ven_idcli: cliente.id,
-        // Usamos el nombre de parámetro correcto 'comprobante_tipo' y el primer valor del array.
-        comprobante_tipo: TIPOS_COMPROBANTE_FACTURA[0],
+        // No filtrar por tipo, traer todas las facturas del cliente
       })
       const url = `/api/ventas/?${params.toString()}`
       const resp = await fetch(url, { credentials: "include" })
@@ -57,8 +57,12 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
       const data = await resp.json()
       // Normalizar para asegurar estructura mínima y soportar paginación
       const lista = Array.isArray(data) ? data : data.results || []
-      // Como el backend ya filtró, no es necesario hacerlo de nuevo en el frontend
-      setFacturas(lista)
+      // Filtrar localmente: solo facturas fiscales (A, B, C) o internas (I)
+      const facturasValidas = lista.filter(f => {
+        const letra = f.comprobante?.letra;
+        return ['A', 'B', 'C', LETRA_FACTURA_INTERNA].includes(letra);
+      });
+      setFacturas(facturasValidas)
     } catch (err) {
       console.error("[FacturaSelectorModal] Error al obtener facturas:", err)
       setError(err.message || "Error desconocido")

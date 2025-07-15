@@ -184,7 +184,7 @@ class VentaSerializer(serializers.ModelSerializer):
                     try:
                         comprobante_nc_interna = Comprobante.objects.get(
                             tipo='nota_credito_interna', 
-                            letra='NC'
+                            letra='I'
                         )
                         validated_data['comprobante_id'] = comprobante_nc_interna.codigo_afip
                     except Comprobante.DoesNotExist:
