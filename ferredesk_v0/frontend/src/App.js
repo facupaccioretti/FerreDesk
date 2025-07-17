@@ -9,6 +9,7 @@ import PrivateRoute from './components/PrivateRoute';
 import ProductosManager from './components/Productos/ProductosManager';
 import ProveedoresManager from './components/Proveedores/ProveedoresManager';
 import PresupuestosManager from './components/Presupuestos y Ventas/PresupuestosManager';
+import LibroIvaVentasManager from './components/Presupuestos y Ventas/LibroIvaVentas/LibroIvaVentasManager';
 import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
 import ConfiguracionManager from './components/ConfiguracionManager';
@@ -56,6 +57,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <PresupuestosManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/libro-iva-ventas"
+          element={
+            <PrivateRoute>
+              <LibroIvaVentasManager />
             </PrivateRoute>
           }
         />

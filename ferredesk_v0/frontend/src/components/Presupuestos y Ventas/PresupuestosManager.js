@@ -1,6 +1,7 @@
   "use client"
   // linea 252 revisar --> setTipoComprobante(4) Forzar tipoComprobante a 4 para presupuesto. Por cambios en la bd
   import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+  import { useNavigate } from "react-router-dom"
   import Navbar from "../Navbar"
   import { useVentasAPI } from "../../utils/useVentasAPI"
   import { useProductosAPI } from "../../utils/useProductosAPI"
@@ -96,6 +97,7 @@
   const PresupuestosManager = () => {
     // Estado y fetch para el usuario
     const [user, setUser] = useState(null)
+    const navigate = useNavigate()
 
     useEffect(() => {
       fetch("/api/user/", { credentials: "include" })
@@ -278,6 +280,10 @@
       setClienteParaNC(null)
       setFacturasParaNC([])
       setModalClienteNCAbierto(true)
+    }
+
+    const handleGenerarLibroIva = () => {
+      navigate('/dashboard/libro-iva-ventas')
     }
 
     const handleEdit = async (presupuesto) => {
@@ -874,6 +880,15 @@
                         className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
                       >
                         <span className="text-lg">+</span> Nueva Nota de Crédito
+                      </button>
+                      <button
+                        onClick={handleGenerarLibroIva}
+                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Generar Libro IVA
                       </button>
                     </div>
                     <div className="overflow-x-auto">
