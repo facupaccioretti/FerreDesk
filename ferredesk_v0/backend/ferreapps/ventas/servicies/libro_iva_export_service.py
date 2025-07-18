@@ -216,9 +216,17 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
             ('ALIGN', (0, 0), (-1, 1), 'CENTER'),
             ('FONTSIZE', (0, 2), (-1, -1), 7),
             ('ALIGN', (0, 2), (-1, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            # Líneas verticales en todas las columnas
+            ('LINEBEFORE', (0, 0), (0, -1), 0.5, colors.black),
+            ('LINEAFTER', (-1, 0), (-1, -1), 0.5, colors.black),
+            # Líneas horizontales solo en encabezados y cada dos filas de datos
+            ('LINEBELOW', (0, 0), (-1, 1), 0.5, colors.black),  # Encabezados
         ])
+        
+        # Agregar líneas horizontales cada dos filas de datos (cada comprobante)
+        for i in range(2, len(table_data), 2):
+            table_style.add('LINEBELOW', (0, i+1), (-1, i+1), 0.5, colors.black)
         for i in range(2, len(table_data), 4):
             if ((i//2) % 2) == 0:  # Ahora el gris va en la segunda, cuarta, etc.
                 table_style.add('BACKGROUND', (0, i), (-1, i), GRIS_COMPROBANTE)
