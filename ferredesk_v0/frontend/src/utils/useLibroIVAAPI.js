@@ -9,7 +9,7 @@ export function useLibroIvaAPI() {
   
   const csrftoken = getCookie('csrftoken');
 
-  const generarLibroIva = useCallback(async (mes, anio) => {
+  const generarLibroIva = useCallback(async (mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     setLoading(true);
     setError(null);
     setValidaciones({ errores: [], advertencias: [] });
@@ -22,7 +22,12 @@ export function useLibroIvaAPI() {
           'X-CSRFToken': csrftoken,
         },
         credentials: 'include',
-        body: JSON.stringify({ mes, anio })
+        body: JSON.stringify({ 
+          mes, 
+          anio, 
+          tipo_libro: tipoLibro, 
+          incluir_presupuestos: incluirPresupuestos 
+        })
       });
 
       if (!response.ok) {
@@ -80,12 +85,12 @@ export function useLibroIvaAPI() {
     }
   }, [csrftoken]);
 
-  const exportarLibroIva = useCallback(async (formato, mes, anio) => {
+  const exportarLibroIva = useCallback(async (formato, mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/libro-iva-ventas/export/${formato}/?mes=${mes}&anio=${anio}`, {
+      const response = await fetch(`/api/libro-iva-ventas/export/${formato}/?mes=${mes}&anio=${anio}&tipo_libro=${tipoLibro}&incluir_presupuestos=${incluirPresupuestos}`, {
         method: 'GET',
         headers: {
           'X-CSRFToken': csrftoken,
@@ -104,7 +109,21 @@ export function useLibroIvaAPI() {
       const a = document.createElement('a');
       a.href = url;
       const extension = formato === 'excel' ? 'xlsx' : formato;
-      a.download = `Libro_IVA_Ventas_${mes.toString().padStart(2, '0')}${anio}.${extension}`;
+      
+      // Generar nombre de archivo según tipo de libro
+      let nombreArchivo = `Libro_IVA_Ventas_`;
+      if (tipoLibro === 'convencional') {
+        nombreArchivo += 'Convencional_';
+      } else if (tipoLibro === 'informal') {
+        if (incluirPresupuestos) {
+          nombreArchivo += 'InformalConPresupuestos_';
+        } else {
+          nombreArchivo += 'Informal_';
+        }
+      }
+      nombreArchivo += `${mes.toString().padStart(2, '0')}${anio}.${extension}`;
+      
+      a.download = nombreArchivo;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

@@ -289,26 +289,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'detail': f'Error al convertir: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=True, methods=['get'], url_path='imprimir')
-    def imprimir_presupuesto(self, request, pk=None):
-        venta = get_object_or_404(Venta, pk=pk)
-        
-        # Lógica para generar PDF (placeholder)
-        # Aquí deberías integrar tu lógica de generación de PDF, por ejemplo con ReportLab o WeasyPrint
-        # Este es un ejemplo muy básico:
-        if venta: # Puedes agregar más validaciones si es necesario (ej. si es presupuesto)
-            response_content = f"<html><body><h1>Presupuesto/Venta N°: {venta.ven_numero}</h1><p>Cliente: {venta.ven_idcli.razon if venta.ven_idcli else 'N/A'}</p><p>Total: {venta.ven_total}</p></body></html>"
-            # Para una respuesta PDF real, deberías usar algo como:
-            # from django.http import FileResponse
-            # buffer = io.BytesIO()
-            # p = canvas.Canvas(buffer)
-            # ... tu lógica de dibujo de PDF ...
-            # p.save()
-            # buffer.seek(0)
-            # return FileResponse(buffer, as_attachment=True, filename=f'presupuesto_{venta.ven_numero}.pdf')
-            return HttpResponse(response_content, content_type='text/html') # Cambiar a application/pdf para PDF real
-        else:
-            raise Http404
+
 
     @transaction.atomic
     def update(self, request, *args, **kwargs):
@@ -352,6 +333,7 @@ class VentaRemPedViewSet(viewsets.ModelViewSet):
 
 class VentaDetalleItemCalculadoFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
+    
     class Meta:
         model = VentaDetalleItemCalculado
         fields = ['vdi_idve']
@@ -362,9 +344,18 @@ class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter
 
+class VentaIVAAlicuotaFilter(FilterSet):
+    vdi_idve = NumberFilter(field_name='vdi_idve')
+    
+    class Meta:
+        model = VentaIVAAlicuota
+        fields = ['vdi_idve']
+
 class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaIVAAlicuota.objects.all()
     serializer_class = VentaIVAAlicuotaSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaIVAAlicuotaFilter
 
 class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaCalculada.objects.all()

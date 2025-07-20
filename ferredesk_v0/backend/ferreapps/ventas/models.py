@@ -185,6 +185,12 @@ class VentaDetalleItemCalculado(models.Model):
     # Precio unitario sin IVA que la vista expone y necesita la plantilla A
     precio_unitario_sin_iva = models.DecimalField(max_digits=15, decimal_places=4, null=True)
     
+    # Campos faltantes que están en la vista SQL pero no en el modelo Django
+    iva_unitario = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    bonif_monto_unit_neto = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    precio_unit_bonif_sin_iva = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    precio_unitario_bonif_desc_sin_iva = models.DecimalField(max_digits=15, decimal_places=4, null=True)
+    
     # Nuevos campos calculados según la lógica de Recalculos.md
     precio_unitario_bonificado = models.DecimalField(max_digits=15, decimal_places=2, null=True)
     subtotal_neto = models.DecimalField(max_digits=15, decimal_places=2, null=True)
@@ -259,6 +265,17 @@ class VentaCalculada(models.Model):
     ven_impneto = models.DecimalField(max_digits=15, decimal_places=3)
     iva_global = models.DecimalField(max_digits=15, decimal_places=3)
     ven_total = models.DecimalField(max_digits=15, decimal_places=3)
+    
+    # NUEVOS CAMPOS: Datos completos del cliente
+    cliente_razon = models.CharField(max_length=100, null=True)
+    cliente_fantasia = models.CharField(max_length=100, null=True)
+    cliente_domicilio = models.CharField(max_length=100, null=True)
+    cliente_telefono = models.CharField(max_length=20, null=True)
+    cliente_cuit = models.CharField(max_length=20, null=True)
+    cliente_ingresos_brutos = models.CharField(max_length=20, null=True)
+    cliente_localidad = models.CharField(max_length=100, null=True)
+    cliente_provincia = models.CharField(max_length=100, null=True)
+    cliente_condicion_iva = models.CharField(max_length=50, null=True)
 
     class Meta:
         managed = False

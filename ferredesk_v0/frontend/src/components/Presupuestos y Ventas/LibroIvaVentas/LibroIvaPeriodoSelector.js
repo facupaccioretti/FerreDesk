@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
   const [mes, setMes] = useState(new Date().getMonth() + 1); // Mes actual
   const [anio, setAnio] = useState(new Date().getFullYear()); // Año actual
+  const [tipoLibro, setTipoLibro] = useState('convencional');
+  const [incluirPresupuestos, setIncluirPresupuestos] = useState(false);
   const [error, setError] = useState('');
 
   const meses = [
@@ -49,7 +51,7 @@ const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
 
   const handleGenerar = () => {
     if (validarPeriodo()) {
-      onGenerar(mes, anio);
+      onGenerar(mes, anio, tipoLibro, incluirPresupuestos);
     }
   };
 
@@ -70,6 +72,64 @@ const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           Selecciona el período a generar
+        </div>
+      </div>
+
+      {/* Selector de Tipo de Libro */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Tipo de Libro IVA
+        </label>
+        <div className="space-y-3">
+          <div className="flex items-center">
+            <input
+              type="radio"
+              id="convencional"
+              name="tipoLibro"
+              value="convencional"
+              checked={tipoLibro === 'convencional'}
+              onChange={(e) => setTipoLibro(e.target.value)}
+              disabled={disabled || loading}
+              className="mr-2"
+            />
+            <label htmlFor="convencional" className="text-sm text-gray-700">
+              <strong>Convencional:</strong> Solo documentos fiscales (Factura A/B/C, Nota de Crédito A/B/C, Nota de Débito A/B/C)
+            </label>
+          </div>
+          
+          <div className="flex items-center">
+            <input
+              type="radio"
+              id="informal"
+              name="tipoLibro"
+              value="informal"
+              checked={tipoLibro === 'informal'}
+              onChange={(e) => setTipoLibro(e.target.value)}
+              disabled={disabled || loading}
+              className="mr-2"
+            />
+            <label htmlFor="informal" className="text-sm text-gray-700">
+              <strong>Informal:</strong> Con comprobantes internos (Factura Interna, Nota de Crédito Interna)
+            </label>
+          </div>
+          
+          {tipoLibro === 'informal' && (
+            <div className="ml-6">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="incluirPresupuestos"
+                  checked={incluirPresupuestos}
+                  onChange={(e) => setIncluirPresupuestos(e.target.checked)}
+                  disabled={disabled || loading}
+                  className="mr-2"
+                />
+                <label htmlFor="incluirPresupuestos" className="text-sm text-gray-700">
+                  Incluir presupuestos
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

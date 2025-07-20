@@ -49,11 +49,19 @@ def generar_libro_iva_ventas_endpoint(request):
         # Extraer parámetros
         mes = request.data.get('mes')
         anio = request.data.get('anio')
+        tipo_libro = request.data.get('tipo_libro', 'convencional')
+        incluir_presupuestos = request.data.get('incluir_presupuestos', False)
         
         # Validar parámetros requeridos
         if mes is None or anio is None:
             return Response({
                 'detail': 'Los parámetros "mes" y "anio" son requeridos'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validar tipo de libro
+        if tipo_libro not in ['convencional', 'informal']:
+            return Response({
+                'detail': 'El parámetro "tipo_libro" debe ser "convencional" o "informal"'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Validar tipos de datos
@@ -77,7 +85,7 @@ def generar_libro_iva_ventas_endpoint(request):
         usuario = request.user.username if request.user else None
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio, usuario)
+        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos, usuario)
         
         # Validar integridad de los datos generados
         validaciones = validar_libro_iva(datos_libro)

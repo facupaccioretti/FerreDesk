@@ -4,6 +4,7 @@
 export function mapearVentaDetalle({
   ventaCalculada,
   itemsCalculados = [],
+  ivaDiscriminado = [],
   clientes = [],
   vendedores = [],
   plazos = [],
@@ -55,6 +56,7 @@ export function mapearVentaDetalle({
     ),
     estado: mapearEstado(ventaCalculada.ven_estado),
     fecha: ventaCalculada.ven_fecha,
+    hora_creacion: ventaCalculada.hora_creacion,
     cliente: clientes.find(c => c.id === ventaCalculada.ven_idcli)?.razon || ventaCalculada.ven_idcli || '-',
     vendedor: vendedores.find(v => v.id === ventaCalculada.ven_idvdo)?.nombre || ventaCalculada.ven_idvdo || '-',
     sucursal: sucursales.find(s => s.id === ventaCalculada.ven_sucursal)?.nombre || ventaCalculada.ven_sucursal || '-',
@@ -62,7 +64,8 @@ export function mapearVentaDetalle({
     plazo: plazos.find(p => p.id === ventaCalculada.ven_idpla)?.nombre || ventaCalculada.ven_idpla || '-',
     domicilio: ventaCalculada.ven_domicilio,
     cuit: ventaCalculada.ven_cuit,
-    items: itemsCalculados || [],
+    items: itemsCalculados || [],    
+    iva_discriminado: ivaDiscriminado || [],
   };
 
   return datos;

@@ -18,7 +18,7 @@
   import PresupuestoForm from "./PresupuestoForm"
   import VentaForm from "./VentaForm"
   import ItemsGrid from "./ItemsGrid"
-  import { BotonEditar, BotonEliminar, BotonImprimir, BotonConvertir, BotonVerDetalle } from "../Botones"
+  import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle } from "../Botones"
   import PresupuestoVentaVista from "./herramientasforms/PresupuestoVentaVista"
   import { getCookie } from "../../utils/csrf"
   import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
@@ -32,6 +32,8 @@
   import NotaCreditoForm from "./NotaCreditoForm"
   import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
   import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
+  import { useGeneradorPDF } from "./herramientasforms/plantillasComprobantes/PDF/useGeneradorPDF"
+  import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 
   const mainTabs = [
     { key: "presupuestos", label: "Presupuestos y Ventas", closable: false },
@@ -98,6 +100,12 @@
     // Estado y fetch para el usuario
     const [user, setUser] = useState(null)
     const navigate = useNavigate()
+    
+    // Hook para generación de PDFs
+    const { descargarPDF, generando } = useGeneradorPDF();
+
+    // Hook para obtener la configuración de la ferretería
+    const { ferreteria, loading: loadingFerreteria } = useFerreteriaAPI();
 
     useEffect(() => {
       fetch("/api/user/", { credentials: "include" })
@@ -322,14 +330,122 @@
     }
 
     const handleImprimir = async (presupuesto) => {
+      if (!presupuesto || !presupuesto.id) return;
+      
+      if (loadingFerreteria) {
+        alert("Cargando configuración de la empresa, por favor espere...");
+        return;
+      }
+      
       try {
-        const response = await fetch(`/api/ventas/${presupuesto.id}/imprimir/`, { method: "GET" })
-        if (!response.ok) throw new Error("No se pudo imprimir")
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        window.open(url)
+        // Obtener datos reales de las vistas SQL usando useVentaDetalleAPI
+        const [cabecera, itemsDetalle, ivaDiscriminado, todasAlicuotas] = await Promise.all([
+          fetch(`/api/venta-calculada/${presupuesto.id}/`).then(async (res) => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ detail: "Error cabecera" }))
+              throw new Error(err.detail)
+            }
+            return res.json()
+          }),
+          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${presupuesto.id}`).then(async (res) => {
+            if (!res.ok) return []
+            return res.json()
+          }),
+          fetch(`/api/venta-iva-alicuota/?vdi_idve=${presupuesto.id}`).then(async (res) => {
+            if (!res.ok) return []
+            return res.json()
+          }),
+          fetch(`/api/productos/alicuotasiva/`).then(async (res) => {
+            if (!res.ok) return []
+            return res.json()
+          })
+        ]);
+
+        // Construir datos del comprobante usando los datos reales de las vistas
+        const datosComprobante = {
+          // Datos del emisor (desde configuración de ferretería)
+          emisor_razon_social: ferreteria?.razon_social,
+          emisor_telefono: ferreteria?.telefono,
+          emisor_condicion_iva: ferreteria?.situacion_iva,
+          emisor_cuit: ferreteria?.cuit,
+          emisor_ingresos_brutos: ferreteria?.ingresos_brutos,
+          emisor_inicio_actividad: ferreteria?.inicio_actividad,
+          
+          // Datos del comprobante (desde VENTA_CALCULADO)
+          comprobante: {
+            letra: cabecera.comprobante_letra,
+            codigo_afip: cabecera.comprobante_codigo_afip,
+            nombre: cabecera.comprobante_nombre,
+            tipo: cabecera.comprobante_tipo
+          },
+          numero_formateado: cabecera.numero_formateado,
+          fecha: cabecera.ven_fecha,
+          hora_creacion: cabecera.hora_creacion,
+          
+          // Datos del cliente (desde VENTA_CALCULADO)
+          cliente: cabecera.cliente_razon,
+          domicilio: cabecera.cliente_domicilio,
+          condicion_iva_cliente: cabecera.cliente_condicion_iva,
+          cuit: cabecera.cliente_cuit,
+          localidad: cabecera.cliente_localidad,
+          provincia: cabecera.cliente_provincia,
+          telefono_cliente: cabecera.cliente_telefono,
+          
+          // Items reales (desde VENTADETALLEITEM_CALCULADO)
+          items: itemsDetalle.map(item => ({
+            codigo: item.codigo,
+            vdi_detalle1: item.vdi_detalle1,
+            vdi_cantidad: item.vdi_cantidad,
+            precio_unitario_sin_iva: item.precio_unitario_sin_iva,
+            vdi_bonifica: item.vdi_bonifica,
+            precio_unitario_bonif_desc_sin_iva: item.precio_unitario_bonif_desc_sin_iva,
+            precio_unitario_bonificado: item.precio_unitario_bonificado,
+            precio_unitario_bonificado_con_iva: item.precio_unitario_bonificado_con_iva,
+            ali_porce: item.ali_porce,
+            iva_monto: item.iva_monto,
+            subtotal_neto: item.subtotal_neto,
+            total_item: item.total_item,
+            // Campos adicionales para descuentos
+            ven_descu1: item.ven_descu1,
+            ven_descu2: item.ven_descu2,
+            ven_descu3: item.ven_descu3
+          })),
+          
+          // Totales reales (desde VENTA_CALCULADO)
+          ven_total: cabecera.ven_total,
+          ven_impneto: cabecera.ven_impneto,
+          iva_global: cabecera.iva_global,
+          ven_descu1: cabecera.ven_descu1,
+          ven_descu2: cabecera.ven_descu2,
+          ven_descu3: cabecera.ven_descu3,
+          
+          // IVA discriminado completo (todas las alícuotas con porcentaje > 0)
+          iva_discriminado: todasAlicuotas
+            .filter(ali => ali.porce > 0) // Solo alícuotas con porcentaje > 0
+            .map(ali => {
+              // Buscar si existe esta alícuota en la factura
+              const ivaEnFactura = ivaDiscriminado.find(iva => 
+                parseFloat(iva.ali_porce) === parseFloat(ali.porce)
+              );
+              
+              return {
+                ali_porce: ali.porce,
+                neto_gravado: ivaEnFactura ? ivaEnFactura.neto_gravado : 0,
+                iva_total: ivaEnFactura ? ivaEnFactura.iva_total : 0
+              };
+            }),
+          
+          // Información AFIP (desde VENTA_CALCULADO)
+          cae: cabecera.ven_cae,
+          cae_vencimiento: cabecera.ven_caevencimiento ? new Date(cabecera.ven_caevencimiento).toLocaleDateString('es-AR') : '',
+        };
+        
+        // Generar y descargar PDF usando el hook del componente, pasando la configuración
+        await descargarPDF(datosComprobante, cabecera.comprobante_letra, ferreteria);
+        
       } catch (err) {
-        alert("Error al imprimir: " + (err.message || ""))
+        console.error("Error al imprimir:", err);
+        alert("Error al generar PDF: " + (err.message || ""))
       }
     }
 
@@ -990,7 +1106,7 @@
                                     {p.tipo === "Presupuesto" && p.estado === "Abierto" ? (
                                       <>
                                         <BotonEditar onClick={() => handleEdit(p)} />
-                                        <BotonImprimir onClick={() => handleImprimir(p)} />
+                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
                                         <BotonVerDetalle onClick={() => openVistaTab(p)} />
                                         <BotonConvertir
                                           onClick={() => handleConvertir(p)}
@@ -1005,7 +1121,7 @@
                                       </>
                                     ) : esFacturaInternaConvertible(p) ? (
                                       <>
-                                        <BotonImprimir onClick={() => handleImprimir(p)} />
+                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
                                         <BotonVerDetalle onClick={() => openVistaTab(p)} />
                                         <BotonConvertir
                                           onClick={() => handleConvertirFacturaI(p)}
@@ -1020,14 +1136,14 @@
                                       </>
                                     ) : p.tipo === "Venta" && p.estado === "Cerrado" ? (
                                       <>
-                                        <BotonImprimir onClick={() => handleImprimir(p)} />
+                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
                                         <BotonVerDetalle onClick={() => openVistaTab(p)} />
                                         <BotonEliminar onClick={() => handleDelete(p.id)} />
                                       </>
                                     ) : (
                                       <>
                                         <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                        <BotonImprimir onClick={() => handleImprimir(p)} />
+                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
                                       </>
                                     )}
                                   </div>

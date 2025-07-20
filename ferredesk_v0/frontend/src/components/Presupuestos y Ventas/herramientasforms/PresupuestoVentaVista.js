@@ -38,7 +38,7 @@ function obtenerLetraComprobante(comprobante) {
 const PresupuestoVentaVista = (props) => {
   const { data, clientes = [], vendedores = [], plazos = [], sucursales = [], puntosVenta = [] } = props;
   const idVenta = data?.ven_id || data?.id;
-  const { ventaCalculada, itemsCalculados, cargando, error } = useVentaDetalleAPI(idVenta);
+  const { ventaCalculada, itemsCalculados, ivaDiscriminado, cargando, error } = useVentaDetalleAPI(idVenta);
 
   if (cargando) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Cargando datos de la venta/presupuesto...</div>;
   if (error) return <div className="p-8 text-red-600 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Error: {error}</div>;
@@ -47,6 +47,7 @@ const PresupuestoVentaVista = (props) => {
     ? mapearVentaDetalle({
         ventaCalculada,
         itemsCalculados,
+        ivaDiscriminado,
         clientes,
         vendedores,
         plazos,

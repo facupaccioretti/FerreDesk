@@ -51,6 +51,21 @@ class Ferreteria(models.Model):
         help_text='Razón social de la empresa'
     )
     
+    # Ingresos Brutos
+    ingresos_brutos = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text='Ingresos Brutos de la empresa'
+    )
+    
+    # Inicio de Actividad
+    inicio_actividad = models.DateField(
+        blank=True,
+        null=True,
+        help_text='Fecha de inicio de actividad'
+    )
+    
     # Logo de la Empresa
     logo_empresa = models.ImageField(
         upload_to='logos/',

@@ -24,7 +24,7 @@ def exportar_libro_iva_pdf(request):
     """
     Endpoint para exportar el Libro IVA en formato PDF.
     
-    GET /api/libro-iva-ventas/export/pdf/?mes=1&anio=2024
+    GET /api/libro-iva-ventas/export/pdf/?mes=1&anio=2024&tipo_libro=convencional&incluir_presupuestos=false
     
     Returns:
     Archivo PDF para descarga
@@ -34,6 +34,8 @@ def exportar_libro_iva_pdf(request):
         # Extraer parámetros de query
         mes = request.GET.get('mes')
         anio = request.GET.get('anio')
+        tipo_libro = request.GET.get('tipo_libro', 'convencional')
+        incluir_presupuestos = request.GET.get('incluir_presupuestos', 'false').lower() == 'true'
         
         # Validar parámetros requeridos
         if not mes or not anio:
@@ -59,17 +61,17 @@ def exportar_libro_iva_pdf(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio)
+        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
         
         # Generar archivo PDF
         archivo_pdf = exportar_libro_iva('pdf', datos_libro)
         
         # Obtener nombre del archivo
-        nombre_archivo = obtener_nombre_archivo('pdf', mes, anio)
+        nombre_archivo = obtener_nombre_archivo('pdf', mes, anio, tipo_libro, incluir_presupuestos)
         
         # Log de auditoría
         usuario = request.user.username if request.user else None
-        logger.info(f"Libro IVA exportado a PDF - Usuario: {usuario}, Período: {mes:02d}/{anio}")
+        logger.info(f"Libro IVA exportado a PDF - Usuario: {usuario}, Período: {mes:02d}/{anio}, Tipo: {tipo_libro}")
         
         # Respuesta con archivo PDF
         response = HttpResponse(
@@ -98,7 +100,7 @@ def exportar_libro_iva_excel(request):
     """
     Endpoint para exportar el Libro IVA en formato Excel.
     
-    GET /api/libro-iva-ventas/export/excel/?mes=1&anio=2024
+    GET /api/libro-iva-ventas/export/excel/?mes=1&anio=2024&tipo_libro=convencional&incluir_presupuestos=false
     
     Returns:
     Archivo Excel para descarga
@@ -108,6 +110,8 @@ def exportar_libro_iva_excel(request):
         # Extraer parámetros de query
         mes = request.GET.get('mes')
         anio = request.GET.get('anio')
+        tipo_libro = request.GET.get('tipo_libro', 'convencional')
+        incluir_presupuestos = request.GET.get('incluir_presupuestos', 'false').lower() == 'true'
         
         # Validar parámetros requeridos
         if not mes or not anio:
@@ -133,17 +137,17 @@ def exportar_libro_iva_excel(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio)
+        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
         
         # Generar archivo Excel
         archivo_excel = exportar_libro_iva('excel', datos_libro)
         
         # Obtener nombre del archivo
-        nombre_archivo = obtener_nombre_archivo('excel', mes, anio)
+        nombre_archivo = obtener_nombre_archivo('excel', mes, anio, tipo_libro, incluir_presupuestos)
         
         # Log de auditoría
         usuario = request.user.username if request.user else None
-        logger.info(f"Libro IVA exportado a Excel - Usuario: {usuario}, Período: {mes:02d}/{anio}")
+        logger.info(f"Libro IVA exportado a Excel - Usuario: {usuario}, Período: {mes:02d}/{anio}, Tipo: {tipo_libro}")
         
         # Respuesta con archivo Excel
         response = HttpResponse(
@@ -172,7 +176,7 @@ def exportar_libro_iva_json(request):
     """
     Endpoint para exportar el Libro IVA en formato JSON.
     
-    GET /api/libro-iva-ventas/export/json/?mes=1&anio=2024
+    GET /api/libro-iva-ventas/export/json/?mes=1&anio=2024&tipo_libro=convencional&incluir_presupuestos=false
     
     Returns:
     Archivo JSON para descarga
@@ -182,6 +186,8 @@ def exportar_libro_iva_json(request):
         # Extraer parámetros de query
         mes = request.GET.get('mes')
         anio = request.GET.get('anio')
+        tipo_libro = request.GET.get('tipo_libro', 'convencional')
+        incluir_presupuestos = request.GET.get('incluir_presupuestos', 'false').lower() == 'true'
         
         # Validar parámetros requeridos
         if not mes or not anio:
@@ -207,17 +213,17 @@ def exportar_libro_iva_json(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio)
+        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
         
         # Generar archivo JSON
         archivo_json = exportar_libro_iva('json', datos_libro)
         
         # Obtener nombre del archivo
-        nombre_archivo = obtener_nombre_archivo('json', mes, anio)
+        nombre_archivo = obtener_nombre_archivo('json', mes, anio, tipo_libro, incluir_presupuestos)
         
         # Log de auditoría
         usuario = request.user.username if request.user else None
-        logger.info(f"Libro IVA exportado a JSON - Usuario: {usuario}, Período: {mes:02d}/{anio}")
+        logger.info(f"Libro IVA exportado a JSON - Usuario: {usuario}, Período: {mes:02d}/{anio}, Tipo: {tipo_libro}")
         
         # Respuesta con archivo JSON
         response = HttpResponse(

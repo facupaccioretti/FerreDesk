@@ -86,7 +86,21 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
 
     # Título y periodo
     periodo = datos_libro['periodo']
-    titulo = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
+    configuracion = datos_libro.get('configuracion', {})
+    tipo_libro = configuracion.get('tipo_libro', 'convencional')
+    incluir_presupuestos = configuracion.get('incluir_presupuestos', False)
+    
+    # Determinar título según tipo de libro
+    if tipo_libro == 'convencional':
+        titulo = f"LIBRO IVA VENTAS (CONVENCIONAL) - {periodo['mes']:02d}/{periodo['anio']}"
+    elif tipo_libro == 'informal':
+        if incluir_presupuestos:
+            titulo = f"LIBRO IVA VENTAS (INFORMAL CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
+        else:
+            titulo = f"LIBRO IVA VENTAS (INFORMAL) - {periodo['mes']:02d}/{periodo['anio']}"
+    else:
+        titulo = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
+    
     info_periodo = f"Período: {periodo['mes']:02d}/{periodo['anio']} - Generado: {periodo['fecha_generacion'][:10]}"
 
     # Encabezados
@@ -330,7 +344,22 @@ def _generar_excel_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
     
     # Título
     periodo = datos_libro['periodo']
-    ws['A1'] = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
+    configuracion = datos_libro.get('configuracion', {})
+    tipo_libro = configuracion.get('tipo_libro', 'convencional')
+    incluir_presupuestos = configuracion.get('incluir_presupuestos', False)
+    
+    # Determinar título según tipo de libro
+    if tipo_libro == 'convencional':
+        titulo_excel = f"LIBRO IVA VENTAS (CONVENCIONAL) - {periodo['mes']:02d}/{periodo['anio']}"
+    elif tipo_libro == 'informal':
+        if incluir_presupuestos:
+            titulo_excel = f"LIBRO IVA VENTAS (INFORMAL CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
+        else:
+            titulo_excel = f"LIBRO IVA VENTAS (INFORMAL) - {periodo['mes']:02d}/{periodo['anio']}"
+    else:
+        titulo_excel = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
+    
+    ws['A1'] = titulo_excel
     ws['A1'].font = Font(bold=True, size=16)
     ws.merge_cells('A1:O1')
     ws['A1'].alignment = Alignment(horizontal="center")
@@ -429,7 +458,7 @@ def _generar_json_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
     return buffer
 
 
-def obtener_nombre_archivo(formato: str, mes: int, anio: int) -> str:
+def obtener_nombre_archivo(formato: str, mes: int, anio: int, tipo_libro: str = 'convencional', incluir_presupuestos: bool = False) -> str:
     """
     Genera el nombre del archivo de exportación.
     
@@ -437,12 +466,25 @@ def obtener_nombre_archivo(formato: str, mes: int, anio: int) -> str:
         formato: Formato del archivo
         mes: Mes del período
         anio: Año del período
+        tipo_libro: Tipo de libro ('convencional' o 'informal')
+        incluir_presupuestos: Si incluye presupuestos (solo para informal)
     
     Returns:
         Nombre del archivo
     """
     
-    nombre_base = f"Libro_IVA_Ventas_{mes:02d}{anio}"
+    # Determinar sufijo según tipo de libro
+    if tipo_libro == 'convencional':
+        sufijo = 'Convencional'
+    elif tipo_libro == 'informal':
+        if incluir_presupuestos:
+            sufijo = 'InformalConPresupuestos'
+        else:
+            sufijo = 'Informal'
+    else:
+        sufijo = ''
+    
+    nombre_base = f"Libro_IVA_Ventas_{sufijo}_{mes:02d}{anio}"
     
     if formato.lower() == 'pdf':
         return f"{nombre_base}.pdf"

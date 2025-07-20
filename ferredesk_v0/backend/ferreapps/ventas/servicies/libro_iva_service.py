@@ -31,14 +31,17 @@ def _mapear_condicion_iva_a_codigo(condicion_normalizada: str) -> str:
     return mapeo.get(condicion_normalizada, '')
 
 
-def generar_libro_iva_ventas(mes: int, anio: int, usuario: Optional[str] = None) -> Dict[str, Any]:
+def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convencional', 
+                            incluir_presupuestos: bool = False, usuario: Optional[str] = None) -> Dict[str, Any]:
     """
-    Genera el Libro IVA Ventas para un período específico.
+    Genera el Libro IVA Ventas para un período específico con opciones de filtrado.
     Solo consolida datos ya calculados por las vistas del sistema.
     
     Args:
         mes: Mes del período (1-12)
         anio: Año del período (YYYY)
+        tipo_libro: 'convencional' (solo fiscales) o 'informal' (con internos)
+        incluir_presupuestos: Incluir presupuestos en libro informal
         usuario: Usuario que solicita la generación (opcional)
     
     Returns:
@@ -58,10 +61,30 @@ def generar_libro_iva_ventas(mes: int, anio: int, usuario: Optional[str] = None)
     emisor_normalizado = normalizar_situacion_iva(situacion_iva_emisor)
     emisor_codigo = _mapear_condicion_iva_a_codigo(emisor_normalizado)
     
-    # Obtener ventas del período desde la vista calculada
+    # Definir filtros según tipo de libro
+    if tipo_libro == 'convencional':
+        # Solo comprobantes fiscales: factura, nota_credito, nota_debito con letras A, B, C
+        filtros_comprobante = {
+            'comprobante_tipo__in': ['factura', 'nota_credito', 'nota_debito'],
+            'comprobante_letra__in': ['A', 'B', 'C']
+        }
+    elif tipo_libro == 'informal':
+        # Comprobantes fiscales + internos
+        filtros_comprobante = {
+            'comprobante_tipo__in': ['factura', 'nota_credito', 'nota_debito', 'factura_interna', 'nota_credito_interna']
+        }
+        
+        # Agregar presupuestos si se solicita
+        if incluir_presupuestos:
+            filtros_comprobante['comprobante_tipo__in'].append('presupuesto')
+    else:
+        raise ValueError(f"Tipo de libro no válido: {tipo_libro}")
+    
+    # Obtener ventas del período desde la vista calculada con filtros aplicados
     ventas_periodo = VentaCalculada.objects.filter(
         ven_fecha__year=anio,
-        ven_fecha__month=mes
+        ven_fecha__month=mes,
+        **filtros_comprobante
     ).order_by('ven_fecha', 'ven_punto', 'ven_numero')
     
     if not ventas_periodo.exists():
@@ -217,6 +240,10 @@ def generar_libro_iva_ventas(mes: int, anio: int, usuario: Optional[str] = None)
             'situacion_iva': situacion_iva_emisor,
             'situacion_iva_normalizada': emisor_normalizado,
             'situacion_iva_codigo': emisor_codigo
+        },
+        'configuracion': {
+            'tipo_libro': tipo_libro,
+            'incluir_presupuestos': incluir_presupuestos
         },
         'lineas': lineas_libro,
         'subtotales': subtotales,

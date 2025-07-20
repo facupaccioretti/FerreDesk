@@ -47,7 +47,12 @@ const LibroIvaExport = ({ libroIva, onExportar, loading }) => {
     setFormatoSeleccionado(formato);
 
     try {
-      await onExportar(formato, libroIva.periodo.mes, libroIva.periodo.anio);
+      // Obtener configuración del libro para pasar a la exportación
+      const configuracion = libroIva.configuracion || {};
+      const tipoLibro = configuracion.tipo_libro || 'convencional';
+      const incluirPresupuestos = configuracion.incluir_presupuestos || false;
+      
+      await onExportar(formato, libroIva.periodo.mes, libroIva.periodo.anio, tipoLibro, incluirPresupuestos);
     } catch (error) {
       console.error('Error al exportar:', error);
       alert(`Error al exportar ${formato.toUpperCase()}: ${error.message}`);

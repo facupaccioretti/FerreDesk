@@ -8,6 +8,7 @@
     "@headlessui/react": "^2.2.4",
     "@mui/icons-material": "^7.1.0",
     "@mui/x-date-pickers": "^8.4.0",
+    "@react-pdf/renderer": "^4.3.0",
     "axios": "^1.9.0",
     "cra-template-tailwindcss": "4.0.1",
     "date-fns": "^4.1.0",

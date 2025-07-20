@@ -22,20 +22,20 @@ const LibroIvaVentasManager = () => {
     document.title = "Libro IVA Ventas - FerreDesk";
   }, []);
 
-  const handleGenerarLibro = async (mes, anio) => {
+  const handleGenerarLibro = async (mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     try {
-      setPeriodoSeleccionado({ mes, anio });
+      setPeriodoSeleccionado({ mes, anio, tipoLibro, incluirPresupuestos });
       setMostrarExportacion(false);
-      await generarLibroIva(mes, anio);
+      await generarLibroIva(mes, anio, tipoLibro, incluirPresupuestos);
       setMostrarExportacion(true);
     } catch (error) {
       console.error('Error al generar libro IVA:', error);
     }
   };
 
-  const handleExportar = async (formato, mes, anio) => {
+  const handleExportar = async (formato, mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     try {
-      await exportarLibroIva(formato, mes, anio);
+      await exportarLibroIva(formato, mes, anio, tipoLibro, incluirPresupuestos);
     } catch (error) {
       console.error('Error al exportar:', error);
       throw error;
