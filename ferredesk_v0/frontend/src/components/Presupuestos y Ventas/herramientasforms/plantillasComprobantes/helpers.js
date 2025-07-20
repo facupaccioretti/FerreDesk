@@ -1,7 +1,7 @@
 // helpers.js
 // Funciones visuales y utilidades compartidas entre plantillas de comprobantes
 import React from 'react';
-import { View, Text, Page } from '@react-pdf/renderer';
+import { View, Text, Page, Image } from '@react-pdf/renderer';
 
 // Constantes compartidas
 export const ALICUOTAS_IVA = [
@@ -116,7 +116,15 @@ export const dividirItemsEnPaginas = (items, itemsPorPagina = CANTIDAD_MAXIMA_IT
  * @param {Function} mapearSituacionFiscal - Función para mapear situación fiscal
  * @returns {JSX.Element} Componente del header
  */
-export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => (
+export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
+  // Debug: Verificar URL del logo
+  console.log('🔍 DEBUG LOGO URL:', {
+    logo_empresa: ferreteriaConfig?.logo_empresa,
+    tieneLogo: !!ferreteriaConfig?.logo_empresa,
+    urlCompleta: ferreteriaConfig?.logo_empresa ? `${window.location.origin}${ferreteriaConfig.logo_empresa}` : null
+  });
+
+  return (
   <View style={styles.header}>
     {/* SECCIÓN IZQUIERDA */}
     <View style={styles.seccionIzquierda}>
@@ -124,7 +132,13 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
       <View style={styles.infoEmpresaCentrada}>
         {ferreteriaConfig.logo_empresa && (
           <View style={styles.logoEmpresa}>
-            <Text style={styles.logoTexto}>[LOGO]</Text>
+            <Image 
+              src={ferreteriaConfig.logo_empresa.startsWith('http') 
+                ? ferreteriaConfig.logo_empresa 
+                : `${window.location.origin}${ferreteriaConfig.logo_empresa}`
+              } 
+              style={styles.logoImagen}
+            />
           </View>
         )}
         <Text style={styles.empresaNombre}>
@@ -182,7 +196,8 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
       </View>
     </View>
   </View>
-);
+  );
+};
 
 /**
  * Genera la información del cliente común para todas las plantillas

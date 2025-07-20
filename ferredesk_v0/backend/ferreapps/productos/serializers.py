@@ -81,9 +81,19 @@ class StockSerializer(serializers.ModelSerializer):
         return vista if vista is not None else 0
 
 class FerreteriaSerializer(serializers.ModelSerializer):
+    logo_empresa = serializers.SerializerMethodField()
+    
     class Meta:
         model = Ferreteria
         fields = '__all__'
+    
+    def get_logo_empresa(self, obj):
+        if obj.logo_empresa:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.logo_empresa.url)
+            return obj.logo_empresa.url
+        return None
 
 class VistaStockProductoSerializer(serializers.ModelSerializer):
     class Meta:

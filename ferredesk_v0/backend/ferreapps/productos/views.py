@@ -12,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 import os
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import JSONParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils.decorators import method_decorator
@@ -438,13 +438,14 @@ def editar_producto_con_relaciones(request):
 
 class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get(self, request):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
-        return Response(FerreteriaSerializer(ferreteria).data)
+        return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
 
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()
@@ -452,7 +453,13 @@ class FerreteriaAPIView(APIView):
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
         if not request.user.is_staff:
             return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
-        serializer = FerreteriaSerializer(ferreteria, data=request.data, partial=True)
+        
+        # Manejar archivos subidos
+        data = request.data.copy()
+        if 'logo_empresa' in request.FILES:
+            data['logo_empresa'] = request.FILES['logo_empresa']
+        
+        serializer = FerreteriaSerializer(ferreteria, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

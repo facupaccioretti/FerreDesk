@@ -53,19 +53,21 @@ const styles = StyleSheet.create({
     marginBottom: 8, // Espacio entre la información principal y "Responsable Inscripto"
   },
   logoEmpresa: {
-    width: 30,
-    height: 30,
-    borderWidth: 1,
-    borderColor: "#000",
-    borderStyle: "solid",
+    width: 50,
+    height: 50,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
     marginBottom: 4,
   },
   logoTexto: {
     fontSize: 4,
     textAlign: "center",
+  },
+  logoImagen: {
+    width: 50,
+    height: 50,
+    objectFit: "contain",
+    resizeMode: "contain",
   },
   empresaNombre: {
     fontSize: 12,

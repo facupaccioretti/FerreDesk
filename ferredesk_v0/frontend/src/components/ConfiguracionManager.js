@@ -203,8 +203,9 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
               onChange={(e) => {
                 const file = e.target.files[0];
                 if (file) {
-                  // Aquí se manejaría la subida del archivo
-                  // Por ahora solo actualizamos el estado
+                  // Guardar el archivo para subirlo cuando se guarde la configuración
+                  onConfigChange("logo_empresa_file", file);
+                  // Mostrar preview temporal
                   onConfigChange("logo_empresa", URL.createObjectURL(file));
                 }
               }}
@@ -468,14 +469,32 @@ const ConfiguracionManager = () => {
     
     try {
       const csrftoken = getCookie("csrftoken")
+      
+      // Preparar datos para envío
+      const formData = new FormData()
+      
+      // Agregar todos los campos de configuración excepto el archivo
+      Object.keys(config).forEach(key => {
+        if (key !== 'logo_empresa_file' && key !== 'logo_empresa') {
+          if (config[key] !== null && config[key] !== undefined) {
+            formData.append(key, config[key])
+          }
+        }
+      })
+      
+      // Agregar el archivo del logo si existe
+      if (config.logo_empresa_file) {
+        formData.append('logo_empresa', config.logo_empresa_file)
+      }
+      
       const res = await fetch("/api/ferreteria/", {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
           "X-CSRFToken": csrftoken,
+          // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
         },
         credentials: "include",
-        body: JSON.stringify(config),
+        body: formData,
       })
       
       if (!res.ok) throw new Error("Error al guardar configuración")
