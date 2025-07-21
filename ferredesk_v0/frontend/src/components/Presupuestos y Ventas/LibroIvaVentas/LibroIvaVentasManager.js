@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import Navbar from '../../Navbar';
 import { useLibroIvaAPI } from '../../../utils/useLibroIVAAPI';
 import LibroIvaPeriodoSelector from './LibroIvaPeriodoSelector';
 import LibroIvaTable from './LibroIvaTable';
 import LibroIvaExport from './LibroIvaExport';
 
 const LibroIvaVentasManager = () => {
+  const [user, setUser] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
   const [mostrarExportacion, setMostrarExportacion] = useState(false);
   
@@ -20,7 +22,23 @@ const LibroIvaVentasManager = () => {
 
   useEffect(() => {
     document.title = "Libro IVA Ventas - FerreDesk";
+    
+    // Obtener información del usuario desde localStorage
+    const userInfo = localStorage.getItem('user');
+    if (userInfo) {
+      try {
+        setUser(JSON.parse(userInfo));
+      } catch (error) {
+        console.error('Error al parsear información del usuario:', error);
+      }
+    }
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  };
 
   const handleGenerarLibro = async (mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     try {
@@ -49,8 +67,10 @@ const LibroIvaVentasManager = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50">
+      <Navbar user={user} onLogout={handleLogout} />
+      <div className="py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -167,6 +187,7 @@ const LibroIvaVentasManager = () => {
             <span className="ml-3 text-gray-600">Generando Libro IVA...</span>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

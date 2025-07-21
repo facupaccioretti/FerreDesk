@@ -16,6 +16,8 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils.decorators import method_decorator
+from django.http import FileResponse
+from django.conf import settings
 
 # Create your views here.
 
@@ -471,3 +473,89 @@ class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = VistaStockProductoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def servir_logo_arca(request):
+    """
+    Endpoint para servir el logo ARCA desde la carpeta media.
+    URL: /api/productos/servir-logo-arca/
+    """
+    try:
+        ruta_logo = os.path.join(settings.MEDIA_ROOT, 'logos', 'logo-arca.jpg')
+        print(f'DEBUG: Intentando servir logo desde: {ruta_logo}')
+        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
+        
+        if not os.path.exists(ruta_logo):
+            print(f'ERROR: Logo ARCA no encontrado en {ruta_logo}')
+            return Response({'detail': 'Logo ARCA no encontrado'}, status=404)
+        
+        print(f'Sirviendo logo desde {ruta_logo}')
+        response = FileResponse(
+            open(ruta_logo, 'rb'),
+            content_type='image/jpeg',
+            headers={
+                'Content-Disposition': 'inline; filename="logo-arca.jpg"',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Cache-Control': 'public, max-age=31536000'
+            }
+        )
+        return response
+    except Exception as e:
+        print(f'ERROR: Error al servir logo: {str(e)}')
+        return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def servir_logo_empresa(request):
+    """
+    Endpoint para servir el logo de empresa desde la base de datos.
+    URL: /api/productos/servir-logo-empresa/
+    """
+    try:
+        # Obtener la configuración de ferretería
+        ferreteria = Ferreteria.objects.first()
+        
+        if not ferreteria or not ferreteria.logo_empresa:
+            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
+        
+        # Obtener la ruta del archivo
+        ruta_logo = ferreteria.logo_empresa.path
+        
+        print(f'DEBUG: Intentando servir logo empresa desde: {ruta_logo}')
+        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
+        
+        if not os.path.exists(ruta_logo):
+            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
+        
+        # Determinar el tipo de contenido basado en la extensión
+        extension = os.path.splitext(ruta_logo)[1].lower()
+        content_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        }
+        content_type = content_type_map.get(extension, 'image/jpeg')
+        
+        print(f'Sirviendo logo empresa desde {ruta_logo}')
+        response = FileResponse(
+            open(ruta_logo, 'rb'),
+            content_type=content_type,
+            headers={
+                'Content-Disposition': f'inline; filename="{os.path.basename(ruta_logo)}"',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Cache-Control': 'public, max-age=31536000'
+            }
+        )
+        return response
+    except Exception as e:
+        print(f'ERROR: Error al servir logo empresa: {str(e)}')
+        return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)

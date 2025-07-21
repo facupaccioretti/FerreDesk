@@ -133,10 +133,7 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
         {ferreteriaConfig.logo_empresa && (
           <View style={styles.logoEmpresa}>
             <Image 
-              src={ferreteriaConfig.logo_empresa.startsWith('http') 
-                ? ferreteriaConfig.logo_empresa 
-                : `${window.location.origin}${ferreteriaConfig.logo_empresa}`
-              } 
+              src="http://localhost:8000/api/productos/servir-logo-empresa/"
               style={styles.logoImagen}
             />
           </View>
@@ -295,43 +292,44 @@ export const generarTablaItemsComun = (
  */
 export const generarPieFiscalComun = (data, styles) => (
   <View style={styles.pieFiscal}>
-    {/* Columna izquierda - QR y ARCA placeholders */}
-    <View style={styles.pieIzquierda}>
-      <View style={styles.placeholdersContainer}>
-        {data.ven_qr && (
-          <View style={styles.qrPlaceholder}>
-            <Text style={styles.qrTexto}>[QR CODE]</Text>
-          </View>
-        )}
-        {data.ven_arca && (
-          <View style={styles.arcaPlaceholder}>
-            <Text style={styles.arcaTexto}>[LOGO ARCA]</Text>
-          </View>
-        )}
+    {/* UNA SOLA FILA HORIZONTAL: QR (60x60) + Logo ARCA + Disclaimer AFIP + CAE */}
+    <View style={styles.pieFilaHorizontal}>
+      {/* QR Placeholder (60x60) */}
+      <View style={styles.qrPlaceholder}>
+        <Text style={styles.qrTexto}>[QR CODE]</Text>
       </View>
-      <Text style={styles.arcaAutorizado}>AGENCIA DE RECAUDACIÓN Y CONTROL ADUANERO</Text>
-      <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
-    </View>
-
-    {/* Columna central - Disclaimer e información bancaria */}
-    <View style={styles.pieCentro}>
-      <Text style={styles.leyendaAfip}>
-        Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
-      </Text>
-      {data.informacion_bancaria && (
-        <Text style={styles.infoBancaria}>{data.informacion_bancaria}</Text>
-      )}
-    </View>
-
-    {/* Columna derecha - CAE y CAE Vencimiento (siempre visibles) */}
-    <View style={styles.pieDerecha}>
-      <View style={styles.campoAfip}>
-        <Text style={styles.labelAfip}>CAE:</Text>
-        <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+      
+      {/* Logo ARCA */}
+      <View style={styles.arcaPlaceholder}>
+        <Image 
+          src="http://localhost:8000/api/productos/servir-logo-arca/"
+          style={{
+            width: 60,
+            height: 50,
+            objectFit: "contain",
+            resizeMode: "contain"
+          }}
+        />
       </View>
-      <View style={styles.campoAfip}>
-        <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
-        <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+      
+      {/* Disclaimer AFIP */}
+      <View style={styles.textosAfipContainer}>
+        <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
+        <Text style={styles.leyendaAfip}>
+          Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
+        </Text>
+      </View>
+      
+      {/* CAE y CAE Vencimiento (a la derecha del todo) */}
+      <View style={styles.pieDerecha}>
+        <View style={styles.campoAfip}>
+          <Text style={styles.labelAfip}>CAE:</Text>
+          <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+        </View>
+        <View style={styles.campoAfip}>
+          <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
+          <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+        </View>
       </View>
     </View>
   </View>

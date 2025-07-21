@@ -41,36 +41,39 @@ const styles = StyleSheet.create({
   },
   seccionIzquierda: {
     flex: 1,
-    alignItems: "center", // Centrar todo el contenido horizontalmente
-    justifyContent: "flex-end", // Alinear todo hacia abajo
+    flexDirection: "row", // Disposición horizontal
+    alignItems: "flex-start", // Alinear al tope
+    justifyContent: "flex-start", // Alinear a la izquierda
     paddingRight: 20, // Espacio para el recuadro flotante
     minHeight: 80, // Altura mínima para distribuir el contenido
-    paddingBottom: 4, // Pequeño margen del pie del header
+    paddingTop: 8, // Margen superior
+    paddingBottom: 8, // Margen inferior
   },
   infoEmpresaCentrada: {
+    flex: 1, // Ocupar el espacio restante
     alignItems: "center", // Centrar horizontalmente
-    justifyContent: "center", // Centrar verticalmente
-    marginBottom: 8, // Espacio entre la información principal y "Responsable Inscripto"
+    justifyContent: "flex-start", // Alinear hacia arriba
+    marginLeft: 8, // Espacio entre logo y texto
   },
   logoEmpresa: {
-    width: 50,
-    height: 50,
+    width: 70,
+    height: 70,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 0, // Sin margen inferior
   },
   logoTexto: {
     fontSize: 4,
     textAlign: "center",
   },
   logoImagen: {
-    width: 50,
-    height: 50,
+    width: 70,
+    height: 70,
     objectFit: "contain",
     resizeMode: "contain",
   },
   empresaNombre: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: "bold",
     marginBottom: 2,
   },
@@ -81,7 +84,11 @@ const styles = StyleSheet.create({
   situacionFiscal: {
     fontSize: 8,
     fontWeight: "bold",
-    marginBottom: 2,
+    position: "absolute",
+    bottom: 4,
+    left: "50%",
+    transform: "translateX(-50%)",
+    textAlign: "center",
   },
   
   // LÍNEA DIVISORIA CENTRAL (cortada para no superponerse con el recuadro)
@@ -390,11 +397,11 @@ const styles = StyleSheet.create({
     borderRightStyle: "solid",
   },
   
-  // Pie fiscal - Simplificado
+  // Pie fiscal - UNA SOLA FILA HORIZONTAL
   pieFiscal: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    justifyContent: "flex-start",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#000",
     borderStyle: "solid",
@@ -403,23 +410,20 @@ const styles = StyleSheet.create({
     bottom: 8,
     left: 8,
     right: 8,
-    minHeight: 60, // 30% más grande (antes 35)
+    minHeight: 60,
   },
-  pieIzquierda: {
-    flex: 1,
-    alignItems: "center",
-    paddingRight: 6,
-  },
-  placeholdersContainer: {
+  // Fila horizontal: QR + Logo ARCA + Textos AFIP
+  pieFilaHorizontal: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
-    marginBottom: 2,
-    gap: 10,
+    gap: 8,
+    width: "100%",
   },
+  // QR Placeholder (60x60)
   qrPlaceholder: {
-    width: 30,
-    height: 30,
+    width: 60,
+    height: 60,
     borderWidth: 1,
     borderColor: "#000",
     borderStyle: "solid",
@@ -428,28 +432,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
   },
   qrTexto: {
-    fontSize: 4,
+    fontSize: 6,
     textAlign: "center",
   },
+  // Logo ARCA
   arcaPlaceholder: {
-    width: 40,
-    height: 30,
-    borderWidth: 1,
-    borderColor: "#000",
-    borderStyle: "solid",
+    width: 60,
+    height: 50,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
   },
   arcaTexto: {
     fontSize: 5,
     textAlign: "center",
   },
+  // Contenedor de disclaimer AFIP
+  textosAfipContainer: {
+    flex: 1,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingLeft: 8,
+    paddingRight: 8,
+  },
+  leyendaAfip: {
+    fontSize: 6,
+    textAlign: "left",
+    lineHeight: 1.2,
+  },
   arcaAutorizado: {
     fontSize: 6,
     fontWeight: "bold",
     marginBottom: 1,
-    textAlign: "center",
+    textAlign: "left",
   },
   pieCentro: {
     flex: 1,
@@ -468,9 +482,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   pieDerecha: {
-    flex: 1,
     alignItems: "flex-end",
     paddingLeft: 6,
+    minWidth: 120,
   },
   campoAfip: {
     marginBottom: 3,
