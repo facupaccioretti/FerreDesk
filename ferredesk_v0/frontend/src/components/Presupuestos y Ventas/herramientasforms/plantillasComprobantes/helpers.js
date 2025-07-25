@@ -118,11 +118,15 @@ export const dividirItemsEnPaginas = (items, itemsPorPagina = CANTIDAD_MAXIMA_IT
  */
 export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
   // Debug: Verificar URL del logo
-  console.log('🔍 DEBUG LOGO URL:', {
+  console.log('DEBUG LOGO URL:', {
     logo_empresa: ferreteriaConfig?.logo_empresa,
     tieneLogo: !!ferreteriaConfig?.logo_empresa,
     urlCompleta: ferreteriaConfig?.logo_empresa ? `${window.location.origin}${ferreteriaConfig.logo_empresa}` : null
   });
+
+  // Determinar si es comprobante informal (presupuesto o factura interna)
+  const comprobante = data.comprobante || {};
+  const esComprobanteInformal = comprobante.CBT_TIPO === "presupuesto" || comprobante.CBT_TIPO === "factura_interna" || comprobante.CBT_LETRA === "P" || comprobante.CBT_LETRA === "I";
 
   return (
   <View style={styles.header}>
@@ -147,17 +151,16 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
         <Text style={styles.empresaInfo}>
           {ferreteriaConfig.telefono || ""}
         </Text>
+        {/* Situación fiscal centrada al pie del bloque empresa */}
+        <View style={styles.situacionFiscalContainer}>
+          <Text style={styles.situacionFiscal}>
+            {ferreteriaConfig.situacion_iva ? mapearSituacionFiscal(ferreteriaConfig.situacion_iva) : ""}
+          </Text>
+        </View>
       </View>
-      
-      {/* Situación fiscal en el piso */}
-      <Text style={styles.situacionFiscal}>
-        {ferreteriaConfig.situacion_iva ? mapearSituacionFiscal(ferreteriaConfig.situacion_iva) : ""}
-      </Text>
     </View>
-
     {/* LÍNEA DIVISORIA CENTRAL */}
     <View style={styles.lineaDivisoriaCentral} />
-
     {/* RECUADRO DE LETRA FLOTANTE */}
     <View style={styles.recuadroLetraFlotante}>
       {data.comprobante?.letra && (
@@ -168,13 +171,15 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
       )}
        <Text style={styles.codigoOriginal}>ORIGINAL</Text>
     </View>
-
     {/* SECCIÓN DERECHA */}
     <View style={styles.seccionDerecha}>
       <View style={styles.facturaInfoTop}>
-        <Text style={styles.facturaTitle}>FACTURA</Text>
+        <Text style={styles.facturaTitle}>{mapearTipoComprobante(data.comprobante)}</Text>
         {data.numero_formateado && (
           <Text style={styles.numeroComprobante}>{data.numero_formateado}</Text>
+        )}
+        {esComprobanteInformal && (
+          <Text style={styles.noValidoComprobanteLabel}>Documento no válido como comprobante</Text>
         )}
         {data.fecha && (
           <Text style={styles.fechaEmision}>Fecha de Emisión: {data.fecha}</Text>
@@ -511,4 +516,45 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
       </View>
     </View>
   );
+}; 
+
+/**
+ * Mapea el tipo de comprobante a un string legible para mostrar en el header del PDF
+ * @param {Object} comprobante
+ * @returns {string}
+ */
+export function mapearTipoComprobante(comprobante) {
+  if (!comprobante) return "FACTURA";
+  const nombre = String(comprobante.nombre || "").toLowerCase();
+  if (nombre.includes("presupuesto")) return "PRESUPUESTO";
+  if (nombre.includes("venta")) return "VENTA";
+  if (nombre.includes("factura")) return "FACTURA";
+  if (nombre.includes("nota de crédito interna")) return "NOTA DE CRÉDITO INTERNA";
+  if (nombre.includes("nota de crédito")) return "NOTA DE CRÉDITO";
+  if (nombre.includes("nota de débito")) return "NOTA DE DÉBITO";
+  if (nombre.includes("recibo")) return "RECIBO";
+  // fallback por tipo
+  const tipo = String(comprobante.tipo || "").toLowerCase();
+  if (tipo === "presupuesto") return "PRESUPUESTO";
+  if (tipo === "factura_interna") return "FACTURA I";
+  if (tipo === "nota_credito_interna") return "NOTA DE CRÉDITO INTERNA";
+  if (tipo === "nota_credito") return "NOTA DE CRÉDITO";
+  if (tipo === "nota_debito") return "NOTA DE DÉBITO";
+  if (tipo === "recibo") return "RECIBO";
+  return (comprobante.nombre || comprobante.tipo || "FACTURA").toUpperCase();
+} 
+
+/**
+ * Agrega estilos para el label de comprobante no válido
+ */
+export const styles = {
+  // ... otros estilos ...
+  noValidoComprobanteLabel: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#b91c1c",
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 2,
+  },
 }; 

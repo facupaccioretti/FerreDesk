@@ -1,294 +1,645 @@
-import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer"
+import { useFerreteriaAPI } from "../../../../../utils/useFerreteriaAPI"
+import { 
+  CANTIDAD_MAXIMA_ITEMS, 
+  dividirItemsEnPaginas,
+  generarPaginaComprobante,
+  calcularNetoPagina,
+  calcularTraspasos,
+  generarFilaTraspaso,
+  generarTablaTotales
+} from "../helpers"
 
-// Registrar fuentes (usando fuentes del sistema por defecto)
+// Registrar fuentes
 Font.register({
-  family: 'Helvetica',
+  family: "Helvetica",
   fonts: [
-    { src: 'Helvetica', fontWeight: 'normal' },
-    { src: 'Helvetica-Bold', fontWeight: 'bold' },
-  ]
-});
+    { src: "Helvetica", fontWeight: "normal" },
+    { src: "Helvetica-Bold", fontWeight: "bold" },
+  ],
+})
 
-// Estilos para PDF
+// Estilos para el PDF, diseñados para coincidir con el esquema de 2 secciones.
 const styles = StyleSheet.create({
   page: {
-    padding: 30,
-    fontFamily: 'Helvetica',
+    padding: 8, // Reducido de 15 a 8 para acercar a los bordes
     fontSize: 10,
+    fontFamily: "Helvetica",
   },
   
-  // Título principal
-  titulo: {
-    fontSize: 24,
-    textAlign: 'center',
-    marginBottom: 20,
-    fontWeight: 'bold',
-  },
-  
-  // Información del comprobante
-  infoComprobante: {
+  // HEADER: Contenedor principal con posición relativa para elementos flotantes.
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     borderWidth: 1,
-    borderColor: '#000',
-    borderStyle: 'solid',
-    padding: 10,
-    marginBottom: 20,
-    textAlign: 'center',
+    borderColor: "#000",
+    borderStyle: "solid",
+    padding: 8,
+    marginBottom: 4, // Reducido para achicar el largo
+    position: "relative",
+  },
+  seccionIzquierda: {
+    flex: 1,
+    flexDirection: "row", // Disposición horizontal
+    alignItems: "flex-start", // Alinear al tope
+    justifyContent: "flex-start", // Alinear a la izquierda
+    paddingRight: 20, // Espacio para el recuadro flotante
+    minHeight: 60, // Reducido de 80 a 60
+    paddingTop: 4, // Reducido
+    paddingBottom: 4, // Reducido
+  },
+  infoEmpresaCentrada: {
+    flex: 1, // Ocupar el espacio restante
+    alignItems: "center", // Centrar horizontalmente
+    justifyContent: "flex-start", // Alinear hacia arriba
+    marginLeft: 8, // Espacio entre logo y texto
+  },
+  logoEmpresa: {
+    width: 70,
+    height: 70,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 0, // Sin margen inferior
+  },
+  logoTexto: {
+    fontSize: 4,
+    textAlign: "center",
+  },
+  logoImagen: {
+    width: 70,
+    height: 70,
+    objectFit: "contain",
+    resizeMode: "contain",
+  },
+  empresaNombre: {
+    fontSize: 9,
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
+  empresaInfo: {
+    fontSize: 8,
+    marginBottom: 1,
+  },
+  situacionFiscal: {
+    fontSize: 8,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 0,
+    width: "100%",
+    alignSelf: "center",
+  },
+  situacionFiscalContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  
+  // LÍNEA DIVISORIA CENTRAL (cortada para no superponerse con el recuadro)
+  lineaDivisoriaCentral: {
+    width: 1,
+    backgroundColor: 'black',
+    position: 'absolute',
+    left: '50%',
+    top: 40, // Empieza después del recuadro (altura del recuadro = 40px)
+    bottom: 0,
+    zIndex: 1,
+  },
+  
+  // RECUADRO DE LETRA FLOTANTE
+  recuadroLetraFlotante: {
+    position: 'absolute',
+    left: '50%',
+    top: 0,
+    marginLeft: -20, // Mitad del ancho del recuadro (40/2) para centrarlo perfectamente
+    width: 40,
+    height: 40,
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10, // Valor alto para asegurar que esté por encima de todo
+  },
+  letraGrande: {
+    fontSize: 24,
+    fontWeight: "bold",
   },
   codigoOriginal: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 6,
+    fontWeight: "bold",
   },
-  letraComprobante: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#059669',
-    marginBottom: 5,
+  
+  // SECCIÓN DERECHA
+  seccionDerecha: {
+    flex: 1,
+    padding: 6,
+    paddingLeft: 20, // Espacio para el recuadro flotante
+  },
+  facturaInfoTop: {
+    paddingBottom: 2,
+  },
+  facturaInfoBottom: {
+    paddingTop: 2,
+  },
+  facturaTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 2,
   },
   numeroComprobante: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 10,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 2,
   },
   fechaEmision: {
-    fontSize: 9,
-  },
-  
-  // Información emisor/receptor
-  seccionContacto: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  emisor: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderStyle: 'solid',
-    padding: 10,
-    marginRight: 5,
-  },
-  receptor: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderStyle: 'solid',
-    padding: 10,
-    marginLeft: 5,
-  },
-  subtitulo: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    backgroundColor: '#f0f0f0',
-    padding: 5,
-  },
-  campo: {
-    marginBottom: 3,
-    fontSize: 9,
-  },
-  
-  // Tabla de items
-  tabla: {
-    marginBottom: 20,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    backgroundColor: '#059669',
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  dataRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    borderBottomStyle: 'solid',
-    fontSize: 9,
-  },
-  rowAlternate: {
-    backgroundColor: '#f9f9f9',
-  },
-  colCodigo: { width: '15%', padding: 5, textAlign: 'center' },
-  colDescripcion: { width: '40%', padding: 5 },
-  colCantidad: { width: '10%', padding: 5, textAlign: 'center' },
-  colPrecio: { width: '15%', padding: 5, textAlign: 'right' },
-  colImporte: { width: '20%', padding: 5, textAlign: 'right' },
-  
-  // Totales
-  totales: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderStyle: 'solid',
-    marginBottom: 20,
-  },
-  filaTotal: {
-    flexDirection: 'row',
-    padding: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    borderBottomStyle: 'solid',
-  },
-  filaTotalFinal: {
-    flexDirection: 'row',
-    padding: 8,
-    backgroundColor: '#f0f0f0',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  labelTotal: { width: '70%', paddingRight: 10 },
-  valorTotal: { width: '30%', textAlign: 'right' },
-  
-  // Régimen de transparencia fiscal
-  regimenTransparencia: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderStyle: 'solid',
-    padding: 5,
-  },
-  tituloRegimen: {
     fontSize: 8,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    textAlign: "center",
+    marginBottom: 1,
+  },
+
+  lineaDivisoria: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#000",
+    borderBottomStyle: "solid",
+    marginVertical: 2,
   },
   
-  // Pie de comprobante
-  pieComprobante: {
+  // Información del cliente - Estructura corregida
+  infoCliente: {
+    flexDirection: "row",
+    marginBottom: 5, // Reducido
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderStyle: 'solid',
-    padding: 10,
+    borderColor: "#000",
+    borderStyle: "solid",
+    padding: 4, // Reducido
+    minHeight: 40, // Reducido de 60 a 40
   },
-  tituloPie: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    backgroundColor: '#f0f0f0',
-    padding: 5,
+  clienteIzquierda: {
+    flex: 1,
+    paddingRight: 6,
+    // Eliminé la línea vertical divisoria
+    justifyContent: "flex-start", // Alinear a la izquierda
+    alignItems: "flex-start", // Alinear a la izquierda
   },
-  campoPie: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  clienteDerecha: {
+    flex: 1,
+    paddingLeft: 6,
+    justifyContent: "flex-start", // Alinear a la izquierda
+    alignItems: "flex-start", // Alinear a la izquierda
+  },
+  labelCliente: {
+    fontSize: 7,
+    marginBottom: 1,
+    textAlign: "left", // Alinear a la izquierda
+  },
+  labelBold: {
+    fontWeight: "bold", // Solo el label en negrita
+  },
+  labelNormal: {
+    fontWeight: "normal", // El valor en normal
+  },
+  
+  // ITEMS - ESTRUCTURA CORREGIDA con líneas completas
+  itemsContainer: {
+    marginBottom: 10,
+    pageBreakInside: "avoid", // Evitar cortar la tabla en medio
+    pageBreakAfter: "auto", // Permitir salto de página después si es necesario
+    // Quitado el borde alrededor de la tabla
+  },
+  itemsHeader: {
+    flexDirection: "row",
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#000",
+    borderStyle: "solid",
+    minHeight: 12, // Reducido de 25 a 12 para hacer más compacto
+  },
+  headerCodigo: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerDescripcion: {
+    flex: 2,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerCantidad: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerPrecio: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerDescuento: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerPrecioBonificado: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerAlicuota: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerIVA: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  headerImporte: {
+    flex: 1,
+    padding: 0, // Eliminado completamente el padding
+    fontSize: 7, // Aumentado de 6 a 7
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
+  },
+  itemRow: {
+    flexDirection: "row",
+    minHeight: 18, // Reducido para eliminar espacio extra
+    // Sin separación visual entre filas
+  },
+  colCodigo: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "center",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colDescripcion: {
+    flex: 2,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "left",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colCantidad: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "center",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colPrecio: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "right",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colDescuento: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "center",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colPrecioBonificado: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "right",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colAlicuota: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "center",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colIVA: {
+    flex: 1,
+    padding: 1, // Reducido de 2 a 1
+    fontSize: 8, // Aumentado 35% de 6 a 8
+    textAlign: "right",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  colImporte: {
+    flex: 1,
+    padding: 1, 
+    fontSize: 8, 
+    textAlign: "right",
+    justifyContent: "center", // Centrar verticalmente
+  },
+  
+  // Totales - Tabla con columnas y filas
+  totalesContainer: {
+    position: "absolute",
+    bottom: 75, 
+    left: 8,
+    right: 8,
+    borderWidth: 1,
+    borderColor: "#000",
+    borderStyle: "solid",
+    backgroundColor: "#f8f9fa",
+    minHeight: 40, 
+  },
+  totalesHeader: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#000",
+    borderBottomStyle: "solid",
+    backgroundColor: "#e9ecef",
+  },
+  totalesHeaderCol: {
+    flex: 1,
+    padding: 4,
+    fontSize: 7,
+    fontWeight: "bold",
+    textAlign: "center",
+    borderRightWidth: 1,
+    borderRightColor: "#000",
+    borderRightStyle: "solid",
+  },
+  totalesRow: {
+    flexDirection: "row",
+  },
+  totalesCol: {
+    flex: 1,
+    padding: 6,
+    fontSize: 8,
+    fontWeight: "bold",
+    textAlign: "center",
+    borderRightWidth: 1,
+    borderRightColor: "#000",
+    borderRightStyle: "solid",
+  },
+  
+  // Pie fiscal - UNA SOLA FILA HORIZONTAL
+  pieFiscal: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#000",
+    borderStyle: "solid",
+    padding: 4,
+    position: "absolute",
+    bottom: 8,
+    left: 8,
+    right: 8,
+    minHeight: 60,
+  },
+  // Fila horizontal: QR + Logo ARCA + Textos AFIP
+  pieFilaHorizontal: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+  },
+  // QR Placeholder (60x60)
+  qrPlaceholder: {
+    width: 60,
+    height: 60,
+    borderWidth: 1,
+    borderColor: "#000",
+    borderStyle: "solid",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+  },
+  qrTexto: {
+    fontSize: 6,
+    textAlign: "center",
+  },
+  // Logo ARCA
+  arcaPlaceholder: {
+    width: 60,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  arcaTexto: {
+    fontSize: 5,
+    textAlign: "center",
+  },
+  // Contenedor de disclaimer AFIP
+  textosAfipContainer: {
+    flex: 1,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingLeft: 8,
+    paddingRight: 8,
+  },
+  leyendaAfip: {
+    fontSize: 6,
+    textAlign: "left",
+    lineHeight: 1.2,
+  },
+  arcaAutorizado: {
+    fontSize: 6,
+    fontWeight: "bold",
+    marginBottom: 1,
+    textAlign: "left",
+  },
+  pieCentro: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 4,
+    justifyContent: "center",
+  },
+  leyendaAfip: {
+    fontSize: 6,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  infoBancaria: {
+    fontSize: 5,
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  pieDerecha: {
+    alignItems: "flex-end",
+    paddingLeft: 6,
+    minWidth: 120,
+  },
+  campoAfip: {
     marginBottom: 3,
-    fontSize: 9,
   },
-});
+  labelAfip: {
+    fontSize: 6,
+    fontWeight: "bold",
+    textAlign: "right",
+  },
+  valorAfip: {
+    fontSize: 6,
+    textAlign: "right",
+  },
+  
+  // Estilos para filas de traspaso
+  filaTraspaso: {
+    flexDirection: "row",
+    minHeight: 18,
+    backgroundColor: "#f8f9fa",
+    borderTopWidth: 1,
+    borderTopColor: "#000",
+    borderTopStyle: "solid",
+  },
+  colTraspaso: {
+    flex: 9, // Ocupa todas las columnas
+    padding: 2,
+    fontSize: 8,
+    fontWeight: "bold",
+    textAlign: "center",
+    justifyContent: "center",
+    color: "#000",
+  },
+})
 
-const PlantillaFacturaBPDF = ({ data }) => {
-  const formatearMoneda = (valor) => {
-    if (!valor) return '$ 0,00';
-    return `$ ${parseFloat(valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+// Configuración específica para Factura A
+const configFacturaB = {
+  generarTablaItems: (
+    itemsPagina,
+    styles,
+    formatearMoneda,
+    formatearDescuentosVisual,
+    netoTraspasado = null,
+    netoPagina = null,
+    mostrarTraspasoSiguiente = false
+  ) => (
+    <View style={styles.itemsContainer}>
+      <View style={styles.itemsHeader}>
+        <Text style={styles.headerCodigo}>Código</Text>
+        <Text style={styles.headerDescripcion}>Descripción</Text>
+        <Text style={styles.headerCantidad}>Cantidad</Text>
+        <Text style={styles.headerPrecio}>P. Unitario</Text>
+        <Text style={styles.headerDescuento}>Desc. %</Text>
+        <Text style={styles.headerPrecioBonificado}>P. Unit. Bonif.</Text>
+        <Text style={styles.headerImporte}>Importe</Text>
+      </View>
+      {netoTraspasado !== null && generarFilaTraspaso(netoTraspasado, styles, formatearMoneda, true)}
+      {itemsPagina && itemsPagina.length > 0 ? (
+        itemsPagina.map((item, index) => (
+          <View key={index} style={styles.itemRow}>
+            <Text style={styles.colCodigo}>{item.codigo || ""}</Text>
+            <Text style={styles.colDescripcion}>{item.vdi_detalle1 || ""}</Text>
+            <Text style={styles.colCantidad}>{item.vdi_cantidad || ""}</Text>
+            <Text style={styles.colPrecio}>{formatearMoneda(item.vdi_precio_unitario_final)}</Text>
+            <Text style={styles.colDescuento}>{formatearDescuentosVisual(item.vdi_bonifica, item.ven_descu1, item.ven_descu2, item.ven_descu3)}</Text>
+            <Text style={styles.colPrecioBonificado}>{formatearMoneda(item.precio_unitario_bonificado_con_iva)}</Text>
+            <Text style={styles.colImporte}>{formatearMoneda(item.total_item)}</Text>
+          </View>
+        ))
+      ) : null}
+      {mostrarTraspasoSiguiente && netoPagina !== null && generarFilaTraspaso(netoPagina, styles, formatearMoneda, false)}
+    </View>
+  ),
+  generarTotales: (data, styles, formatearMoneda) => {
+    const configTotalesB = [
+      { label: "Subtotal", tipo: "neto_gravado" },
+      { label: "IVA Contenido", tipo: "iva_contenido" },
+      { label: "Total", tipo: "total" }
+    ];
+    return generarTablaTotales(data, styles, formatearMoneda, configTotalesB);
+  }
+};
+
+const PlantillaFacturaBPDF = ({ data, ferreteriaConfig }) => {
+
+  // Si no hay configuración, no renderizar nada o un mensaje de error
+  if (!ferreteriaConfig) {
+    return (
+      <Document>
+        <Page size="A4" style={styles.page}>
+          <Text>Error: Faltan los datos de configuración de la empresa.</Text>
+        </Page>
+      </Document>
+    );
+  }
+
+  // Dividir items en páginas
+  const paginasItems = dividirItemsEnPaginas(data.items || [], CANTIDAD_MAXIMA_ITEMS);
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        {/* Título */}
-        <Text style={styles.titulo}>FACTURA</Text>
+      {paginasItems.map((itemsPagina, indexPagina) => {
+        const esUltimaPagina = indexPagina === paginasItems.length - 1;
         
-        {/* Información del comprobante */}
-        <View style={styles.infoComprobante}>
-          <Text style={styles.codigoOriginal}>CÓD. 06 ORIGINAL</Text>
-          <Text style={styles.letraComprobante}>{data.comprobante?.letra || 'B'}</Text>
-          <Text style={styles.numeroComprobante}>{data.numero_formateado || '0000-00000001'}</Text>
-          <Text style={styles.fechaEmision}>Fecha de emisión: {data.fecha || ''}</Text>
-        </View>
+        // Calcular neto de la página actual
+        const netoPagina = calcularNetoPagina(itemsPagina, 'A');
         
-        {/* Emisor y Receptor */}
-        <View style={styles.seccionContacto}>
-          <View style={styles.emisor}>
-            <Text style={styles.subtitulo}>EMISOR</Text>
-            <Text style={styles.campo}>Razón Social: {data.emisor_razon_social || 'Empresa de Ejemplo S.R.L.'}</Text>
-            <Text style={styles.campo}>Dirección: {data.emisor_direccion || 'Avenida 44 Nro. 12345 (1900) La Plata - Buenos Aires'}</Text>
-            <Text style={styles.campo}>Teléfono: {data.emisor_telefono || '(0123) 15-456-7800'}</Text>
-            <Text style={styles.campo}>Condición IVA: {data.emisor_condicion_iva || 'Responsable Inscripto'}</Text>
-            <Text style={styles.campo}>CUIT: {data.emisor_cuit || '20-12345678-3'}</Text>
-            <Text style={styles.campo}>Ing. Brutos: {data.emisor_ingresos_brutos || '20-12345078-3'}</Text>
-            <Text style={styles.campo}>Inicio Actividad: {data.emisor_inicio_actividad || '01/01/2000'}</Text>
-          </View>
-          
-          <View style={styles.receptor}>
-            <Text style={styles.subtitulo}>RECEPTOR</Text>
-            <Text style={styles.campo}>Nombre: {data.cliente || 'Cliente 1'}</Text>
-            <Text style={styles.campo}>Dirección: {data.domicilio || 'Dirección Cliente 1'}</Text>
-            <Text style={styles.campo}>Cond. IVA: {data.condicion_iva_cliente || 'Consumidor Final'}</Text>
-            <Text style={styles.campo}>Cond. Venta: Contado</Text>
-            <Text style={styles.campo}>DNI: {data.cuit || '28.123.123'}</Text>
-            <Text style={styles.campo}>Localidad: {data.localidad || 'Ciudad Cliente 1'}</Text>
-            <Text style={styles.campo}>Provincia: {data.provincia || 'Provincia Cliente 1'}</Text>
-            <Text style={styles.campo}>Teléfono: {data.telefono_cliente || 'Teléfono Cliente 1'}</Text>
-          </View>
-        </View>
+        // Calcular neto traspasado de páginas anteriores
+        let netoTraspasado = null;
+        if (indexPagina > 0) {
+          let netoAcumulado = 0;
+          // Sumar netos de todas las páginas anteriores
+          for (let i = 0; i < indexPagina; i++) {
+            const paginaAnterior = paginasItems[i];
+            netoAcumulado = calcularTraspasos(paginaAnterior, 'A', netoAcumulado);
+          }
+          netoTraspasado = netoAcumulado;
+        }
         
-        {/* Tabla de Items */}
-        <View style={styles.tabla}>
-          <View style={styles.headerRow}>
-            <Text style={styles.colCodigo}>Código</Text>
-            <Text style={styles.colDescripcion}>Descripción</Text>
-            <Text style={styles.colCantidad}>Cantidad</Text>
-            <Text style={styles.colPrecio}>P. Unitario</Text>
-            <Text style={styles.colImporte}>Importe</Text>
-          </View>
-          
-          {data.items?.map((item, index) => (
-            <View key={index} style={[styles.dataRow, index % 2 === 1 && styles.rowAlternate]}>
-              <Text style={styles.colCodigo}>{item.codigo || ''}</Text>
-              <Text style={styles.colDescripcion}>{item.vdi_detalle1 || ''}</Text>
-              <Text style={styles.colCantidad}>{item.vdi_cantidad || 0}</Text>
-              <Text style={styles.colPrecio}>{formatearMoneda(item.vdi_precio_unitario_final)}</Text>
-              <Text style={styles.colImporte}>{formatearMoneda(item.total_item)}</Text>
-            </View>
-          ))}
-        </View>
+        // Calcular neto acumulado para traspaso a página siguiente
+        const netoAcumuladoParaSiguiente = netoTraspasado !== null 
+          ? netoTraspasado + netoPagina 
+          : netoPagina;
         
-        {/* Totales */}
-        <View style={styles.totales}>
-          <View style={styles.filaTotal}>
-            <Text style={styles.labelTotal}>SUBTOTAL</Text>
-            <Text style={styles.valorTotal}>{formatearMoneda(data.ven_total)}</Text>
-          </View>
-          <View style={styles.filaTotal}>
-            <Text style={styles.labelTotal}>DTO./RECARGO</Text>
-            <Text style={styles.valorTotal}>$ 0,00</Text>
-          </View>
-          <View style={styles.filaTotalFinal}>
-            <Text style={styles.labelTotal}>TOTAL</Text>
-            <Text style={styles.valorTotal}>{formatearMoneda(data.ven_total)}</Text>
-          </View>
-        </View>
+        // Determinar si mostrar traspaso a página siguiente
+        const mostrarTraspasoSiguiente = !esUltimaPagina;
         
-        {/* Régimen de Transparencia Fiscal */}
-        <View style={styles.regimenTransparencia}>
-          <Text style={styles.tituloRegimen}>RÉGIMEN DE TRANSPARENCIA FISCAL AL CONSUMIDOR (Ley 27.743)</Text>
-          <View style={styles.filaTotal}>
-            <Text style={styles.labelTotal}>IVA CONTENIDO</Text>
-            <Text style={styles.valorTotal}>{formatearMoneda(data.iva_global)}</Text>
-          </View>
-          <View style={styles.filaTotal}>
-            <Text style={styles.labelTotal}>OTROS IMPUESTOS NACIONALES INDIRECTOS</Text>
-            <Text style={styles.valorTotal}>$ 0,00</Text>
-          </View>
-        </View>
+        // Logs de depuración
+        console.log(`Página ${indexPagina + 1}:`, {
+          itemsEnPagina: itemsPagina.length,
+          netoPagina,
+          netoTraspasado,
+          netoAcumuladoParaSiguiente,
+          mostrarTraspasoSiguiente,
+          esUltimaPagina
+        });
         
-        {/* Pie de comprobante */}
-        <View style={styles.pieComprobante}>
-          <Text style={styles.tituloPie}>INFORMACIÓN AFIP</Text>
-          <View style={styles.campoPie}>
-            <Text>CAE N°: {data.cae || '1234567890'}</Text>
-            <Text></Text>
-          </View>
-          <View style={styles.campoPie}>
-            <Text>Fecha de Vto. de CAE: {data.cae_vencimiento || '11/01/2025'}</Text>
-            <Text>Comprobante generado con Virtual</Text>
-          </View>
-          <View style={styles.campoPie}>
-            <Text>QR:</Text>
-            <Text></Text>
-          </View>
-        </View>
-      </Page>
+        return generarPaginaComprobante(
+          configFacturaB, //  Configuración específica de Factura A
+          data,
+          ferreteriaConfig,
+          itemsPagina,
+          styles,
+          esUltimaPagina, // Solo mostrar totales en la última página
+          netoTraspasado, // Neto traspasado de página anterior
+          netoAcumuladoParaSiguiente, // Neto acumulado para traspaso a página siguiente
+          mostrarTraspasoSiguiente, // Si mostrar traspaso a página siguiente
+          'B' // Tipo de comprobante
+        );
+      })}
     </Document>
   );
 };

@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     borderColor: "#000",
     borderStyle: "solid",
     padding: 8,
-    marginBottom: 8,
+    marginBottom: 4, // Reducido para achicar el largo
     position: "relative",
   },
   seccionIzquierda: {
@@ -45,9 +45,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start", // Alinear al tope
     justifyContent: "flex-start", // Alinear a la izquierda
     paddingRight: 20, // Espacio para el recuadro flotante
-    minHeight: 80, // Altura mínima para distribuir el contenido
-    paddingTop: 8, // Margen superior
-    paddingBottom: 8, // Margen inferior
+    minHeight: 60, // Reducido de 80 a 60
+    paddingTop: 4, // Reducido
+    paddingBottom: 4, // Reducido
   },
   infoEmpresaCentrada: {
     flex: 1, // Ocupar el espacio restante
@@ -84,11 +84,17 @@ const styles = StyleSheet.create({
   situacionFiscal: {
     fontSize: 8,
     fontWeight: "bold",
-    position: "absolute",
-    bottom: 4,
-    left: "50%",
-    transform: "translateX(-50%)",
     textAlign: "center",
+    marginTop: 4,
+    marginBottom: 0,
+    width: "100%",
+    alignSelf: "center",
+  },
+  situacionFiscalContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
   },
   
   // LÍNEA DIVISORIA CENTRAL (cortada para no superponerse con el recuadro)
@@ -166,12 +172,12 @@ const styles = StyleSheet.create({
   // Información del cliente - Estructura corregida
   infoCliente: {
     flexDirection: "row",
-    marginBottom: 10,
+    marginBottom: 5, // Reducido
     borderWidth: 1,
     borderColor: "#000",
     borderStyle: "solid",
-    padding: 6,
-    minHeight: 60, // Altura mínima para líneas completas
+    padding: 4, // Reducido
+    minHeight: 40, // Reducido de 60 a 40
   },
   clienteIzquierda: {
     flex: 1,
@@ -638,7 +644,7 @@ const PlantillaFacturaAPDF = ({ data, ferreteriaConfig }) => {
         });
         
         return generarPaginaComprobante(
-          configFacturaA, // ✅ Configuración específica de Factura A
+          configFacturaA, //  Configuración específica de Factura A
           data,
           ferreteriaConfig,
           itemsPagina,

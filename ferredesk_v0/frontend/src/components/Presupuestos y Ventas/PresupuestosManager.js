@@ -393,22 +393,7 @@
           
           // Items reales (desde VENTADETALLEITEM_CALCULADO)
           items: itemsDetalle.map(item => ({
-            codigo: item.codigo,
-            vdi_detalle1: item.vdi_detalle1,
-            vdi_cantidad: item.vdi_cantidad,
-            precio_unitario_sin_iva: item.precio_unitario_sin_iva,
-            vdi_bonifica: item.vdi_bonifica,
-            precio_unitario_bonif_desc_sin_iva: item.precio_unitario_bonif_desc_sin_iva,
-            precio_unitario_bonificado: item.precio_unitario_bonificado,
-            precio_unitario_bonificado_con_iva: item.precio_unitario_bonificado_con_iva,
-            ali_porce: item.ali_porce,
-            iva_monto: item.iva_monto,
-            subtotal_neto: item.subtotal_neto,
-            total_item: item.total_item,
-            // Campos adicionales para descuentos
-            ven_descu1: item.ven_descu1,
-            ven_descu2: item.ven_descu2,
-            ven_descu3: item.ven_descu3
+            ...item // Incluir absolutamente todos los campos del ítem original
           })),
           
           // Totales reales (desde VENTA_CALCULADO)
