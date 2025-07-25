@@ -68,6 +68,7 @@ export const formatearHora = (hora) => {
 export const mapearSituacionFiscal = (situacion) => {
   const mapeo = {
     'RI': 'Responsable Inscripto',
+    'MO': 'Monotributista', 
   };
   return mapeo[situacion] || situacion;
 };

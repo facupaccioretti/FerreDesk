@@ -10,6 +10,7 @@ import {
   generarTablaTotales,
   mapearTipoComprobante
 } from "../helpers"
+import { Image } from "@react-pdf/renderer";
 
 // Registrar fuentes
 Font.register({
@@ -544,8 +545,143 @@ const styles = StyleSheet.create({
   },
 })
 
+// Sobrescribir la función del header para la plantilla C
+const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
+  const comprobante = data.comprobante || {};
+  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
+
+  return (
+    <View style={styles.header}>
+      {/* SECCIÓN IZQUIERDA */}
+      <View style={styles.seccionIzquierda}>
+        {/* Información principal centrada */}
+        <View style={styles.infoEmpresaCentrada}>
+          {ferreteriaConfig.logo_empresa && (
+            <View style={styles.logoEmpresa}>
+              <Image 
+                src="http://localhost:8000/api/productos/servir-logo-empresa/"
+                style={styles.logoImagen}
+              />
+            </View>
+          )}
+          <Text style={styles.empresaNombre}>
+            {ferreteriaConfig.nombre || ""}
+          </Text>
+          <Text style={styles.empresaInfo}>
+            {ferreteriaConfig.direccion || ""}
+          </Text>
+          <Text style={styles.empresaInfo}>
+            {ferreteriaConfig.telefono || ""}
+          </Text>
+          {/* Situación fiscal centrada al pie del bloque empresa */}
+          <View style={styles.situacionFiscalContainer}>
+            <Text style={styles.situacionFiscal}>
+              {ferreteriaConfig.situacion_iva ? mapearSituacionFiscal(ferreteriaConfig.situacion_iva) : ""}
+            </Text>
+          </View>
+        </View>
+      </View>
+      {/* LÍNEA DIVISORIA CENTRAL */}
+      <View style={styles.lineaDivisoriaCentral} />
+      {/* RECUADRO DE LETRA FLOTANTE SOBRESCRITO */}
+      <View style={styles.recuadroLetraFlotante}>
+        {data.comprobante?.letra && (
+          <Text style={styles.letraGrande}>{data.comprobante.letra}</Text>
+        )}
+        {data.comprobante?.codigo_afip && (
+          <Text style={styles.codigoOriginal}>CÓD. {data.comprobante.codigo_afip}</Text>
+        )}
+        {/* Mostrar 'ORIGINAL' solo si es comprobante formal */}
+        {!esComprobanteInformal && (
+          <Text style={styles.codigoOriginal}>ORIGINAL</Text>
+        )}
+      </View>
+      {/* SECCIÓN DERECHA */}
+      <View style={styles.seccionDerecha}>
+        <View style={styles.facturaInfoTop}>
+          <Text style={styles.facturaTitle}>{mapearTipoComprobante(data.comprobante)}</Text>
+          {data.numero_formateado && (
+            <Text style={styles.numeroComprobante}>{data.numero_formateado}</Text>
+          )}
+          {data.fecha && (
+            <Text style={styles.fechaEmision}>Fecha de Emisión: {data.fecha}</Text>
+          )}
+          {data.hora_creacion && (
+            <Text style={styles.fechaEmision}>Hora: {formatearHora(data.hora_creacion)}</Text>
+          )}
+          {!data.hora_creacion && (
+            <Text style={styles.fechaEmision}>Hora: No disponible</Text>
+          )}
+        </View>
+        <View style={styles.facturaInfoBottom}>
+          {mostrarSiempre(ferreteriaConfig.cuit_cuil, "CUIT", styles)}
+          {mostrarSiempre(ferreteriaConfig.ingresos_brutos, "Ingresos Brutos", styles)}
+          {mostrarSiempre(ferreteriaConfig.inicio_actividad, "Inicio de Actividades", styles)}
+        </View>
+        {/* Etiqueta de documento no válido centrada y más baja en la sección derecha */}
+        {esComprobanteInformal && (
+          <View style={{ alignItems: 'center', marginTop: 24 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 8, textAlign: 'center' }}>
+              Documento no válido como comprobante
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// Sobrescribir la función del pie fiscal para la plantilla C
+const generarPieFiscalC = (data, styles) => {
+  const comprobante = data.comprobante || {};
+  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
+  // Por ahora, dejar el pie fiscal igual para ambos casos
+  // Más adelante, se podrá condicionar el contenido según esComprobanteInformal
+  return (
+    <View style={styles.pieFiscal}>
+      <View style={styles.pieFilaHorizontal}>
+        {/* QR Placeholder (60x60) */}
+        <View style={styles.qrPlaceholder}>
+          <Text style={styles.qrTexto}>[QR CODE]</Text>
+        </View>
+        {/* Logo ARCA */}
+        <View style={styles.arcaPlaceholder}>
+          <Image 
+            src="http://localhost:8000/api/productos/servir-logo-arca/"
+            style={{
+              width: 60,
+              height: 50,
+              objectFit: "contain",
+              resizeMode: "contain"
+            }}
+          />
+        </View>
+        {/* Disclaimer AFIP */}
+        <View style={styles.textosAfipContainer}>
+          <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
+          <Text style={styles.leyendaAfip}>
+            Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
+          </Text>
+        </View>
+        {/* CAE y CAE Vencimiento (a la derecha del todo) */}
+        <View style={styles.pieDerecha}>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE:</Text>
+            <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+          </View>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
+            <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 // Configuración específica para Factura A
 const configFacturaC = {
+  generarHeader: generarHeaderC,
   generarTablaItems: (
     itemsPagina,
     styles,
@@ -603,7 +739,9 @@ const configFacturaC = {
         </Text>
       </View>
     </View>
-  )
+  ),
+  // Pie fiscal sobrescrito para distinguir comprobante formal/informal (por ahora igual)
+  generarPieFiscal: generarPieFiscalC
 };
 
 const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
@@ -624,7 +762,7 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
 
   // Determinar si es comprobante informal (presupuesto o factura I)
   const comprobante = data.comprobante || {};
-  const esComprobanteInformal = comprobante.CBT_TIPO === "presupuesto" || comprobante.CBT_TIPO === "factura_interna" || comprobante.CBT_LETRA === "P" || comprobante.CBT_LETRA === "I";
+  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
 
   return (
     <Document>
