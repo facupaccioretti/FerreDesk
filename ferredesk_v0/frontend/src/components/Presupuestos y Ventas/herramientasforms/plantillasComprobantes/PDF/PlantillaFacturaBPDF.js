@@ -637,7 +637,9 @@ const PlantillaFacturaBPDF = ({ data, ferreteriaConfig }) => {
           netoTraspasado, // Neto traspasado de página anterior
           netoAcumuladoParaSiguiente, // Neto acumulado para traspaso a página siguiente
           mostrarTraspasoSiguiente, // Si mostrar traspaso a página siguiente
-          'B' // Tipo de comprobante
+          'B', // Tipo de comprobante
+          indexPagina + 1, // Número de página actual
+          paginasItems.length // Total de páginas
         );
       })}
     </Document>

@@ -632,7 +632,7 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
 };
 
 // Sobrescribir la función del pie fiscal para la plantilla C
-const generarPieFiscalC = (data, styles) => {
+const generarPieFiscalC = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
   const comprobante = data.comprobante || {};
   const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
   // Por ahora, dejar el pie fiscal igual para ambos casos
@@ -672,6 +672,10 @@ const generarPieFiscalC = (data, styles) => {
           <View style={styles.campoAfip}>
             <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
             <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+          </View>
+          {/* Contador de páginas abajo a la derecha */}
+          <View style={{ marginTop: 4 }}>
+            <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
           </View>
         </View>
       </View>
@@ -812,7 +816,9 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
           netoTraspasado, // Neto traspasado de página anterior
           netoAcumuladoParaSiguiente, // Neto acumulado para traspaso a página siguiente
           mostrarTraspasoSiguiente, // Si mostrar traspaso a página siguiente
-          'C' // Tipo de comprobante
+          'C', // Tipo de comprobante
+          indexPagina + 1, // Número de página actual
+          paginasItems.length // Total de páginas
         );
       })}
     </Document>

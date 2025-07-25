@@ -294,17 +294,17 @@ export const generarTablaItemsComun = (
  * Genera el pie fiscal común para todas las plantillas
  * @param {Object} data - Datos del comprobante
  * @param {Object} styles - Estilos del componente
+ * @param {number} numeroPagina - Número de página actual
+ * @param {number} totalPaginas - Número total de páginas
  * @returns {JSX.Element} Componente del pie fiscal
  */
-export const generarPieFiscalComun = (data, styles) => (
+export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPaginas = 1) => (
   <View style={styles.pieFiscal}>
-    {/* UNA SOLA FILA HORIZONTAL: QR (60x60) + Logo ARCA + Disclaimer AFIP + CAE */}
     <View style={styles.pieFilaHorizontal}>
       {/* QR Placeholder (60x60) */}
       <View style={styles.qrPlaceholder}>
         <Text style={styles.qrTexto}>[QR CODE]</Text>
       </View>
-      
       {/* Logo ARCA */}
       <View style={styles.arcaPlaceholder}>
         <Image 
@@ -317,7 +317,6 @@ export const generarPieFiscalComun = (data, styles) => (
           }}
         />
       </View>
-      
       {/* Disclaimer AFIP */}
       <View style={styles.textosAfipContainer}>
         <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
@@ -325,7 +324,6 @@ export const generarPieFiscalComun = (data, styles) => (
           Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
         </Text>
       </View>
-      
       {/* CAE y CAE Vencimiento (a la derecha del todo) */}
       <View style={styles.pieDerecha}>
         <View style={styles.campoAfip}>
@@ -335,6 +333,10 @@ export const generarPieFiscalComun = (data, styles) => (
         <View style={styles.campoAfip}>
           <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
           <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+        </View>
+        {/* Contador de páginas abajo a la derecha */}
+        <View style={{ marginTop: 4 }}>
+          <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
         </View>
       </View>
     </View>
@@ -365,7 +367,9 @@ export const generarPaginaComprobante = (
   netoTraspasado = null,
   netoPagina = null,
   mostrarTraspasoSiguiente = false,
-  tipoComprobante = 'A'
+  tipoComprobante = 'A',
+  numeroPagina = 1,
+  totalPaginas = 1
 ) => {
   // Funciones auxiliares que pueden ser sobrescritas por config
   const {
@@ -400,7 +404,7 @@ export const generarPaginaComprobante = (
       {mostrarTotales && generarTotales && generarTotales(data, styles, formatearMonedaFn)}
       
       {/* Pie fiscal */}
-      {generarPieFiscal(data, styles)}
+      {generarPieFiscal(data, styles, numeroPagina, totalPaginas)}
     </Page>
   );
 };

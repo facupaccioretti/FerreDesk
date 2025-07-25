@@ -11,6 +11,11 @@ export default function Navbar({ user, onLogout }) {
     setIsMoreMenuOpen(false) // Close dropdown after navigation
   }
 
+  const handleLinkClick = (e, path) => {
+    e.preventDefault()
+    handleNavigation(path)
+  }
+
   const toggleMoreMenu = () => {
     setIsMoreMenuOpen(!isMoreMenuOpen)
   }
@@ -41,9 +46,10 @@ export default function Navbar({ user, onLogout }) {
 
         <div className="flex items-center gap-2 bg-slate-600/50 rounded-2xl p-2 shadow-lg border border-slate-500/40">
           {/* Panel Principal */}
-          <button
-            onClick={() => handleNavigation("/dashboard")}
-            className="p-3 rounded-xl hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+          <a
+            href="/dashboard"
+            onClick={(e) => handleLinkClick(e, "/dashboard")}
+            className="p-3 rounded-xl hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -62,12 +68,13 @@ export default function Navbar({ user, onLogout }) {
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Panel Principal
             </span>
-          </button>
+          </a>
 
           {/* Clientes */}
-          <button
-            onClick={() => handleNavigation("/dashboard/clientes")}
-            className="p-3 rounded-xl hover:bg-blue-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+          <a
+            href="/dashboard/clientes"
+            onClick={(e) => handleLinkClick(e, "/dashboard/clientes")}
+            className="p-3 rounded-xl hover:bg-blue-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -86,12 +93,13 @@ export default function Navbar({ user, onLogout }) {
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Clientes
             </span>
-          </button>
+          </a>
 
           {/* Presupuestos y Ventas */}
-          <button
-            onClick={() => handleNavigation("/dashboard/presupuestos")}
-            className="p-3 rounded-xl hover:bg-emerald-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+          <a
+            href="/dashboard/presupuestos"
+            onClick={(e) => handleLinkClick(e, "/dashboard/presupuestos")}
+            className="p-3 rounded-xl hover:bg-emerald-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -110,12 +118,13 @@ export default function Navbar({ user, onLogout }) {
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Presupuestos y Ventas
             </span>
-          </button>
+          </a>
 
           {/* Productos */}
-          <button
-            onClick={() => handleNavigation("/dashboard/productos")}
-            className="p-3 rounded-xl hover:bg-purple-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+          <a
+            href="/dashboard/productos"
+            onClick={(e) => handleLinkClick(e, "/dashboard/productos")}
+            className="p-3 rounded-xl hover:bg-purple-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -134,12 +143,13 @@ export default function Navbar({ user, onLogout }) {
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Productos
             </span>
-          </button>
+          </a>
 
           {/* Proveedores */}
-          <button
-            onClick={() => handleNavigation("/dashboard/proveedores")}
-            className="p-3 rounded-xl hover:bg-red-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105"
+          <a
+            href="/dashboard/proveedores"
+            onClick={(e) => handleLinkClick(e, "/dashboard/proveedores")}
+            className="p-3 rounded-xl hover:bg-red-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -158,7 +168,7 @@ export default function Navbar({ user, onLogout }) {
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Proveedores
             </span>
-          </button>
+          </a>
 
           {/* Menú Más Herramientas */}
           <div className="relative">
@@ -188,9 +198,10 @@ export default function Navbar({ user, onLogout }) {
                   Herramientas Adicionales
                 </div>
 
-                <button
-                  onClick={() => handleNavigation("/dashboard/notas")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-yellow-500/10 transition-all duration-200 text-left group"
+                <a
+                  href="/dashboard/notas"
+                  onClick={(e) => handleLinkClick(e, "/dashboard/notas")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-yellow-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -207,11 +218,12 @@ export default function Navbar({ user, onLogout }) {
                     />
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Notas</span>
-                </button>
+                </a>
 
-                <button
-                  onClick={() => handleNavigation("/dashboard/notas-alertas-notificaciones")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-all duration-200 text-left group"
+                <a
+                  href="/dashboard/notas-alertas-notificaciones"
+                  onClick={(e) => handleLinkClick(e, "/dashboard/notas-alertas-notificaciones")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -228,11 +240,12 @@ export default function Navbar({ user, onLogout }) {
                     />
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Alertas</span>
-                </button>
+                </a>
 
-                <button
-                  onClick={() => handleNavigation("/dashboard/dashboards")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/10 transition-all duration-200 text-left group"
+                <a
+                  href="/dashboard/dashboards"
+                  onClick={(e) => handleLinkClick(e, "/dashboard/dashboards")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -249,11 +262,12 @@ export default function Navbar({ user, onLogout }) {
                     />
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Dashboards</span>
-                </button>
+                </a>
 
-                <button
-                  onClick={() => handleNavigation("/dashboard/informes")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group"
+                <a
+                  href="/dashboard/informes"
+                  onClick={(e) => handleLinkClick(e, "/dashboard/informes")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -270,7 +284,7 @@ export default function Navbar({ user, onLogout }) {
                     />
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Informes</span>
-                </button>
+                </a>
               </div>
             )}
           </div>
@@ -280,9 +294,10 @@ export default function Navbar({ user, onLogout }) {
       {/* Right side - User info and actions */}
       <div className="flex items-center gap-3">
         {/* Configuration Button */}
-        <button
-          onClick={() => handleNavigation("/dashboard/configuracion")}
-          className="p-2.5 rounded-xl bg-slate-600/50 hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 border border-slate-500/40"
+        <a
+          href="/dashboard/configuracion"
+          onClick={(e) => handleLinkClick(e, "/dashboard/configuracion")}
+          className="p-2.5 rounded-xl bg-slate-600/50 hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 border border-slate-500/40 cursor-pointer"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -302,7 +317,7 @@ export default function Navbar({ user, onLogout }) {
           <span className="absolute right-0 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
             Configuración
           </span>
-        </button>
+        </a>
 
         {/* User Info */}
         <div className="flex items-center gap-3 bg-slate-600/50 rounded-2xl px-4 py-2 shadow-lg border border-slate-500/40">

@@ -1090,9 +1090,9 @@
                                   <div className="flex gap-1">
                                     {p.tipo === "Presupuesto" && p.estado === "Abierto" ? (
                                       <>
-                                        <BotonEditar onClick={() => handleEdit(p)} />
                                         <BotonGenerarPDF onClick={() => handleImprimir(p)} />
                                         <BotonVerDetalle onClick={() => openVistaTab(p)} />
+                                        <BotonEditar onClick={() => handleEdit(p)} />
                                         <BotonConvertir
                                           onClick={() => handleConvertir(p)}
                                           disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
