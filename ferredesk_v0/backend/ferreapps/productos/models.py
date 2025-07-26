@@ -290,6 +290,8 @@ class VistaStockProducto(models.Model):
     cantidad_minima = models.IntegerField(null=True, blank=True)
     stock_total = models.DecimalField(max_digits=15, decimal_places=2)
     necesita_reposicion = models.IntegerField()
+    proveedor_razon = models.CharField(max_length=50, null=True, blank=True)
+    proveedor_fantasia = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         managed = False  # Importante: Django no debe crear/alterar la vista

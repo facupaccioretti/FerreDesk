@@ -55,7 +55,7 @@ const Tabla = ({
     : datosFiltrados
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm">
+    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
       {/* Header con buscador y controles */}
       <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
         <div className="flex items-center justify-between gap-4">
@@ -100,10 +100,10 @@ const Tabla = ({
                   key={col.id}
                   className={`${
                     { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                  } ${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} font-semibold text-xs tracking-wider uppercase text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
+                  } ${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} font-semibold text-sm text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
-                  {col.titulo}
+                  {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
                 </th>
               ))}
             </tr>

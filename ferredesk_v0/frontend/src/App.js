@@ -13,6 +13,7 @@ import LibroIvaVentasManager from './components/Presupuestos y Ventas/LibroIvaVe
 import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
 import ConfiguracionManager from './components/ConfiguracionManager';
+import InformesManager from './components/Informes/InformesManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -89,6 +90,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ConfiguracionManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/informes"
+          element={
+            <PrivateRoute>
+              <InformesManager />
             </PrivateRoute>
           }
         />

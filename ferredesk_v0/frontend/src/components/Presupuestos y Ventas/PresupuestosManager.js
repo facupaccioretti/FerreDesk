@@ -992,26 +992,26 @@
                         Generar Libro IVA
                       </button>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                       <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px" }}>
                         <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
                           <tr>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               Comprobante
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               N°
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               Fecha
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               Cliente
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               Total
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-100 uppercase tracking-wider">
+                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
                               Acciones
                             </th>
                           </tr>
