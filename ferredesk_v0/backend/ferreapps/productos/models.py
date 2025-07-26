@@ -19,13 +19,7 @@ class Ferreteria(models.Model):
         help_text='Condición fiscal del negocio/emisor para comprobantes.'
     )
     
-    # Configuración Fiscal
-    alicuota_iva_por_defecto = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        default=21.00,
-        help_text='Alícuota de IVA por defecto para productos'
-    )
+
     
     # Punto de Venta (ARCA)
     punto_venta_arca = models.CharField(

@@ -12,7 +12,7 @@ class FerreteriaAdmin(admin.ModelAdmin):
             'fields': ('nombre', 'direccion', 'telefono', 'email', 'activa')
         }),
         ('Configuración Fiscal', {
-            'fields': ('situacion_iva', 'alicuota_iva_por_defecto', 'comprobante_por_defecto')
+            'fields': ('situacion_iva', 'comprobante_por_defecto')
         }),
         ('Configuración de Precios', {
             'fields': ('margen_ganancia_por_defecto',)

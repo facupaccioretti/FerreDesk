@@ -135,23 +135,6 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
           </select>
         </FormField>
 
-        <FormField label="Alícuota IVA por Defecto" required>
-          <div className="relative">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={config.alicuota_iva_por_defecto || "21.00"}
-              onChange={(e) => onConfigChange("alicuota_iva_por_defecto", e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 pr-12"
-              placeholder="21.00"
-              disabled={loading}
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-          </div>
-        </FormField>
-
         <FormField label="Punto de Venta (ARCA)">
           <input
             type="text"
@@ -244,26 +227,6 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h5 className="font-medium text-slate-800">Notificaciones por Email</h5>
-                <p className="text-sm text-slate-600">Recibir notificaciones importantes por correo electrónico</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_email")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_email ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_email ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
                 <h5 className="font-medium text-slate-800">Stock Bajo</h5>
                 <p className="text-sm text-slate-600">Notificar cuando los productos tengan stock bajo</p>
               </div>
@@ -277,46 +240,6 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     config.notificaciones_stock_bajo ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h5 className="font-medium text-slate-800">Vencimientos</h5>
-                <p className="text-sm text-slate-600">Notificar vencimientos próximos de productos</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_vencimientos")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_vencimientos ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_vencimientos ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h5 className="font-medium text-slate-800">Pagos Pendientes</h5>
-                <p className="text-sm text-slate-600">Notificar pagos pendientes de clientes</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_pagos_pendientes")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_pagos_pendientes ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_pagos_pendientes ? "translate-x-6" : "translate-x-1"
                   }`}
                 />
               </button>
@@ -378,23 +301,7 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h4 className="text-base font-semibold text-slate-800 mb-4">Configuración de Comprobantes</h4>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField label="Comprobante por Defecto" required>
-              <select
-                value={config.comprobante_por_defecto || "FA"}
-                onChange={(e) => onConfigChange("comprobante_por_defecto", e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                disabled={loading}
-              >
-                <option value="FA">Factura A</option>
-                <option value="FB">Factura B</option>
-                <option value="FC">Factura C</option>
-                <option value="BA">Boleta A</option>
-                <option value="BB">Boleta B</option>
-                <option value="BC">Boleta C</option>
-              </select>
-            </FormField>
-
+          <div className="grid grid-cols-1 gap-6">
             <FormField label="Margen de Ganancia por Defecto" required>
               <div className="relative">
                 <input
