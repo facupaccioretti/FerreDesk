@@ -46,22 +46,48 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     setCargando(true)
     setError(null)
     try {
-      // Traer facturas fiscales e internas
+      // NUEVO: Usar filtro backend para obtener solo facturas válidas
       const params = new URLSearchParams({
         ven_idcli: cliente.id,
-        // No filtrar por tipo, traer todas las facturas del cliente
+        para_nota_credito: 'true'  // ← NUEVO: Filtro backend
       })
       const url = `/api/ventas/?${params.toString()}`
+      console.log("[FacturaSelectorModal] URL de la petición:", url)
+      
       const resp = await fetch(url, { credentials: "include" })
       if (!resp.ok) throw new Error("No se pudieron obtener las facturas")
       const data = await resp.json()
+      
       // Normalizar para asegurar estructura mínima y soportar paginación
       const lista = Array.isArray(data) ? data : data.results || []
-      // Filtrar localmente: solo facturas fiscales (A, B, C) o internas (I)
+      console.log("[FacturaSelectorModal] Datos recibidos del backend:", lista.length, "registros")
+      
+      // DEBUG: Mostrar tipos de comprobantes recibidos
+      const tiposRecibidos = [...new Set(lista.map(f => f.comprobante?.tipo))];
+      console.log("[FacturaSelectorModal] Tipos de comprobantes recibidos:", tiposRecibidos);
+      
+      // NUEVO: Backend ya filtró, solo validación adicional en frontend
       const facturasValidas = lista.filter(f => {
         const letra = f.comprobante?.letra;
-        return ['A', 'B', 'C', LETRA_FACTURA_INTERNA].includes(letra);
+        const tipo = f.comprobante?.tipo;
+        // Doble verificación: letra + tipo (seguridad adicional)
+        const esValida = ['A', 'B', 'C', LETRA_FACTURA_INTERNA].includes(letra) && 
+                        ['factura', 'venta'].includes(tipo);
+        
+        // DEBUG: Mostrar qué comprobantes se están filtrando
+        if (!esValida) {
+          console.log("[FacturaSelectorModal] Comprobante filtrado:", {
+            numero: f.numero_formateado,
+            tipo: tipo,
+            letra: letra,
+            razon: `Tipo: ${tipo}, Letra: ${letra}`
+          });
+        }
+        
+        return esValida;
       });
+      
+      console.log("[FacturaSelectorModal] Facturas válidas después del filtro:", facturasValidas.length);
       setFacturas(facturasValidas)
     } catch (err) {
       console.error("[FacturaSelectorModal] Error al obtener facturas:", err)

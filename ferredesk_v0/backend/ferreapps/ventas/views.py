@@ -79,10 +79,36 @@ class VentaCalculadaFilter(FilterSet):
     ven_idvdo = NumberFilter(field_name='ven_idvdo')
     comprobante_tipo = CharFilter(field_name='comprobante_tipo', lookup_expr='iexact')
     comprobante_letra = CharFilter(field_name='comprobante_letra', lookup_expr='iexact')
+    # NUEVO: Filtro para notas de crédito - solo facturas válidas
+    para_nota_credito = CharFilter(method='filter_para_nota_credito', label='Para nota de crédito')
+
+    def filter_para_nota_credito(self, queryset, name, value):
+        """
+        Filtra para mostrar solo facturas válidas para asociar a una nota de crédito.
+        Solo permite facturas fiscales (A, B, C) e internas (I).
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[FILTRO] filter_para_nota_credito llamado con value: {value}")
+        logger.info(f"[FILTRO] Queryset inicial: {queryset.count()} registros")
+        
+        if value.lower() == 'true':
+            filtered_queryset = queryset.filter(
+                comprobante_tipo__in=['factura', 'venta']  # 'venta' es el tipo de factura interna
+            )
+            logger.info(f"[FILTRO] Queryset filtrado: {filtered_queryset.count()} registros")
+            
+            # DEBUG: Mostrar tipos encontrados
+            tipos_encontrados = set(filtered_queryset.values_list('comprobante_tipo', flat=True))
+            logger.info(f"[FILTRO] Tipos de comprobantes encontrados: {tipos_encontrados}")
+            
+            return filtered_queryset
+        return queryset
 
     class Meta:
         model = VentaCalculada  # Vista SQL (managed = False)
-        fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra']
+        fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra', 'para_nota_credito']
 
 class VentaViewSet(viewsets.ModelViewSet):
     """ViewSet principal para Ventas.

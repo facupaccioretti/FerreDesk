@@ -1,0 +1,333 @@
+import React from "react"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle } from "../Botones"
+import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
+import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
+import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
+import Paginador from "../Paginador"
+
+/**
+ * Función para obtener el icono y etiqueta de un comprobante
+ * @param {string} tipo - Tipo de comprobante
+ * @param {string} nombre - Nombre del comprobante
+ * @param {string} letra - Letra del comprobante
+ * @returns {Object} - Objeto con icon y label
+ */
+const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
+  const n = String(nombre || "").toLowerCase()
+  if (n.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
+  if (n.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
+  if (n.includes("factura")) return { icon: <IconFactura />, label: "Factura" }
+  if (n.includes("nota de crédito interna")) return { icon: <IconCredito />, label: "N. Cred. Int." }
+  if (n.includes("nota de crédito")) return { icon: <IconCredito />, label: "N. Cred." }
+  if (n.includes("nota de débito")) return { icon: <IconCredito />, label: "N. Deb." }
+  if (n.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
+  return { icon: <IconFactura />, label: String(nombre) }
+}
+
+/**
+ * Badge de estado para mostrar visualmente si está Abierto o Cerrado
+ * @param {Object} props - Props del componente
+ * @param {string} props.estado - Estado del comprobante
+ * @returns {JSX.Element} - Badge de estado
+ */
+const EstadoBadge = ({ estado }) => {
+  if (estado === "Cerrado") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+          className="w-3.5 h-3.5"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
+          />
+        </svg>
+        Cerrado
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={1.5}
+        stroke="currentColor"
+        className="w-3.5 h-3.5"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
+        />
+      </svg>
+      Abierto
+    </span>
+  )
+}
+
+/**
+ * Componente para renderizar las acciones de un comprobante según su tipo y estado
+ * @param {Object} props - Props del componente
+ * @param {Object} props.comprobante - Datos del comprobante
+ * @param {Object} props.acciones - Funciones de acciones disponibles
+ * @param {boolean} props.isFetchingForConversion - Estado de carga para conversión
+ * @param {number} props.fetchingPresupuestoId - ID del presupuesto siendo convertido
+ * @param {Function} props.esFacturaInternaConvertible - Función para verificar si es factura interna convertible
+ * @returns {JSX.Element} - Botones de acciones
+ */
+const ComprobanteAcciones = ({
+  comprobante,
+  acciones,
+  isFetchingForConversion,
+  fetchingPresupuestoId,
+  esFacturaInternaConvertible,
+}) => {
+  const {
+    handleImprimir,
+    openVistaTab,
+    handleEdit,
+    handleConvertir,
+    handleDelete,
+    handleConvertirFacturaI,
+  } = acciones
+
+  // Presupuesto abierto
+  if (comprobante.tipo === "Presupuesto" && comprobante.estado === "Abierto") {
+    return (
+      <>
+        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
+        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
+        <BotonEditar onClick={() => handleEdit(comprobante)} />
+        <BotonConvertir
+          onClick={() => handleConvertir(comprobante)}
+          disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
+          title={
+            isFetchingForConversion && fetchingPresupuestoId === comprobante.id
+              ? "Cargando..."
+              : "Convertir"
+          }
+        />
+        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
+      </>
+    )
+  }
+
+  // Factura interna convertible
+  if (esFacturaInternaConvertible(comprobante)) {
+    return (
+      <>
+        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
+        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
+        <BotonConvertir
+          onClick={() => handleConvertirFacturaI(comprobante)}
+          disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
+          title={
+            isFetchingForConversion && fetchingPresupuestoId === comprobante.id
+              ? "Cargando..."
+              : "Convertir factura interna a factura fiscal"
+          }
+        />
+        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
+      </>
+    )
+  }
+
+  // Venta cerrada
+  if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
+    return (
+      <>
+        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
+        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
+        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
+      </>
+    )
+  }
+
+  // Otros casos (solo ver y generar PDF)
+  return (
+    <>
+      <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
+      <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
+    </>
+  )
+}
+
+/**
+ * Componente principal para la lista de comprobantes
+ * Extraído de PresupuestosManager.js
+ * 
+ * @param {Object} props - Props del componente
+ * @param {Array} props.comprobantes - Lista de comprobantes a mostrar
+ * @param {Array} props.datosPagina - Datos paginados para mostrar
+ * @param {Object} props.acciones - Funciones de acciones disponibles
+ * @param {boolean} props.isFetchingForConversion - Estado de carga para conversión
+ * @param {number} props.fetchingPresupuestoId - ID del presupuesto siendo convertido
+ * @param {Function} props.esFacturaInternaConvertible - Función para verificar si es factura interna convertible
+ * @param {number} props.totalItems - Total de items
+ * @param {number} props.itemsPorPagina - Items por página
+ * @param {number} props.paginaActual - Página actual
+ * @param {Function} props.setPaginaActual - Función para cambiar página
+ * @param {Function} props.setItemsPorPagina - Función para cambiar items por página
+ * @returns {JSX.Element} - Tabla de comprobantes con paginación
+ */
+const ComprobantesList = ({
+  comprobantes,
+  datosPagina,
+  acciones,
+  isFetchingForConversion,
+  fetchingPresupuestoId,
+  esFacturaInternaConvertible,
+  totalItems,
+  itemsPorPagina,
+  paginaActual,
+  setPaginaActual,
+  setItemsPorPagina,
+}) => {
+  return (
+    <>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px" }}>
+          <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
+            <tr>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                Comprobante
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                N°
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                Fecha
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                Cliente
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                Total
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-300">
+            {datosPagina.map((p) => {
+              // Obtener datos del comprobante
+              let comprobanteObj = null
+              if (typeof p.comprobante === "object" && p.comprobante !== null) {
+                comprobanteObj = p.comprobante
+              } else if (p.comprobante) {
+                comprobanteObj = (comprobantes || []).find((c) => c.id === p.comprobante) || null
+              }
+              
+              const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
+              const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
+              const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
+              
+              const { icon, label } = getComprobanteIconAndLabel(
+                comprobanteTipo,
+                comprobanteNombre,
+                comprobanteLetra,
+              )
+              
+              // Quitar letra del numero_formateado si existe
+              let numeroSinLetra = p.numero_formateado
+              if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
+                numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
+              }
+              
+              // Lógica para mostrar tooltips de comprobantes asociados
+              const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
+              const facturasAnuladas = p.facturas_anuladas || []
+              const tieneNotasCredito = notasCreditoAsociadas.length > 0
+              const tieneFacturasAnuladas = facturasAnuladas.length > 0
+
+              return (
+                <tr key={p.id} className="hover:bg-slate-100">
+                  {/* Comprobante */}
+                  <td className="px-3 py-1 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex items-center gap-2 text-slate-700">
+                        {icon} <span className="font-medium">{label}</span>
+                      </div>
+                      {/* Renderizar tooltip si hay notas de crédito asociadas a la factura */}
+                      {tieneNotasCredito && (
+                        <ComprobanteAsociadoTooltip
+                          documentos={notasCreditoAsociadas}
+                          titulo="Notas de Crédito Asociadas"
+                        />
+                      )}
+                      {/* Renderizar tooltip si la NC anula facturas */}
+                      {tieneFacturasAnuladas && (
+                        <ComprobanteAsociadoTooltip
+                          documentos={facturasAnuladas}
+                          titulo="Facturas que Anula"
+                        />
+                      )}
+                    </div>
+                  </td>
+                  
+                  {/* Número */}
+                  <td className="px-3 py-1 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800">
+                        {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
+                      </span>
+                      <EstadoBadge estado={p.estado} />
+                    </div>
+                  </td>
+                  
+                  {/* Fecha */}
+                  <td className="px-3 py-1 whitespace-nowrap text-slate-600">{p.fecha}</td>
+                  
+                  {/* Cliente */}
+                  <td className="px-3 py-1 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
+                  
+                  {/* Total */}
+                  <td className="px-3 py-1 whitespace-nowrap">
+                    <span className="font-semibold text-slate-800">${formatearMoneda(p.total)}</span>
+                  </td>
+                  
+                  {/* Acciones */}
+                  <td className="px-3 py-1 whitespace-nowrap">
+                    <div className="flex gap-1">
+                      <ComprobanteAcciones
+                        comprobante={p}
+                        acciones={acciones}
+                        isFetchingForConversion={isFetchingForConversion}
+                        fetchingPresupuestoId={fetchingPresupuestoId}
+                        esFacturaInternaConvertible={esFacturaInternaConvertible}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Paginador */}
+      <Paginador
+        totalItems={totalItems}
+        itemsPerPage={itemsPorPagina}
+        currentPage={paginaActual}
+        onPageChange={setPaginaActual}
+        onItemsPerPageChange={(n) => {
+          setItemsPorPagina(n)
+          setPaginaActual(1)
+        }}
+        opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
+      />
+    </>
+  )
+}
+
+export default ComprobantesList 

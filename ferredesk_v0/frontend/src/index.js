@@ -4,6 +4,10 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// Polyfill para Buffer (necesario para @react-pdf/renderer)
+import { Buffer } from 'buffer';
+window.Buffer = Buffer;
+
 // Verificar si hay una redirección pendiente
 const redirectHeader = document.querySelector('meta[name="x-redirect"]')?.content;
 if (redirectHeader) {

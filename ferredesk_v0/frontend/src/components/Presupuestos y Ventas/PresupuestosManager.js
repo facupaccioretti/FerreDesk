@@ -12,89 +12,31 @@
   import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
   import { usePlazosAPI } from "../../utils/usePlazosAPI"
   import { useVendedoresAPI } from "../../utils/useVendedoresAPI"
-  import VendedorForm from "./VendedorForm"
   import { useLocalidadesAPI } from "../../utils/useLocalidadesAPI"
-  import VendedoresTable from "./VendedoresTable"
   import PresupuestoForm from "./PresupuestoForm"
   import VentaForm from "./VentaForm"
   import ItemsGrid from "./ItemsGrid"
-  import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle } from "../Botones"
   import PresupuestoVentaVista from "./herramientasforms/PresupuestoVentaVista"
   import { getCookie } from "../../utils/csrf"
-  import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
   import EditarPresupuestoForm from "./EditarPresupuestoForm"
   import ConversionModal from "./ConversionModal"
   import ConVentaForm from "./ConVentaForm"
-  import Paginador from "../Paginador"
   import FiltrosPresupuestos from "./herramientasforms/FiltrosPresupuestos"
   import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
   import FacturaSelectorModal from "./herramientasforms/FacturaSelectorModal"
   import NotaCreditoForm from "./NotaCreditoForm"
-  import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
-  import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
   import { useGeneradorPDF } from "./herramientasforms/plantillasComprobantes/PDF/useGeneradorPDF"
   import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
+  import useTabsManager from "./hooks/useTabsManager"
+  import useComprobantesCRUD from "./hooks/useComprobantesCRUD"
+  import useFiltrosComprobantes from "./hooks/useFiltrosComprobantes"
+  import useVendedoresCRUD from "./hooks/useVendedoresCRUD"
+  import ComprobantesList from "./ComprobantesList"
+  import VendedoresTab from "./VendedoresTab"
 
-  const mainTabs = [
-    { key: "presupuestos", label: "Presupuestos y Ventas", closable: false },
-    { key: "vendedores", label: "Vendedores", closable: false },
-  ]
 
-  const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
-    const n = String(nombre || "").toLowerCase()
-    if (n.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
-    if (n.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
-    if (n.includes("factura")) return { icon: <IconFactura />, label: "Factura" }
-    if (n.includes("nota de crédito interna")) return { icon: <IconCredito />, label: "N. Cred. Int." }
-    if (n.includes("nota de crédito")) return { icon: <IconCredito />, label: "N. Cred." }
-    if (n.includes("nota de débito")) return { icon: <IconCredito />, label: "N. Deb." }
-    if (n.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
-    return { icon: <IconFactura />, label: String(nombre) }
-  }
 
-  // Badge de estado para mostrar visualmente si está Abierto o Cerrado
-  const EstadoBadge = ({ estado }) => {
-    if (estado === "Cerrado") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-3.5 h-3.5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
-            />
-          </svg>
-          Cerrado
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-          className="w-3.5 h-3.5"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
-          />
-        </svg>
-        Abierto
-      </span>
-    )
-  }
+
 
   const PresupuestosManager = () => {
     // Estado y fetch para el usuario
@@ -144,73 +86,121 @@
     } = useVendedoresAPI()
     const sucursales = [{ id: 1, nombre: "Casa Central" }]
     const puntosVenta = [{ id: 1, nombre: "PV 1" }]
-    const [comprobanteTipo, setComprobanteTipo] = useState("")
-    const [comprobanteLetra, setComprobanteLetra] = useState("")
-    // Inicializar rango de fechas: hoy y 30 días atrás
-    const hoyISO = (() => {
-      const d = new Date()
-      const mes = String(d.getMonth() + 1).padStart(2, "0")
-      const dia = String(d.getDate()).padStart(2, "0")
-      return `${d.getFullYear()}-${mes}-${dia}`
-    })()
-    const hace30ISO = (() => {
-      const d = new Date()
-      d.setDate(d.getDate() - 30)
-      const mes = String(d.getMonth() + 1).padStart(2, "0")
-      const dia = String(d.getDate()).padStart(2, "0")
-      return `${d.getFullYear()}-${mes}-${dia}`
-    })()
-    const [fechaDesde, setFechaDesde] = useState(hace30ISO)
-    const [fechaHasta, setFechaHasta] = useState(hoyISO)
-    const [clienteId, setClienteId] = useState("")
-    const [vendedorId, setVendedorId] = useState("")
-    const [tabs, setTabs] = useState(() => {
-      try {
-        const savedTabs = localStorage.getItem("presupuestosTabs")
-        if (savedTabs) {
-          const parsedTabs = JSON.parse(savedTabs)
-          // Validar que siempre estén los mainTabs al principio
-          let restoredTabs = parsedTabs
-          mainTabs.forEach((mainTab) => {
-            if (!restoredTabs.find((t) => t.key === mainTab.key)) {
-              restoredTabs = [mainTab, ...restoredTabs]
-            }
-          })
-          return restoredTabs
-        }
-      } catch (e) {
-        console.error("[INIT] Error restaurando tabs:", e)
-      }
-      return [...mainTabs]
+    const { localidades } = useLocalidadesAPI()
+    const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false)
+    
+    // Hook para gestión CRUD de vendedores (debe ir ANTES que useTabsManager)
+    const {
+      handleNuevoVendedor,
+      handleEditVendedor,
+      handleSaveVendedor,
+      handleDeleteVendedor,
+      editVendedorData,
+      setEditVendedorData,
+      searchVendedor,
+      setSearchVendedor,
+    } = useVendedoresCRUD({
+      fetchVendedores,
+      addVendedor,
+      updateVendedor,
+      deleteVendedor,
     })
-    const [activeTab, setActiveTab] = useState(() => {
-      return localStorage.getItem("presupuestosActiveTab") || "presupuestos"
-    })
-   
+    
+    // Hook para gestión de tabs dinámicos
+    const {
+      tabs,
+      activeTab,
+      draggedTabKey,
+      openTab,
+      closeTab,
+      setActiveTab,
+      updateTabData,
+      handleDragStart,
+      handleDrop,
+      handleDragEnd,
+      mainTabs,
+    } = useTabsManager(setEditVendedorData)
 
     // Memorizar los datos para la pestaña activa para evitar re-renders innecesarios
     const activeTabData = useMemo(() => {
       return tabs.find((t) => t.key === activeTab)?.data || null
     }, [tabs, activeTab])
 
-    const { localidades } = useLocalidadesAPI()
-    const [autoSumarDuplicados, setAutoSumarDuplicados] = useState(false)
-    const [draggedTabKey, setDraggedTabKey] = useState(null)
-    const tiposComprobante = comprobantes.map((c) => ({
+    // Hook para gestión CRUD de comprobantes
+    const {
+      conversionModal,
+      isFetchingForConversion,
+      fetchingPresupuestoId,
+      handleEdit,
+      handleImprimir,
+      handleConvertir,
+      handleDelete,
+      openVistaTab,
+      handleConversionConfirm,
+      handleConVentaFormSave,
+      handleConVentaFormCancel,
+      handleConVentaFormSaveFacturaI,
+      handleConvertirFacturaI,
+      esFacturaInternaConvertible,
+      setConversionModal,
+    } = useComprobantesCRUD({
+      openTab,
+      closeTab,
+      updateTabData,
+      fetchVentas,
+      deleteVenta,
+      descargarPDF,
+      ferreteria,
+      loadingFerreteria,
+      navigate,
+    })
+
+    // Hook para gestión de filtros, normalización y paginación
+    const {
+      comprobanteTipo,
+      setComprobanteTipo,
+      comprobanteLetra,
+      setComprobanteLetra,
+      fechaDesde,
+      setFechaDesde,
+      fechaHasta,
+      setFechaHasta,
+      clienteId,
+      setClienteId,
+      vendedorId,
+      setVendedorId,
+      paginaActual,
+      setPaginaActual,
+      itemsPorPagina,
+      setItemsPorPagina,
+      ventasNormalizadas,
+      totalItems,
+      datosPagina,
+      handleFiltroChange,
+      resetearFiltros,
+      obtenerFiltrosActuales,
+      productosPorId,
+      clientesPorId,
+      normalizarVenta,
+        } = useFiltrosComprobantes({
+      ventas,
+      productos,
+      clientes,
+      fetchVentas,
+    })
+
+
+    
+    // Tipos de comprobante con validación para evitar errores de inicialización
+    const tiposComprobante = useMemo(() => {
+      return (comprobantes || []).map((c) => ({
       value: c.id,
       label: c.nombre,
       campo: c.codigo_afip,
       tipo: c.tipo,
     }))
+    }, [comprobantes])
     const [tipoComprobante, setTipoComprobante] = useState(1) // 1=Factura A por defecto
-    const [searchVendedor, setSearchVendedor] = useState("")
-    const [editVendedorData, setEditVendedorData] = useState(null)
-    const [conversionModal, setConversionModal] = useState({ open: false, presupuesto: null })
-    const [isFetchingForConversion, setIsFetchingForConversion] = useState(false)
-    const [fetchingPresupuestoId, setFetchingPresupuestoId] = useState(null)
-    // Estado para paginación
-    const [paginaActual, setPaginaActual] = useState(1)
-    const [itemsPorPagina, setItemsPorPagina] = useState(15)
 
     // --- Estados específicos para la creación de Notas de Crédito ---
     const [modalClienteNCAbierto, setModalClienteNCAbierto] = useState(false)
@@ -218,57 +208,19 @@
     const [facturasParaNC, setFacturasParaNC] = useState([])
     const [modalFacturasNCAbierto, setModalFacturasNCAbierto] = useState(false)
 
-    // Funciones para tabs
-    const openTab = (key, label, data = null) => {
-      setEditVendedorData(data)
-      setTabs((prev) => {
-        if (prev.find((t) => t.key === key)) return prev
-        return [...prev, { key, label, closable: true, data }]
-      })
-      setActiveTab(key)
-    }
-    const closeTab = (key) => {
-      // Eliminar borradores asociados a la pestaña que se cierra
-      try {
-        if (key.startsWith("editar")) {
-          const tab = tabs.find((t) => t.key === key)
-          const idPres = tab?.data?.id || tab?.data?.ven_id || null
-          if (idPres) localStorage.removeItem(`editarPresupuestoDraft_${idPres}`)
-        } else if (key.startsWith("nuevo-")) {
-          localStorage.removeItem(`presupuestoFormDraft_${key}`)
-        } else if (key.startsWith("nueva-venta-")) {
-          localStorage.removeItem(`ventaFormDraft_${key}`)
-        } else if (key.startsWith("conventa-")) {
-          localStorage.removeItem(`conVentaFormDraft_${key}`)
-        } else if (key.startsWith("nota-credito-")) {
-          localStorage.removeItem(`notaCreditoFormDraft_${key}`)
-        }
-      } catch (err) {
-        console.warn("[closeTab] No se pudo limpiar borrador:", err)
-      }
 
-      setTabs((prev) => prev.filter((t) => t.key !== key))
-      if (activeTab === key) setActiveTab("presupuestos")
-      setEditVendedorData(null)
-    }
 
     // Acciones
     const handleNuevo = () => {
       const newKey = `nuevo-${Date.now()}`
-      setTabs((prev) => {
-        return [...prev, { key: newKey, label: "Nuevo Presupuesto", closable: true }]
-      })
-      setActiveTab(newKey)
+      openTab(newKey, "Nuevo Presupuesto")
       setTipoComprobante(4) // Forzar tipoComprobante a 4 para presupuesto
       localStorage.removeItem("presupuestoFormDraft")
     }
 
     const handleNuevaVenta = () => {
       const newKey = `nueva-venta-${Date.now()}`
-      setTabs((prev) => {
-        return [...prev, { key: newKey, label: "Nueva Factura", closable: true }]
-      })
-      setActiveTab(newKey)
+      openTab(newKey, "Nueva Factura")
       setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
       localStorage.removeItem("ventaFormDraft")
     }
@@ -276,7 +228,7 @@
     const handleNuevaNotaCredito = () => {
       // Agregar validación de comprobantes NC disponibles
       const tiposNC = ['nota_credito', 'nota_credito_interna'];
-      const comprobantesNC = comprobantes.filter(c => tiposNC.includes(c.tipo));
+      const comprobantesNC = (comprobantes || []).filter(c => tiposNC.includes(c.tipo));
       
       if (comprobantesNC.length === 0) {
         alert('No hay comprobantes de Nota de Crédito configurados en el sistema.\n' +
@@ -294,559 +246,31 @@
       navigate('/dashboard/libro-iva-ventas')
     }
 
-    const handleEdit = async (presupuesto) => {
-      if (!presupuesto || !presupuesto.id) return
-      
-      try {
-        // Obtener cabecera completa con items desde el endpoint de detalle
-        const [cabecera, itemsDetalle] = await Promise.all([
-          fetch(`/api/ventas/${presupuesto.id}/`).then(async (res) => {
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({ detail: "Error al cargar cabecera" }))
-              throw new Error(err.detail)
-            }
-            return res.json()
-          }),
-          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${presupuesto.id}`).then(async (res) => {
-            if (!res.ok) return []
-            return res.json()
-          }),
-        ])
 
-        // Combinar cabecera con items calculados
-        const presupuestoCompleto = {
-          ...cabecera,
-          items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
-        }
 
-        const key = `editar-${presupuesto.id}`
-        const label = `Editar ${presupuesto.numero || presupuesto.id}`
-        openTab(key, label, presupuestoCompleto)
-        
-      } catch (error) {
-        console.error('Error al cargar presupuesto para edición:', error)
-        alert('Error al cargar el presupuesto: ' + error.message)
-      }
-    }
 
-    const handleImprimir = async (presupuesto) => {
-      if (!presupuesto || !presupuesto.id) return;
-      
-      if (loadingFerreteria) {
-        alert("Cargando configuración de la empresa, por favor espere...");
-        return;
-      }
-      
-      try {
-        // Obtener datos reales de las vistas SQL usando useVentaDetalleAPI
-        const [cabecera, itemsDetalle, ivaDiscriminado, todasAlicuotas] = await Promise.all([
-          fetch(`/api/venta-calculada/${presupuesto.id}/`).then(async (res) => {
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({ detail: "Error cabecera" }))
-              throw new Error(err.detail)
-            }
-            return res.json()
-          }),
-          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${presupuesto.id}`).then(async (res) => {
-            if (!res.ok) return []
-            return res.json()
-          }),
-          fetch(`/api/venta-iva-alicuota/?vdi_idve=${presupuesto.id}`).then(async (res) => {
-            if (!res.ok) return []
-            return res.json()
-          }),
-          fetch(`/api/productos/alicuotasiva/`).then(async (res) => {
-            if (!res.ok) return []
-            return res.json()
-          })
-        ]);
 
-        // Construir datos del comprobante usando los datos reales de las vistas
-        const datosComprobante = {
-          // Datos del emisor (desde configuración de ferretería)
-          emisor_razon_social: ferreteria?.razon_social,
-          emisor_telefono: ferreteria?.telefono,
-          emisor_condicion_iva: ferreteria?.situacion_iva,
-          emisor_cuit: ferreteria?.cuit,
-          emisor_ingresos_brutos: ferreteria?.ingresos_brutos,
-          emisor_inicio_actividad: ferreteria?.inicio_actividad,
-          
-          // Datos del comprobante (desde VENTA_CALCULADO)
-          comprobante: {
-            letra: cabecera.comprobante_letra,
-            codigo_afip: cabecera.comprobante_codigo_afip,
-            nombre: cabecera.comprobante_nombre,
-            tipo: cabecera.comprobante_tipo
-          },
-          numero_formateado: cabecera.numero_formateado,
-          fecha: cabecera.ven_fecha,
-          hora_creacion: cabecera.hora_creacion,
-          
-          // Datos del cliente (desde VENTA_CALCULADO)
-          cliente: cabecera.cliente_razon,
-          domicilio: cabecera.cliente_domicilio,
-          condicion_iva_cliente: cabecera.cliente_condicion_iva,
-          cuit: cabecera.cliente_cuit,
-          localidad: cabecera.cliente_localidad,
-          provincia: cabecera.cliente_provincia,
-          telefono_cliente: cabecera.cliente_telefono,
-          
-          // Items reales (desde VENTADETALLEITEM_CALCULADO)
-          items: itemsDetalle.map(item => ({
-            ...item // Incluir absolutamente todos los campos del ítem original
-          })),
-          
-          // Totales reales (desde VENTA_CALCULADO)
-          ven_total: cabecera.ven_total,
-          ven_impneto: cabecera.ven_impneto,
-          iva_global: cabecera.iva_global,
-          ven_descu1: cabecera.ven_descu1,
-          ven_descu2: cabecera.ven_descu2,
-          ven_descu3: cabecera.ven_descu3,
-          
-          // IVA discriminado completo (todas las alícuotas con porcentaje > 0)
-          iva_discriminado: todasAlicuotas
-            .filter(ali => ali.porce > 0) // Solo alícuotas con porcentaje > 0
-            .map(ali => {
-              // Buscar si existe esta alícuota en la factura
-              const ivaEnFactura = ivaDiscriminado.find(iva => 
-                parseFloat(iva.ali_porce) === parseFloat(ali.porce)
-              );
-              
-              return {
-                ali_porce: ali.porce,
-                neto_gravado: ivaEnFactura ? ivaEnFactura.neto_gravado : 0,
-                iva_total: ivaEnFactura ? ivaEnFactura.iva_total : 0
-              };
-            }),
-          
-          // Información AFIP (desde VENTA_CALCULADO)
-          cae: cabecera.ven_cae,
-          cae_vencimiento: cabecera.ven_caevencimiento ? new Date(cabecera.ven_caevencimiento).toLocaleDateString('es-AR') : '',
-        };
-        
-        // Generar y descargar PDF usando el hook del componente, pasando la configuración
-        await descargarPDF(datosComprobante, cabecera.comprobante_letra, ferreteria);
-        
-      } catch (err) {
-        console.error("Error al imprimir:", err);
-        alert("Error al generar PDF: " + (err.message || ""))
-      }
-    }
 
-    const handleConvertir = async (presupuesto) => {
-      if (!presupuesto || !presupuesto.id || (isFetchingForConversion && fetchingPresupuestoId === presupuesto.id)) return
 
-      setFetchingPresupuestoId(presupuesto.id)
-      setIsFetchingForConversion(true)
 
-      try {
-        const [cabecera, itemsDetalle] = await Promise.all([
-          fetch(`/api/venta-calculada/${presupuesto.id}/`).then(async (res) => {
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({ detail: "Error cabecera" }))
-              throw new Error(err.detail)
-            }
-            return res.json()
-          }),
-          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${presupuesto.id}`).then(async (res) => {
-            if (!res.ok) return []
-            return res.json()
-          }),
-        ])
 
-        const presupuestoConDetalle = {
-          ...(cabecera.venta || presupuesto),
-          items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
-        }
 
-        const itemsConId = presupuestoConDetalle.items.map((it, idx) => ({
-          ...it,
-          id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
-        }))
 
-        setConversionModal({ open: true, presupuesto: { ...presupuestoConDetalle, items: itemsConId } })
-      } catch (error) {
-        console.error("Error al obtener detalle para conversión:", error)
-        alert(error.message)
-      } finally {
-        setIsFetchingForConversion(false)
-        setFetchingPresupuestoId(null)
-      }
-    }
 
-    const handleConversionConfirm = (selectedItems) => {
-      const datos = conversionModal.presupuesto
-      const itemsSeleccionadosObjs = (datos.items || []).filter((item) => selectedItems.includes(item.id))
-      
-      // Detectar tipo de conversión
-      const esConversionFacturaI = datos.tipoConversion === 'factura_i_factura'
-      const tipoTab = esConversionFacturaI ? 'conv-factura-i' : 'conventa'
-      const labelPrefix = esConversionFacturaI ? 'Conv. Factura Interna' : 'Conversión a Factura'
-      
-      const tabKey = `${tipoTab}-${datos.id}`
-      
-      setTabs((prev) => {
-        const existente = prev.find((t) => t.key === tabKey)
-        if (existente) {
-          return prev.map((t) =>
-            t.key === tabKey
-              ? {
-                  ...t,
-                  data: {
-                    [esConversionFacturaI ? 'facturaInternaOrigen' : 'presupuestoOrigen']: datos,
-                    itemsSeleccionados: itemsSeleccionadosObjs.map(item => ({
-                      ...item,
-                      // Marcar items originales para bloqueo
-                      esBloqueado: esConversionFacturaI,
-                      noDescontarStock: esConversionFacturaI,
-                      idOriginal: esConversionFacturaI ? item.id : null
-                    })),
-                    itemsSeleccionadosIds: selectedItems,
-                    tipoConversion: datos.tipoConversion || 'presupuesto_venta'
-                  },
-                }
-              : t,
-          )
-        }
-        return [
-          ...prev,
-          {
-            key: tabKey,
-            label: `${labelPrefix} #${datos.numero || datos.id}`,
-            closable: true,
-            data: {
-              [esConversionFacturaI ? 'facturaInternaOrigen' : 'presupuestoOrigen']: datos,
-              itemsSeleccionados: itemsSeleccionadosObjs.map(item => ({
-                ...item,
-                esBloqueado: esConversionFacturaI,
-                noDescontarStock: esConversionFacturaI,
-                idOriginal: esConversionFacturaI ? item.id : null
-              })),
-              itemsSeleccionadosIds: selectedItems,
-              tipoConversion: datos.tipoConversion || 'presupuesto_venta'
-            },
-            tipo: tipoTab,
-          },
-        ]
-      })
-      setActiveTab(tabKey)
-      setConversionModal({ open: false, presupuesto: null })
-    }
 
-    const handleConVentaFormSave = async (payload, tabKey) => {
-      try {
-        const csrftoken = getCookie("csrftoken")
-        const response = await fetch("/api/convertir-presupuesto/", {
-          method: "POST",
-          headers: {
-            "X-CSRFToken": csrftoken,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-          credentials: "include",
-        })
 
-        if (!response.ok) {
-          let msg = "No se pudo convertir"
-          try {
-            const data = await response.json()
-            msg = data.detail || msg
-          } catch {}
-          throw new Error(msg)
-        }
 
-        const data = await response.json()
 
-        // Actualizar la lista de ventas y presupuestos
-        await fetchVentas()
-        await fetchPresupuestos()
-        // Cerrar la tab de conversión
-        closeTab(tabKey)
-        // Mostrar mensaje de éxito
-        if (data.presupuesto === null) {
-          alert("Factura creada correctamente. El presupuesto fue eliminado por no tener items restantes.")
-        } else {
-          alert("Factura creada correctamente. El presupuesto fue actualizado con los items restantes.")
-        }
-      } catch (err) {
-        alert("Error al convertir: " + (err.message || ""))
-      }
-    }
 
-    const handleConVentaFormCancel = (tabKey) => {
-      closeTab(tabKey)
-    }
 
-    // Handler específico para conversiones de facturas internas
-    const handleConVentaFormSaveFacturaI = async (payload, tabKey, endpoint) => {
-      try {
-        const csrftoken = getCookie("csrftoken")
-        const response = await fetch(endpoint || "/api/convertir-factura-interna/", {
-          method: "POST",
-          headers: {
-            "X-CSRFToken": csrftoken,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-          credentials: "include",
-        })
 
-        if (!response.ok) {
-          let msg = "No se pudo convertir la factura interna"
-          try {
-            const data = await response.json()
-            msg = data.detail || msg
-          } catch {}
-          throw new Error(msg)
-        }
 
-        const data = await response.json()
 
-        // Actualizar listas
-        await fetchVentas()
-        closeTab(tabKey)
-        
-        // Mensaje de éxito específico según lo que pasó con la factura interna original
-        if (data.factura_interna === null) {
-          alert("Factura fiscal creada correctamente. La factura interna fue eliminada por no tener ítems restantes.")
-        } else {
-          alert("Factura fiscal creada correctamente. La factura interna fue actualizada con los ítems restantes.")
-        }
-      } catch (err) {
-        alert("Error al convertir factura interna: " + (err.message || ""))
-      }
-    }
 
-    const handleDelete = async (id) => {
-      if (window.confirm("¿Seguro que deseas eliminar este presupuesto/venta?")) {
-        try {
-          await deleteVenta(id)
-        } catch (err) {
-          alert("Error al eliminar: " + (err.message || ""))
-        }
-      }
-    }
 
-    // Nueva función para abrir subtab de vista no editable
-    const openVistaTab = (presupuesto) => {
-      setTabs((prev) => {
-        if (prev.find((t) => t.key === `vista-${presupuesto.id}`)) return prev
-        return [
-          ...prev,
-          {
-            key: `vista-${presupuesto.id}`,
-            label: `Vista ${presupuesto.tipo} ${presupuesto.numero}`,
-            closable: true,
-            data: presupuesto,
-          },
-        ]
-      })
-      setActiveTab(`vista-${presupuesto.id}`)
-    }
 
-    // Vendedores: abrir nuevo/editar
-    const handleNuevoVendedor = () => {
-      const newKey = `nuevo-vendedor-${Date.now()}`
-      openTab(newKey, "Nuevo Vendedor")
-    }
-    const handleEditVendedor = (vendedor) => {
-      const editKey = `editar-vendedor-${vendedor.id}`
-      openTab(editKey, `Editar Vendedor: ${vendedor.nombre.substring(0, 15)}...`, vendedor)
-    }
-    const handleSaveVendedor = async (data) => {
-      try {
-        if (editVendedorData) {
-          await updateVendedor(editVendedorData.id, data)
-        } else {
-          await addVendedor(data)
-        }
-        fetchVendedores()
-        closeTab(activeTab)
-      } catch (err) {
-        // Manejo de error opcional
-      }
-    }
-    const handleDeleteVendedor = async (id) => {
-      if (window.confirm("¿Seguro que deseas eliminar este vendedor?")) {
-        try {
-          await deleteVendedor(id)
-          fetchVendedores()
-        } catch (err) {}
-      }
-    }
 
-    // Mapas para accesos O(1)
-    const productosPorId = useMemo(() => {
-      const m = new Map()
-      productos.forEach((p) => m.set(p.id, p))
-      return m
-    }, [productos])
 
-    const clientesPorId = useMemo(() => {
-      const m = new Map()
-      clientes.forEach((c) => m.set(c.id, c))
-      return m
-    }, [clientes])
-
-    // Función normalizadora memorizada
-    const normalizarVenta = useCallback(
-      (venta) => {
-        const comprobanteObj = typeof venta.comprobante === "object" ? venta.comprobante : null
-        if (!comprobanteObj) return null
-
-        const esPresupuesto =
-          (comprobanteObj.tipo && comprobanteObj.tipo.toLowerCase() === "presupuesto") ||
-          comprobanteObj.codigo_afip === "9997"
-
-        const tipo = esPresupuesto ? "Presupuesto" : "Venta"
-        const estado = venta.estado || (venta.ven_estado === "AB" ? "Abierto" : venta.ven_estado === "CE" ? "Cerrado" : "")
-
-        const items = (venta.items || venta.detalle || venta.productos || []).map((item) => {
-          const producto = productosPorId.get(item.vdi_idsto || item.producto?.id) || null
-          const cantidad = Number.parseFloat(item.vdi_cantidad || item.cantidad || 0)
-          const costo = Number.parseFloat(item.vdi_importe || item.precio || item.costo || 0)
-          const bonificacion = Number.parseFloat(item.vdi_bonifica || item.bonificacion || 0)
-          const subtotalSinIva = costo * cantidad * (bonificacion ? 1 - bonificacion / 100 : 1)
-          const alicuotaIva = producto ? Number.parseFloat(producto.aliiva?.porce || producto.aliiva || 0) || 0 : 0
-          const iva = subtotalSinIva * (alicuotaIva / 100)
-          return {
-            ...item,
-            producto,
-            codigo: producto?.codvta || producto?.codigo || item.codigo || item.codvta || item.id || "-",
-            denominacion: producto?.deno || producto?.nombre || item.denominacion || item.nombre || "",
-            unidad: producto?.unidad || producto?.unidadmedida || item.unidad || item.unidadmedida || "-",
-            cantidad,
-            precio: costo,
-            bonificacion,
-            alicuotaIva,
-            iva,
-          }
-        })
-
-        return {
-          ...venta,
-          tipo,
-          estado,
-          letra: comprobanteObj.letra || venta.letra || "",
-          numero: venta.numero_formateado || venta.ven_numero || venta.numero || "",
-          cliente:
-            clientesPorId.get(venta.ven_idcli)?.razon ||
-            (venta.ven_idcli === 1 || venta.ven_idcli === "1" ? "Cliente Mostrador" : "") ||
-            venta.cliente ||
-            "",
-          fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
-          id: venta.id || venta.ven_id || venta.pk,
-          items,
-          plazoId: venta.ven_idpla || venta.plazoId || "",
-          vendedorId: venta.ven_idvdo || venta.vendedorId || "",
-          sucursalId: venta.ven_sucursal || venta.sucursalId || 1,
-          puntoVentaId: venta.ven_punto || venta.puntoVentaId || 1,
-          bonificacionGeneral: venta.ven_bonificacion_general ?? venta.bonificacionGeneral ?? 0,
-          descu1: venta.ven_descu1 || venta.descu1 || 0,
-          descu2: venta.ven_descu2 || venta.descu2 || 0,
-          descu3: venta.ven_descu3 || venta.descu3 || 0,
-          copia: venta.ven_copia || venta.copia || 1,
-          cae: venta.ven_cae || venta.cae || "",
-          comprobante: comprobanteObj,
-          total: venta.total || venta.ven_total || venta.importe_total || 0,
-        }
-      },
-      [productosPorId, clientesPorId]
-    )
-
-    const ventasNormalizadas = useMemo(() => {
-      return ventas.map(normalizarVenta).filter(Boolean)
-    }, [ventas, normalizarVenta])
-
-    // Usar directamente ventasNormalizadas para la paginación
-    const totalItems = ventasNormalizadas.length
-    const datosPagina = ventasNormalizadas.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina)
-
-    // Persistencia en localStorage con debounce para evitar escrituras en cada render
-    const persistTimeout = useRef(null)
-    useEffect(() => {
-      clearTimeout(persistTimeout.current)
-      persistTimeout.current = setTimeout(() => {
-        localStorage.setItem("presupuestosTabs", JSON.stringify(tabs))
-        localStorage.setItem("presupuestosActiveTab", activeTab)
-      }, 300)
-      return () => clearTimeout(persistTimeout.current)
-    }, [tabs, activeTab])
-
-    const handleFiltroChange = (filtros) => {
-      setComprobanteTipo(filtros.comprobanteTipo)
-      setComprobanteLetra(filtros.comprobanteLetra)
-      setFechaDesde(filtros.fechaDesde)
-      setFechaHasta(filtros.fechaHasta)
-      setClienteId(filtros.clienteId)
-      setVendedorId(filtros.vendedorId)
-      const params = {}
-      if (filtros.comprobanteTipo) params["comprobante_tipo"] = filtros.comprobanteTipo
-      if (filtros.comprobanteLetra) params["comprobante_letra"] = filtros.comprobanteLetra
-      if (filtros.fechaDesde) params["ven_fecha_after"] = filtros.fechaDesde
-      if (filtros.fechaHasta) params["ven_fecha_before"] = filtros.fechaHasta
-      if (filtros.clienteId) params["ven_idcli"] = filtros.clienteId
-      if (filtros.vendedorId) params["ven_idvdo"] = filtros.vendedorId
-      fetchVentas(params)
-    }
-
-    // Función para detectar si una factura interna puede convertirse
-    const esFacturaInternaConvertible = (item) => {
-      const esFacturaInterna = item.comprobante_tipo === 'factura_interna' || 
-        (item.comprobante_nombre && item.comprobante_nombre.toLowerCase().includes('interna'));
-      return esFacturaInterna;
-    };
-
-    // Handler específico para conversión de facturas internas
-    const handleConvertirFacturaI = async (facturaInterna) => {
-      if (!facturaInterna || !facturaInterna.id || (isFetchingForConversion && fetchingPresupuestoId === facturaInterna.id)) return;
-
-      setFetchingPresupuestoId(facturaInterna.id);
-      setIsFetchingForConversion(true);
-
-      try {
-        const [cabecera, itemsDetalle] = await Promise.all([
-          fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({ detail: "Error cabecera" }));
-              throw new Error(err.detail);
-            }
-            return res.json();
-          }),
-          fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${facturaInterna.id}`).then(async (res) => {
-            if (!res.ok) return [];
-            return res.json();
-          }),
-        ]);
-
-        const facturaInternaConDetalle = {
-          ...(cabecera.venta || facturaInterna),
-          items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
-        };
-
-        const itemsConId = facturaInternaConDetalle.items.map((it, idx) => ({
-          ...it,
-          id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
-        }));
-
-        // Marcar que es conversión de factura interna
-        setConversionModal({ 
-          open: true, 
-          presupuesto: { 
-            ...facturaInternaConDetalle, 
-            items: itemsConId,
-            tipoConversion: 'factura_i_factura'
-          } 
-        });
-      } catch (error) {
-        console.error("Error al obtener detalle para conversión:", error);
-        alert(error.message);
-      } finally {
-        setIsFetchingForConversion(false);
-        setFetchingPresupuestoId(null);
-      }
-    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
@@ -894,7 +318,7 @@
                     onDragStart={
                       tab.closable
                         ? (e) => {
-                            setDraggedTabKey(tab.key)
+                            handleDragStart(tab.key)
                             e.dataTransfer.effectAllowed = "move"
                           }
                         : undefined
@@ -903,25 +327,11 @@
                       tab.closable
                         ? (e) => {
                             e.preventDefault()
-                            if (draggedTabKey && draggedTabKey !== tab.key) {
-                              const dynamicTabs = tabs.filter((t) => t.closable)
-                              const fixedTabs = tabs.filter((t) => !t.closable)
-                              const draggedIdx = dynamicTabs.findIndex((t) => t.key === draggedTabKey)
-                              const dropIdx = dynamicTabs.findIndex((t) => t.key === tab.key)
-                              if (draggedIdx !== -1 && dropIdx !== -1) {
-                                const newDynamicTabs = [...dynamicTabs]
-                                const [draggedTab] = newDynamicTabs.splice(draggedIdx, 1)
-                                newDynamicTabs.splice(dropIdx, 0, draggedTab)
-                                setTabs([...fixedTabs, ...newDynamicTabs])
-                              }
-                            }
-                            setDraggedTabKey(null)
+                            handleDrop(tab.key)
                           }
                         : undefined
                     }
-                    onDragEnd={() => {
-                      setDraggedTabKey(null)
-                    }}
+                    onDragEnd={handleDragEnd}
                   >
                     {tab.label}
                     {tab.closable && (
@@ -992,199 +402,46 @@
                         Generar Libro IVA
                       </button>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px" }}>
-                        <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
-                          <tr>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              Comprobante
-                            </th>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              N°
-                            </th>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              Fecha
-                            </th>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              Cliente
-                            </th>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              Total
-                            </th>
-                            <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100">
-                              Acciones
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-300">
-                          {datosPagina.map((p) => {
-                            let comprobanteObj = null
-                            if (typeof p.comprobante === "object" && p.comprobante !== null) {
-                              comprobanteObj = p.comprobante
-                            } else if (p.comprobante) {
-                              comprobanteObj = comprobantes.find((c) => c.id === p.comprobante) || null
-                            }
-                            const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
-                            const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
-                            const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
-                            const { icon, label } = getComprobanteIconAndLabel(
-                              comprobanteTipo,
-                              comprobanteNombre,
-                              comprobanteLetra,
-                            )
-                            // Quitar letra del numero_formateado si existe
-                            let numeroSinLetra = p.numero_formateado
-                            if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
-                              numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
-                            }
-                            
-                            // Lógica para mostrar tooltips de comprobantes asociados
-                            const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
-                            const facturasAnuladas = p.facturas_anuladas || []
-                            const tieneNotasCredito = notasCreditoAsociadas.length > 0
-                            const tieneFacturasAnuladas = facturasAnuladas.length > 0
-
-                            return (
-                              <tr key={p.id} className="hover:bg-slate-100">
-                                {/* Comprobante */}
-                                <td className="px-3 py-1 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div className="flex items-center gap-2 text-slate-700">
-                                      {icon} <span className="font-medium">{label}</span>
-                                    </div>
-                                    {/* Renderizar tooltip si hay notas de crédito asociadas a la factura */}
-                                    {tieneNotasCredito && (
-                                      <ComprobanteAsociadoTooltip
-                                        documentos={notasCreditoAsociadas}
-                                        titulo="Notas de Crédito Asociadas"
-                                      />
-                                    )}
-                                    {/* Renderizar tooltip si la NC anula facturas */}
-                                    {tieneFacturasAnuladas && (
-                                      <ComprobanteAsociadoTooltip
-                                        documentos={facturasAnuladas}
-                                        titulo="Facturas que Anula"
-                                      />
-                                    )}
-                                  </div>
-                                </td>
-                                {/* Número */}
-                                <td className="px-3 py-1 whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-slate-800">
-                                      {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
-                                    </span>
-                                    <EstadoBadge estado={p.estado} />
-                                  </div>
-                                </td>
-                                {/* Fecha */}
-                                <td className="px-3 py-1 whitespace-nowrap text-slate-600">{p.fecha}</td>
-                                {/* Cliente */}
-                                <td className="px-3 py-1 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
-                                {/* Total */}
-                                <td className="px-3 py-1 whitespace-nowrap">
-                                  <span className="font-semibold text-slate-800">${formatearMoneda(p.total)}</span>
-                                </td>
-                                {/* Acciones */}
-                                <td className="px-3 py-1 whitespace-nowrap">
-                                  <div className="flex gap-1">
-                                    {p.tipo === "Presupuesto" && p.estado === "Abierto" ? (
-                                      <>
-                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
-                                        <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                        <BotonEditar onClick={() => handleEdit(p)} />
-                                        <BotonConvertir
-                                          onClick={() => handleConvertir(p)}
-                                          disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
-                                          title={
-                                            isFetchingForConversion && fetchingPresupuestoId === p.id
-                                              ? "Cargando..."
-                                              : "Convertir"
-                                          }
-                                        />
-                                        <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                      </>
-                                    ) : esFacturaInternaConvertible(p) ? (
-                                      <>
-                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
-                                        <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                        <BotonConvertir
-                                          onClick={() => handleConvertirFacturaI(p)}
-                                          disabled={isFetchingForConversion && fetchingPresupuestoId === p.id}
-                                          title={
-                                            isFetchingForConversion && fetchingPresupuestoId === p.id
-                                              ? "Cargando..."
-                                              : "Convertir factura interna a factura fiscal"
-                                          }
-                                        />
-                                        <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                      </>
-                                    ) : p.tipo === "Venta" && p.estado === "Cerrado" ? (
-                                      <>
-                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
-                                        <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                        <BotonEliminar onClick={() => handleDelete(p.id)} />
-                                      </>
-                                    ) : (
-                                      <>
-                                        <BotonVerDetalle onClick={() => openVistaTab(p)} />
-                                        <BotonGenerarPDF onClick={() => handleImprimir(p)} />
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <Paginador
-                      totalItems={totalItems}
-                      itemsPerPage={itemsPorPagina}
-                      currentPage={paginaActual}
-                      onPageChange={setPaginaActual}
-                      onItemsPerPageChange={(n) => {
-                        setItemsPorPagina(n)
-                        setPaginaActual(1)
+                    <ComprobantesList
+                      comprobantes={comprobantes}
+                      datosPagina={datosPagina}
+                      acciones={{
+                        handleImprimir,
+                        openVistaTab,
+                        handleEdit,
+                        handleConvertir,
+                        handleDelete,
+                        handleConvertirFacturaI,
                       }}
-                      opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
+                      isFetchingForConversion={isFetchingForConversion}
+                      fetchingPresupuestoId={fetchingPresupuestoId}
+                      esFacturaInternaConvertible={esFacturaInternaConvertible}
+                      totalItems={totalItems}
+                      itemsPorPagina={itemsPorPagina}
+                      paginaActual={paginaActual}
+                      setPaginaActual={setPaginaActual}
+                      setItemsPorPagina={setItemsPorPagina}
                     />
                   </>
                 )}
-                {/* Vendedores: lista */}
-                {activeTab === "vendedores" && (
-                  <>
-                    <div className="flex justify-end mb-4">
-                      <button
-                        onClick={handleNuevoVendedor}
-                        className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                      >
-                        <span className="text-lg">+</span> Nuevo Vendedor
-                      </button>
-                    </div>
-                    <VendedoresTable
+                {/* Vendedores */}
+                <VendedoresTab
+                  activeTab={activeTab}
                       vendedores={vendedores}
-                      onEdit={handleEditVendedor}
-                      onDelete={handleDeleteVendedor}
-                      search={searchVendedor}
-                      setSearch={setSearchVendedor}
-                    />
-                  </>
-                )}
-                {/* Vendedores: nuevo/editar */}
-                {(activeTab.startsWith("nuevo-vendedor") || activeTab.startsWith("editar-vendedor")) && (
-                  <div className="flex justify-center items-center min-h-[60vh]">
-                    <VendedorForm
-                      initialData={editVendedorData}
-                      onSave={handleSaveVendedor}
-                      onCancel={() => closeTab(activeTab)}
-                      loading={loadingVendedores}
-                      error={errorVendedores}
+                  loadingVendedores={loadingVendedores}
+                  errorVendedores={errorVendedores}
+                  searchVendedor={searchVendedor}
+                  setSearchVendedor={setSearchVendedor}
+                  editVendedorData={editVendedorData}
                       localidades={localidades}
-                    />
-                  </div>
-                )}
+                  acciones={{
+                    handleNuevoVendedor: () => handleNuevoVendedor(openTab),
+                    handleEditVendedor: (vendedor) => handleEditVendedor(vendedor, openTab),
+                    handleSaveVendedor: (data) => handleSaveVendedor(data, closeTab, activeTab),
+                    handleDeleteVendedor,
+                  }}
+                  closeTab={closeTab}
+                />
                 {/* Presupuestos: nuevo/editar/vista */}
                 {(activeTab.startsWith("nuevo-") ||
                   activeTab.startsWith("editar") ||
@@ -1492,20 +749,12 @@
             setModalFacturasNCAbierto(false)
             // Abrir pestaña con formulario de Nota de Crédito
             const newKey = `nota-credito-${Date.now()}`
-            setTabs((prev) => [
-              ...prev,
-              {
-                key: newKey,
-                label: `Nueva N. Crédito`,
-                closable: true,
-                tipo: "nota-credito",
-                data: {
+            const label = `Nueva N. Crédito`
+            const data = {
                   cliente: clienteParaNC,
                   facturas: facturas,
-                },
-              },
-            ])
-            setActiveTab(newKey)
+            }
+            updateTabData(newKey, label, data, "nota-credito")
           }}
         />
       </div>

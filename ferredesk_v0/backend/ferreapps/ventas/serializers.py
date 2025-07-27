@@ -164,6 +164,18 @@ class VentaSerializer(serializers.ModelSerializer):
             facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
             
             if facturas_asociadas.exists():
+                # NUEVA VALIDACIÓN: Verificar que solo se asocien facturas válidas
+                tipos_comprobantes_asociados = set(facturas_asociadas.values_list('comprobante__tipo', flat=True))
+                tipos_invalidos = tipos_comprobantes_asociados - {'factura', 'venta'}  # 'venta' es el tipo de factura interna
+                
+                if tipos_invalidos:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'No se pueden asociar comprobantes de tipo: {", ".join(sorted(tipos_invalidos))}. '
+                            f'Solo se permiten facturas (fiscales o internas) para notas de crédito.'
+                        ]
+                    })
+                
                 letras_facturas = set(facturas_asociadas.values_list('comprobante__letra', flat=True))
                 
                 # Validar que todas las facturas tengan la misma letra
