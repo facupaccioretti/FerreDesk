@@ -91,7 +91,7 @@ const Tabla = ({
 
       {/* Contenedor de tabla */}
       <div className="flex-1 overflow-auto">
-        <table className="min-w-full">
+        <table className="min-w-full rounded-lg overflow-hidden">
           {/* Encabezado */}
           <thead className="sticky top-0 z-10">
             <tr className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
