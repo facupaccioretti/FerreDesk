@@ -42,6 +42,8 @@ class CategoriaClienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ClienteSerializer(serializers.ModelSerializer):
+    iva_nombre = serializers.CharField(source='iva.nombre', read_only=True)
+    
     class Meta:
         model = Cliente
         fields = '__all__'

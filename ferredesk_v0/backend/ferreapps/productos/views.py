@@ -461,6 +461,13 @@ class FerreteriaAPIView(APIView):
         if 'logo_empresa' in request.FILES:
             data['logo_empresa'] = request.FILES['logo_empresa']
         
+        # Manejar archivos ARCA
+        if 'certificado_arca' in request.FILES:
+            data['certificado_arca'] = request.FILES['certificado_arca']
+        
+        if 'clave_privada_arca' in request.FILES:
+            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
+        
         serializer = FerreteriaSerializer(ferreteria, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()

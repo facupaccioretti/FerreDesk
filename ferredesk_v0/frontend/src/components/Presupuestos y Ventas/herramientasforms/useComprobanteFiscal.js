@@ -142,7 +142,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
       return;
     }
 
-    const situacion_iva_cliente = cliente.iva;
+    const situacion_iva_cliente = cliente.iva_nombre || cliente.iva?.nombre;
 
     // Validaciones estrictas
     if (situacion_iva_cliente === undefined || situacion_iva_cliente === null || situacion_iva_cliente === '') {

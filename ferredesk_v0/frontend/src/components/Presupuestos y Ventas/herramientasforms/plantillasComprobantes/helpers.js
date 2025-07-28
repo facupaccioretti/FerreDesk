@@ -15,6 +15,68 @@ export const ALICUOTAS_IVA = [
 export const CANTIDAD_MAXIMA_ITEMS = 25;
 
 /**
+ * Convierte bytes del QR a formato base64 para mostrar como imagen
+ * @param {ArrayBuffer|Uint8Array} bytes - Bytes del QR
+ * @returns {string|null} String base64 o null si hay error
+ */
+export const convertirBytesABase64 = (bytes) => {
+  if (!bytes) {
+    console.log('DEBUG QR - No hay bytes para convertir');
+    return null;
+  }
+  
+  console.log('DEBUG QR - Iniciando conversión:', {
+    tipoBytes: typeof bytes,
+    esArrayBuffer: bytes instanceof ArrayBuffer,
+    esUint8Array: bytes instanceof Uint8Array,
+    esString: typeof bytes === 'string',
+    longitud: bytes.length
+  });
+  
+  try {
+    // Si ya es un string (base64 del backend), devolverlo directamente
+    if (typeof bytes === 'string') {
+      console.log('DEBUG QR - Ya es base64 del backend, longitud:', bytes.length);
+      // Verificar que sea base64 válido
+      if (bytes.length > 100 && /^[A-Za-z0-9+/]*={0,2}$/.test(bytes)) {
+        return bytes;
+      } else {
+        console.log('DEBUG QR - String no parece ser base64 válido');
+        return null;
+      }
+    }
+    
+    // Si bytes es un ArrayBuffer, convertirlo a Uint8Array
+    const uint8Array = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+    
+    console.log('DEBUG QR - Uint8Array creado:', {
+      longitud: uint8Array.length,
+      primerosBytes: Array.from(uint8Array.slice(0, 10))
+    });
+    
+    // Convertir a string y luego a base64
+    const binaryString = String.fromCharCode.apply(null, uint8Array);
+    
+    console.log('DEBUG QR - Binary string creado:', {
+      longitud: binaryString.length,
+      primerosCaracteres: binaryString.substring(0, 20)
+    });
+    
+    const resultado = btoa(binaryString);
+    
+    console.log('DEBUG QR - Base64 generado:', {
+      longitud: resultado.length,
+      primerosCaracteres: resultado.substring(0, 20)
+    });
+    
+    return resultado;
+  } catch (error) {
+    console.error('Error convirtiendo QR a base64:', error);
+    return null;
+  }
+};
+
+/**
  * Formatea la columna de descuentos visualmente como "5+10+20".
  * @param {number} bonificacion - Bonificación particular del ítem
  * @param {number} descu1 - Descuento 1 general
@@ -298,50 +360,77 @@ export const generarTablaItemsComun = (
  * @param {number} totalPaginas - Número total de páginas
  * @returns {JSX.Element} Componente del pie fiscal
  */
-export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPaginas = 1) => (
-  <View style={styles.pieFiscal}>
-    <View style={styles.pieFilaHorizontal}>
-      {/* QR Placeholder (60x60) */}
-      <View style={styles.qrPlaceholder}>
-        <Text style={styles.qrTexto}>[QR CODE]</Text>
-      </View>
-      {/* Logo ARCA */}
-      <View style={styles.arcaPlaceholder}>
-        <Image 
-          src="http://localhost:8000/api/productos/servir-logo-arca/"
-          style={{
-            width: 60,
-            height: 50,
-            objectFit: "contain",
-            resizeMode: "contain"
-          }}
-        />
-      </View>
-      {/* Disclaimer AFIP */}
-      <View style={styles.textosAfipContainer}>
-        <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
-        <Text style={styles.leyendaAfip}>
-          Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
-        </Text>
-      </View>
-      {/* CAE y CAE Vencimiento (a la derecha del todo) */}
-      <View style={styles.pieDerecha}>
-        <View style={styles.campoAfip}>
-          <Text style={styles.labelAfip}>CAE:</Text>
-          <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
+  // Debug: Verificar datos del QR
+  console.log('DEBUG QR - Datos recibidos:', {
+    tieneVenQr: !!data.ven_qr,
+    tipoVenQr: typeof data.ven_qr,
+    longitudVenQr: data.ven_qr ? data.ven_qr.length : null,
+    esArrayBuffer: data.ven_qr instanceof ArrayBuffer,
+    esUint8Array: data.ven_qr instanceof Uint8Array,
+    datosCompletos: data
+  });
+  
+  // Convertir QR a base64 si existe
+  const qrBase64 = data.ven_qr ? convertirBytesABase64(data.ven_qr) : null;
+  
+  console.log('DEBUG QR - Resultado conversión:', {
+    qrBase64: qrBase64 ? `${qrBase64.substring(0, 50)}...` : null,
+    longitudBase64: qrBase64 ? qrBase64.length : null
+  });
+  
+  return (
+    <View style={styles.pieFiscal}>
+      <View style={styles.pieFilaHorizontal}>
+        {/* QR Real o Placeholder */}
+        {qrBase64 ? (
+          <Image 
+            src={`data:image/png;base64,${qrBase64}`}
+            style={styles.qrPlaceholder}
+          />
+        ) : (
+          <View style={styles.qrPlaceholder}>
+            <Text style={styles.qrTexto}>[QR CODE]</Text>
+          </View>
+        )}
+        {/* Logo ARCA */}
+        <View style={styles.arcaPlaceholder}>
+          <Image 
+            src="http://localhost:8000/api/productos/servir-logo-arca/"
+            style={{
+              width: 60,
+              height: 50,
+              objectFit: "contain",
+              resizeMode: "contain"
+            }}
+          />
         </View>
-        <View style={styles.campoAfip}>
-          <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
-          <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+        {/* Disclaimer AFIP */}
+        <View style={styles.textosAfipContainer}>
+          <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
+          <Text style={styles.leyendaAfip}>
+            Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
+          </Text>
         </View>
-        {/* Contador de páginas abajo a la derecha */}
-        <View style={{ marginTop: 4 }}>
-          <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
+        {/* CAE y CAE Vencimiento (a la derecha del todo) */}
+        <View style={styles.pieDerecha}>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE:</Text>
+            <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+          </View>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
+            <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+          </View>
+          {/* Contador de páginas abajo a la derecha */}
+          <View style={{ marginTop: 4 }}>
+            <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
+          </View>
         </View>
       </View>
     </View>
-  </View>
-);
+  );
+};
 
 /**
  * Genera una página completa de comprobante con configuración flexible

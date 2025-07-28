@@ -167,8 +167,9 @@ const useComprobantesCRUD = ({
           }),
         
         // Información AFIP (desde VENTA_CALCULADO)
-        cae: cabecera.ven_cae,
-        cae_vencimiento: cabecera.ven_caevencimiento ? new Date(cabecera.ven_caevencimiento).toLocaleDateString('es-AR') : '',
+        ven_cae: cabecera.ven_cae,
+        ven_caevencimiento: cabecera.ven_caevencimiento ? new Date(cabecera.ven_caevencimiento).toLocaleDateString('es-AR') : '',
+        ven_qr: cabecera.ven_qr, // Agregar el QR desde la cabecera
       };
       
       // Generar y descargar PDF usando el hook del componente, pasando la configuración

@@ -325,6 +325,135 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
   )
 }
 
+// Pestaña: Configuración ARCA
+const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
+  const handleFileChange = (field, file) => {
+    onConfigChange(field, file)
+  }
+
+  const handleToggle = (field) => {
+    onConfigChange(field, !config[field])
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-purple-50 to-purple-100/60 rounded-2xl p-6 border border-purple-200/50">
+        <h3 className="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          Configuración ARCA
+        </h3>
+        <p className="text-purple-700 text-sm mb-6">Configura la integración con servicios web de AFIP para emisión automática de comprobantes</p>
+      </div>
+
+      <div className="space-y-6">
+        {/* Estado de Configuración ARCA - Solo Información */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h4 className="text-base font-semibold text-slate-800 mb-4">Estado de Configuración</h4>
+          
+          <div className="space-y-4">
+            {/* Estado de configuración */}
+            {config.arca_configurado && (
+              <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                <span className="text-sm text-emerald-700">Configuración ARCA válida</span>
+              </div>
+            )}
+
+            {config.arca_error_configuracion && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+                <span className="text-sm text-red-700">{config.arca_error_configuracion}</span>
+              </div>
+            )}
+
+            {/* Información de configuración interna */}
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+              <span className="text-sm text-blue-700">
+                Configuración interna: {config.arca_habilitado ? 'Habilitado' : 'Deshabilitado'} | 
+                Modo: {config.modo_arca === 'PROD' ? 'Producción' : 'Homologación'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Certificados ARCA */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h4 className="text-base font-semibold text-slate-800 mb-4">Certificados ARCA</h4>
+          
+          <div className="space-y-6">
+            <FormField label="Certificado ARCA (.pem)" required>
+              <div className="space-y-3">
+                {config.certificado_arca && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    </svg>
+                    <span className="text-sm text-slate-600">Certificado actual cargado</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pem"
+                  onChange={(e) => handleFileChange("certificado_arca_file", e.target.files[0])}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  disabled={loading}
+                />
+                <p className="text-xs text-slate-500">
+                  Archivo certificado.pem proporcionado por AFIP para autenticación
+                </p>
+              </div>
+            </FormField>
+
+            <FormField label="Clave Privada ARCA (.pem)" required>
+              <div className="space-y-3">
+                {config.clave_privada_arca && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                    </svg>
+                    <span className="text-sm text-slate-600">Clave privada actual cargada</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pem"
+                  onChange={(e) => handleFileChange("clave_privada_arca_file", e.target.files[0])}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  disabled={loading}
+                />
+                <p className="text-xs text-slate-500">
+                  Archivo clave_privada.pem para firma digital de comprobantes
+                </p>
+              </div>
+            </FormField>
+          </div>
+        </div>
+
+        {/* Información Adicional */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h4 className="text-base font-semibold text-blue-800 mb-3">Información Importante</h4>
+          <ul className="text-sm text-blue-700 space-y-2">
+            <li>• Los certificados deben ser archivos .pem válidos proporcionados por AFIP</li>
+            <li>• En modo Homologación se usan servicios de prueba de AFIP</li>
+            <li>• En modo Producción se usan servicios reales de AFIP</li>
+            <li>• Solo usuarios administradores pueden modificar esta configuración</li>
+            <li>• Los archivos se almacenan de forma segura en el servidor</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const ConfiguracionManager = () => {
   const [user, setUser] = useState(null)
   const [config, setConfig] = useState({})
@@ -380,9 +509,11 @@ const ConfiguracionManager = () => {
       // Preparar datos para envío
       const formData = new FormData()
       
-      // Agregar todos los campos de configuración excepto el archivo
+      // Agregar todos los campos de configuración excepto archivos
       Object.keys(config).forEach(key => {
-        if (key !== 'logo_empresa_file' && key !== 'logo_empresa') {
+        if (key !== 'logo_empresa_file' && key !== 'logo_empresa' && 
+            key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
+            key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca') {
           if (config[key] !== null && config[key] !== undefined) {
             formData.append(key, config[key])
           }
@@ -392,6 +523,15 @@ const ConfiguracionManager = () => {
       // Agregar el archivo del logo si existe
       if (config.logo_empresa_file) {
         formData.append('logo_empresa', config.logo_empresa_file)
+      }
+      
+      // Agregar archivos ARCA si existen
+      if (config.certificado_arca_file) {
+        formData.append('certificado_arca', config.certificado_arca_file)
+      }
+      
+      if (config.clave_privada_arca_file) {
+        formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
       
       const res = await fetch("/api/ferreteria/", {
@@ -461,10 +601,25 @@ const ConfiguracionManager = () => {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
         </svg>
       )
+    },
+    {
+      key: "arca",
+      label: "Configuración ARCA",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      )
     }
   ]
 
   const renderActiveTab = () => {
+    // Si el usuario no es admin y está en la pestaña ARCA, redirigir a negocio
+    if (activeTab === "arca" && !user?.is_staff) {
+      setActiveTab("negocio")
+      return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+    }
+    
     switch (activeTab) {
       case "negocio":
         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
@@ -474,6 +629,8 @@ const ConfiguracionManager = () => {
         return <Notificaciones config={config} onConfigChange={handleConfigChange} loading={loading} />
       case "sistema":
         return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "arca":
+        return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
       default:
         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
     }
@@ -511,16 +668,23 @@ const ConfiguracionManager = () => {
             {/* Tabs */}
             <div className="bg-white/80 rounded-2xl border border-slate-300/60 shadow-xl mb-8">
               <div className="flex flex-wrap gap-2 p-6 border-b border-slate-200">
-                {tabs.map((tab) => (
-                  <TabButton
-                    key={tab.key}
-                    isActive={activeTab === tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    icon={tab.icon}
-                  >
-                    {tab.label}
-                  </TabButton>
-                ))}
+                {tabs.map((tab) => {
+                  // Solo mostrar pestaña ARCA a usuarios admin
+                  if (tab.key === "arca" && !user?.is_staff) {
+                    return null
+                  }
+                  
+                  return (
+                    <TabButton
+                      key={tab.key}
+                      isActive={activeTab === tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      icon={tab.icon}
+                    >
+                      {tab.label}
+                    </TabButton>
+                  )
+                })}
               </div>
 
               {/* Tab Content */}

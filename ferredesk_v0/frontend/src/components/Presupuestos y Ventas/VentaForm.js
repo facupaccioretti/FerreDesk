@@ -14,6 +14,8 @@ import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
+import { useArcaEstado } from "../../utils/useArcaEstado"
+import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -95,6 +97,19 @@ const VentaForm = ({
   const [inicializado, setInicializado] = useState(false)
   const [tipoComprobante, setTipoComprobante] = useState("")
   const [comprobanteId, setComprobanteId] = useState("")
+
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    respuestaArca,
+    errorArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca,
+    estaProcesando
+  } = useArcaEstado()
 
   // Función para normalizar items
   const normalizarItemsVenta = (items) => {
@@ -298,6 +313,11 @@ const VentaForm = ({
           ? "factura"
           : "factura_interna"
       
+      // Verificar si requiere emisión ARCA y iniciar estado de espera
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        iniciarEsperaArca()
+      }
+      
       // HÍBRIDO: Enviar solo el TIPO al backend, no código AFIP específico
       // El backend ejecutará su propia lógica fiscal autoritaria
 
@@ -338,14 +358,35 @@ const VentaForm = ({
       if (formulario.cuit) payload.ven_cuit = formulario.cuit
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
 
-      await onSave(payload)
+      const resultado = await onSave(payload)
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+      
       onCancel()
     } catch (error) {
       console.error("Error al guardar venta:", error)
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la venta")
+      }
     }
   }
 
   const handleCancel = () => {
+    limpiarEstadoArca() // Limpiar estado de ARCA al cancelar
     limpiarBorrador()
     onCancel()
   }
@@ -781,6 +822,17 @@ const VentaForm = ({
         onSeleccionar={onSeleccionarDesdeModal}
         cargando={loadingClientes}
         error={errorClientes}
+      />
+      
+      {/* Overlay de espera de ARCA */}
+      <ArcaEsperaOverlay 
+        estaEsperando={esperandoArca}
+        mensajePersonalizado={
+          tipoComprobante === "factura" 
+            ? "Esperando autorización de AFIP para la factura fiscal..." 
+            : null
+        }
+        mostrarDetalles={true}
       />
     </div>
   )

@@ -12,6 +12,8 @@ import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { useArcaEstado } from '../../utils/useArcaEstado';
+import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const ConVentaForm = ({
   onSave,
@@ -54,6 +56,19 @@ const ConVentaForm = ({
   const [loadingError, setLoadingError] = useState(null);
 
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
+
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    respuestaArca,
+    errorArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca,
+    estaProcesando
+  } = useArcaEstado()
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -291,6 +306,11 @@ const ConVentaForm = ({
       const items = itemsGridRef.current.getItems();
       limpiarBorrador();
 
+      // Verificar si requiere emisión ARCA y iniciar estado de espera
+      if (requiereEmisionArca(tipoComprobante)) {
+        iniciarEsperaArca();
+      }
+
       // Constantes descriptivas
       const ESTADO_VENTA_CERRADA = 'CE';
       const TIPO_VENTA = 'Venta';
@@ -343,14 +363,35 @@ const ConVentaForm = ({
       // Llamar al endpoint apropiado
       const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
       
-      await onSave(payload, tabKey, endpoint);
+      const resultado = await onSave(payload, tabKey, endpoint);
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobante)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+      
       onCancel();
     } catch (error) {
       console.error('Error al guardar venta:', error);
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la conversión")
+      }
     }
   };
 
   const handleCancel = () => {
+    limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
     limpiarBorrador();
     onCancel();
   };
@@ -732,6 +773,17 @@ const ConVentaForm = ({
             onSeleccionar={handleClienteSelect}
             cargando={loadingClientes}
             error={errorClientes}
+          />
+          
+          {/* Overlay de espera de ARCA */}
+          <ArcaEsperaOverlay 
+            estaEsperando={esperandoArca}
+            mensajePersonalizado={
+              tipoComprobante === "factura" 
+                ? "Esperando autorización de AFIP para la conversión a factura fiscal..." 
+                : null
+            }
+            mostrarDetalles={true}
           />
         </form>
       </div>

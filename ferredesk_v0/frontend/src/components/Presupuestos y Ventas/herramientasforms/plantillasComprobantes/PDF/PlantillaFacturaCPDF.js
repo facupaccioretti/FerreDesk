@@ -631,59 +631,10 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
   );
 };
 
-// Sobrescribir la función del pie fiscal para la plantilla C
-const generarPieFiscalC = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
-  const comprobante = data.comprobante || {};
-  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
-  // Por ahora, dejar el pie fiscal igual para ambos casos
-  // Más adelante, se podrá condicionar el contenido según esComprobanteInformal
-  return (
-    <View style={styles.pieFiscal}>
-      <View style={styles.pieFilaHorizontal}>
-        {/* QR Placeholder (60x60) */}
-        <View style={styles.qrPlaceholder}>
-          <Text style={styles.qrTexto}>[QR CODE]</Text>
-        </View>
-        {/* Logo ARCA */}
-        <View style={styles.arcaPlaceholder}>
-          <Image 
-            src="http://localhost:8000/api/productos/servir-logo-arca/"
-            style={{
-              width: 60,
-              height: 50,
-              objectFit: "contain",
-              resizeMode: "contain"
-            }}
-          />
-        </View>
-        {/* Disclaimer AFIP */}
-        <View style={styles.textosAfipContainer}>
-          <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
-          <Text style={styles.leyendaAfip}>
-            Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
-          </Text>
-        </View>
-        {/* CAE y CAE Vencimiento (a la derecha del todo) */}
-        <View style={styles.pieDerecha}>
-          <View style={styles.campoAfip}>
-            <Text style={styles.labelAfip}>CAE:</Text>
-            <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
-          </View>
-          <View style={styles.campoAfip}>
-            <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
-            <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
-          </View>
-          {/* Contador de páginas abajo a la derecha */}
-          <View style={{ marginTop: 4 }}>
-            <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-};
+// Usar la función común del pie fiscal que ya maneja el QR
+// La plantilla C no necesita una implementación específica del pie fiscal
 
-// Configuración específica para Factura A
+// Configuración específica para Factura C
 const configFacturaC = {
   generarHeader: generarHeaderC,
   generarTablaItems: (
@@ -743,9 +694,8 @@ const configFacturaC = {
         </Text>
       </View>
     </View>
-  ),
-  // Pie fiscal sobrescrito para distinguir comprobante formal/informal (por ahora igual)
-  generarPieFiscal: generarPieFiscalC
+  )
+  // No sobrescribir generarPieFiscal para usar la función común que ya maneja el QR
 };
 
 const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {

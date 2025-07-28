@@ -29,6 +29,8 @@ urlpatterns = router.urls + [
     path('convertir-presupuesto/', views.convertir_presupuesto_a_venta, name='convertir_presupuesto_a_venta'),
     path('convertir-factura-interna/', views.convertir_factura_interna_a_fiscal, name='convertir_factura_interna'),
     
+
+    
     # Endpoints del Libro IVA Ventas
     path('libro-iva-ventas/generar/', libro_iva_views.generar_libro_iva_ventas_endpoint, name='generar_libro_iva_ventas'),
     path('libro-iva-ventas/estadisticas/', libro_iva_views.obtener_estadisticas_libro_iva, name='estadisticas_libro_iva'),

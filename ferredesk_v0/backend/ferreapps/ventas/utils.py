@@ -13,14 +13,16 @@ def normalizar_situacion_iva(valor):
             valor = ''
     valor = (valor or '').strip().lower()
     # Acepta tanto los códigos cortos como los nombres largos
-    if valor in ["ri", "responsable inscripto"]:
+    if valor in ["ri", "responsable inscripto", "responsable inscripto"]:
         return "responsable_inscripto"
-    if valor in ["mo", "responsable monotributo", "monotributo social"]:
+    if valor in ["mo", "responsable monotributo", "monotributo social", "responsable monotributo"]:
         return "monotributista"
-    if valor in ["iva sujeto exento", "exento"]:
+    if valor in ["iva sujeto exento", "exento", "sujeto exento"]:
         return "exento"
     if valor in ["consumidor final"]:
         return "consumidor_final"
+    if valor in ["responsable no inscripto"]:
+        return "responsable_no_inscripto"
     return valor
 
 def _construir_respuesta_comprobante(comprobante):

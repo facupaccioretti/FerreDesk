@@ -9,6 +9,8 @@ import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
+import { useArcaEstado } from '../../utils/useArcaEstado';
+import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
   if (!clienteSeleccionado) return {}; 
@@ -84,6 +86,19 @@ const NotaCreditoForm = ({
   tabKey
 }) => {
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
+  
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    respuestaArca,
+    errorArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca,
+    estaProcesando
+  } = useArcaEstado()
   
   const { 
     formulario, 
@@ -200,6 +215,12 @@ const NotaCreditoForm = ({
       return;
     }
 
+    // Verificar si requiere emisión ARCA y iniciar estado de espera
+    const tipoComprobanteSeleccionado = comprobanteNC?.tipo || 'nota_credito';
+    if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+      iniciarEsperaArca();
+    }
+
     const payload = {
       // Campos alineados con VentaForm.js para consistencia y robustez
       ven_estado: "CE", // Las NC se crean como 'Cerrado'
@@ -207,7 +228,7 @@ const NotaCreditoForm = ({
       permitir_stock_negativo: true, // CRÍTICO: Permite que la lógica de suma de stock no falle
 
       // NUEVO: Enviar tipo determinado automáticamente
-      tipo_comprobante: comprobanteNC?.tipo || 'nota_credito',
+      tipo_comprobante: tipoComprobanteSeleccionado,
       comprobante_id: comprobanteNC?.codigo_afip || '',
       comprobantes_asociados_ids: (formulario.facturasAsociadas || []).map(f => f.id || f.ven_id),
       
@@ -231,11 +252,35 @@ const NotaCreditoForm = ({
       items: itemsParaGuardar.map((item, idx) => mapearCamposItem(item, idx))
     };
     
-    await onSave(payload, limpiarBorrador);
+    try {
+      const resultado = await onSave(payload, limpiarBorrador);
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+    } catch (error) {
+      console.error("Error al guardar nota de crédito:", error);
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la nota de crédito")
+      }
+    }
   };
 
   const handleCancel = () => {
     if (window.confirm('¿Está seguro de que desea cancelar? Se perderán todos los cambios no guardados.')) {
+      limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
       limpiarBorrador();
       onCancel();
     }
@@ -389,6 +434,17 @@ const NotaCreditoForm = ({
           </div>
         </div>
       </form>
+      
+      {/* Overlay de espera de ARCA */}
+      <ArcaEsperaOverlay 
+        estaEsperando={esperandoArca}
+        mensajePersonalizado={
+          comprobanteNC?.tipo === "nota_credito" 
+            ? "Esperando autorización de AFIP para la nota de crédito fiscal..." 
+            : null
+        }
+        mostrarDetalles={true}
+      />
     </div>
   );
 };

@@ -389,10 +389,33 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
     # NUEVOS CAMPOS PARA EL TOOLTIP
     notas_credito_que_la_anulan = serializers.SerializerMethodField()
     facturas_anuladas = serializers.SerializerMethodField()
+    # Campo personalizado para el QR
+    ven_qr = serializers.SerializerMethodField()
 
     class Meta:
         model = VentaCalculada
         fields = '__all__'
+
+    def get_ven_qr(self, obj):
+        """Convierte el BinaryField del QR a base64 para ReactPDF"""
+        if obj.ven_qr:
+            try:
+                import base64
+                # Si ya es una cadena (bytes serializados), convertirla primero a bytes
+                if isinstance(obj.ven_qr, str):
+                    # Convertir la cadena Unicode a bytes
+                    qr_bytes = obj.ven_qr.encode('latin-1')
+                else:
+                    # Si ya son bytes, usarlos directamente
+                    qr_bytes = obj.ven_qr
+                
+                # Convertir bytes a base64
+                qr_base64 = base64.b64encode(qr_bytes).decode('utf-8')
+                return qr_base64
+            except Exception as e:
+                print(f"Error convirtiendo QR a base64: {e}")
+                return None
+        return None
 
     def get_iva_desglose(self, obj):
         from .models import VentaIVAAlicuota

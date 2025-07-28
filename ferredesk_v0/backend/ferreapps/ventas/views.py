@@ -22,8 +22,14 @@ from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
+
+# Configurar logger para este módulo
+logger = logging.getLogger(__name__)
 from .utils import asignar_comprobante, _construir_respuesta_comprobante
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
+
+# Importación para integración ARCA automática
+from .ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 
 # Diccionario de alícuotas (igual que en el frontend)
 ALICUOTAS = {
@@ -249,11 +255,39 @@ class VentaViewSet(viewsets.ModelViewSet):
             nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
             data['ven_numero'] = nuevo_numero
             try:
+                # === CREAR VENTA ===
                 response = super().create(request, *args, **kwargs)
+                venta_creada = Venta.objects.get(ven_id=response.data['ven_id'])
+                
+                # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
+                if debe_emitir_arca(tipo_comprobante):
+                    try:
+                        logger.info(f"Emisión automática ARCA para venta {venta_creada.ven_id} - tipo: {tipo_comprobante}")
+                        resultado_arca = emitir_arca_automatico(venta_creada)
+                        
+                        # Agregar información ARCA a la respuesta
+                        response.data['arca_emitido'] = True
+                        response.data['cae'] = resultado_arca.get('cae')
+                        response.data['cae_vencimiento'] = resultado_arca.get('cae_vencimiento')
+                        response.data['qr_generado'] = resultado_arca.get('qr_generado', False)
+                        
+                        logger.info(f"Emisión ARCA exitosa para venta {venta_creada.ven_id}: CAE {resultado_arca.get('cae')}")
+                        
+                    except Exception as e:
+                        # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
+                        logger.error(f"Error en emisión automática ARCA para venta {venta_creada.ven_id}: {e}")
+                        raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
+                else:
+                    # Comprobante interno - no requiere emisión ARCA
+                    response.data['arca_emitido'] = False
+                    response.data['arca_motivo'] = 'Comprobante interno - no requiere emisión ARCA'
+                
+                # Agregar datos de respuesta
                 response.data['stock_actualizado'] = stock_actualizado
                 response.data['comprobante_letra'] = comprobante["letra"]
                 response.data['comprobante_nombre'] = comprobante["nombre"]
                 response.data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+                
                 return response
             except IntegrityError as e:
                 if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
@@ -873,3 +907,5 @@ def convertir_factura_interna_a_fiscal(request):
     except Exception as e:
         print("DEBUG - Error en convertir_factura_interna_a_fiscal:", str(e))
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
