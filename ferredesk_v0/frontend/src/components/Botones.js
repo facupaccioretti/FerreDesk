@@ -81,6 +81,20 @@ export const BotonConvertir = ({ onClick, title = 'Convertir', ...props }) => (
   </button>
 );
 
+export const BotonNotaCredito = ({ onClick, title = 'Nota de Crédito', ...props }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-blue-600 hover:text-blue-800"
+    {...props}
+  >
+    <svg width="20" height="20" viewBox="0 0 48 48" className="w-5 h-5">
+      <rect x="6" y="6" width="36" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <text x="24" y="30" textAnchor="middle" className="fill-current font-bold text-lg">NC</text>
+    </svg>
+  </button>
+);
+
 export const BotonVinculado = ({ onClick, title = 'Ver presupuesto vinculado', ...props }) => (
   <button
     onClick={onClick}

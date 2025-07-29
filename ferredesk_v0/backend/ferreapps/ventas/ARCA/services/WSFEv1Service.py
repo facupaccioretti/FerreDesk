@@ -241,9 +241,12 @@ class WSFEv1Service:
         
         # Log de comprobantes asociados si existen
         if 'CbtesAsoc' in datos_comprobante and datos_comprobante['CbtesAsoc']:
-            cbtes_asoc = datos_comprobante['CbtesAsoc'].get('CbteAsoc', [])
-            logger.info(f"COMPROBANTES ASOCIADOS ({len(cbtes_asoc)} comprobantes):")
-            for i, cbte in enumerate(cbtes_asoc):
+            # CbtesAsoc es una lista, no un diccionario
+            cbtes_asoc_list = datos_comprobante['CbtesAsoc']
+            logger.info(f"COMPROBANTES ASOCIADOS ({len(cbtes_asoc_list)} comprobantes):")
+            for i, cbte_asoc_item in enumerate(cbtes_asoc_list):
+                # Cada elemento de la lista tiene una clave 'CbteAsoc' con los datos del comprobante
+                cbte = cbte_asoc_item.get('CbteAsoc', {})
                 logger.info(f"   • Comprobante {i+1}: Tipo={cbte.get('Tipo', 'N/A')}, PtoVta={cbte.get('PtoVta', 'N/A')}, Nro={cbte.get('Nro', 'N/A')}")
         
         # Log del payload completo

@@ -1,5 +1,5 @@
 import React from "react"
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle } from "../Botones"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
@@ -97,7 +97,18 @@ const ComprobanteAcciones = ({
     handleConvertir,
     handleDelete,
     handleConvertirFacturaI,
+    handleNotaCredito,
   } = acciones
+
+  // Función para determinar si una factura puede tener NC
+  const puedeTenerNotaCredito = (comp) => {
+    const esFactura = comp.comprobante?.tipo === 'factura' || 
+                     comp.comprobante?.tipo === 'venta' || 
+                     comp.comprobante?.tipo === 'factura_interna';
+    const letraValida = ['A', 'B', 'C', 'I'].includes(comp.comprobante?.letra);
+    const estaCerrada = comp.estado === 'Cerrado';
+    return esFactura && letraValida && estaCerrada;
+  };
 
   // Presupuesto abierto
   if (comprobante.tipo === "Presupuesto" && comprobante.estado === "Abierto") {
@@ -120,27 +131,22 @@ const ComprobanteAcciones = ({
     )
   }
 
-  // Factura interna convertible
-  if (esFacturaInternaConvertible(comprobante)) {
+  // Facturas cerradas que pueden tener NC (incluye facturas internas cerradas)
+  if (puedeTenerNotaCredito(comprobante)) {
     return (
       <>
         <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
         <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
-        <BotonConvertir
-          onClick={() => handleConvertirFacturaI(comprobante)}
-          disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
-          title={
-            isFetchingForConversion && fetchingPresupuestoId === comprobante.id
-              ? "Cargando..."
-              : "Convertir factura interna a factura fiscal"
-          }
+        <BotonNotaCredito 
+          onClick={() => handleNotaCredito(comprobante)}
+          title="Crear Nota de Crédito"
         />
         <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
       </>
     )
   }
 
-  // Venta cerrada
+  // Venta cerrada (sin botón NC)
   if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
     return (
       <>

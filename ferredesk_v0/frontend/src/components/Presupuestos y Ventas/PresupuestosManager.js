@@ -142,6 +142,7 @@
       handleConVentaFormSaveFacturaI,
       handleConvertirFacturaI,
       esFacturaInternaConvertible,
+      handleNotaCredito,
       setConversionModal,
     } = useComprobantesCRUD({
       openTab,
@@ -412,6 +413,7 @@
                         handleConvertir,
                         handleDelete,
                         handleConvertirFacturaI,
+                        handleNotaCredito,
                       }}
                       isFetchingForConversion={isFetchingForConversion}
                       fetchingPresupuestoId={fetchingPresupuestoId}

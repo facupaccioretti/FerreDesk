@@ -446,6 +446,51 @@ const useComprobantesCRUD = ({
     }
   }
 
+  /**
+   * Crea una nota de crédito a partir de una factura seleccionada
+   * @param {Object} factura - Datos de la factura para crear NC
+   */
+  const handleNotaCredito = async (factura) => {
+    if (!factura || !factura.id) return;
+    
+    // Validar que sea una factura válida para NC
+    const esFacturaValida = factura.comprobante?.tipo === 'factura' || 
+                           factura.comprobante?.tipo === 'venta' || 
+                           factura.comprobante?.tipo === 'factura_interna';
+    const letraValida = ['A', 'B', 'C', 'I'].includes(factura.comprobante?.letra);
+    const estaCerrada = factura.estado === 'Cerrado';
+    
+    if (!esFacturaValida || !letraValida) {
+      alert('Esta factura no puede tener una nota de crédito asociada.');
+      return;
+    }
+    
+    if (!estaCerrada) {
+      alert('Solo se pueden crear notas de crédito para facturas cerradas.');
+      return;
+    }
+    
+    // Obtener datos del cliente
+    const cliente = {
+      id: factura.ven_idcli,
+      razon: factura.cliente_nombre || factura.cliente,
+      nombre: factura.cliente_nombre || factura.cliente,
+      cuit: factura.cuit || '',
+      domicilio: factura.domicilio || '',
+      plazo_id: factura.ven_idpla
+    };
+    
+    // Crear tab de nota de crédito con datos pre-seleccionados
+    const newKey = `nota-credito-${Date.now()}`;
+    const label = `N. Crédito - ${factura.numero_formateado}`;
+    const data = {
+      cliente: cliente,
+      facturas: [factura]
+    };
+    
+    updateTabData(newKey, label, data, "nota-credito");
+  }
+
   return {
     // Estados
     conversionModal,
@@ -468,6 +513,7 @@ const useComprobantesCRUD = ({
     
     // Funciones de utilidad
     esFacturaInternaConvertible,
+    handleNotaCredito,
     
     // Setters para estados
     setConversionModal,

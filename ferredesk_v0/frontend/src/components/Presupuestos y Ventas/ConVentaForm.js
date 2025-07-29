@@ -225,13 +225,6 @@ const ConVentaForm = ({
   // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
 
-  // Estado sincronizado para comprobante seleccionado
-  const [comprobanteId, setComprobanteId] = useState('');
-
-  // Estado de tipo de comprobante como string ('venta' | 'factura') y flag de inicialización
-  const [tipoComprobante, setTipoComprobante] = useState('');
-  const [inicializado, setInicializado] = useState(false);
-
   // Efecto de inicialización sincronizada (similar a VentaForm)
   useEffect(() => {
     if (!inicializado && comprobantesVenta.length > 0) {
