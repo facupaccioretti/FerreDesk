@@ -47,7 +47,6 @@ const REQUISITOS_POR_TIPO = {
   'B': {
     nombre: 'Factura B',
     requisitos: [
-      { ...REQUISITOS_BASE.cuit, mensaje: mensajesError.cuit('B') },
       { ...REQUISITOS_BASE.razon_social, mensaje: mensajesError.razon_social() },
       { ...REQUISITOS_BASE.domicilio, mensaje: mensajesError.domicilio() }
     ]
@@ -120,7 +119,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
 
     // Determinar qué campos son requeridos según el tipo de factura
     const camposRequeridos = {
-      cuit: letraComprobante !== 'C',
+      cuit: letraComprobante === 'A', // Solo Factura A requiere CUIT obligatorio
       domicilio: true,
       razon_social: true
     };

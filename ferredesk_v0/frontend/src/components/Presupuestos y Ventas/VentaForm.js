@@ -16,6 +16,7 @@ import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 import { useArcaEstado } from "../../utils/useArcaEstado"
 import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
+import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -275,10 +276,39 @@ const VentaForm = ({
   // Estado para modal selector de clientes
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 
+  // Estado para manejar documento (CUIT/DNI)
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || '',
+    esValido: false
+  })
+
+  // Función para manejar cambios en el documento
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo)
+    
+    // Actualizar el formulario con el nuevo valor
+    setFormulario(prevForm => ({
+      ...prevForm,
+      cuit: nuevaInfo.valor,
+      ven_cuit: nuevaInfo.tipo === 'cuit' ? nuevaInfo.valor : '',
+      ven_dni: nuevaInfo.tipo === 'dni' ? nuevaInfo.valor : ''
+    }))
+  }
+
   const abrirSelector = () => setSelectorAbierto(true)
   const cerrarSelector = () => setSelectorAbierto(false)
   const onSeleccionarDesdeModal = (cli) => {
     handleClienteSelect(cli)
+    
+    // Actualizar el estado del documento cuando se selecciona un cliente
+    if (cli.cuit) {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: cli.cuit,
+        esValido: true
+      })
+    }
   }
 
   // Bloquear envío de formulario al presionar Enter en cualquier campo
@@ -354,8 +384,12 @@ const VentaForm = ({
         permitir_stock_negativo: true, // Permitir stock negativo
       }
 
-      // Agregar CUIT y domicilio si existen
-      if (formulario.cuit) payload.ven_cuit = formulario.cuit
+      // Agregar documento (CUIT/DNI) y domicilio si existen
+      if (documentoInfo.tipo === 'cuit' && documentoInfo.valor) {
+        payload.ven_cuit = documentoInfo.valor
+      } else if (documentoInfo.tipo === 'dni' && documentoInfo.valor) {
+        payload.ven_dni = documentoInfo.valor
+      }
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
 
       const resultado = await onSave(payload)
@@ -585,19 +619,16 @@ const VentaForm = ({
                   )}
                 </div>
 
-                {/* CUIT */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}</label>
-                  <input
-                    name="cuit"
-                    type="text"
-                    value={formulario.cuit}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required={usarFiscal && fiscal.camposRequeridos.cuit}
-                    readOnly={isReadOnly}
-                  />
-                </div>
+                {/* Selector de Documento (CUIT/DNI) */}
+                <SelectorDocumento
+                  tipoComprobante={fiscal.letra || 'A'}
+                  esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
+                  valorInicial={documentoInfo.valor}
+                  tipoInicial={documentoInfo.tipo}
+                  onChange={handleDocumentoChange}
+                  readOnly={isReadOnly}
+                  className="w-full"
+                />
 
                 {/* Domicilio */}
                 <div className="w-full">

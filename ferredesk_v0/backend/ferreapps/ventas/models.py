@@ -69,6 +69,7 @@ class Venta(models.Model):
         related_name='ventas'
     )
     ven_cuit = models.CharField(max_length=20, db_column='VEN_CUIT', blank=True, null=True)
+    ven_dni = models.CharField(max_length=20, db_column='VEN_DNI', blank=True, null=True)
     ven_domicilio = models.CharField(max_length=100, db_column='VEN_DOMICILIO', blank=True, null=True)
     ven_razon_social = models.CharField(max_length=100, db_column='VEN_RAZON_SOCIAL', blank=True, null=True)
     ven_idpla = models.IntegerField(db_column='VEN_IDPLA')

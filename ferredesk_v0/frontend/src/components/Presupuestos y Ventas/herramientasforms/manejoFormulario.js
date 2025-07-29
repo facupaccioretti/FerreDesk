@@ -53,5 +53,8 @@ export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) 
     // 
     iva: clienteSeleccionado.iva || null,
     iva_nombre: clienteSeleccionado.iva_nombre || clienteSeleccionado.iva?.nombre || '',
+    // Campos para documento (CUIT/DNI)
+    ven_cuit: clienteSeleccionado.cuit || '',
+    ven_dni: '',
   }));
 }; 
