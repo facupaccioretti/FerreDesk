@@ -48,7 +48,7 @@ const ConVentaForm = ({
   setAutoSumarDuplicados,
   tabKey
 }) => {
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
   // Estados de carga centralizados
@@ -78,6 +78,32 @@ const ConVentaForm = ({
         }, {})
       : {}
   ), [alicuotasIVA]);
+
+  // Estados sincronizados para comprobante y tipo (igual que VentaForm)
+  const [inicializado, setInicializado] = useState(false);
+  const [tipoComprobante, setTipoComprobante] = useState("");
+  const [comprobanteId, setComprobanteId] = useState("");
+
+  // Efecto de inicialización sincronizada (igual que VentaForm)
+  useEffect(() => {
+    if (!inicializado && comprobantes.length > 0) {
+      const comprobanteFacturaInterna = comprobantes.find((c) => (c.tipo || "").toLowerCase() === "factura_interna");
+      if (comprobanteFacturaInterna) {
+        setTipoComprobante("factura_interna");
+        setComprobanteId(comprobanteFacturaInterna.id);
+      } else {
+        setTipoComprobante(comprobantes[0].tipo?.toLowerCase() || "factura_interna");
+        setComprobanteId(comprobantes[0].id);
+      }
+      setInicializado(true);
+    }
+  }, [inicializado, comprobantes]);
+
+  useEffect(() => {
+    if (comprobantes.length > 0 && !comprobanteId) {
+      setComprobanteId(comprobantes[0].id);
+    }
+  }, [comprobantes, comprobanteId]);
 
   // Determinar origen de datos
   const origenDatos = facturaInternaOrigen || presupuestoOrigen;
@@ -412,9 +438,9 @@ const ConVentaForm = ({
       ];
     }
     
-    // Si es conversión de presupuesto, permitir ambas opciones
+    // Si es conversión de presupuesto, permitir factura interna y factura (igual que VentaForm)
     return [
-      { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
+      { value: 'factura_interna', label: 'Factura Interna', tipo: 'factura_interna', letra: 'I' },
       { value: 'factura', label: 'Factura', tipo: 'factura' }
     ];
   }, [esConversionFacturaI]);
@@ -453,6 +479,20 @@ const ConVentaForm = ({
   const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
   const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
 
+  // Determinar el código AFIP y la letra a mostrar en el badge (igual que VentaForm)
+  let letraComprobanteMostrar = "V";
+  let codigoAfipMostrar = "";
+  if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
+    letraComprobanteMostrar = fiscal.letra || "A";
+    codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
+  } else if (comprobantes.length > 0 && comprobanteId) {
+    const compSeleccionado = comprobantes.find((c) => c.id === comprobanteId);
+    if (compSeleccionado) {
+      letraComprobanteMostrar = compSeleccionado.letra || "V";
+      codigoAfipMostrar = compSeleccionado.codigo_afip || "";
+    }
+  }
+
   // Renderizado condicional centralizado
   if (isLoading) {
     return (
@@ -487,11 +527,11 @@ const ConVentaForm = ({
           <div className="px-8 pt-4 pb-6">
 
             {/* Badge de letra del comprobante */}
-            {comprobanteLetra && (
+            {letraComprobanteMostrar && (
               <div className="absolute top-6 right-6 z-10">
                 <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
-                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{comprobanteLetra}</span>
-                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {usarFiscal && fiscal.comprobanteFiscal ? fiscal.comprobanteFiscal.codigo_afip : (compSeleccionado?.codigo_afip || '')}</span>
+                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{letraComprobanteMostrar}</span>
+                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {codigoAfipMostrar}</span>
                 </div>
               </div>
             )}

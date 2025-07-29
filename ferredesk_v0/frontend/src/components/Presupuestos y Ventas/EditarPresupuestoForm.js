@@ -177,7 +177,7 @@ const EditarPresupuestoForm = ({
   // =========================
   // Selector de Clientes (Modal)
   // =========================
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
 
   const [selectorAbierto, setSelectorAbierto] = useState(false);
   const abrirSelector = () => setSelectorAbierto(true);

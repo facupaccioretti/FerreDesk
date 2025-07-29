@@ -73,6 +73,9 @@ const REQUISITOS_POR_TIPO = {
  * 2. Frontend envía solo TIPO al backend (no código AFIP)
  * 3. Backend ejecuta su propia lógica fiscal independientemente
  * 4. Si hay discrepancia, el backend siempre gana
+ * 
+ * MEJORA: El estado anterior se mantiene hasta que se complete la nueva lógica fiscal
+ * para evitar que el cliente "desaparezca" visualmente cuando hay errores temporales.
  */
 export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const [letra, setLetra] = useState('');
@@ -134,7 +137,8 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const fetchComprobanteFiscal = useCallback(async () => {
     console.log('[useComprobanteFiscal] Disparado con:', { tipoComprobante, cliente });
     setLoading(true);
-    limpiarEstado();
+    // Solo limpiar errores previos, mantener el estado anterior hasta completar
+    setError(null);
 
     if (!tipoComprobante || !cliente) {
       console.log('[useComprobanteFiscal] Faltan datos para disparar lógica fiscal.');
@@ -144,12 +148,19 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
 
     const situacion_iva_cliente = cliente.iva_nombre || cliente.iva?.nombre;
 
+    // 
+    console.log('[useComprobanteFiscal] Cliente completo:', cliente);
+    console.log('[useComprobanteFiscal] Cliente.iva:', cliente.iva);
+    console.log('[useComprobanteFiscal] Cliente.iva_nombre:', cliente.iva_nombre);
+    console.log('[useComprobanteFiscal] Situación IVA cliente (final):', situacion_iva_cliente);
+
     // Validaciones estrictas
     if (situacion_iva_cliente === undefined || situacion_iva_cliente === null || situacion_iva_cliente === '') {
       const msg = '[useComprobanteFiscal] ERROR: El cliente no tiene IVA asignado. No se puede continuar.';
       console.error(msg, cliente);
       setError('El cliente seleccionado no tiene situación de IVA asignada.');
       setLoading(false);
+      // No limpiar el estado anterior, solo mostrar el error
       return;
     }
 
@@ -171,12 +182,19 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
         console.error('[useComprobanteFiscal] Error de backend:', data);
         setError(data.detail || 'Error al obtener comprobante fiscal');
         setLoading(false);
+        // No limpiar el estado anterior, solo mostrar el error
         return;
       }
       const data = await res.json();
       console.log('[useComprobanteFiscal] Respuesta del backend:', data);
       
       const letraComprobante = data.letra || '';
+      
+      // 
+      console.log('[useComprobanteFiscal] Letra asignada:', letraComprobante);
+      console.log('[useComprobanteFiscal] Código AFIP:', data.codigo_afip);
+      console.log('[useComprobanteFiscal] Comprobante completo:', data);
+      
       setLetra(letraComprobante);
       setCodigoAfip(data.codigo_afip || '');
       setComprobanteFiscal(data);
@@ -192,15 +210,11 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
     } catch (err) {
       console.error('[useComprobanteFiscal] Error de red o inesperado:', err);
       setError('Error de red o inesperado');
+      // No limpiar el estado anterior, solo mostrar el error
     } finally {
       setLoading(false);
     }
   }, [tipoComprobante, cliente, csrftoken, limpiarEstado, validarRequisitos]);
-
-  // Efecto para limpiar estado cuando cambian las dependencias
-  useEffect(() => {
-    limpiarEstado();
-  }, [tipoComprobante, cliente, limpiarEstado]);
 
   // Efecto para obtener comprobante fiscal
   useEffect(() => {

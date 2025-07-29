@@ -91,7 +91,7 @@ const PresupuestoForm = ({
   setAutoSumarDuplicados,
   tabKey = `presupuesto-${Date.now()}` // Valor por defecto en caso de que no se pase
 }) => {
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
 
   const alicuotasMap = useMemo(

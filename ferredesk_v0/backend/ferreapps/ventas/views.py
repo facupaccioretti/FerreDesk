@@ -3,6 +3,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404
+from django.core.exceptions import ValidationError
 from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed, VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
 from .serializers import (
     ComprobanteSerializer,
@@ -599,15 +600,45 @@ def convertir_presupuesto_a_venta(request):
                     print(f"DEBUG - No se encontró stock para el item {item_id}")
                     continue
 
-            # Preparar respuesta
-            response_data = {
-                'venta': VentaSerializer(venta).data,
-                'presupuesto': presupuesto_result,
-                'stock_actualizado': stock_actualizado,
-                'comprobante_letra': comprobante['letra'],
-                'comprobante_nombre': comprobante['nombre'],
-                'comprobante_codigo_afip': comprobante['codigo_afip']
-            }
+            # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
+            if debe_emitir_arca(tipo_comprobante):
+                try:
+                    logger.info(f"Emisión automática ARCA para conversión presupuesto {presupuesto.id} a venta {venta.ven_id} - tipo: {tipo_comprobante}")
+                    resultado_arca = emitir_arca_automatico(venta)
+                    
+                    # Agregar información ARCA a la respuesta
+                    response_data = {
+                        'venta': VentaSerializer(venta).data,
+                        'presupuesto': presupuesto_result,
+                        'stock_actualizado': stock_actualizado,
+                        'comprobante_letra': comprobante['letra'],
+                        'comprobante_nombre': comprobante['nombre'],
+                        'comprobante_codigo_afip': comprobante['codigo_afip'],
+                        'arca_emitido': True,
+                        'cae': resultado_arca.get('cae'),
+                        'cae_vencimiento': resultado_arca.get('cae_vencimiento'),
+                        'qr_generado': resultado_arca.get('qr_generado', False)
+                    }
+                    
+                    logger.info(f"Emisión ARCA exitosa para conversión presupuesto {presupuesto.id} a venta {venta.ven_id}: CAE {resultado_arca.get('cae')}")
+                    
+                except Exception as e:
+                    # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
+                    logger.error(f"Error en emisión automática ARCA para conversión presupuesto {presupuesto.id} a venta {venta.ven_id}: {e}")
+                    raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
+            else:
+                # Comprobante interno - no requiere emisión ARCA
+                response_data = {
+                    'venta': VentaSerializer(venta).data,
+                    'presupuesto': presupuesto_result,
+                    'stock_actualizado': stock_actualizado,
+                    'comprobante_letra': comprobante['letra'],
+                    'comprobante_nombre': comprobante['nombre'],
+                    'comprobante_codigo_afip': comprobante['codigo_afip'],
+                    'arca_emitido': False,
+                    'arca_motivo': 'Comprobante interno - no requiere emisión ARCA'
+                }
+            
             return Response(response_data)
 
     except Exception as e:
@@ -894,13 +925,40 @@ def convertir_factura_interna_a_fiscal(request):
                 factura_interna.save()
                 factura_interna_result = VentaSerializer(factura_interna).data
         
-        # Respuesta exitosa (IDÉNTICA AL MÉTODO CREATE)
-        response_data = VentaSerializer(nueva_factura).data
-        response_data['stock_actualizado'] = stock_actualizado
-        response_data['comprobante_letra'] = comprobante["letra"]
-        response_data['comprobante_nombre'] = comprobante["nombre"]
-        response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
-        response_data['factura_interna'] = factura_interna_result
+        # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
+        if debe_emitir_arca(tipo_comprobante):
+            try:
+                logger.info(f"Emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id} - tipo: {tipo_comprobante}")
+                resultado_arca = emitir_arca_automatico(nueva_factura)
+                
+                # Agregar información ARCA a la respuesta
+                response_data = VentaSerializer(nueva_factura).data
+                response_data['stock_actualizado'] = stock_actualizado
+                response_data['comprobante_letra'] = comprobante["letra"]
+                response_data['comprobante_nombre'] = comprobante["nombre"]
+                response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+                response_data['factura_interna'] = factura_interna_result
+                response_data['arca_emitido'] = True
+                response_data['cae'] = resultado_arca.get('cae')
+                response_data['cae_vencimiento'] = resultado_arca.get('cae_vencimiento')
+                response_data['qr_generado'] = resultado_arca.get('qr_generado', False)
+                
+                logger.info(f"Emisión ARCA exitosa para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: CAE {resultado_arca.get('cae')}")
+                
+            except Exception as e:
+                # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
+                logger.error(f"Error en emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: {e}")
+                raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
+        else:
+            # Comprobante interno - no requiere emisión ARCA
+            response_data = VentaSerializer(nueva_factura).data
+            response_data['stock_actualizado'] = stock_actualizado
+            response_data['comprobante_letra'] = comprobante["letra"]
+            response_data['comprobante_nombre'] = comprobante["nombre"]
+            response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+            response_data['factura_interna'] = factura_interna_result
+            response_data['arca_emitido'] = False
+            response_data['arca_motivo'] = 'Comprobante interno - no requiere emisión ARCA'
         
         return Response(response_data, status=status.HTTP_201_CREATED)
         

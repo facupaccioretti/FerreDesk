@@ -109,7 +109,7 @@ const useFiltrosComprobantes = ({
           venta.cliente ||
           "",
         fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
-        id: venta.id || venta.ven_id || venta.pk,
+        id: venta.ven_id || venta.id || venta.pk,
         items,
         plazoId: venta.ven_idpla || venta.plazoId || "",
         vendedorId: venta.ven_idvdo || venta.vendedorId || "",

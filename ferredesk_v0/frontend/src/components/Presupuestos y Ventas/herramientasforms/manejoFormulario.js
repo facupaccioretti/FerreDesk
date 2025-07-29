@@ -50,5 +50,8 @@ export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) 
     descu1: clienteSeleccionado.descu1 || 0,
     descu2: clienteSeleccionado.descu2 || 0,
     descu3: clienteSeleccionado.descu3 || 0,
+    // 
+    iva: clienteSeleccionado.iva || null,
+    iva_nombre: clienteSeleccionado.iva_nombre || clienteSeleccionado.iva?.nombre || '',
   }));
 }; 

@@ -287,17 +287,17 @@ const useComprobantesCRUD = ({
       }
 
       const data = await response.json()
-
-      // Actualizar la lista de ventas y presupuestos
-      await fetchVentas()
-      // Cerrar la tab de conversión
       closeTab(tabKey)
+      
       // Mostrar mensaje de éxito
       if (data.presupuesto === null) {
         alert("Factura creada correctamente. El presupuesto fue eliminado por no tener items restantes.")
       } else {
         alert("Factura creada correctamente. El presupuesto fue actualizado con los items restantes.")
       }
+      
+
+      await fetchVentas()
     } catch (err) {
       alert("Error al convertir: " + (err.message || ""))
     }
@@ -341,8 +341,7 @@ const useComprobantesCRUD = ({
 
       const data = await response.json()
 
-      // Actualizar listas
-      await fetchVentas()
+
       closeTab(tabKey)
       
       // Mensaje de éxito específico según lo que pasó con la factura interna original
@@ -351,6 +350,9 @@ const useComprobantesCRUD = ({
       } else {
         alert("Factura fiscal creada correctamente. La factura interna fue actualizada con los ítems restantes.")
       }
+      
+
+      await fetchVentas()
     } catch (err) {
       alert("Error al convertir factura interna: " + (err.message || ""))
     }

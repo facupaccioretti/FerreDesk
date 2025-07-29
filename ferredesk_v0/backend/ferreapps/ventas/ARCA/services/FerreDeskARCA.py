@@ -440,16 +440,19 @@ class FerreDeskARCA:
             logger.error(f"Error consultando tipos de concepto: {e}")
             raise FerreDeskARCAError(f"Error consultando tipos de concepto: {e}")
     
-    def consultar_condicion_iva_receptor(self) -> Dict[str, Any]:
+    def consultar_condicion_iva_receptor(self, clase_comprobante: str = '6') -> Dict[str, Any]:
         """
         Consulta las condiciones de IVA del receptor válidas en AFIP.
         
+        Args:
+            clase_comprobante: Clase de comprobante (1, 6, 11)
+            
         Returns:
             Lista de condiciones de IVA con códigos y descripciones
         """
         try:
-            logger.info("Consultando condiciones de IVA del receptor válidas")
-            return self.wsfev1_service.fe_param_get_condicion_iva_receptor()
+            logger.info(f"Consultando condiciones de IVA del receptor válidas para clase {clase_comprobante}")
+            return self.wsfev1_service.fe_param_get_condicion_iva_receptor(clase_comprobante)
         except Exception as e:
             logger.error(f"Error consultando condiciones de IVA: {e}")
             raise FerreDeskARCAError(f"Error consultando condiciones de IVA: {e}") 

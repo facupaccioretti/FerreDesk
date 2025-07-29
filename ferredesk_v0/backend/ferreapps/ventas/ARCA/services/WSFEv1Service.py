@@ -74,43 +74,80 @@ class WSFEv1Service:
         logger.debug(f"Cliente SOAP inicializado para {self.wsfev1_config['url']}")
         return client
     
-    def send_request(self, method_name: str, data: Dict[str, Any]) -> Any:
+    def send_request(self, method: str, data: Dict[str, Any]) -> Any:
         """
-        Envía una solicitud al servicio wsfev1.
-        
-        Basado en arca_arg.ArcaWebService.send_request, pero específico para wsfev1.
+        Envía una solicitud al servicio web de AFIP.
         
         Args:
-            method_name: Nombre del método SOAP (ej: 'FECAESolicitar', 'FECompUltimoAutorizado')
-            data: Datos a enviar al método
+            method: Nombre del método a llamar
+            data: Datos de la solicitud
             
         Returns:
-            Respuesta del servicio web
-            
-        Raises:
-            exceptions.Error: Si ocurre un error en la llamada al servicio web
+            Respuesta del servicio web (objeto SOAP original)
         """
+        logger.info("=" * 80)
+        logger.info(f"ENVIANDO SOLICITUD SOAP A AFIP")
+        logger.info("=" * 80)
+        logger.info(f"METODO: {method}")
+        logger.info(f"URL: {self.wsfev1_config['url']}")
+        
         try:
-            logger.info(f"Enviando solicitud {method_name} a wsfev1")
-            logger.debug(f"Datos de la solicitud: {data}")
+            # Crear cliente SOAP
+            client = Client(self.wsfev1_config['url'])
             
-            # Obtener método del cliente
-            method = getattr(self.client.service, method_name)
+            # Log del cliente SOAP
+            logger.info(f"CLIENTE SOAP CREADO:")
+            logger.info(f"   • WSDL URL: {self.wsfev1_config['url']}")
+            logger.info(f"   • Servicios disponibles: {list(client.service.__dict__.keys())}")
+            
+            # Preparar datos de la solicitud - enviar solo los parámetros esperados
+            # No incluir el nombre del método como parámetro
+            request_data = data.copy()
+            
+            # Log de la solicitud SOAP
+            import json
+            request_json = json.dumps(request_data, indent=2, default=str)
+            logger.info(f"SOLICITUD SOAP ENVIADA:")
+            logger.info(f"\n{request_json}")
             
             # Enviar solicitud
-            response = method(**data)
+            logger.info(f"EJECUTANDO METODO {method}...")
+            response = getattr(client.service, method)(**request_data)
             
-            logger.info(f"Solicitud {method_name} completada exitosamente")
-            logger.debug(f"Respuesta: {response}")
+            # Log de la respuesta SOAP
+            logger.info(f"RESPUESTA SOAP RECIBIDA:")
+            logger.info(f"   • Tipo de respuesta: {type(response)}")
+            logger.info(f"   • Atributos disponibles: {dir(response)}")
             
+            # Log de la respuesta (solo para debug, sin convertir)
+            logger.info(f"RESPUESTA SOAP (sin convertir):")
+            logger.info(f"   • Respuesta: {response}")
+            
+            logger.info("=" * 80)
+            logger.info(f"SOLICITUD SOAP COMPLETADA EXITOSAMENTE")
+            logger.info("=" * 80)
+            
+            # Devolver la respuesta SOAP original (como hace arca_arg)
             return response
             
-        except exceptions.Error as e:
-            logger.error(f"Error en solicitud {method_name}: {e}")
-            # Re-lanzar la excepción original para transparencia
-            raise
         except Exception as e:
-            logger.error(f"Error inesperado en solicitud {method_name}: {e}")
+            logger.error("=" * 80)
+            logger.error(f"ERROR EN SOLICITUD SOAP")
+            logger.error("=" * 80)
+            logger.error(f"DETALLE DEL ERROR:")
+            logger.error(f"   • Método: {method}")
+            logger.error(f"   • Error: {str(e)}")
+            logger.error(f"   • Tipo de error: {type(e).__name__}")
+            
+            # Log adicional para errores SOAP
+            if hasattr(e, 'document'):
+                logger.error(f"   • Documento SOAP: {e.document}")
+            if hasattr(e, 'code'):
+                logger.error(f"   • Código de error: {e.code}")
+            if hasattr(e, 'message'):
+                logger.error(f"   • Mensaje: {e.message}")
+            
+            logger.error("=" * 80)
             raise
     
     def fe_comp_ultimo_autorizado(self, punto_venta: int, tipo_comprobante: int) -> Dict[str, Any]:
@@ -148,6 +185,10 @@ class WSFEv1Service:
         Returns:
             Respuesta con el CAE
         """
+        logger.info("=" * 80)
+        logger.info("INICIANDO SOLICITUD CAE A AFIP")
+        logger.info("=" * 80)
+        
         # Obtener datos de autenticación
         auth_data = self.auth.get_auth_data()
         
@@ -169,7 +210,69 @@ class WSFEv1Service:
             'FeCAEReq': fe_cae_req
         }
         
-        return self.send_request('FECAESolicitar', request_data)
+        # Log detallado de la solicitud
+        logger.info(f"INFORMACIÓN DE LA SOLICITUD:")
+        logger.info(f"   • Tipo de comprobante: {tipo_cbte}")
+        logger.info(f"   • Punto de venta: {punto_venta}")
+        logger.info(f"   • Cantidad de registros: {fe_cae_req['FeCabReq']['CantReg']}")
+        
+        logger.info(f"DATOS DE AUTENTICACIÓN:")
+        logger.info(f"   • Token: {auth_data.get('Token', 'N/A')[:20]}...")
+        logger.info(f"   • Sign: {auth_data.get('Sign', 'N/A')[:20]}...")
+        logger.info(f"   • Cuit: {auth_data.get('Cuit', 'N/A')}")
+        
+        logger.info(f"DATOS DEL COMPROBANTE:")
+        logger.info(f"   • Concepto: {datos_comprobante.get('Concepto', 'N/A')}")
+        logger.info(f"   • DocTipo: {datos_comprobante.get('DocTipo', 'N/A')}")
+        logger.info(f"   • DocNro: {datos_comprobante.get('DocNro', 'N/A')}")
+        logger.info(f"   • CbteDesde: {datos_comprobante.get('CbteDesde', 'N/A')}")
+        logger.info(f"   • CbteHasta: {datos_comprobante.get('CbteHasta', 'N/A')}")
+        logger.info(f"   • CbteFch: {datos_comprobante.get('CbteFch', 'N/A')}")
+        logger.info(f"   • ImpNeto: {datos_comprobante.get('ImpNeto', 'N/A')}")
+        logger.info(f"   • ImpIVA: {datos_comprobante.get('ImpIVA', 'N/A')}")
+        logger.info(f"   • ImpTotal: {datos_comprobante.get('ImpTotal', 'N/A')}")
+        
+        # Log de alícuotas si existen
+        if 'Iva' in datos_comprobante and datos_comprobante['Iva']:
+            alicuotas = datos_comprobante['Iva'].get('AlicIva', [])
+            logger.info(f"ALÍCUOTAS DE IVA ({len(alicuotas)} alícuotas):")
+            for i, alic in enumerate(alicuotas):
+                logger.info(f"   • Alícuota {i+1}: Id={alic.get('Id', 'N/A')}, BaseImp={alic.get('BaseImp', 'N/A')}, Importe={alic.get('Importe', 'N/A')}")
+        
+        # Log de comprobantes asociados si existen
+        if 'CbtesAsoc' in datos_comprobante and datos_comprobante['CbtesAsoc']:
+            cbtes_asoc = datos_comprobante['CbtesAsoc'].get('CbteAsoc', [])
+            logger.info(f"COMPROBANTES ASOCIADOS ({len(cbtes_asoc)} comprobantes):")
+            for i, cbte in enumerate(cbtes_asoc):
+                logger.info(f"   • Comprobante {i+1}: Tipo={cbte.get('Tipo', 'N/A')}, PtoVta={cbte.get('PtoVta', 'N/A')}, Nro={cbte.get('Nro', 'N/A')}")
+        
+        # Log del payload completo
+        import json
+        request_json = json.dumps(request_data, indent=2, default=str)
+        logger.info(f"PAYLOAD COMPLETO ENVIADO A AFIP:")
+        logger.info(f"\n{request_json}")
+        
+        logger.info("=" * 80)
+        logger.info("ENVIANDO SOLICITUD A AFIP...")
+        logger.info("=" * 80)
+        
+        # Enviar solicitud
+        response = self.send_request('FECAESolicitar', request_data)
+        
+        logger.info("=" * 80)
+        logger.info("RESPUESTA RECIBIDA DE AFIP")
+        logger.info("=" * 80)
+        
+        # Log de la respuesta
+        response_json = json.dumps(response, indent=2, default=str)
+        logger.info(f"RESPUESTA COMPLETA DE AFIP:")
+        logger.info(f"\n{response_json}")
+        
+        logger.info("=" * 80)
+        logger.info("SOLICITUD CAE COMPLETADA")
+        logger.info("=" * 80)
+        
+        return response
     
     def fe_dummy(self) -> Dict[str, Any]:
         """
@@ -235,15 +338,22 @@ class WSFEv1Service:
         request_data = {'Auth': auth_data}
         return self.send_request('FEParamGetTiposConcepto', request_data)
     
-    def fe_param_get_condicion_iva_receptor(self) -> Dict[str, Any]:
+    def fe_param_get_condicion_iva_receptor(self, clase_comprobante: str = '6') -> Dict[str, Any]:
         """
         Consulta las condiciones de IVA del receptor válidas.
         
+        Args:
+            clase_comprobante: Clase de comprobante (1, 6, 11)
+            
         Returns:
             Lista de condiciones de IVA con códigos y descripciones
         """
         auth_data = self.auth.get_auth_data()
-        request_data = {'Auth': auth_data}
+        # Para FEParamGetCondicionIvaReceptor, necesitamos especificar la clase de comprobante
+        request_data = {
+            'Auth': auth_data,
+            'ClaseCmp': clase_comprobante
+        }
         return self.send_request('FEParamGetCondicionIvaReceptor', request_data)
     
     def get_methods(self) -> list:

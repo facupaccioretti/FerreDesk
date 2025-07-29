@@ -90,7 +90,7 @@ const VentaForm = ({
   const [loadingError, setLoadingError] = useState(null)
 
   // Hooks existentes movidos al inicio
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
 
   // Estados sincronizados para comprobante y tipo

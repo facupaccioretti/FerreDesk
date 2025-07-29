@@ -4,15 +4,20 @@ import { useClientesAPI } from '../../../utils/useClientesAPI';
 /**
  * Hook para obtener la lista de clientes combinando la lista general y el cliente por defecto (ID 1).
  * Devuelve { clientes, loading, error }.
+ * 
+ * @param {Object} opciones - Opciones de configuración
+ * @param {boolean} opciones.soloConMovimientos - Si es true, solo muestra clientes con movimientos (por defecto: true)
  */
-export function useClientesConDefecto() {
+export function useClientesConDefecto(opciones = {}) {
+  const { soloConMovimientos = true } = opciones;
+  
   const {
     clientes: clientesGenerales,
     loading: loadingGenerales,
     error: errorGenerales,
     fetchClientePorDefecto,
     clearError
-  } = useClientesAPI({ con_ventas: 1 });
+  } = useClientesAPI(soloConMovimientos ? { con_ventas: 1 } : {});
   const [clientePorDefecto, setClientePorDefecto] = useState(null);
   const [loadingDefecto, setLoadingDefecto] = useState(false);
   const [errorDefecto, setErrorDefecto] = useState(null);

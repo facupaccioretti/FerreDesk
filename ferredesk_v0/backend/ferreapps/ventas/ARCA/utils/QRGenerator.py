@@ -130,9 +130,11 @@ class QRGenerator:
         elif dni_cliente and len(str(dni_cliente)) >= 7:
             tipo_doc_rec = 96  # DNI
             nro_doc_rec = int(str(dni_cliente).replace('.', '').replace(' ', ''))
+        # CORRECCIÓN: Para Consumidor Final, usar DocTipo 99 y DocNro 0 (como en emisión)
         else:
-            logger.error(f"El cliente {cliente.razon} no tiene CUIT ni DNI válido. No se puede generar QR.")
-            raise Exception(f"El cliente {cliente.razon} no tiene CUIT ni DNI válido. No se puede generar QR.")
+            tipo_doc_rec = 99  # Consumidor Final
+            nro_doc_rec = 0
+            logger.info(f"Cliente {cliente.razon} identificado como Consumidor Final para QR (DocTipo: 99, DocNro: 0)")
         
         # Crear JSON exactamente como lo espera AFIP para redirección web
         qr_json = {

@@ -65,6 +65,7 @@ class ClienteBusquedaSerializer(serializers.ModelSerializer):
             'cuit',
             'domicilio',
             'iva_nombre',
+            'iva',  # 
             'descu1',
             'descu2'
         ] 

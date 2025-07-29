@@ -66,7 +66,7 @@ ARCA_MAPEOS_COMPROBANTE = {
     },
     # Notas de débito con lógica fiscal (según letra A/B/C)
     'nota_debito': {
-        'A': 2,  # Nota de Débito A - código AFIP 003
+        'A': 2,  # Nota de Débito A - código AFIP 002
         'B': 7,  # Nota de Débito B - código AFIP 007
         'C': 12, # Nota de Débito C - código AFIP 012
     }
