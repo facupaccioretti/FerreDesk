@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
   const [mes, setMes] = useState(new Date().getMonth() + 1); // Mes actual

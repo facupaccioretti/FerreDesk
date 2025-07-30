@@ -92,7 +92,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
 
-  const [codigoProveedorDetectado, setCodigoProveedorDetectado] = useState(false)
+  
 
   useEffect(() => {
     if (stock) {
@@ -164,7 +164,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     let detectado = false
     const proveedorId = newStockProve.proveedor
     if (!proveedorId) {
-      setCodigoProveedorDetectado(false)
       return
     }
 
@@ -198,8 +197,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       )
       if (codigoPendiente) detectado = true
     }
-
-    setCodigoProveedorDetectado(detectado)
   }, [newStockProve.proveedor, stockProve, codigosPendientes, codigosPendientesEdicion, form.stock_proveedores, isEdicion, stock?.id])
 
   useEffect(() => {

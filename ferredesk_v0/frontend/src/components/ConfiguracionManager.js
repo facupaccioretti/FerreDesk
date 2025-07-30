@@ -331,9 +331,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
     onConfigChange(field, file)
   }
 
-  const handleToggle = (field) => {
-    onConfigChange(field, !config[field])
-  }
+
 
   return (
     <div className="space-y-6">
@@ -457,7 +455,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
 const ConfiguracionManager = () => {
   const [user, setUser] = useState(null)
   const [config, setConfig] = useState({})
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("negocio")
   const [feedback, setFeedback] = useState("")

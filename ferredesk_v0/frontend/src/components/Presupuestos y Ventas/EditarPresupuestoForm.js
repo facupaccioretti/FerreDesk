@@ -5,7 +5,7 @@ import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
@@ -144,7 +144,7 @@ const EditarPresupuestoForm = ({
   // Manejadores de cambios
   const handleChange = manejarCambioFormulario(setFormulario);
 
-  const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
+
 
   // Efecto: cuando llegan los productos (o cambian) volver a normalizar ítems sin producto
   useEffect(() => {
@@ -156,7 +156,7 @@ const EditarPresupuestoForm = ({
       actualizarItems(itemsNormalizados);
       setGridKey(Date.now()); // Forzar remount de la grilla
     }
-  }, [productos, alicuotasMap]);
+  }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
   // Agregar producto desde el buscador
   const handleAddItemToGrid = (producto) => {

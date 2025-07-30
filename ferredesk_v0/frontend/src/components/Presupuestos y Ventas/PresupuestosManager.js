@@ -1,6 +1,6 @@
   "use client"
   // linea 252 revisar --> setTipoComprobante(4) Forzar tipoComprobante a 4 para presupuesto. Por cambios en la bd
-  import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+  import { useState, useEffect, useMemo } from "react"
   import { useNavigate } from "react-router-dom"
   import Navbar from "../Navbar"
   import { useVentasAPI } from "../../utils/useVentasAPI"
@@ -44,7 +44,7 @@
     const navigate = useNavigate()
     
     // Hook para generación de PDFs
-    const { descargarPDF, generando } = useGeneradorPDF();
+    const { descargarPDF } = useGeneradorPDF();
 
     // Hook para obtener la configuración de la ferretería
     const { ferreteria, loading: loadingFerreteria } = useFerreteriaAPI();
@@ -67,7 +67,7 @@
     }, [])
 
     const { ventas, error: ventasError, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
-    const fetchPresupuestos = fetchVentas
+
     const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI()
     const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI()
     const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI()
@@ -110,7 +110,7 @@
     const {
       tabs,
       activeTab,
-      draggedTabKey,
+
       openTab,
       closeTab,
       setActiveTab,
@@ -118,7 +118,7 @@
       handleDragStart,
       handleDrop,
       handleDragEnd,
-      mainTabs,
+
     } = useTabsManager(setEditVendedorData)
 
     // Memorizar los datos para la pestaña activa para evitar re-renders innecesarios
@@ -174,15 +174,11 @@
       setPaginaActual,
       itemsPorPagina,
       setItemsPorPagina,
-      ventasNormalizadas,
+
       totalItems,
       datosPagina,
       handleFiltroChange,
-      resetearFiltros,
-      obtenerFiltrosActuales,
-      productosPorId,
-      clientesPorId,
-      normalizarVenta,
+
         } = useFiltrosComprobantes({
       ventas,
       productos,
@@ -206,7 +202,6 @@
     // --- Estados específicos para la creación de Notas de Crédito ---
     const [modalClienteNCAbierto, setModalClienteNCAbierto] = useState(false)
     const [clienteParaNC, setClienteParaNC] = useState(null)
-    const [facturasParaNC, setFacturasParaNC] = useState([])
     const [modalFacturasNCAbierto, setModalFacturasNCAbierto] = useState(false)
 
 
@@ -239,7 +234,6 @@
       
       // Reiniciar estados relacionados
       setClienteParaNC(null)
-      setFacturasParaNC([])
       setModalClienteNCAbierto(true)
     }
 
@@ -747,7 +741,6 @@
           cliente={clienteParaNC}
           onCerrar={() => setModalFacturasNCAbierto(false)}
           onSeleccionar={(facturas) => {
-            setFacturasParaNC(facturas)
             setModalFacturasNCAbierto(false)
             // Abrir pestaña con formulario de Nota de Crédito
             const newKey = `nota-credito-${Date.now()}`

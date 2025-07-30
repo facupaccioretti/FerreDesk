@@ -165,7 +165,7 @@ const ClientesManager = () => {
       }
     }, 300) // Debounce simple
     return () => clearTimeout(timeout)
-  }, [search])
+  }, [search, fetchClientes])
 
   // Eliminar cualquier renderizado visual de error relacionado a 'error' en la UI
 

@@ -87,16 +87,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const [erroresValidacion, setErroresValidacion] = useState([]);
   const csrftoken = getCookie('csrftoken');
 
-  // Función para limpiar estado
-  const limpiarEstado = useCallback(() => {
-    setLetra('');
-    setCodigoAfip('');
-    setComprobanteFiscal(null);
-    setRequisitos({});
-    setError(null);
-    setOpcionDropdown(null);
-    setErroresValidacion([]);
-  }, []);
+
 
   // Función para validar requisitos
   const validarRequisitos = useCallback((letraComprobante, clienteActual) => {
@@ -213,7 +204,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
     } finally {
       setLoading(false);
     }
-  }, [tipoComprobante, cliente, csrftoken, limpiarEstado, validarRequisitos]);
+  }, [tipoComprobante, cliente, csrftoken, validarRequisitos]);
 
   // Efecto para obtener comprobante fiscal
   useEffect(() => {

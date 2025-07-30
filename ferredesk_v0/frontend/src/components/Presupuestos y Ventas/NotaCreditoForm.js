@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { normalizarItems } from './herramientasforms/normalizadorItems';
-import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
+import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
@@ -90,14 +90,11 @@ const NotaCreditoForm = ({
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
-    respuestaArca,
-    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca,
-    estaProcesando
+    requiereEmisionArca
   } = useArcaEstado()
   
   const { 
@@ -159,11 +156,11 @@ const NotaCreditoForm = ({
     return comprobantes.find(c => c.tipo === tipoNotaCredito && (letraNotaCredito ? c.letra === letraNotaCredito : true));
   }, [comprobantes, tipoNotaCredito, letraNotaCredito]);
   
-  const comprobanteIdNC = comprobanteNC?.id || null;
+
   const codigoAfipNC = comprobanteNC?.codigo_afip || '';
   const letraNC = comprobanteNC?.letra || 'X';
 
-  const { datosFiscales, loadingFiscal } = useComprobanteFiscal({
+  useComprobanteFiscal({
     puntoVenta: formulario.puntoVentaId,
     codigoAfip: codigoAfipNC,
     clienteId: formulario.clienteId,

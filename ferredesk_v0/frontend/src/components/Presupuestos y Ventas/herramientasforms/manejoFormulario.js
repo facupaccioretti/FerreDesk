@@ -41,6 +41,27 @@ export const manejarCambioCliente = (setForm, clientes) => (e) => {
 export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) => {
   if (!clienteSeleccionado) return;
   console.log('[manejarSeleccionClienteObjeto] Cliente seleccionado:', clienteSeleccionado);
+  
+  // Lógica de validación del documento del cliente
+  let ven_cuit = '';
+  let ven_dni = '';
+  
+  if (clienteSeleccionado.cuit) {
+    // Limpiar el CUIT de espacios y guiones para validar
+    const cuitLimpio = clienteSeleccionado.cuit.replace(/[-\s]/g, '')
+    
+    // Validar si tiene exactamente 11 dígitos (CUIT válido)
+    if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+      // Es un CUIT válido
+      ven_cuit = clienteSeleccionado.cuit;
+      ven_dni = '';
+    } else {
+      // No es un CUIT válido, tratar como DNI
+      ven_cuit = '';
+      ven_dni = clienteSeleccionado.cuit;
+    }
+  }
+  
   setForm(prevForm => ({
     ...prevForm,
     clienteId: clienteSeleccionado.id,
@@ -53,8 +74,8 @@ export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) 
     // 
     iva: clienteSeleccionado.iva || null,
     iva_nombre: clienteSeleccionado.iva_nombre || clienteSeleccionado.iva?.nombre || '',
-    // Campos para documento (CUIT/DNI)
-    ven_cuit: clienteSeleccionado.cuit || '',
-    ven_dni: '',
+    // Campos para documento (CUIT/DNI) - validados según lógica fiscal
+    ven_cuit: ven_cuit,
+    ven_dni: ven_dni,
   }));
 }; 

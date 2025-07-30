@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 
 /**
  * Hook que centraliza la lógica de cálculos compartida entre formularios (VentaForm, PresupuestoForm, etc.)
@@ -15,8 +15,6 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
   // Cálculo de subtotal base
   const calcularSubtotal = (item) => {
     const cantidad = parseFloat(item.cantidad ?? item.vdi_cantidad) || 0;
-    const aliId = obtenerAliId(item);
-    const aliPorc = alicuotas[aliId] || 0;
     const precioBase = parseFloat(item.precio ?? item.costo ?? item.vdi_importe) || 0;
     return cantidad * precioBase;
   };
@@ -47,11 +45,11 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
 
   // Cálculo de descuentos escalonados sobre el subtotal neto
   const calcularDescuento = (item) => {
-    let precioConDescuento = calcularSubtotalNeto(item);
-    if (descu1 > 0) precioConDescuento *= (1 - descu1 / 100);
-    if (descu2 > 0) precioConDescuento *= (1 - descu2 / 100);
-    if (descu3 > 0) precioConDescuento *= (1 - descu3 / 100);
-    return calcularSubtotalNeto(item) - precioConDescuento;
+    let subtotalNeto = calcularSubtotalNeto(item);
+    if (descu1 > 0) subtotalNeto *= (1 - descu1 / 100);
+    if (descu2 > 0) subtotalNeto *= (1 - descu2 / 100);
+    if (descu3 > 0) subtotalNeto *= (1 - descu3 / 100);
+    return calcularSubtotalNeto(item) - subtotalNeto;
   };
 
   // Cálculo de alícuota de IVA robusto
@@ -70,16 +68,8 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
     const aliId = obtenerAliId(item);
     const aliPorc = alicuotas[aliId] || 0;
     const lineaSubtotal = calcularSubtotal(item);
-    // Proporción del neto tras bonificación y descuentos
-    const subtotalNeto = calcularSubtotalNeto(item);
-    let precioConDescuento = subtotalNeto;
-    if (descu1 > 0) precioConDescuento *= (1 - descu1 / 100);
-    if (descu2 > 0) precioConDescuento *= (1 - descu2 / 100);
-    if (descu3 > 0) precioConDescuento *= (1 - descu3 / 100);
     const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
     const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-    // Alternativamente, usar el neto real de la línea:
-    // const itemSubtotalConDescuentos = precioConDescuento;
     return itemSubtotalConDescuentos * (aliPorc / 100);
   };
 

@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer"
-import { useFerreteriaAPI } from "../../../../../utils/useFerreteriaAPI"
+
 import { 
   CANTIDAD_MAXIMA_ITEMS, 
   dividirItemsEnPaginas,
@@ -460,11 +460,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 8,
   },
-  leyendaAfip: {
-    fontSize: 6,
-    textAlign: "left",
-    lineHeight: 1.2,
-  },
+
   arcaAutorizado: {
     fontSize: 6,
     fontWeight: "bold",

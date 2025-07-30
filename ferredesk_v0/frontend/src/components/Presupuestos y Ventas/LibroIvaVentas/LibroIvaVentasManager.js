@@ -8,7 +8,7 @@ import LibroIvaExport from './LibroIvaExport';
 const LibroIvaVentasManager = () => {
   const [user, setUser] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
-  const [mostrarExportacion, setMostrarExportacion] = useState(false);
+  
   
   const {
     libroIva,
@@ -43,9 +43,7 @@ const LibroIvaVentasManager = () => {
   const handleGenerarLibro = async (mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {
     try {
       setPeriodoSeleccionado({ mes, anio, tipoLibro, incluirPresupuestos });
-      setMostrarExportacion(false);
       await generarLibroIva(mes, anio, tipoLibro, incluirPresupuestos);
-      setMostrarExportacion(true);
     } catch (error) {
       console.error('Error al generar libro IVA:', error);
     }
@@ -63,7 +61,6 @@ const LibroIvaVentasManager = () => {
   const handleNuevoPeriodo = () => {
     limpiarLibroIva();
     setPeriodoSeleccionado(null);
-    setMostrarExportacion(false);
   };
 
   return (

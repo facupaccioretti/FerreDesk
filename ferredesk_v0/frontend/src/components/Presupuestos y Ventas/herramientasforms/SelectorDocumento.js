@@ -34,7 +34,7 @@ const SelectorDocumento = ({
     mensajeError,
     cambiarTipoDocumento,
     cambiarValorDocumento,
-    obtenerValorFormateado,
+
     TIPOS_DOCUMENTO,
     esCUIT,
     esDNI,

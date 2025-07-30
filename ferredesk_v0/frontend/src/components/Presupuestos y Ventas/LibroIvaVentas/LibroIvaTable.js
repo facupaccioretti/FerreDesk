@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 
 const LibroIvaTable = ({ libroIva, loading }) => {
   const [currentPage, setCurrentPage] = useState(1);
@@ -25,7 +25,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
   };
 
   // Función para ordenar
-  const ordenarDatos = (datos) => {
+  const ordenarDatos = useCallback((datos) => {
     return [...datos].sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
@@ -40,10 +40,10 @@ const LibroIvaTable = ({ libroIva, loading }) => {
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  };
+  }, [sortField, sortDirection]);
 
   // Función para filtrar
-  const filtrarDatos = (datos) => {
+  const filtrarDatos = useCallback((datos) => {
     return datos.filter(linea => {
       // Extraer letra del comprobante (último carácter)
       const letra = (linea.comprobante || '').trim().slice(-1);
@@ -51,7 +51,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
       const cumpleCondicion = !filterCondicion || linea.condicion_iva === filterCondicion;
       return cumpleTipo && cumpleCondicion;
     });
-  };
+  }, [filterTipo, filterCondicion]);
 
   // Procesar datos
   const datosProcesados = useMemo(() => {
@@ -60,7 +60,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
     let datos = ordenarDatos(libroIva.lineas);
     datos = filtrarDatos(datos);
     return datos;
-  }, [libroIva?.lineas, sortField, sortDirection, filterTipo, filterCondicion]);
+  }, [libroIva?.lineas, ordenarDatos, filtrarDatos]);
 
   // Calcular paginación
   const totalPages = Math.ceil(datosProcesados.length / itemsPerPage);

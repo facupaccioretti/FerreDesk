@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState, useMemo, useEffect } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import Buscador from "../Buscador"
 

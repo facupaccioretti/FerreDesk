@@ -114,10 +114,10 @@ class QRGenerator:
         # Formatear fchVto: string en formato YYYYMMDD
         fch_vto_formateado = str(fecha_vencimiento)
         
-        # Obtener datos del cliente para el QR (usar la misma lógica que en emisión)
+        # Obtener datos del cliente para el QR (solo datos específicos de la venta, sin segunda prioridad)
         cliente = venta.ven_idcli
-        cuit_cliente = cliente.cuit or venta.ven_cuit or ""
-        dni_cliente = getattr(cliente, 'dni', None) or getattr(venta, 'ven_dni', None) or ""
+        cuit_cliente = venta.ven_cuit or ""
+        dni_cliente = venta.ven_dni or ""
 
         tipo_doc_rec = None
         nro_doc_rec = None

@@ -131,10 +131,10 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
     }
     
     for venta in ventas_periodo:
-        # Obtener datos del cliente
+        # Obtener datos del cliente (solo datos específicos de la venta, sin segunda prioridad)
         try:
             cliente = Cliente.objects.get(id=venta.ven_idcli)
-            cuit_comprador = cliente.cuit or ''
+            cuit_comprador = venta.ven_cuit or ''  # Solo usar datos específicos de la venta
             nombre_comprador = cliente.razon or cliente.fantasia or 'CLIENTE SIN NOMBRE'
             # Obtener condición IVA desde el tipo de IVA del cliente, normalizarla y mapearla
             condicion_normalizada = normalizar_situacion_iva(cliente.iva.nombre if cliente.iva else '')

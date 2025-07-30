@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -60,14 +60,11 @@ const ConVentaForm = ({
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
-    respuestaArca,
-    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca,
-    estaProcesando
+    requiereEmisionArca
   } = useArcaEstado()
 
   const alicuotasMap = useMemo(() => (
@@ -212,7 +209,7 @@ const ConVentaForm = ({
       actualizarItems(itemsNormalizados);
       setGridKey(Date.now());
     }
-  }, [productos, alicuotasMap]);
+  }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
   const stockProveedores = useMemo(() => {
     const map = {};
@@ -260,7 +257,6 @@ const ConVentaForm = ({
 
   // HÍBRIDO: useComprobanteFiscal solo para preview visual
   // El backend ejecutará su propia lógica fiscal autoritaria
-  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
 
   // Calcular el número de comprobante basado en el último número del comprobante seleccionado
   const numeroComprobante = useMemo(() => {
@@ -308,7 +304,7 @@ const ConVentaForm = ({
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleChange = manejarCambioFormulario(setFormulario);
-  const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -467,10 +463,7 @@ const ConVentaForm = ({
     tipoComprobante: usarFiscal ? 'factura' : '',
     cliente: usarFiscal ? clienteParaFiscal : null
   });
-  const comprobanteLetra = usarFiscal ? fiscal.letra : 'V';
   const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null;
-  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
-  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
 
   // Determinar el código AFIP y la letra a mostrar en el badge (igual que VentaForm)
   let letraComprobanteMostrar = "V";

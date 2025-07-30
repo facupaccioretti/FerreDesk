@@ -36,13 +36,6 @@ const ProveedoresManager = () => {
   const [user, setUser] = useState(null)
 
   // ------------------------------ Paginación ------------------------------
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(10)
-
-  // Reiniciar página cuando cambia la búsqueda o listado
-  useEffect(() => {
-    setPaginaActual(1)
-  }, [search, proveedores])
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -116,8 +109,8 @@ const ProveedoresManager = () => {
       (p.cuit || "").toLowerCase().includes(search.toLowerCase()),
   )
 
-  const indiceInicio = (paginaActual - 1) * itemsPorPagina
-  const proveedoresPagina = proveedoresFiltrados.slice(indiceInicio, indiceInicio + itemsPorPagina)
+
+
 
   // Modales
   const handleOpenListaModal = (proveedor) => {

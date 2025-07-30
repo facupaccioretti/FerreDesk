@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer"
-import { useFerreteriaAPI } from "../../../../../utils/useFerreteriaAPI"
+
 import { 
   CANTIDAD_MAXIMA_ITEMS, 
   dividirItemsEnPaginas,
@@ -480,11 +480,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 8,
   },
-  leyendaAfip: {
-    fontSize: 6,
-    textAlign: "left",
-    lineHeight: 1.2,
-  },
+
   arcaAutorizado: {
     fontSize: 6,
     fontWeight: "bold",
@@ -714,9 +710,8 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
   // Dividir items en páginas
   const paginasItems = dividirItemsEnPaginas(data.items || [], CANTIDAD_MAXIMA_ITEMS);
 
-  // Determinar si es comprobante informal (presupuesto o factura I)
-  const comprobante = data.comprobante || {};
-  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
+
+
 
   return (
     <Document>

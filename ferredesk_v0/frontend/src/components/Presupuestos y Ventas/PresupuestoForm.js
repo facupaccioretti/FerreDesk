@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'

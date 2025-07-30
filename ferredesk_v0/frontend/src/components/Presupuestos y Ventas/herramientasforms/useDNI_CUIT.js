@@ -134,6 +134,14 @@ export function useDocumentoFiscal({
     validarDocumento(valorInicial, tipoInicial);
   }, [tipoInicial, valorInicial, validarDocumento]);
 
+  // Función para forzar actualización desde componente padre
+  const actualizarDocumento = useCallback((nuevoTipo, nuevoValor) => {
+    setTipoDocumento(nuevoTipo);
+    setValorDocumento(nuevoValor);
+    setEstaModificado(false);
+    validarDocumento(nuevoValor, nuevoTipo);
+  }, [validarDocumento]);
+
   // Efecto para validar cuando cambia el tipo de comprobante
   useEffect(() => {
     validarDocumento(valorDocumento, tipoDocumento);
@@ -160,6 +168,7 @@ export function useDocumentoFiscal({
     obtenerValorFormateado,
     obtenerValorLimpio,
     resetearDocumento,
+    actualizarDocumento,
     
     // Constantes
     TIPOS_DOCUMENTO,

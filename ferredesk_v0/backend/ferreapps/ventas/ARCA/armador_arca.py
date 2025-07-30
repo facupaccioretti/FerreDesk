@@ -39,9 +39,9 @@ def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_v
     # Obtener tipo de comprobante
     tipo_cbte = int(comprobante.codigo_afip)
     
-    # Obtener datos del cliente
-    cuit_cliente = getattr(cliente, 'cuit', None) or getattr(venta, 'ven_cuit', None) or ""
-    dni_cliente = getattr(cliente, 'dni', None) or getattr(venta, 'ven_dni', None) or ""
+    # Obtener datos del cliente (solo datos específicos de la venta, sin segunda prioridad)
+    cuit_cliente = getattr(venta, 'ven_cuit', None) or ""
+    dni_cliente = getattr(venta, 'ven_dni', None) or ""
     condicion_iva_cliente = getattr(cliente.iva, 'nombre', None) if getattr(cliente, 'iva', None) else "Consumidor Final"
 
     # Log de datos del cliente
@@ -141,6 +141,7 @@ def _determinar_tipo_documento(tipo_cbte, cuit_cliente, dni_cliente, razon_clien
     """
     Determina el tipo y número de documento según el tipo de comprobante.
     Retorna (doc_tipo, doc_numero, tipo_usado) donde tipo_usado indica qué se usó.
+    Solo usa datos específicos de la venta (ven_cuit, ven_dni) sin segunda prioridad.
     """
     # Factura A, Nota de Crédito A y Nota de Débito A (1, 3, 2) - Requieren CUIT
     if tipo_cbte in [1, 3, 2]:  # Factura A, Nota de Crédito A, Nota de Débito A
@@ -151,17 +152,17 @@ def _determinar_tipo_documento(tipo_cbte, cuit_cliente, dni_cliente, razon_clien
     
     # Factura B, C y Notas de Crédito B, C y Notas de Débito B, C (6, 8, 11, 13, 7, 12)
     elif tipo_cbte in [6, 8, 11, 13, 7, 12]:  # Factura B, Nota de Crédito B, Factura C, Nota de Crédito C, Nota de Débito B, Nota de Débito C
-        # Verificar qué documentos están disponibles
+        # Verificar qué documentos están disponibles (solo datos de la venta)
         tiene_cuit = cuit_cliente and len(str(cuit_cliente)) == 11
         tiene_dni = dni_cliente and len(str(dni_cliente)) >= 7
         
-        # Priorizar CUIT si existe
+        # Priorizar CUIT si existe (si por algún motivo tiene ambos, priorizar CUIT)
         if tiene_cuit:
             return 80, int(str(cuit_cliente).replace('-', '').replace(' ', '')), 'CUIT'
         # Luego DNI
         elif tiene_dni:
             return 96, int(str(dni_cliente).replace('.', '').replace(' ', '')), 'DNI'
-        # Finalmente Consumidor Final
+        # Finalmente Consumidor Final (DocNro = 0)
         else:
             return 99, 0, 'Consumidor Final'
     
@@ -243,6 +244,7 @@ def _construir_alicuotas_afip(alicuotas_venta):
 def verificar_documentos_disponibles(cliente, venta=None):
     """
     Verifica qué tipos de documento están disponibles para un cliente.
+    Solo usa datos específicos de la venta (ven_cuit, ven_dni) sin segunda prioridad.
     
     Args:
         cliente: instancia de Cliente
@@ -251,8 +253,9 @@ def verificar_documentos_disponibles(cliente, venta=None):
     Returns:
         dict con información de documentos disponibles
     """
-    cuit_cliente = getattr(cliente, 'cuit', None) or (getattr(venta, 'ven_cuit', None) if venta else None)
-    dni_cliente = getattr(cliente, 'dni', None) or (getattr(venta, 'ven_dni', None) if venta else None)
+    # Solo usar datos específicos de la venta, sin segunda prioridad
+    cuit_cliente = getattr(venta, 'ven_cuit', None) if venta else None
+    dni_cliente = getattr(venta, 'ven_dni', None) if venta else None
     
     documentos_disponibles = []
     
@@ -290,6 +293,31 @@ def verificar_documentos_disponibles(cliente, venta=None):
     } 
 
 
+def _determinar_doc_tipo_factura(factura_afectada):
+    """
+    Determina el DocTipo de una factura afectada basándose en sus datos de CUIT/DNI.
+    Retorna el DocTipo (80, 96, 99) para determinar si debe incluirse el campo Cuit.
+    """
+    # Obtener CUIT y DNI de la factura afectada
+    cuit_factura = factura_afectada.ven_cuit
+    dni_factura = factura_afectada.ven_dni
+    
+    # Verificar si tiene CUIT válido (11 dígitos)
+    if cuit_factura:
+        cuit_limpio = str(cuit_factura).replace('-', '').replace(' ', '')
+        if len(cuit_limpio) == 11 and cuit_limpio.isdigit():
+            return 80  # CUIT válido
+    
+    # Verificar si tiene DNI válido
+    if dni_factura:
+        dni_limpio = str(dni_factura).replace('.', '').replace(' ', '')
+        if dni_limpio.isdigit():
+            return 96  # DNI válido
+    
+    # Si no tiene CUIT ni DNI válidos, es Consumidor Final
+    return 99
+
+
 def _construir_comprobantes_asociados(datos_comprobante, venta, tipo_cbte):
     """
     Construye la estructura CbtesAsoc para notas de crédito y débito.
@@ -324,18 +352,34 @@ def _construir_comprobantes_asociados(datos_comprobante, venta, tipo_cbte):
         # Obtener el tipo de comprobante de la factura afectada
         tipo_factura = int(factura_afectada.comprobante.codigo_afip)
         
-        # Obtener CUIT del cliente de la factura afectada
-        cuit_factura = getattr(factura_afectada.ven_idcli, 'cuit', None) or factura_afectada.ven_cuit or ""
+        # Determinar el DocTipo de la factura afectada
+        doc_tipo_factura = _determinar_doc_tipo_factura(factura_afectada)
+        
+        # Construir la estructura base del comprobante asociado
+        cbte_asoc = {
+            'Tipo': tipo_factura,
+            'PtoVta': factura_afectada.ven_punto,
+            'Nro': factura_afectada.ven_numero,
+            'CbteFch': int(factura_afectada.ven_fecha.strftime('%Y%m%d'))
+        }
+        
+        # Solo incluir el campo Cuit si NO es consumidor final (DocTipo != 99)
+        if doc_tipo_factura != 99:
+            # Obtener CUIT/DNI como número
+            cuit_factura = 0
+            
+            if doc_tipo_factura == 80:  # CUIT
+                cuit_limpio = str(factura_afectada.ven_cuit).replace('-', '').replace(' ', '')
+                cuit_factura = int(cuit_limpio)
+            elif doc_tipo_factura == 96:  # DNI
+                dni_limpio = str(factura_afectada.ven_dni).replace('.', '').replace(' ', '')
+                cuit_factura = int(dni_limpio)
+            
+            cbte_asoc['Cuit'] = cuit_factura  # Número, no string
         
         # Estructura correcta según documentación AFIP: cada elemento debe tener clave 'CbteAsoc'
         cbtes_asoc.append({
-            'CbteAsoc': {
-                'Tipo': tipo_factura,
-                'PtoVta': factura_afectada.ven_punto,
-                'Nro': factura_afectada.ven_numero,
-                'Cuit': cuit_factura,
-                'CbteFch': int(factura_afectada.ven_fecha.strftime('%Y%m%d'))
-            }
+            'CbteAsoc': cbte_asoc
         })
     
     datos_comprobante['CbtesAsoc'] = cbtes_asoc 

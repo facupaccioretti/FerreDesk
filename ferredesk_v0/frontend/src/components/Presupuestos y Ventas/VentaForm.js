@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
@@ -102,14 +102,11 @@ const VentaForm = ({
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
-    respuestaArca,
-    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca,
-    estaProcesando
+    requiereEmisionArca
   } = useArcaEstado()
 
   // Función para normalizar items
@@ -243,10 +240,7 @@ const VentaForm = ({
     tipoComprobante: usarFiscal ? "factura" : "",
     cliente: usarFiscal ? clienteParaFiscal : null,
   })
-  const comprobanteLetra = usarFiscal ? fiscal.letra : "V"
   const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null
-  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false
-  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null
 
   // Determinar el código AFIP y la letra a mostrar en el badge
   let letraComprobanteMostrar = "V"
@@ -270,7 +264,7 @@ const VentaForm = ({
   })()
 
   const handleChange = manejarCambioFormulario(setFormulario)
-  const handleClienteChange = manejarCambioCliente(setFormulario, clientes)
+
   const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
 
   // Estado para modal selector de clientes
@@ -282,6 +276,27 @@ const VentaForm = ({
     valor: formulario.cuit || '',
     esValido: false
   })
+
+  // Sincronizar documentoInfo cuando cambie el formulario (por ejemplo, al seleccionar cliente)
+  useEffect(() => {
+    // Si el formulario tiene ven_cuit, usar CUIT
+    if (formulario.ven_cuit) {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: formulario.ven_cuit,
+        esValido: true
+      })
+    }
+    // Si el formulario tiene ven_dni, usar DNI
+    else if (formulario.ven_dni) {
+      setDocumentoInfo({
+        tipo: 'dni',
+        valor: formulario.ven_dni,
+        esValido: true
+      })
+    }
+    // Si no tiene ninguno, mantener el estado actual
+  }, [formulario.ven_cuit, formulario.ven_dni])
 
   // Función para manejar cambios en el documento
   const handleDocumentoChange = (nuevaInfo) => {
@@ -301,12 +316,33 @@ const VentaForm = ({
   const onSeleccionarDesdeModal = (cli) => {
     handleClienteSelect(cli)
     
-    // Actualizar el estado del documento cuando se selecciona un cliente
+    // Lógica de validación y autocompletado del documento cuando se selecciona un cliente
     if (cli.cuit) {
+      // Limpiar el CUIT de espacios y guiones para validar
+      const cuitLimpio = cli.cuit.replace(/[-\s]/g, '')
+      
+      // Validar si tiene exactamente 11 dígitos (CUIT válido)
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        // Es un CUIT válido: marcar checkbox CUIT y autocompletar
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: cli.cuit,
+          esValido: true
+        })
+      } else {
+        // No es un CUIT válido: marcar checkbox DNI y autocompletar
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: cli.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      // No hay CUIT: limpiar el selector de documento
       setDocumentoInfo({
         tipo: 'cuit',
-        valor: cli.cuit,
-        esValido: true
+        valor: '',
+        esValido: false
       })
     }
   }
@@ -621,6 +657,7 @@ const VentaForm = ({
 
                 {/* Selector de Documento (CUIT/DNI) */}
                 <SelectorDocumento
+                  key={`${documentoInfo.tipo}-${documentoInfo.valor}`} // Forzar re-renderizado cuando cambien los valores
                   tipoComprobante={fiscal.letra || 'A'}
                   esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
                   valorInicial={documentoInfo.valor}

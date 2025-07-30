@@ -41,7 +41,7 @@ const FiltrosPresupuestos = ({
   // Autocomplete para clientes
   const [clienteInput, setClienteInput] = useState('');
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
-  const clienteSeleccionado = clientes.find(c => String(c.id) === String(clienteId));
+
   const sugerenciasClientes = clienteInput.length >= 2
     ? clientes.filter(c =>
         (c.razon || '').toLowerCase().includes(clienteInput.toLowerCase()) ||

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
-import { TotalesVisualizacion } from "./herramientasforms/useCalculosFormulario"
+
 import { BotonDuplicar, BotonEliminar } from "../Botones"
 
 // Mapa de alícuotas por defecto, se utiliza solo si el backend aún no proveyó datos
@@ -62,7 +62,7 @@ const ItemsGridPresupuesto = forwardRef(
     useEffect(() => {
     }, [initialItems, productosDisponibles, modo]);
 
-    const esPresupuesto = modo === "presupuesto"
+
     // Combinar alícuotas del backend con un fallback seguro
     const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
 
@@ -92,7 +92,7 @@ const ItemsGridPresupuesto = forwardRef(
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
   const [mostrarTooltipOriginal, setMostrarTooltipOriginal] = useState({})
   const [posicionTooltip, setPosicionTooltip] = useState({ x: 0, y: 0 })
-  const tooltipRefs = useRef({})
+
 
     // ------------------------------------------------------------
     // Helper: determina el ID de proveedor habitual desde el objeto
@@ -245,7 +245,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
         })
       },
-      [getProveedoresProducto, autoSumarDuplicados, stockProveedores, modo],
+      [getProveedoresProducto, autoSumarDuplicados, aliMap, rows],
     )
 
     // Log de llegada/actualización de stockProveedores

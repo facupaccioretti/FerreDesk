@@ -96,7 +96,7 @@ const ComprobanteAcciones = ({
     handleEdit,
     handleConvertir,
     handleDelete,
-    handleConvertirFacturaI,
+
     handleNotaCredito,
   } = acciones
 

@@ -4,27 +4,6 @@ import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 
-const ALICUOTAS = {
-  1: 0, // NO GRAVADO
-  2: 0, // EXENTO
-  3: 0, // 0%
-  4: 10.5,
-  5: 21,
-  6: 27,
-}
-
-const getAlicuota = (item) => {
-  const ali = item.vdi_idaliiva !== undefined ? Number(item.vdi_idaliiva) : undefined
-  if (ali !== undefined && ALICUOTAS[ali] !== undefined) return ALICUOTAS[ali] + "%"
-  const aliKey = Object.keys(ALICUOTAS).find((k) => Number(ALICUOTAS[k]) === ali)
-  if (aliKey) return ALICUOTAS[aliKey] + "%"
-  if (item.alicuota) return item.alicuota + "%"
-  if (item.iva) return item.iva + "%"
-  if (item.iva_porcentaje) return item.iva_porcentaje + "%"
-  if (item.vdi_idaliiva !== undefined) return String(item.vdi_idaliiva)
-  return "-"
-}
-
 const ConversionModal = ({
   open,
   presupuesto,
