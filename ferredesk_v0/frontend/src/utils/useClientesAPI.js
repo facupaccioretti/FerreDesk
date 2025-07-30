@@ -7,7 +7,7 @@ export function useClientesAPI(filtrosIniciales = {}) {
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchClientes = async (filtros = {}) => {
+  const fetchClientes = useCallback(async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
@@ -28,9 +28,9 @@ export function useClientesAPI(filtrosIniciales = {}) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Dependencias vacías: nunca se recrea
 
-  const addCliente = async (cliente) => {
+  const addCliente = useCallback(async (cliente) => {
     setError(null);
     try {
       const res = await fetch('/api/clientes/clientes/', {
@@ -53,9 +53,9 @@ export function useClientesAPI(filtrosIniciales = {}) {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
-  const updateCliente = async (id, updated) => {
+  const updateCliente = useCallback(async (id, updated) => {
     setError(null);
     try {
       const res = await fetch(`/api/clientes/clientes/${id}/`, {
@@ -78,9 +78,9 @@ export function useClientesAPI(filtrosIniciales = {}) {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
-  const deleteCliente = async (id) => {
+  const deleteCliente = useCallback(async (id) => {
     setError(null);
     try {
       const res = await fetch(`/api/clientes/clientes/${id}/`, {
@@ -107,7 +107,7 @@ export function useClientesAPI(filtrosIniciales = {}) {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
   const fetchClientePorDefecto = useCallback(async () => {
     setLoading(true);
@@ -124,12 +124,11 @@ export function useClientesAPI(filtrosIniciales = {}) {
     }
   }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
     fetchClientes(filtrosIniciales);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchClientes]);
 
   return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
 }
