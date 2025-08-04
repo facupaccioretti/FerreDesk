@@ -509,6 +509,7 @@ class PrecioProveedorExcel(models.Model):
     proveedor = models.ForeignKey('Proveedor', on_delete=models.CASCADE, related_name='precios_excel')
     codigo_producto_excel = models.CharField(max_length=100, db_index=True)
     precio = models.DecimalField(max_digits=15, decimal_places=2)
+    denominacion = models.CharField(max_length=200, blank=True, null=True, help_text='Denominación del producto desde Excel')
     fecha_carga = models.DateTimeField(auto_now_add=True)
     nombre_archivo = models.CharField(max_length=255)
 

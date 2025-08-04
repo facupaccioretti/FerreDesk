@@ -7,6 +7,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const [file, setFile] = useState(null);
   const [colCodigo, setColCodigo] = useState('A');
   const [colPrecio, setColPrecio] = useState('B');
+  const [colDenominacion, setColDenominacion] = useState('C');
   const [filaInicio, setFilaInicio] = useState(2);
   const [vistaPrevia, setVistaPrevia] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
 
         const codigoIdx = letterToColumnIndex(colCodigo.toUpperCase());
         const precioIdx = letterToColumnIndex(colPrecio.toUpperCase());
+        const denominacionIdx = letterToColumnIndex(colDenominacion.toUpperCase());
         
         const previewData = [];
         // Start from filaInicio - 1 (because dataRows is 0-indexed)
@@ -62,12 +64,14 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
           const row = dataRows[i];
           const codigo = row[codigoIdx];
           const precio = row[precioIdx];
+          const denominacion = row[denominacionIdx];
 
           if (codigo !== undefined && precio !== undefined) { // Only add if both values exist
             previewData.push({ 
               codigo: String(codigo).trim(), 
               // Attempt to convert precio to number, handle potential errors
-              precio: !isNaN(parseFloat(precio)) ? parseFloat(precio) : String(precio).trim()
+              precio: !isNaN(parseFloat(precio)) ? parseFloat(precio) : String(precio).trim(),
+              denominacion: denominacion !== undefined ? String(denominacion).trim() : ''
             });
           } else if (previewData.length === 0 && i >= filaInicio -1 + 5) {
             // If after 5 data rows we still haven't found valid data, likely wrong columns/start row
@@ -105,7 +109,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       handleFileChange({ target: { files: [file] } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colCodigo, colPrecio, filaInicio]); // Removed 'file' from deps to avoid loop if handleFileChange sets file
+  }, [colCodigo, colPrecio, colDenominacion, filaInicio]); // Removed 'file' from deps to avoid loop if handleFileChange sets file
 
   // --- CSRF: Forzar obtención de cookie al abrir el modal ---
   useEffect(() => {
@@ -136,6 +140,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
     formData.append('excel_file', file);
     formData.append('col_codigo', colCodigo.toUpperCase());
     formData.append('col_precio', colPrecio.toUpperCase());
+    formData.append('col_denominacion', colDenominacion.toUpperCase());
     formData.append('fila_inicio', String(filaInicio));
     // also pass proveedor.id so backend knows which provider this file belongs to.
     // The endpoint will be specific to the provider, e.g., /api/productos/proveedores/${proveedor.id}/upload-price-list/
@@ -185,7 +190,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
             onChange={handleFileChange}
             className="mb-2 block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
           />
-          <div className="grid grid-cols-3 gap-4 mb-2">
+          <div className="grid grid-cols-4 gap-4 mb-2">
             <div>
               <label htmlFor={`colCodigo-${proveedor?.id}`} className="block text-sm font-medium">Columna Código</label>
               <input id={`colCodigo-${proveedor?.id}`} type="text" value={colCodigo} onChange={e => setColCodigo(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
@@ -193,6 +198,10 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
             <div>
               <label htmlFor={`colPrecio-${proveedor?.id}`} className="block text-sm font-medium">Columna Precio</label>
               <input id={`colPrecio-${proveedor?.id}`} type="text" value={colPrecio} onChange={e => setColPrecio(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+            </div>
+            <div>
+              <label htmlFor={`colDenominacion-${proveedor?.id}`} className="block text-sm font-medium">Columna Denominación</label>
+              <input id={`colDenominacion-${proveedor?.id}`} type="text" value={colDenominacion} onChange={e => setColDenominacion(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
             </div>
             <div>
               <label htmlFor={`filaInicio-${proveedor?.id}`} className="block text-sm font-medium">Fila de Inicio</label>
@@ -217,6 +226,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                 <tr>
                   <th className="border px-2 py-1 text-left">Código ({colCodigo})</th>
                   <th className="border px-2 py-1 text-left">Precio ({colPrecio})</th>
+                  <th className="border px-2 py-1 text-left">Denominación ({colDenominacion})</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,6 +234,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                   <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="border px-2 py-1">{item.codigo}</td>
                     <td className="border px-2 py-1">{typeof item.precio === 'number' ? item.precio.toFixed(2) : item.precio}</td>
+                    <td className="border px-2 py-1">{item.denominacion}</td>
                   </tr>
                 ))}
               </tbody>
