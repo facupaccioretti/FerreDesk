@@ -1,14 +1,17 @@
+Agrego y testing del Dashboard
 
-El cliente no se debe poder borrar si tiene algun movimiento
 
-En el modal asociar codigo proveedor mejorar que se muestre tambien la denominacion del producto relacionado a ese codigo.
+Cambiar modelo Cliente, para que campo CUIT sea unique.
+cambiar la URL del home a /home y no /dashboard
+Borrar presupuestos de cierta fecha.
+En la barra de navegacion s
+Mostrar mensajes del ARCA al facturar
 
-El enter en ningun formulario deberia completar el formulario (es molesto ya que si
+Hook formularioDraft verificar compatibilidad con todos los formularios.
+
+Verificar ;El enter en ningun formulario deberia completar el formulario (es molesto ya que si
  queremos apretar enter para autocompletar algun campo o algo se nos completa el formulario entero)
  
-Productos agregar  y sistema bajo stock (cant minima), agregar costo en edicion de productos. 
-Presupuestos y Ventas
-
 
 Revision General
 
@@ -16,7 +19,6 @@ arreglar draft para nueva grid y datos en venta
 
 Revisar todas funcionalidades de forms
 
-Arreglar plantillas PDF no muestran datos.
 
 Para optimizar tabla de Ventas:
     Recomendaciones para optimizar:
@@ -54,3 +56,15 @@ Para optimizar tabla de Ventas:
 Agregar funcionalidad clientes activos/inactivos y productos para el grid activos/inactivos.
 Mejorar Libro IVA
 Adaptar plantillas b y c usando el formato de plantilla A (pdf)
+
+
+Plantillas C y capaz otras no mostrando subtotales
+
+Nota Credito genericos no muestra alicuotas correctamente
+  No anda buscador productos
+  Bonif general no anda correctamente.
+
+
+
+El sistema está obteniendo ven_cuit y ven_dni de la venta, pero si estos campos están vacíos (None o string vacío), entonces cuit_cliente y dni_cliente serán strings vacíos.
+
