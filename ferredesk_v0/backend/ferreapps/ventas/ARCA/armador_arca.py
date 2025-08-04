@@ -58,14 +58,15 @@ def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_v
     logger.info(f"   • Número: {doc_numero}")
     logger.info(f"   • Documento usado: {tipo_documento_usado}")
 
-    # Mapear condición IVA a ID AFIP
+    # Mapear condición IVA a ID AFIP (códigos oficiales de AFIP)
     mapeo_condiciones = {
         'responsable_inscripto': 1,
         'responsable_no_inscripto': 9,
-        'monotributista': 4,
-        'exento': 5,
-        'consumidor_final': 5,  # CORREGIDO: Consumidor Final es ID 5, no 6
-        'monotributista_social': 11,
+        'monotributista': 6,  # Responsable Monotributo
+        'exento': 4,  # Sujeto Exento
+        'consumidor_final': 5,  # Consumidor Final
+        'monotributista_social': 13,  # Monotributo Social
+        'monotributista_trabajador': 16,  # Monotributo Trabajador
         'pequeno_contribuyente_eventual': 12,
         'pequeno_contribuyente_eventual_social': 13,
         'monoimpuesto_social': 15,

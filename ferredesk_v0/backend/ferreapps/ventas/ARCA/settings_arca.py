@@ -116,15 +116,16 @@ ARCA_TIPOS_DOCUMENTO = {
     'otro': 99           # Otro
 }
 
-# Configuración de condiciones IVA ARCA
+# Configuración de condiciones IVA ARCA (códigos oficiales de AFIP)
 ARCA_CONDICIONES_IVA = {
     'responsable_inscripto': 1,     # Responsable Inscripto
-    'monotributista': 4,            # Monotributista
-    'exento': 5,                    # Exento
-    'consumidor_final': 6,          # Consumidor Final
+    'monotributista': 6,            # Responsable Monotributo
+    'exento': 4,                    # Sujeto Exento
+    'consumidor_final': 5,          # Consumidor Final
     'responsable_no_inscripto': 9,  # Responsable No Inscripto
     'no_categorizado': 10,          # No Categorizado
-    'monotributista_social': 11,    # Monotributista Social
+    'monotributista_social': 13,    # Monotributo Social
+    'monotributista_trabajador': 16, # Monotributo Trabajador
     'pequeno_contribuyente_eventual': 12,  # Pequeño Contribuyente Eventual
     'pequeno_contribuyente_eventual_social': 13,  # Pequeño Contribuyente Eventual Social
     'monoimpuesto_social': 15,      # Monoimpuesto Social

@@ -313,7 +313,8 @@ Cliente: Responsable Inscripto
 Emisor: Responsable Inscripto
 → asignar_comprobante("factura", "responsable_inscripto")
 → Múltiples comprobantes tipo "factura" → Aplica lógica fiscal
-→ Emisor RI + Cliente RI = Letra A
+→ Emisor RI + Cliente (excepto consumidor final) = Letra A
+→ Emisor RI + Cliente consumidor final = Letra B
 → Devuelve Factura A (código 001)
 
 CASO 2: Factura Interna

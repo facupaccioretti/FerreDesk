@@ -657,7 +657,6 @@ const VentaForm = ({
 
                 {/* Selector de Documento (CUIT/DNI) */}
                 <SelectorDocumento
-                  key={`${documentoInfo.tipo}-${documentoInfo.valor}`} // Forzar re-renderizado cuando cambien los valores
                   tipoComprobante={fiscal.letra || 'A'}
                   esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
                   valorInicial={documentoInfo.valor}

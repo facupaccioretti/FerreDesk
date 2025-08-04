@@ -30,8 +30,6 @@ const SelectorDocumento = ({
   const {
     tipoDocumento,
     valorDocumento,
-    esValido,
-    mensajeError,
     cambiarTipoDocumento,
     cambiarValorDocumento,
 
@@ -41,8 +39,6 @@ const SelectorDocumento = ({
     tieneError,
     esObligatorio: esObligatorioHook
   } = useDocumentoFiscal({
-    tipoComprobante,
-    esObligatorio,
     valorInicial,
     tipoInicial
   });
@@ -57,8 +53,7 @@ const SelectorDocumento = ({
     if (onChange) {
       onChange({
         tipo: nuevoTipo,
-        valor: '',
-        esValido: false
+        valor: ''
       });
     }
   };
@@ -74,8 +69,7 @@ const SelectorDocumento = ({
     if (onChange) {
       onChange({
         tipo: tipoDocumento,
-        valor: nuevoValor,
-        esValido: esValido
+        valor: nuevoValor
       });
     }
   };
@@ -123,11 +117,7 @@ const SelectorDocumento = ({
         onChange={handleValorChange}
         onKeyDown={handleKeyDown}
         placeholder={esCUIT ? 'XX-XXXXXXXX-X' : 'XX.XXX.XXX'}
-        className={`compacto w-full px-3 py-2 border rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 ${
-          tieneError 
-            ? 'border-red-500 focus:ring-red-500 focus:border-red-500' 
-            : 'border-slate-300'
-        }`}
+        className="compacto w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
         required={esObligatorioHook}
         readOnly={readOnly}
         aria-label={`Campo de ${esCUIT ? 'CUIT' : 'DNI'}`}
@@ -135,27 +125,7 @@ const SelectorDocumento = ({
         aria-describedby={tieneError ? 'error-documento' : undefined}
       />
 
-      {/* Mensaje de error */}
-      {tieneError && (
-        <div 
-          id="error-documento"
-          className="mt-1 text-sm text-red-600 flex items-center gap-1"
-          role="alert"
-        >
-          <svg 
-            className="w-4 h-4" 
-            fill="currentColor" 
-            viewBox="0 0 20 20"
-          >
-            <path 
-              fillRule="evenodd" 
-              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" 
-              clipRule="evenodd" 
-            />
-          </svg>
-          {mensajeError}
-        </div>
-      )}
+             {/* Sin mensajes de error automáticos */}
     </div>
   );
 };

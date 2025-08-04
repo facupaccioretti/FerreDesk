@@ -427,23 +427,24 @@ class FerreDeskARCA:
                 doc_tipo = 96  # DNI (fallback)
                 doc_numero = 20123456  # DNI ficticio
             
-            # Mapear condición IVA del cliente a ID de AFIP
+            # Mapear condición IVA del cliente a ID de AFIP (códigos oficiales de AFIP)
             def mapear_condicion_iva_afip(condicion_iva):
                 """Mapea la condición IVA del cliente al ID correspondiente de AFIP"""
                 mapeo_condiciones = {
                     'responsable_inscripto': 1,
                     'responsable_no_inscripto': 9,
-                    'monotributista': 4,
-                    'exento': 5,
-                    'consumidor_final': 6,
-                    'monotributista_social': 11,
+                    'monotributista': 6,  # Responsable Monotributo
+                    'exento': 4,  # Sujeto Exento
+                    'consumidor_final': 5,  # Consumidor Final
+                    'monotributista_social': 13,  # Monotributo Social
+                    'monotributista_trabajador': 16,  # Monotributo Trabajador
                     'pequeno_contribuyente_eventual': 12,
                     'pequeno_contribuyente_eventual_social': 13,
                     'monoimpuesto_social': 15,
                     'pequeno_contribuyente_social': 16,
                     'pequeno_contribuyente': 17
                 }
-                return mapeo_condiciones.get(condicion_iva, 6)  # Default a Consumidor Final
+                return mapeo_condiciones.get(condicion_iva, 5)  # Default a Consumidor Final (ID 5)
             
             # Obtener condición IVA del cliente
             condicion_iva_cliente = cliente.iva.nombre if cliente.iva else "Consumidor Final"

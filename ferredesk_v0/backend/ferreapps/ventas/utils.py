@@ -15,8 +15,12 @@ def normalizar_situacion_iva(valor):
     # Acepta tanto los códigos cortos como los nombres largos
     if valor in ["ri", "responsable inscripto", "responsable inscripto"]:
         return "responsable_inscripto"
-    if valor in ["mo", "responsable monotributo", "monotributo social", "responsable monotributo"]:
+    if valor in ["mo", "responsable monotributo", "responsable monotributo"]:
         return "monotributista"
+    if valor in ["monotributo social"]:
+        return "monotributista_social"
+    if valor in ["monotributo trabajador"]:
+        return "monotributista_trabajador"
     if valor in ["iva sujeto exento", "exento", "sujeto exento"]:
         return "exento"
     if valor in ["consumidor final"]:
@@ -59,10 +63,10 @@ def _aplicar_logica_fiscal(comprobantes, situacion_iva_cliente):
     
     # Determinar la letra según las reglas fiscales
     if emisor == 'responsable_inscripto':
-        if cliente == 'responsable_inscripto':
-            letra_objetivo = 'A'
-        else:
+        if cliente == 'consumidor_final':
             letra_objetivo = 'B'
+        else:
+            letra_objetivo = 'A'
     elif emisor == 'monotributista':
         letra_objetivo = 'C'
     else:
