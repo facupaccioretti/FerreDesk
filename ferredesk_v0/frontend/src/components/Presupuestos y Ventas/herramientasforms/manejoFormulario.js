@@ -38,6 +38,43 @@ export const manejarCambioCliente = (setForm, clientes) => (e) => {
   }));
 };
 
+/**
+ * Valida el documento de un cliente y retorna la información para el componente CUIT/DNI
+ * @param {Object} cliente - Objeto cliente con campo cuit
+ * @returns {Object} Información del documento validada {tipo, valor, esValido}
+ */
+export const validarDocumentoCliente = (cliente) => {
+  console.log('[validarDocumentoCliente] Cliente recibido:', cliente)
+  
+  if (!cliente?.cuit) {
+    console.log('[validarDocumentoCliente] No hay CUIT, retornando vacío')
+    return {
+      tipo: 'cuit',
+      valor: '',
+      esValido: false
+    }
+  }
+
+  const cuitLimpio = cliente.cuit.replace(/[-\s]/g, '')
+  console.log('[validarDocumentoCliente] CUIT limpio:', cuitLimpio, 'longitud:', cuitLimpio.length)
+  
+  if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+    console.log('[validarDocumentoCliente] Es CUIT válido')
+    return {
+      tipo: 'cuit',
+      valor: cliente.cuit,
+      esValido: true
+    }
+  } else {
+    console.log('[validarDocumentoCliente] Es DNI')
+    return {
+      tipo: 'dni',
+      valor: cliente.cuit,
+      esValido: true
+    }
+  }
+}
+
 export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) => {
   if (!clienteSeleccionado) return;
   console.log('[manejarSeleccionClienteObjeto] Cliente seleccionado:', clienteSeleccionado);
@@ -68,6 +105,7 @@ export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) 
     cuit: clienteSeleccionado.cuit || '',
     domicilio: clienteSeleccionado.domicilio || '',
     plazoId: clienteSeleccionado.plazoId || clienteSeleccionado.plazo || '',
+    vendedorId: clienteSeleccionado.vendedorId || clienteSeleccionado.vendedor || '',
     descu1: clienteSeleccionado.descu1 || 0,
     descu2: clienteSeleccionado.descu2 || 0,
     descu3: clienteSeleccionado.descu3 || 0,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // Constantes para tipos de documento
 const TIPOS_DOCUMENTO = {
@@ -17,6 +17,15 @@ export function useDocumentoFiscal({
   // Solo estados básicos, sin validaciones
   const [tipoDocumento, setTipoDocumento] = useState(tipoInicial);
   const [valorDocumento, setValorDocumento] = useState(valorInicial);
+
+  // Sincronizar con las props cuando cambien
+  useEffect(() => {
+    setTipoDocumento(tipoInicial);
+  }, [tipoInicial]);
+
+  useEffect(() => {
+    setValorDocumento(valorInicial);
+  }, [valorInicial]);
 
   // Función simple para cambiar el tipo
   const cambiarTipoDocumento = (nuevoTipo) => {

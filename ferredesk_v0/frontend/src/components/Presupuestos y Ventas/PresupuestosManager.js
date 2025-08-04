@@ -450,8 +450,12 @@
                     <VentaForm
                       key={activeTab}
                       onSave={async (payload) => {
-                        await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
-                        closeTab(activeTab)
+                        const resultado = await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
+                        // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                        if (!resultado?.arca_emitido) {
+                          closeTab(activeTab)
+                        }
+                        return resultado
                       }}
                       onCancel={() => closeTab(activeTab)}
                       initialData={null}
@@ -550,20 +554,30 @@
                             credentials: "include",
                             body: JSON.stringify(payload),
                           })
+                          
+                          const data = await response.json()
+                          
                           if (!response.ok) {
                             let msg = "No se pudo guardar la Nota de Crédito"
                             try {
-                              const data = await response.json()
                               msg = data.detail || msg
                             } catch {}
                             throw new Error(msg)
                           }
+                          
                           // Actualizar lista
                           await fetchVentas()
-                          // Cerrar pestaña
-                          closeTab(activeTab)
+                          
+                          // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                          if (!data?.arca_emitido) {
+                            closeTab(activeTab)
+                          }
+                          
+                          // Devolver la respuesta del backend para que NotaCreditoForm pueda procesar los datos de ARCA
+                          return data
                         } catch (err) {
                           alert(err.message)
+                          throw err
                         }
                       }}
                       onCancel={() => closeTab(activeTab)}
@@ -631,8 +645,13 @@
                         key={tab.key}
                         presupuestoOrigen={tab.data.presupuestoOrigen}
                         itemsSeleccionados={tab.data.itemsSeleccionados}
-                        onSave={(payload, tk) => {
-                          handleConVentaFormSave(payload, tk)
+                        onSave={async (payload, tk) => {
+                          const resultado = await handleConVentaFormSave(payload, tk)
+                          // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                          if (!resultado?.arca_emitido) {
+                            closeTab(tk)
+                          }
+                          return resultado
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}
@@ -672,8 +691,13 @@
                         tipoConversion={tab.data.tipoConversion}
                         itemsSeleccionados={tab.data.itemsSeleccionados}
                         itemsSeleccionadosIds={tab.data.itemsSeleccionadosIds}
-                        onSave={(payload, tk, endpoint) => {
-                          handleConVentaFormSaveFacturaI(payload, tk, endpoint)
+                        onSave={async (payload, tk, endpoint) => {
+                          const resultado = await handleConVentaFormSaveFacturaI(payload, tk, endpoint)
+                          // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                          if (!resultado?.arca_emitido) {
+                            closeTab(tk)
+                          }
+                          return resultado
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}

@@ -51,6 +51,12 @@ const ConVentaForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
+  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
+  const handleAceptarResultadoArca = () => {
+    aceptarResultadoArca()
+    onCancel()
+  }
+
   // Estados de carga centralizados
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(null);
@@ -60,11 +66,15 @@ const ConVentaForm = ({
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
+    respuestaArca,
+    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca
+    aceptarResultadoArca,
+    requiereEmisionArca,
+    obtenerMensajePersonalizado
   } = useArcaEstado()
 
   const alicuotasMap = useMemo(() => (
@@ -386,16 +396,21 @@ const ConVentaForm = ({
           finalizarEsperaArcaExito({
             cae: resultado.cae,
             cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado
+            qr_generado: resultado.qr_generado,
+            observaciones: resultado.observaciones || []
           })
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else if (resultado?.error) {
           finalizarEsperaArcaError(resultado.error)
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else {
           finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         }
+      } else {
+        // Solo cerrar la pestaña si NO requiere emisión ARCA
+        onCancel();
       }
-      
-      onCancel();
     } catch (error) {
       console.error('Error al guardar venta:', error);
       // Si hay error y estaba esperando ARCA, finalizar con error
@@ -804,12 +819,11 @@ const ConVentaForm = ({
           {/* Overlay de espera de ARCA */}
           <ArcaEsperaOverlay 
             estaEsperando={esperandoArca}
-            mensajePersonalizado={
-              tipoComprobante === "factura" 
-                ? "Esperando autorización de AFIP para la conversión a factura fiscal..." 
-                : null
-            }
+            mensajePersonalizado={obtenerMensajePersonalizado(tipoComprobante)}
             mostrarDetalles={true}
+            respuestaArca={respuestaArca}
+            errorArca={errorArca}
+            onAceptar={handleAceptarResultadoArca}
           />
         </form>
       </div>

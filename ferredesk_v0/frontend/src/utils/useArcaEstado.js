@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 /**
  * Hook personalizado para manejar el estado de espera de respuesta de ARCA
  * Detecta cuando un formulario está esperando la respuesta de AFIP para obtener el CAE
+ * Mejorado para mayor consistencia y funcionalidad
  */
 export const useArcaEstado = () => {
   // Estado de espera de ARCA
@@ -14,6 +15,9 @@ export const useArcaEstado = () => {
   // Estado de error de ARCA
   const [errorArca, setErrorArca] = useState(null);
 
+  // Estado de progreso (opcional para futuras mejoras)
+  const [progresoArca, setProgresoArca] = useState(0);
+
   /**
    * Función para iniciar el estado de espera de ARCA
    * Se llama cuando se envía un formulario que requiere emisión fiscal
@@ -22,6 +26,7 @@ export const useArcaEstado = () => {
     setEsperandoArca(true);
     setRespuestaArca(null);
     setErrorArca(null);
+    setProgresoArca(0);
   }, []);
 
   /**
@@ -32,6 +37,7 @@ export const useArcaEstado = () => {
     setEsperandoArca(false);
     setRespuestaArca(datos);
     setErrorArca(null);
+    setProgresoArca(100);
   }, []);
 
   /**
@@ -42,6 +48,7 @@ export const useArcaEstado = () => {
     setEsperandoArca(false);
     setRespuestaArca(null);
     setErrorArca(error);
+    setProgresoArca(0);
   }, []);
 
   /**
@@ -52,6 +59,23 @@ export const useArcaEstado = () => {
     setEsperandoArca(false);
     setRespuestaArca(null);
     setErrorArca(null);
+    setProgresoArca(0);
+  }, []);
+
+  /**
+   * Función para manejar el cierre del overlay cuando el usuario hace clic en "Aceptar"
+   * Se llama cuando el usuario acepta el resultado (éxito o error) del ARCA
+   */
+  const aceptarResultadoArca = useCallback(() => {
+    // Limpiar el estado para cerrar el overlay
+    limpiarEstadoArca();
+  }, [limpiarEstadoArca]);
+
+  /**
+   * Función para actualizar el progreso (para futuras mejoras)
+   */
+  const actualizarProgresoArca = useCallback((progreso) => {
+    setProgresoArca(progreso);
   }, []);
 
   /**
@@ -65,22 +89,42 @@ export const useArcaEstado = () => {
     return tiposQueRequierenArca.includes(tipoComprobante?.toLowerCase());
   }, []);
 
+  /**
+   * Función para obtener mensaje personalizado según el tipo de comprobante
+   * @param {string} tipoComprobante - Tipo de comprobante
+   * @returns {string} - Mensaje personalizado
+   */
+  const obtenerMensajePersonalizado = useCallback((tipoComprobante) => {
+    const mensajes = {
+      'factura': 'Esperando autorización de AFIP para la factura fiscal...',
+      'nota_credito': 'Esperando autorización de AFIP para la nota de crédito...',
+      'default': 'Esperando respuesta de AFIP para obtener el CAE...'
+    };
+    
+    return mensajes[tipoComprobante?.toLowerCase()] || mensajes.default;
+  }, []);
+
   return {
     // Estados
     esperandoArca,
     respuestaArca,
     errorArca,
+    progresoArca,
     
     // Funciones de control
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
+    aceptarResultadoArca,
+    actualizarProgresoArca,
     requiereEmisionArca,
+    obtenerMensajePersonalizado,
     
     // Estados derivados
     tieneRespuestaArca: !!respuestaArca,
     tieneErrorArca: !!errorArca,
     estaProcesando: esperandoArca,
+    estaCompletado: progresoArca === 100,
   };
 }; 

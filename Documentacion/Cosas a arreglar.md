@@ -66,5 +66,4 @@ Nota Credito genericos no muestra alicuotas correctamente
 
 
 
-El sistema está obteniendo ven_cuit y ven_dni de la venta, pero si estos campos están vacíos (None o string vacío), entonces cuit_cliente y dni_cliente serán strings vacíos.
 

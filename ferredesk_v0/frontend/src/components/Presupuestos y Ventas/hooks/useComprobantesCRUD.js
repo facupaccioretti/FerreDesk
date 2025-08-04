@@ -277,29 +277,23 @@ const useComprobantesCRUD = ({
         credentials: "include",
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
         let msg = "No se pudo convertir"
         try {
-          const data = await response.json()
           msg = data.detail || msg
         } catch {}
         throw new Error(msg)
       }
 
-      const data = await response.json()
-      closeTab(tabKey)
-      
-      // Mostrar mensaje de éxito
-      if (data.presupuesto === null) {
-        alert("Factura creada correctamente. El presupuesto fue eliminado por no tener items restantes.")
-      } else {
-        alert("Factura creada correctamente. El presupuesto fue actualizado con los items restantes.")
-      }
-      
-
       await fetchVentas()
+      
+      // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
+      return data
     } catch (err) {
       alert("Error al convertir: " + (err.message || ""))
+      throw err
     }
   }
 
@@ -330,31 +324,23 @@ const useComprobantesCRUD = ({
         credentials: "include",
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
         let msg = "No se pudo convertir la factura interna"
         try {
-          const data = await response.json()
           msg = data.detail || msg
         } catch {}
         throw new Error(msg)
       }
 
-      const data = await response.json()
-
-
-      closeTab(tabKey)
-      
-      // Mensaje de éxito específico según lo que pasó con la factura interna original
-      if (data.factura_interna === null) {
-        alert("Factura fiscal creada correctamente. La factura interna fue eliminada por no tener ítems restantes.")
-      } else {
-        alert("Factura fiscal creada correctamente. La factura interna fue actualizada con los ítems restantes.")
-      }
-      
-
       await fetchVentas()
+      
+      // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
+      return data
     } catch (err) {
       alert("Error al convertir factura interna: " + (err.message || ""))
+      throw err
     }
   }
 
