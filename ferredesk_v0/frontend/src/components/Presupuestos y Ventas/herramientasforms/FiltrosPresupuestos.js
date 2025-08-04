@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 
 const tiposComprobanteUnicos = (comprobantes) => {
-  // Devuelve tipos únicos en minúscula y capitalizados
+  // Devuelve objetos con value (tipo original) y label (tipo transformado)
   const tipos = Array.from(new Set(comprobantes.map(c => (c.tipo || '').toLowerCase())));
-  return tipos.filter(Boolean).map(tipo => tipo.charAt(0).toUpperCase() + tipo.slice(1));
+  return tipos.filter(Boolean).map(tipo => ({
+    value: tipo, // Tipo original para enviar al backend
+    label: tipo.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) // Tipo transformado para mostrar
+  }));
 };
 
 const letrasUnicasPorTipo = (comprobantes, tipo) => {
@@ -38,7 +41,7 @@ const FiltrosPresupuestos = ({
   // Autocomplete para clientes
   const [clienteInput, setClienteInput] = useState('');
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
-  const clienteSeleccionado = clientes.find(c => String(c.id) === String(clienteId));
+
   const sugerenciasClientes = clienteInput.length >= 2
     ? clientes.filter(c =>
         (c.razon || '').toLowerCase().includes(clienteInput.toLowerCase()) ||
@@ -156,7 +159,7 @@ const FiltrosPresupuestos = ({
         >
           <option value="">Todos</option>
           {tipos.map(tipo => (
-            <option key={tipo} value={tipo}>{tipo}</option>
+            <option key={tipo.value} value={tipo.value}>{tipo.label}</option>
           ))}
         </select>
       </div>

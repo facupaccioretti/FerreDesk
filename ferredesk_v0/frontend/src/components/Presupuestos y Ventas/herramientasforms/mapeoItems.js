@@ -13,12 +13,22 @@
  * @returns {Object} Item mapeado SOLO con campos base
  */
 export const mapearCamposItem = (item, idx, esModificacion = false) => {
-  console.log('[mapearCamposItem] Recibe:', item, 'idx:', idx);
+  console.log('[mapearCamposItem] Recibiendo item para mapear:', JSON.parse(JSON.stringify(item)));
+
   let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
   if (idaliiva && typeof idaliiva === 'object') {
     idaliiva = idaliiva.id;
   }
-  const vdi_costo = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? 0);
+  
+  // VALOR POR DEFECTO PARA COSTOS INVÁLIDOS
+  const COSTO_POR_DEFECTO = 0;
+  
+  const vdi_costo = (() => {
+    const valor = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? COSTO_POR_DEFECTO);
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : COSTO_POR_DEFECTO;
+  })();
+  
   console.log('[mapearCamposItem] vdi_costo calculado:', vdi_costo);
 
   // Lista de campos permitidos. Se mantiene como referencia estática
@@ -32,8 +42,8 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
   const camposMapeados = {
     vdi_idve: item.vdi_idve ?? null,
     vdi_orden: idx + 1,
-    vdi_idsto: item.producto?.id ?? item.idSto ?? item.vdi_idsto ?? item.idsto ?? null,
-    vdi_idpro: item.proveedorId ?? item.idPro ?? item.vdi_idpro ?? null,
+    vdi_idsto: (item.producto?.id && item.producto?.id !== '') ? item.producto?.id : (item.idSto && item.idSto !== '') ? item.idSto : (item.vdi_idsto && item.vdi_idsto !== '') ? item.vdi_idsto : (item.idsto && item.idsto !== '') ? item.idsto : null,
+    vdi_idpro: (item.proveedorId && item.proveedorId !== '') ? item.proveedorId : (item.idPro && item.idPro !== '') ? item.idPro : (item.vdi_idpro && item.vdi_idpro !== '') ? item.vdi_idpro : null,
     vdi_cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
     vdi_costo: vdi_costo,
     vdi_margen: item.margen ?? item.vdi_margen ?? (item.producto?.margen ?? 0),
@@ -42,9 +52,15 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
     vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
     vdi_idaliiva: idaliiva,
+    // NUEVO: Preservar metadatos de conversión para el backend
+    ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
+    ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
+    ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
     // ATENCIÓN: No incluir campos como 'cuit' o 'domicilio' en los ítems. Estos solo corresponden a la cabecera de la venta.
     // Si necesitas esos datos, agrégalos en el objeto principal de la venta, nunca en los ítems.
   };
+
+  console.log('[mapearCamposItem] Devolviendo item mapeado:', JSON.parse(JSON.stringify(camposMapeados)));
 
   // Eliminar cualquier campo calculado si accidentalmente se incluyó
   const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem', 'precioFinal'];

@@ -1,0 +1,174 @@
+[eslint] 
+src\components\Presupuestos y Ventas\ConVentaForm.js
+  Line 5:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\ConversionModal.js
+  Line 16:7:  'getAlicuota' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\EditarPresupuestoForm.js
+  Line 8:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\ItemsGrid.js
+  Line 248:7:  React Hook useCallback has missing dependencies: 'aliMap' and 'rows'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaTable.js
+  Line 63:6:  React Hook useMemo has unnecessary dependencies: 'filterCondicion', 'filterTipo', 'sortDirection', and 'sortField'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaVentasManager.js
+  Line 11:10:  'mostrarExportacion' is assigned a value but never used  no-unused-vars        
+
+src\components\Presupuestos y Ventas\NotaCreditoForm.js
+  Line 1:17:   'useState' is defined but never used  no-unused-vars
+  Line 163:9:  Unexpected empty object pattern       no-empty-pattern
+
+src\components\Presupuestos y Ventas\PresupuestosManager.js
+  Line 3:42:    'useRef' is defined but never used                   no-unused-vars
+  Line 205:12:  'facturasParaNC' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\VentaForm.js
+  Line 7:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\herramientasforms\plantillasComprobantes\PDF\PlantillaFacturaCPDF.js
+  Line 714:9:  'comprobante' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\herramientasforms\useCalculosFormulario.js
+  Line 18:11:   'aliId' is assigned a value but never used
+
+        no-unused-vars
+  Line 50:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 51:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 52:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 77:21:   'precioConDescuento' is assigned a value but never used
+
+        no-unused-vars
+  Line 123:61:  React Hook useMemo has unnecessary dependencies: 'alicuotas', 'bonificacionGeneral', 'descu1', 'descu2', 'descu3', and 'items'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\herramientasforms\useComprobanteFiscal.js
+  Line 91:9:  'limpiarEstado' is assigned a value but never used  no-unused-vars
+
+src\components\Productos\ProductosManager.js
+  Line 251:93:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 252:97:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Productos\StockForm.js
+  Line 94:10:  'codigoProveedorDetectado' is assigned a value but never used  no-unused-vars  
+
+src\components\Proveedores\ProveedoresManager.js
+  Line 119:9:  'indiceInicio' is assigned a value but never used  no-unused-vars
+
+
+
+[eslint] 
+src\components\Presupuestos y Ventas\ConVentaForm.js
+  Line 5:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\ConversionModal.js
+  Line 16:7:  'getAlicuota' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\EditarPresupuestoForm.js
+  Line 8:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\ItemsGrid.js
+  Line 248:7:  React Hook useCallback has missing dependencies: 'aliMap' and 'rows'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaTable.js
+  Line 63:6:  React Hook useMemo has unnecessary dependencies: 'filterCondicion', 'filterTipo', 'sortDirection', and 'sortField'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaVentasManager.js
+  Line 11:10:  'mostrarExportacion' is assigned a value but never used  no-unused-vars        
+
+src\components\Presupuestos y Ventas\NotaCreditoForm.js
+  Line 1:17:   'useState' is defined but never used  no-unused-vars
+  Line 163:9:  Unexpected empty object pattern       no-empty-pattern
+
+src\components\Presupuestos y Ventas\PresupuestosManager.js
+  Line 3:42:    'useRef' is defined but never used                   no-unused-vars
+  Line 205:12:  'facturasParaNC' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\VentaForm.js
+  Line 7:35:  'manejarCambioCliente' is defined but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\herramientasforms\plantillasComprobantes\PDF\PlantillaFacturaCPDF.js
+  Line 714:9:  'comprobante' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\herramientasforms\useCalculosFormulario.js
+  Line 18:11:   'aliId' is assigned a value but never used
+
+        no-unused-vars
+  Line 50:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 51:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 52:21:   'subtotalNeto' is constant
+
+        no-const-assign
+  Line 77:21:   'precioConDescuento' is assigned a value but never used
+
+        no-unused-vars
+  Line 123:61:  React Hook useMemo has unnecessary dependencies: 'alicuotas', 'bonificacionGeneral', 'descu1', 'descu2', 'descu3', and 'items'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\herramientasforms\useComprobanteFiscal.js
+  Line 91:9:  'limpiarEstado' is assigned a value but never used  no-unused-vars
+
+src\components\Productos\ProductosManager.js
+  Line 251:93:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 252:97:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Productos\StockForm.js
+  Line 94:10:  'codigoProveedorDetectado' is assigned a value but never used  no-unused-vars  
+
+src\components\Proveedores\ProveedoresManager.js
+  Line 119:9:  'indiceInicio' is assigned a value but never used  no-unused-vars
+
+Compiled with warnings.
+
+[eslint] 
+src\components\Presupuestos y Ventas\ConversionModal.js
+  Line 7:7:  'ALICUOTAS' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\ItemsGrid.js
+  Line 248:7:  React Hook useCallback has unnecessary dependencies: 'modo' and 'stockProveedores'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaTable.js
+  Line 63:6:  React Hook useMemo has missing dependencies: 'filtrarDatos' and 'ordenarDatos'. 
+Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Presupuestos y Ventas\LibroIvaVentas\LibroIvaVentasManager.js
+  Line 11:10:  'mostrarExportacion' is assigned a value but never used  no-unused-vars        
+
+src\components\Presupuestos y Ventas\PresupuestosManager.js
+  Line 205:12:  'facturasParaNC' is assigned a value but never used  no-unused-vars
+
+src\components\Presupuestos y Ventas\herramientasforms\useCalculosFormulario.js
+  Line 18:11:   'aliId' is assigned a value but never used
+                                             no-unused-vars
+  Line 50:21:   'subtotalNeto' is constant
+                                             no-const-assign
+  Line 51:21:   'subtotalNeto' is constant
+                                             no-const-assign
+  Line 52:21:   'subtotalNeto' is constant
+                                             no-const-assign
+  Line 77:21:   'precioConDescuento' is assigned a value but never used
+                                             no-unused-vars
+  Line 123:61:  React Hook useMemo has a missing dependency: 'calcularTotalesGenerales'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Productos\ProductosManager.js
+  Line 251:93:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 252:97:  React Hook useMemo has unnecessary dependencies: 'fam1Filtro', 'fam2Filtro', and 'fam3Filtro'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\components\Productos\StockForm.js
+  Line 94:10:  'codigoProveedorDetectado' is assigned a value but never used  no-unused-vars  
+
+src\components\Proveedores\ProveedoresManager.js
+  Line 39:10:  'paginaActual' is assigned a value but never used    no-unused-vars
+  Line 40:10:  'itemsPorPagina' is assigned a value but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.

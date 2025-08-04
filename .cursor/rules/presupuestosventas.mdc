@@ -1,7 +1,5 @@
 ---
-description: 
-globs: 
-alwaysApply: true
+alwaysApply: false
 ---
 Queremos cambiar el sistema para que en lugar de guardar precios unitarios, guardemos el costo, el margen y el IVA de cada producto. El precio unitario es un valor calculado sin IVA que representa el importe base de venta por unidad de producto. Se determina a partir del costo neto, aplicando un porcentaje de margen de ganancia y restando una bonificación particular sobre ese mismo costo. Esto nos permitirá tener un mejor control sobre los márgenes de ganancia y hacer análisis más precisos de rentabilidad. El precio que ve el cliente será calculado a partir de estos componentes, pero en la base de datos mantendremos los valores base (costo y margen) para tener más flexibilidad y control sobre los precios.
 Necesitamos manejar los precios de manera diferente según el tipo de comprobante. Para Boletas A, se mostrarán los precios sin IVA y se discriminará el IVA por separado. Para Boletas B y C, se mostrarán los precios con el IVA incluido y sin discriminar. Es importante destacar que en la base de datos siempre guardaremos los valores SIN IVA, independientemente del tipo de comprobante.

@@ -547,7 +547,7 @@ export default function ProductosTable({
               columnas={columnas}
               datos={productosFiltrados}
               valorBusqueda=""
-              onCambioBusqueda={() => {}}
+              onCambioBuscador={() => {}}
               mostrarBuscador={false}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
@@ -556,7 +556,7 @@ export default function ProductosTable({
                   <tr
                     key={p.id}
                     onClick={() => toggleRow(p.id)}
-                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="hover:bg-slate-100 transition-colors cursor-pointer"
                   >
                     {columnas.map((col) => {
                       let contenido

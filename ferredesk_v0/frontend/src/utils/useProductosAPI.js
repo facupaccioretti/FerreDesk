@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getCookie } from '../utils/csrf';
 
 export function useProductosAPI() {
@@ -7,7 +7,8 @@ export function useProductosAPI() {
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchProductos = async (filtros = {}) => {
+  // Memoizar fetchProductos para evitar recreación y polling accidental
+  const fetchProductos = useCallback(async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
@@ -25,9 +26,10 @@ export function useProductosAPI() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Dependencias vacías: nunca se recrea
 
-  const addProducto = async (producto) => {
+  // Las funciones que dependen de fetchProductos deben usar la referencia memoizada
+  const addProducto = useCallback(async (producto) => {
     setError(null);
     try {
       const res = await fetch('/api/productos/stock/', {
@@ -49,9 +51,9 @@ export function useProductosAPI() {
       setError(err.message);
       throw err;
     }
-  };
+  }, [csrftoken, fetchProductos]);
 
-  const updateProducto = async (id, updated) => {
+  const updateProducto = useCallback(async (id, updated) => {
     setError(null);
     try {
       const res = await fetch(`/api/productos/stock/${id}/`, {
@@ -73,9 +75,9 @@ export function useProductosAPI() {
       setError(err.message);
       throw err;
     }
-  };
+  }, [csrftoken, fetchProductos]);
 
-  const deleteProducto = async (id) => {
+  const deleteProducto = useCallback(async (id) => {
     setError(null);
     try {
       const res = await fetch(`/api/productos/stock/${id}/`, {
@@ -88,11 +90,11 @@ export function useProductosAPI() {
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, [csrftoken, fetchProductos]);
 
   useEffect(() => {
     fetchProductos();
-  }, []);
+  }, [fetchProductos]);
 
   return { productos, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };
 }

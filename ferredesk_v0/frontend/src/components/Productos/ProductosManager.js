@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
@@ -15,7 +15,7 @@ const ProductosManager = () => {
   }, [])
 
   // Hooks API
-  const { productos, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos } = useProductosAPI()
+  const { productos, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -238,7 +238,7 @@ const ProductosManager = () => {
   const productosActivosBase = useMemo(() => productos.filter((p) => p.acti === "S"), [productos])
   const productosInactivosBase = useMemo(() => productos.filter((p) => p.acti === "N"), [productos])
 
-  const aplicaFiltrosFamilia = (prod) => {
+  const aplicaFiltrosFamilia = useCallback((prod) => {
     const fam1 = prod.idfam1 && typeof prod.idfam1 === "object" ? prod.idfam1.id : prod.idfam1
     const fam2 = prod.idfam2 && typeof prod.idfam2 === "object" ? prod.idfam2.id : prod.idfam2
     const fam3 = prod.idfam3 && typeof prod.idfam3 === "object" ? prod.idfam3.id : prod.idfam3
@@ -246,10 +246,10 @@ const ProductosManager = () => {
     if (fam2Filtro && String(fam2Filtro) !== String(fam2)) return false
     if (fam3Filtro && String(fam3Filtro) !== String(fam3)) return false
     return true
-  }
+  }, [fam1Filtro, fam2Filtro, fam3Filtro])
 
-  const productosActivos = useMemo(() => productosActivosBase.filter(aplicaFiltrosFamilia), [productosActivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
-  const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, fam1Filtro, fam2Filtro, fam3Filtro])
+  const productosActivos = useMemo(() => productosActivosBase.filter(aplicaFiltrosFamilia), [productosActivosBase, aplicaFiltrosFamilia])
+  const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, aplicaFiltrosFamilia])
 
   // ------------------------------------------------------------------
   // Efecto: recarga productos desde el backend cuando cambian búsqueda o filtros
@@ -264,7 +264,7 @@ const ProductosManager = () => {
       fetchProductos(filtros)
     }, 300)
     return () => clearTimeout(timeout)
-  }, [search, fam1Filtro, fam2Filtro, fam3Filtro])
+  }, [search, fam1Filtro, fam2Filtro, fam3Filtro, fetchProductos])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">

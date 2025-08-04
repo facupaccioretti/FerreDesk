@@ -9,7 +9,8 @@ export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del mod
 export const MIN_CARACTERES_BUSQUEDA = 1 // Mínimo de caracteres para que se active filtrado
 // Array de posibles nombres para el tipo de comprobante "Factura" que la API podría esperar.
 // Se utiliza el primer valor para la petición directa, los demás son para un posible filtrado local de respaldo.
-export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura"]
+export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna"]
+export const LETRA_FACTURA_INTERNA = 'I';
 
 /**
  * FacturaSelectorModal
@@ -45,20 +46,49 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     setCargando(true)
     setError(null)
     try {
-      // Construimos una URL que filtra directamente en el backend
+      // NUEVO: Usar filtro backend para obtener solo facturas válidas
       const params = new URLSearchParams({
         ven_idcli: cliente.id,
-        // Usamos el nombre de parámetro correcto 'comprobante_tipo' y el primer valor del array.
-        comprobante_tipo: TIPOS_COMPROBANTE_FACTURA[0],
+        para_nota_credito: 'true'  // ← NUEVO: Filtro backend
       })
       const url = `/api/ventas/?${params.toString()}`
+      console.log("[FacturaSelectorModal] URL de la petición:", url)
+      
       const resp = await fetch(url, { credentials: "include" })
       if (!resp.ok) throw new Error("No se pudieron obtener las facturas")
       const data = await resp.json()
+      
       // Normalizar para asegurar estructura mínima y soportar paginación
       const lista = Array.isArray(data) ? data : data.results || []
-      // Como el backend ya filtró, no es necesario hacerlo de nuevo en el frontend
-      setFacturas(lista)
+      console.log("[FacturaSelectorModal] Datos recibidos del backend:", lista.length, "registros")
+      
+      // DEBUG: Mostrar tipos de comprobantes recibidos
+      const tiposRecibidos = [...new Set(lista.map(f => f.comprobante?.tipo))];
+      console.log("[FacturaSelectorModal] Tipos de comprobantes recibidos:", tiposRecibidos);
+      
+      // NUEVO: Backend ya filtró, solo validación adicional en frontend
+      const facturasValidas = lista.filter(f => {
+        const letra = f.comprobante?.letra;
+        const tipo = f.comprobante?.tipo;
+        // Doble verificación: letra + tipo (seguridad adicional)
+        const esValida = ['A', 'B', 'C', LETRA_FACTURA_INTERNA].includes(letra) && 
+                        ['factura', 'venta'].includes(tipo);
+        
+        // DEBUG: Mostrar qué comprobantes se están filtrando
+        if (!esValida) {
+          console.log("[FacturaSelectorModal] Comprobante filtrado:", {
+            numero: f.numero_formateado,
+            tipo: tipo,
+            letra: letra,
+            razon: `Tipo: ${tipo}, Letra: ${letra}`
+          });
+        }
+        
+        return esValida;
+      });
+      
+      console.log("[FacturaSelectorModal] Facturas válidas después del filtro:", facturasValidas.length);
+      setFacturas(facturasValidas)
     } catch (err) {
       console.error("[FacturaSelectorModal] Error al obtener facturas:", err)
       setError(err.message || "Error desconocido")
@@ -80,10 +110,45 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
   // Helpers de selección
   const getId = (fac) => fac.id ?? fac.ven_id ?? fac.idventa ?? fac.vdi_idve ?? fac.vdi_id ?? null
 
+  // Validación en tiempo real de letras
+  const validarSeleccionLetras = (nuevasFacturas) => {
+    if (nuevasFacturas.length <= 1) return { valido: true };
+    
+    const letras = [...new Set(nuevasFacturas.map(f => f.comprobante?.letra))];
+    
+    if (letras.length > 1) {
+      return {
+        valido: false,
+        mensaje: `No se pueden seleccionar facturas de distinto tipo.\n` +
+                 `Facturas encontradas: ${letras.join(', ')}\n\n` +
+                 `Una Nota de Crédito solo puede anular facturas del mismo tipo.`
+      };
+    }
+    
+    return { valido: true };
+  };
+
+  // Modificar toggleSeleccion para incluir validación
   const toggleSeleccion = (fac) => {
     const id = getId(fac)
     if (id === null) return
-    setSeleccionadas((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]))
+    
+    const nuevasSeleccionadas = seleccionadas.includes(id)
+      ? seleccionadas.filter(s => s !== id)
+      : [...seleccionadas, id];
+    
+    // Obtener facturas correspondientes a las nuevas selecciones
+    const facturasNuevas = facturas.filter(f => nuevasSeleccionadas.includes(getId(f)));
+    
+    // Validar consistencia de letras
+    const validacion = validarSeleccionLetras(facturasNuevas);
+    
+    if (!validacion.valido) {
+      alert(validacion.mensaje);
+      return; // No actualizar selección si es inválida
+    }
+    
+    setSeleccionadas(nuevasSeleccionadas);
   }
   const estaSeleccionada = (fac) => seleccionadas.includes(getId(fac))
 

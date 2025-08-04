@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCookie } from './csrf';
 
-export function useClientesAPI() {
+export function useClientesAPI(filtrosIniciales = {}) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const csrftoken = getCookie('csrftoken');
 
-  const fetchClientes = async (filtros = {}) => {
+  const fetchClientes = useCallback(async (filtros = {}) => {
     setLoading(true);
     setError(null);
     try {
@@ -28,9 +28,9 @@ export function useClientesAPI() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Dependencias vacías: nunca se recrea
 
-  const addCliente = async (cliente) => {
+  const addCliente = useCallback(async (cliente) => {
     setError(null);
     try {
       const res = await fetch('/api/clientes/clientes/', {
@@ -53,9 +53,9 @@ export function useClientesAPI() {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
-  const updateCliente = async (id, updated) => {
+  const updateCliente = useCallback(async (id, updated) => {
     setError(null);
     try {
       const res = await fetch(`/api/clientes/clientes/${id}/`, {
@@ -78,9 +78,9 @@ export function useClientesAPI() {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
-  const deleteCliente = async (id) => {
+  const deleteCliente = useCallback(async (id) => {
     setError(null);
     try {
       const res = await fetch(`/api/clientes/clientes/${id}/`, {
@@ -92,7 +92,12 @@ export function useClientesAPI() {
         let errorMsg = 'Error al eliminar cliente';
         try {
           const data = await res.json();
-          errorMsg = data.detail || JSON.stringify(data);
+          // Manejo específico para el error de restricción de movimientos comerciales
+          if (data.error && data.error.includes('movimientos comerciales')) {
+            errorMsg = data.error;
+          } else {
+            errorMsg = data.detail || data.error || JSON.stringify(data);
+          }
         } catch (e) {}
         throw new Error(errorMsg);
       }
@@ -102,7 +107,7 @@ export function useClientesAPI() {
       setError(err.message);
       return false;
     }
-  };
+  }, [csrftoken, fetchClientes]);
 
   const fetchClientePorDefecto = useCallback(async () => {
     setLoading(true);
@@ -119,11 +124,11 @@ export function useClientesAPI() {
     }
   }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
-    fetchClientes();
-  }, []);
+    fetchClientes(filtrosIniciales);
+  }, [fetchClientes]);
 
   return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
 }

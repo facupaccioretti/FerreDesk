@@ -30,10 +30,12 @@ const AsociarCodigoProveedorModal = ({
   const [selectedProveedor, setSelectedProveedor] = useState("")
   const [codigoProveedor, setCodigoProveedor] = useState("")
   const [codigosSugeridos, setCodigosSugeridos] = useState([])
+  const [productosConDenominacion, setProductosConDenominacion] = useState([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [costo, setCosto] = useState("")
+  const [denominacion, setDenominacion] = useState("")
   const [cargandoCosto, setCargandoCosto] = useState(false)
   const [showSugeridos, setShowSugeridos] = useState(false)
 
@@ -42,9 +44,11 @@ const AsociarCodigoProveedorModal = ({
       setSelectedProveedor("")
       setCodigoProveedor("")
       setCodigosSugeridos([])
+      setProductosConDenominacion([])
       setMessage(null)
       setError(null)
       setCosto("")
+      setDenominacion("")
       setShowSugeridos(false)
     }
   }, [open])
@@ -60,6 +64,7 @@ const AsociarCodigoProveedorModal = ({
         .then((data) => {
           console.log('[Modal] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
           setCodigosSugeridos(data.codigos || [])
+          setProductosConDenominacion(data.productos || [])
           setLoading(false)
         })
         .catch(() => {
@@ -83,17 +88,21 @@ const AsociarCodigoProveedorModal = ({
         .then((data) => {
           if (data && data.precio !== undefined && data.precio !== null) {
             setCosto(data.precio)
+            setDenominacion(data.denominacion || "")
           } else {
             setCosto("")
+            setDenominacion("")
           }
           setCargandoCosto(false)
         })
         .catch(() => {
           setCosto("")
+          setDenominacion("")
           setCargandoCosto(false)
         })
     } else {
       setCosto("")
+      setDenominacion("")
     }
   }, [selectedProveedor, codigoProveedor])
 
@@ -160,15 +169,15 @@ const AsociarCodigoProveedorModal = ({
   }
 
   // Memoizar el filtrado para evitar cálculos costosos en cada render
-  const filteredCodigos = useMemo(() => {
-    if (codigosSugeridos.length === 0) return []
+  const filteredProductos = useMemo(() => {
+    if (productosConDenominacion.length === 0) return []
 
     const term = codigoProveedor.trim().toLowerCase()
 
     // Calcular puntuación por código
-    const puntuados = codigosSugeridos
-      .map((codigo) => {
-        const texto = String(codigo).toLowerCase()
+    const puntuados = productosConDenominacion
+      .map((producto) => {
+        const texto = String(producto.codigo).toLowerCase()
         let score = 0
         if (term.length === 0) {
           // Sin texto de búsqueda: score por orden original
@@ -180,7 +189,7 @@ const AsociarCodigoProveedorModal = ({
         } else if (texto.includes(term)) {
           score = 50
         }
-        return { codigo, score }
+        return { ...producto, score }
       })
       .filter((obj) => obj.score > 0 || term.length === 0)
 
@@ -191,9 +200,9 @@ const AsociarCodigoProveedorModal = ({
       return collator.compare(String(a.codigo), String(b.codigo))
     })
 
-    const resultado = puntuados.slice(0, 8).map((obj) => obj.codigo)
+    const resultado = puntuados.slice(0, 8)
     return resultado
-  }, [codigosSugeridos, codigoProveedor])
+  }, [productosConDenominacion, codigoProveedor])
 
   return (
     <Transition appear show={open} as={Fragment}>
@@ -222,7 +231,7 @@ const AsociarCodigoProveedorModal = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md relative border border-slate-200 text-left">
+                             <Dialog.Panel className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl relative border border-slate-200 text-left">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -339,14 +348,14 @@ const AsociarCodigoProveedorModal = ({
                         value={codigoProveedor}
                         onChange={(e) => {
                           setCodigoProveedor(e.target.value)
-                          setShowSugeridos(e.target.value.length > 0 && codigosSugeridos.length > 0)
+                          setShowSugeridos(e.target.value.length > 0 && productosConDenominacion.length > 0)
                         }}
-                        onFocus={() => setShowSugeridos(codigoProveedor.length > 0 && codigosSugeridos.length > 0)}
+                        onFocus={() => setShowSugeridos(codigoProveedor.length > 0 && productosConDenominacion.length > 0)}
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-10 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
                         placeholder="Ingrese el código del proveedor"
                         disabled={loading || !selectedProveedor}
                       />
-                      {codigosSugeridos.length > 0 && (
+                      {productosConDenominacion.length > 0 && (
                         <button
                           type="button"
                           onClick={() => setShowSugeridos(!showSugeridos)}
@@ -365,28 +374,35 @@ const AsociarCodigoProveedorModal = ({
                     </div>
 
                     {/* Dropdown de sugerencias */}
-                    {showSugeridos && filteredCodigos.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {filteredCodigos.map((codigo, index) => (
+                    {showSugeridos && filteredProductos.length > 0 && (
+                      <div className="absolute z-10 w-96 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredProductos.map((producto, index) => (
                           <button
                             key={index}
                             type="button"
                             onClick={() => {
-                              setCodigoProveedor(codigo)
+                              setCodigoProveedor(producto.codigo)
                               setShowSugeridos(false)
                             }}
                             className="w-full text-left px-3 py-2 hover:bg-orange-50 hover:text-orange-700 transition-colors text-sm border-b border-slate-100 last:border-b-0"
                           >
-                            <div className="flex items-center gap-2">
-                              <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"
-                                />
-                              </svg>
-                              {codigo}
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"
+                                  />
+                                </svg>
+                                <span className="font-mono text-slate-800">{producto.codigo}</span>
+                              </div>
+                              {producto.denominacion && (
+                                <div className="ml-5 text-xs text-slate-600 truncate">
+                                  {producto.denominacion}
+                                </div>
+                              )}
                             </div>
                           </button>
                         ))}
@@ -401,35 +417,57 @@ const AsociarCodigoProveedorModal = ({
                     )}
                   </div>
 
-                  {/* Costo sugerido */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      <svg className="w-4 h-4 inline mr-1 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
-                        />
-                      </svg>
-                      Costo sugerido
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={costo ? `$${costo}` : ""}
-                        readOnly
-                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700 cursor-not-allowed"
-                        placeholder="Se calculará automáticamente"
-                      />
-                      {cargandoCosto && (
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                          <div className="w-4 h-4 border border-slate-300 border-t-orange-500 rounded-full animate-spin"></div>
+                  {/* Mini Visualización: Código - Denominación - Costo */}
+                  {(codigoProveedor || denominacion || costo) && (
+                    <div className="bg-gradient-to-r from-blue-50 to-orange-50 rounded-lg p-4 border border-blue-200/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-sm font-medium text-blue-700">Información del Producto</span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {/* Código */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-600 w-16">Código:</span>
+                          <span className="text-sm font-mono bg-white px-2 py-1 rounded border text-slate-800">
+                            {codigoProveedor || "—"}
+                          </span>
                         </div>
+                        
+                        {/* Denominación */}
+                        <div className="flex items-start gap-2">
+                          <span className="text-xs font-medium text-slate-600 w-16 mt-0.5">Denominación:</span>
+                          <span className="text-sm bg-white px-2 py-1 rounded border text-slate-800 flex-1 min-h-[20px]">
+                            {denominacion || "—"}
+                          </span>
+                        </div>
+                        
+                        {/* Costo */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-600 w-16">Costo:</span>
+                          <span className="text-sm font-mono bg-white px-2 py-1 rounded border text-green-700">
+                            {costo ? `$${costo}` : "—"}
+                          </span>
+                          {cargandoCosto && (
+                            <div className="w-3 h-3 border border-slate-300 border-t-orange-500 rounded-full animate-spin"></div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {(costo || denominacion) && (
+                        <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Información encontrada en lista del proveedor
+                        </p>
                       )}
                     </div>
-                    {costo && <p className="text-xs text-green-600 mt-1">✓ Precio encontrado en lista del proveedor</p>}
-                  </div>
+                  )}
+
+
                 </div>
 
                 {/* Botones */}

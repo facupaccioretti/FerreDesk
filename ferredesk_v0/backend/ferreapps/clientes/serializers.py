@@ -42,6 +42,30 @@ class CategoriaClienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ClienteSerializer(serializers.ModelSerializer):
+    iva_nombre = serializers.CharField(source='iva.nombre', read_only=True)
+    
     class Meta:
         model = Cliente
-        fields = '__all__' 
+        fields = '__all__'
+
+class ClienteBusquedaSerializer(serializers.ModelSerializer):
+    """
+    Serializer optimizado para búsquedas en el ClienteSelectorModal.
+    Incluye solo los campos necesarios para la tabla del modal.
+    """
+    iva_nombre = serializers.CharField(source='iva.nombre', read_only=True)
+    
+    class Meta:
+        model = Cliente
+        fields = [
+            'id',
+            'codigo', 
+            'razon',
+            'fantasia',
+            'cuit',
+            'domicilio',
+            'iva_nombre',
+            'iva',  # 
+            'descu1',
+            'descu2'
+        ] 

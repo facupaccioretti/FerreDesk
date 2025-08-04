@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
-    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada, ComprobanteAsociacion
 )
 from django.db import models
 from ferreapps.productos.models import AlicuotaIVA
@@ -17,10 +17,12 @@ class ComprobanteSerializer(serializers.ModelSerializer):
 
 class VentaAsociadaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
+    comprobante = ComprobanteSerializer(read_only=True)
+    ven_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Venta
-        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante']
+        fields = ['ven_id', 'ven_fecha', 'numero_formateado', 'comprobante', 'ven_total']
 
     def get_numero_formateado(self, obj):
         if obj.ven_punto is not None and obj.ven_numero is not None:
@@ -28,6 +30,14 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
             # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
             return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
         return None
+    
+    def get_ven_total(self, obj):
+        try:
+            # Busca el total en la vista calculada para evitar N+1 queries
+            venta_calculada = VentaCalculada.objects.get(ven_id=obj.ven_id)
+            return venta_calculada.ven_total
+        except VentaCalculada.DoesNotExist:
+            return None
 
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,6 +58,10 @@ class VentaSerializer(serializers.ModelSerializer):
     numero_formateado = serializers.SerializerMethodField()
     cliente_nombre = serializers.SerializerMethodField()
     vendedor_nombre = serializers.SerializerMethodField()
+
+    # NUEVOS CAMPOS PARA EL TOOLTIP
+    notas_credito_que_la_anulan = serializers.SerializerMethodField()
+    facturas_anuladas = serializers.SerializerMethodField()
 
     # CAMPO DE LECTURA: Muestra info de los comprobantes asociados a esta venta/NC.
     comprobantes_asociados = VentaAsociadaSerializer(many=True, read_only=True)
@@ -91,17 +105,23 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def get_numero_formateado(self, obj):
         if obj.ven_punto is not None and obj.ven_numero is not None:
-            letra = getattr(obj.comprobante, 'letra', None)
-            if letra:
-                return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}"
-            return f"{obj.ven_punto:04d}-{obj.ven_numero:08d}"
+            letra = getattr(obj.comprobante, 'letra', '')
+            # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
+            return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
         return None
 
     def get_cliente_nombre(self, obj):
         try:
-            cliente = Cliente.objects.get(id=obj.ven_idcli)
-            return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
-        except Cliente.DoesNotExist:
+            # Después de la migración 0045, ven_idcli es un ForeignKey (objeto Cliente)
+            # Antes era un IntegerField (ID)
+            if hasattr(obj.ven_idcli, 'razon'):
+                # Es un objeto Cliente (ForeignKey)
+                return obj.ven_idcli.razon if hasattr(obj.ven_idcli, 'razon') else str(obj.ven_idcli)
+            else:
+                # Es un ID (IntegerField) - caso legacy
+                cliente = Cliente.objects.get(id=obj.ven_idcli)
+                return cliente.razon if hasattr(cliente, 'razon') else str(cliente)
+        except (Cliente.DoesNotExist, AttributeError):
             return ''
 
     def get_vendedor_nombre(self, obj):
@@ -111,6 +131,24 @@ class VentaSerializer(serializers.ModelSerializer):
         except Exception:
             return ''
 
+    def get_notas_credito_que_la_anulan(self, obj):
+        """
+        Si 'obj' es una Factura, devuelve las Notas de Crédito que la anulan.
+        """
+        # obj es una instancia de Venta. Se consulta directamente la tabla de asociación.
+        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
+        ncs = [asc.nota_credito for asc in asociaciones]
+        return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
+
+    def get_facturas_anuladas(self, obj):
+        """
+        Si 'obj' es una Nota de Crédito, devuelve las Facturas que anula.
+        """
+        # obj es una instancia de Venta. Se consulta directamente la tabla de asociación.
+        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
+        facturas = [asc.factura_afectada for asc in asociaciones]
+        return VentaAsociadaSerializer(facturas, many=True, context=self.context).data
+
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
@@ -119,6 +157,75 @@ class VentaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
+
+        # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
+        tipo_comprobante = self.initial_data.get('tipo_comprobante')
+        if tipo_comprobante in ['nota_credito', 'nota_credito_interna'] and comprobantes_asociados_ids:
+            facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
+            
+            if facturas_asociadas.exists():
+                # NUEVA VALIDACIÓN: Verificar que solo se asocien facturas válidas
+                tipos_comprobantes_asociados = set(facturas_asociadas.values_list('comprobante__tipo', flat=True))
+                tipos_invalidos = tipos_comprobantes_asociados - {'factura', 'venta'}  # 'venta' es el tipo de factura interna
+                
+                if tipos_invalidos:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'No se pueden asociar comprobantes de tipo: {", ".join(sorted(tipos_invalidos))}. '
+                            f'Solo se permiten facturas (fiscales o internas) para notas de crédito.'
+                        ]
+                    })
+                
+                letras_facturas = set(facturas_asociadas.values_list('comprobante__letra', flat=True))
+                
+                # Validar que todas las facturas tengan la misma letra
+                if len(letras_facturas) > 1:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Todas las facturas asociadas deben tener la misma letra. '
+                            f'Se encontraron letras: {", ".join(sorted(letras_facturas))}'
+                        ]
+                    })
+                
+                letra_facturas = letras_facturas.pop() if letras_facturas else None
+                
+                # Determinar automáticamente el tipo de NC según la letra de las facturas
+                if letra_facturas == 'I':
+                    # Facturas internas requieren NC interna
+                    # Buscar comprobante NC interna
+                    try:
+                        comprobante_nc_interna = Comprobante.objects.get(
+                            tipo='nota_credito_interna', 
+                            letra='I'
+                        )
+                        validated_data['comprobante_id'] = comprobante_nc_interna.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                'No se encontró comprobante de tipo nota_credito_interna configurado'
+                            ]
+                        })
+                elif letra_facturas in ['A', 'B', 'C']:
+                    # Facturas fiscales requieren NC fiscal con misma letra
+                    # Buscar comprobante NC con la letra correspondiente
+                    try:
+                        comprobante_nc = Comprobante.objects.get(
+                            tipo='nota_credito', 
+                            letra=letra_facturas
+                        )
+                        validated_data['comprobante_id'] = comprobante_nc.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                f'No se encontró comprobante de Nota de Crédito {letra_facturas} configurado'
+                            ]
+                        })
+                else:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Letra de factura no soportada para Notas de Crédito: {letra_facturas}'
+                        ]
+                    })
 
         # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
@@ -279,10 +386,36 @@ class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()
     comprobante = serializers.SerializerMethodField()
+    # NUEVOS CAMPOS PARA EL TOOLTIP
+    notas_credito_que_la_anulan = serializers.SerializerMethodField()
+    facturas_anuladas = serializers.SerializerMethodField()
+    # Campo personalizado para el QR
+    ven_qr = serializers.SerializerMethodField()
 
     class Meta:
         model = VentaCalculada
         fields = '__all__'
+
+    def get_ven_qr(self, obj):
+        """Convierte el BinaryField del QR a base64 para ReactPDF"""
+        if obj.ven_qr:
+            try:
+                import base64
+                # Si ya es una cadena (bytes serializados), convertirla primero a bytes
+                if isinstance(obj.ven_qr, str):
+                    # Convertir la cadena Unicode a bytes
+                    qr_bytes = obj.ven_qr.encode('latin-1')
+                else:
+                    # Si ya son bytes, usarlos directamente
+                    qr_bytes = obj.ven_qr
+                
+                # Convertir bytes a base64
+                qr_base64 = base64.b64encode(qr_bytes).decode('utf-8')
+                return qr_base64
+            except Exception as e:
+                print(f"Error convirtiendo QR a base64: {e}")
+                return None
+        return None
 
     def get_iva_desglose(self, obj):
         from .models import VentaIVAAlicuota
@@ -309,4 +442,27 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
             'codigo_afip': obj.comprobante_codigo_afip,
             'descripcion': obj.comprobante_descripcion,
             'activo': obj.comprobante_activo,
-        } 
+        }
+
+    # MÉTODOS NUEVOS PARA EL TOOLTIP (Implementación segura)
+    def get_notas_credito_que_la_anulan(self, obj):
+        """
+        Si 'obj' es una Factura (desde la vista VentaCalculada),
+        devuelve las Notas de Crédito que la anulan.
+        """
+        # Consulta directa a la tabla de asociación para evitar errores de related_name
+        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
+        # De cada asociación, obtenemos la nota de crédito que la originó
+        ncs = [asc.nota_credito for asc in asociaciones]
+        return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
+
+    def get_facturas_anuladas(self, obj):
+        """
+        Si 'obj' es una Nota de Crédito (desde la vista VentaCalculada),
+        devuelve las Facturas que anula.
+        """
+        # Consulta directa a la tabla de asociación
+        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
+        # De cada asociación, obtenemos la factura que fue afectada
+        facturas = [asc.factura_afectada for asc in asociaciones]
+        return VentaAsociadaSerializer(facturas, many=True, context=self.context).data 

@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -13,6 +14,9 @@ import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
+import { useArcaEstado } from "../../utils/useArcaEstado"
+import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
+import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -26,7 +30,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   puntoVentaId: puntosVenta[0]?.id || "",
   fecha: new Date().toISOString().split("T")[0],
   estado: "Abierto",
-  tipo: "Venta",
+  tipo: "Factura Interna",
   items: [],
   bonificacionGeneral: 0,
   total: 0,
@@ -80,13 +84,14 @@ const VentaForm = ({
   errorAlicuotas,
   autoSumarDuplicados,
   setAutoSumarDuplicados,
+  tabKey = `venta-${Date.now()}` // Valor por defecto en caso de que no se pase
 }) => {
   // Estados para manejar la carga
   const [isLoading, setIsLoading] = useState(true)
   const [loadingError, setLoadingError] = useState(null)
 
   // Hooks existentes movidos al inicio
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto()
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
 
   // Estados sincronizados para comprobante y tipo
@@ -94,37 +99,32 @@ const VentaForm = ({
   const [tipoComprobante, setTipoComprobante] = useState("")
   const [comprobanteId, setComprobanteId] = useState("")
 
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca
+  } = useArcaEstado()
+
   // Función para normalizar items
-  const normalizarItems = (items) => {
-    return items.map((item, idx) => {
-      // Si ya tiene producto, dejarlo
-      if (item.producto) return { ...item, id: item.id || idx + 1 }
-      // Buscar producto por código si es posible
-      let prod = null
-      if (item.codigo || item.codvta) {
-        prod = productos.find((p) => (p.codvta || p.codigo)?.toString() === (item.codigo || item.codvta)?.toString())
-      }
-      return {
-        id: item.id || idx + 1,
-        producto: prod || undefined,
-        codigo: item.codigo || item.codvta || (prod ? prod.codvta || prod.codigo : ""),
-        denominacion: item.denominacion || item.nombre || (prod ? prod.deno || prod.nombre : ""),
-        unidad: item.unidad || item.unidadmedida || (prod ? prod.unidad || prod.unidadmedida : ""),
-        cantidad: item.cantidad || 1,
-        costo: item.costo || item.precio || (prod ? prod.precio || prod.preciovta || prod.preciounitario : 0),
-        bonificacion: item.vdi_bonifica || 0,
-        subtotal: item.subtotal || 0,
-      }
+  const normalizarItemsVenta = (items) => {
+    return normalizarItems(items, { 
+      productos, 
+      modo: 'venta', 
+      alicuotasMap 
     })
   }
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
-    claveAlmacenamiento: "ventaFormDraft",
+    claveAlmacenamiento: `ventaFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
-    normalizarItems,
+    normalizarItems: normalizarItemsVenta,
   })
 
   const alicuotasMap = useMemo(
@@ -166,12 +166,12 @@ const VentaForm = ({
   // Efecto de inicialización sincronizada
   useEffect(() => {
     if (!inicializado && comprobantesVenta.length > 0) {
-      const comprobanteVenta = comprobantesVenta.find((c) => (c.tipo || "").toLowerCase() === "venta")
-      if (comprobanteVenta) {
-        setTipoComprobante("venta")
-        setComprobanteId(comprobanteVenta.id)
+      const comprobanteFacturaInterna = comprobantesVenta.find((c) => (c.tipo || "").toLowerCase() === "factura_interna")
+      if (comprobanteFacturaInterna) {
+        setTipoComprobante("factura_interna")
+        setComprobanteId(comprobanteFacturaInterna.id)
       } else {
-        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || "venta")
+        setTipoComprobante(comprobantesVenta[0].tipo?.toLowerCase() || "factura_interna")
         setComprobanteId(comprobantesVenta[0].id)
       }
       setInicializado(true)
@@ -190,21 +190,7 @@ const VentaForm = ({
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados])
 
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
-  useEffect(() => {
-    if (!formulario.clienteId && clientesConDefecto.length > 0) {
-      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
-      if (mostrador) {
-        setFormulario((prev) => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || "",
-          domicilio: mostrador.domicilio || "",
-          plazoId: mostrador.plazoId || mostrador.plazo || "",
-        }))
-      }
-    }
-  }, [clientesConDefecto, formulario.clienteId, setFormulario])
+
 
   // Sincronizar comprobanteId con el tipo de comprobante seleccionado
   useEffect(() => {
@@ -235,8 +221,7 @@ const VentaForm = ({
   // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
   const clienteSeleccionado =
     clientes.find((c) => String(c.id) === String(formulario.clienteId)) ||
-    clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId)) ||
-    clientesConDefecto.find((c) => String(c.id) === "1") // Mostrador por defecto
+    clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
 
   // Construir objeto para validación fiscal con datos actuales del formulario
   const clienteParaFiscal = useMemo(() => {
@@ -255,10 +240,7 @@ const VentaForm = ({
     tipoComprobante: usarFiscal ? "factura" : "",
     cliente: usarFiscal ? clienteParaFiscal : null,
   })
-  const comprobanteLetra = usarFiscal ? fiscal.letra : "V"
   const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null
-  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false
-  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null
 
   // Determinar el código AFIP y la letra a mostrar en el badge
   let letraComprobanteMostrar = "V"
@@ -282,16 +264,87 @@ const VentaForm = ({
   })()
 
   const handleChange = manejarCambioFormulario(setFormulario)
-  const handleClienteChange = manejarCambioCliente(setFormulario, clientes)
+
   const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
 
   // Estado para modal selector de clientes
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 
+  // Estado para manejar documento (CUIT/DNI)
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || '',
+    esValido: false
+  })
+
+  // Sincronizar documentoInfo cuando cambie el formulario (por ejemplo, al seleccionar cliente)
+  useEffect(() => {
+    // Si el formulario tiene ven_cuit, usar CUIT
+    if (formulario.ven_cuit) {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: formulario.ven_cuit,
+        esValido: true
+      })
+    }
+    // Si el formulario tiene ven_dni, usar DNI
+    else if (formulario.ven_dni) {
+      setDocumentoInfo({
+        tipo: 'dni',
+        valor: formulario.ven_dni,
+        esValido: true
+      })
+    }
+    // Si no tiene ninguno, mantener el estado actual
+  }, [formulario.ven_cuit, formulario.ven_dni])
+
+  // Función para manejar cambios en el documento
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo)
+    
+    // Actualizar el formulario con el nuevo valor
+    setFormulario(prevForm => ({
+      ...prevForm,
+      cuit: nuevaInfo.valor,
+      ven_cuit: nuevaInfo.tipo === 'cuit' ? nuevaInfo.valor : '',
+      ven_dni: nuevaInfo.tipo === 'dni' ? nuevaInfo.valor : ''
+    }))
+  }
+
   const abrirSelector = () => setSelectorAbierto(true)
   const cerrarSelector = () => setSelectorAbierto(false)
   const onSeleccionarDesdeModal = (cli) => {
     handleClienteSelect(cli)
+    
+    // Lógica de validación y autocompletado del documento cuando se selecciona un cliente
+    if (cli.cuit) {
+      // Limpiar el CUIT de espacios y guiones para validar
+      const cuitLimpio = cli.cuit.replace(/[-\s]/g, '')
+      
+      // Validar si tiene exactamente 11 dígitos (CUIT válido)
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        // Es un CUIT válido: marcar checkbox CUIT y autocompletar
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: cli.cuit,
+          esValido: true
+        })
+      } else {
+        // No es un CUIT válido: marcar checkbox DNI y autocompletar
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: cli.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      // No hay CUIT: limpiar el selector de documento
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: '',
+        esValido: false
+      })
+    }
   }
 
   // Bloquear envío de formulario al presionar Enter en cualquier campo
@@ -319,16 +372,20 @@ const VentaForm = ({
       limpiarBorrador()
 
       // Determinar el tipo de comprobante como string fijo
-      // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "venta"
+      // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "factura_interna"
       const tipoComprobanteSeleccionado =
         comprobantesVenta.find((c) => c.id === comprobanteId) &&
         (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
           ? "factura"
-          : "venta"
-      // Usar el codigo_afip del comprobante como comprobante_id
-      const comprobanteCodigoAfip = comprobantesVenta.find((c) => c.id === comprobanteId)
-        ? comprobantesVenta.find((c) => c.id === comprobanteId).codigo_afip
-        : ""
+          : "factura_interna"
+      
+      // Verificar si requiere emisión ARCA y iniciar estado de espera
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        iniciarEsperaArca()
+      }
+      
+      // HÍBRIDO: Enviar solo el TIPO al backend, no código AFIP específico
+      // El backend ejecutará su propia lógica fiscal autoritaria
 
       // Definir constantes descriptivas para valores por defecto
       // Estado cerrado para ventas
@@ -340,8 +397,8 @@ const VentaForm = ({
       const payload = {
         ven_estado: ESTADO_VENTA_CERRADA, // Estado cerrado
         ven_tipo: TIPO_VENTA, // Tipo de operación
-        tipo_comprobante: tipoComprobanteSeleccionado, // "venta" o "factura"
-        comprobante_id: comprobanteCodigoAfip, // Código AFIP del comprobante
+        tipo_comprobante: tipoComprobanteSeleccionado, // "factura" o "factura_interna"
+        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante, // Número de comprobante
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1, // Sucursal
         ven_fecha: formulario.fecha, // Fecha
@@ -363,18 +420,43 @@ const VentaForm = ({
         permitir_stock_negativo: true, // Permitir stock negativo
       }
 
-      // Agregar CUIT y domicilio si existen
-      if (formulario.cuit) payload.ven_cuit = formulario.cuit
+      // Agregar documento (CUIT/DNI) y domicilio si existen
+      if (documentoInfo.tipo === 'cuit' && documentoInfo.valor) {
+        payload.ven_cuit = documentoInfo.valor
+      } else if (documentoInfo.tipo === 'dni' && documentoInfo.valor) {
+        payload.ven_dni = documentoInfo.valor
+      }
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
 
-      await onSave(payload)
+      const resultado = await onSave(payload)
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+      
       onCancel()
     } catch (error) {
       console.error("Error al guardar venta:", error)
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la venta")
+      }
     }
   }
 
   const handleCancel = () => {
+    limpiarEstadoArca() // Limpiar estado de ARCA al cancelar
     limpiarBorrador()
     onCancel()
   }
@@ -395,9 +477,25 @@ const VentaForm = ({
 
   // Opciones fijas para el dropdown
   const opcionesComprobante = [
-    { value: "venta", label: "Venta", tipo: "venta", letra: "V" },
+    { value: "factura_interna", label: "Factura Interna", tipo: "factura_interna", letra: "I" },
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
+
+  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  useEffect(() => {
+    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
+      if (mostrador) {
+        setFormulario((prev) => ({
+          ...prev,
+          clienteId: mostrador.id,
+          cuit: mostrador.cuit || "",
+          domicilio: mostrador.domicilio || "",
+          plazoId: mostrador.plazoId || mostrador.plazo || "",
+        }))
+      }
+    }
+  }, [clientesConDefecto, formulario.clienteId, setFormulario])
 
   // Renderizado condicional al final
   if (isLoading) {
@@ -438,7 +536,7 @@ const VentaForm = ({
             {letraComprobanteMostrar && (
               <div className="absolute top-6 right-6 z-10">
                 <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
-                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">
+                  <span className="text-2xl font-extrabold font-serif text-slate-900 leading-none">
                     {letraComprobanteMostrar}
                   </span>
                   <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">
@@ -477,7 +575,7 @@ const VentaForm = ({
                     />
                   </svg>
                 </div>
-                {initialData ? (isReadOnly ? "Ver Venta" : "Editar Venta") : "Nueva Venta"}
+                {initialData ? (isReadOnly ? "Ver Factura" : "Editar Factura") : "Nueva Factura"}
               </h3>
 
               {isReadOnly && (
@@ -492,7 +590,7 @@ const VentaForm = ({
                       />
                     </svg>
                     <span className="font-medium">
-                      Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
+                      Este comprobante está cerrado y no puede ser editado. Solo lectura.
                     </span>
                   </div>
                 </div>
@@ -557,19 +655,16 @@ const VentaForm = ({
                   )}
                 </div>
 
-                {/* CUIT */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}</label>
-                  <input
-                    name="cuit"
-                    type="text"
-                    value={formulario.cuit}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required={usarFiscal && fiscal.camposRequeridos.cuit}
-                    readOnly={isReadOnly}
-                  />
-                </div>
+                {/* Selector de Documento (CUIT/DNI) */}
+                <SelectorDocumento
+                  tipoComprobante={fiscal.letra || 'A'}
+                  esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
+                  valorInicial={documentoInfo.valor}
+                  tipoInicial={documentoInfo.tipo}
+                  onChange={handleDocumentoChange}
+                  readOnly={isReadOnly}
+                  className="w-full"
+                />
 
                 {/* Domicilio */}
                 <div className="w-full">
@@ -794,6 +889,17 @@ const VentaForm = ({
         onSeleccionar={onSeleccionarDesdeModal}
         cargando={loadingClientes}
         error={errorClientes}
+      />
+      
+      {/* Overlay de espera de ARCA */}
+      <ArcaEsperaOverlay 
+        estaEsperando={esperandoArca}
+        mensajePersonalizado={
+          tipoComprobante === "factura" 
+            ? "Esperando autorización de AFIP para la factura fiscal..." 
+            : null
+        }
+        mostrarDetalles={true}
       />
     </div>
   )

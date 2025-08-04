@@ -12,10 +12,14 @@ from django.db import transaction
 from django.utils import timezone
 import os
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import JSONParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils.decorators import method_decorator
+from django.http import FileResponse
+from django.conf import settings
+import re
+from difflib import SequenceMatcher
 
 # Create your views here.
 
@@ -77,6 +81,7 @@ class UploadListaPreciosProveedor(APIView):
         excel_file = request.FILES.get('excel_file')
         col_codigo = request.POST.get('col_codigo', 'A').upper()
         col_precio = request.POST.get('col_precio', 'B').upper()
+        col_denominacion = request.POST.get('col_denominacion', 'C').upper()
         fila_inicio = int(request.POST.get('fila_inicio', 2))
 
         if not excel_file:
@@ -94,21 +99,25 @@ class UploadListaPreciosProveedor(APIView):
             to_create = []
             col_codigo_idx = ord(col_codigo) - 65
             col_precio_idx = ord(col_precio) - 65
+            col_denominacion_idx = ord(col_denominacion) - 65
             for i, row in enumerate(sheet.rows()):
                 if i + 1 < fila_inicio:
                     continue
                 try:
                     codigo = row[col_codigo_idx]
                     precio = row[col_precio_idx]
+                    denominacion = row[col_denominacion_idx] if col_denominacion_idx < len(row) else None
                 except IndexError:
                     continue
                 if codigo is not None and precio is not None:
                     try:
                         precio_float = float(str(precio).replace(',', '.').replace('$', '').strip())
+                        denominacion_str = str(denominacion).strip() if denominacion is not None else ''
                         to_create.append(PrecioProveedorExcel(
                             proveedor=proveedor,
                             codigo_producto_excel=str(codigo).strip(),
                             precio=precio_float,
+                            denominacion=denominacion_str,
                             nombre_archivo=excel_file.name
                         ))
                     except Exception as e:
@@ -195,12 +204,14 @@ class PrecioProductoProveedorAPIView(APIView):
                     'origen': 'manual',
                     'precio': precio_manual,
                     'fecha': fecha_manual,
+                    'denominacion': None,  # Los precios manuales no tienen denominación
                 })
             elif precio_excel_val:
                 return Response({
                     'origen': 'excel',
                     'precio': precio_excel_val,
                     'fecha': fecha_excel,
+                    'denominacion': precio_excel.denominacion if precio_excel.denominacion else None,
                 })
             else:
                 return Response({'detail': 'No se encontró precio para ese producto y proveedor.'}, status=404)
@@ -291,17 +302,30 @@ def codigos_lista_proveedor(request, proveedor_id):
     # 2. Obtener el nombre del archivo de ese último registro
     ultimo_nombre_archivo = ultimo_registro.nombre_archivo
 
-    # 3. Devolver todos los códigos asociados a ese nombre de archivo, ignorando la fecha.
+    # 3. Devolver todos los códigos y denominaciones asociados a ese nombre de archivo, ignorando la fecha.
     # Esto soluciona el problema de la zona horaria y respeta la lógica de que
     # la última lista cargada es la única válida.
-    codigos = list(
+    productos = list(
         PrecioProveedorExcel.objects.filter(
             proveedor_id=proveedor_id,
             nombre_archivo=ultimo_nombre_archivo
-        ).values_list('codigo_producto_excel', flat=True)
+        ).values('codigo_producto_excel', 'denominacion')
     )
     
-    return Response({'codigos': codigos})
+    # Formatear la respuesta para mantener compatibilidad
+    codigos = [item['codigo_producto_excel'] for item in productos]
+    productos_con_denominacion = [
+        {
+            'codigo': item['codigo_producto_excel'],
+            'denominacion': item['denominacion'] if item['denominacion'] else None
+        }
+        for item in productos
+    ]
+    
+    return Response({
+        'codigos': codigos,  # Mantener compatibilidad con código existente
+        'productos': productos_con_denominacion  # Nueva estructura con denominación
+    })
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -438,13 +462,14 @@ def editar_producto_con_relaciones(request):
 
 class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get(self, request):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
-        return Response(FerreteriaSerializer(ferreteria).data)
+        return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
 
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()
@@ -452,7 +477,20 @@ class FerreteriaAPIView(APIView):
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
         if not request.user.is_staff:
             return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
-        serializer = FerreteriaSerializer(ferreteria, data=request.data, partial=True)
+        
+        # Manejar archivos subidos
+        data = request.data.copy()
+        if 'logo_empresa' in request.FILES:
+            data['logo_empresa'] = request.FILES['logo_empresa']
+        
+        # Manejar archivos ARCA
+        if 'certificado_arca' in request.FILES:
+            data['certificado_arca'] = request.FILES['certificado_arca']
+        
+        if 'clave_privada_arca' in request.FILES:
+            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
+        
+        serializer = FerreteriaSerializer(ferreteria, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -464,3 +502,322 @@ class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = VistaStockProductoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def servir_logo_arca(request):
+    """
+    Endpoint para servir el logo ARCA desde la carpeta media.
+    URL: /api/productos/servir-logo-arca/
+    """
+    try:
+        ruta_logo = os.path.join(settings.MEDIA_ROOT, 'logos', 'logo-arca.jpg')
+        print(f'DEBUG: Intentando servir logo desde: {ruta_logo}')
+        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
+        
+        if not os.path.exists(ruta_logo):
+            print(f'ERROR: Logo ARCA no encontrado en {ruta_logo}')
+            return Response({'detail': 'Logo ARCA no encontrado'}, status=404)
+        
+        print(f'Sirviendo logo desde {ruta_logo}')
+        response = FileResponse(
+            open(ruta_logo, 'rb'),
+            content_type='image/jpeg',
+            headers={
+                'Content-Disposition': 'inline; filename="logo-arca.jpg"',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Cache-Control': 'public, max-age=31536000'
+            }
+        )
+        return response
+    except Exception as e:
+        print(f'ERROR: Error al servir logo: {str(e)}')
+        return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def servir_logo_empresa(request):
+    """
+    Endpoint para servir el logo de empresa desde la base de datos.
+    URL: /api/productos/servir-logo-empresa/
+    """
+    try:
+        # Obtener la configuración de ferretería
+        ferreteria = Ferreteria.objects.first()
+        
+        if not ferreteria or not ferreteria.logo_empresa:
+            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
+        
+        # Obtener la ruta del archivo
+        ruta_logo = ferreteria.logo_empresa.path
+        
+        print(f'DEBUG: Intentando servir logo empresa desde: {ruta_logo}')
+        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
+        
+        if not os.path.exists(ruta_logo):
+            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
+        
+        # Determinar el tipo de contenido basado en la extensión
+        extension = os.path.splitext(ruta_logo)[1].lower()
+        content_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        }
+        content_type = content_type_map.get(extension, 'image/jpeg')
+        
+        print(f'Sirviendo logo empresa desde {ruta_logo}')
+        response = FileResponse(
+            open(ruta_logo, 'rb'),
+            content_type=content_type,
+            headers={
+                'Content-Disposition': f'inline; filename="{os.path.basename(ruta_logo)}"',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Cache-Control': 'public, max-age=31536000'
+            }
+        )
+        return response
+    except Exception as e:
+        print(f'ERROR: Error al servir logo empresa: {str(e)}')
+        return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
+
+class BuscarDenominacionesSimilaresAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        denominacion = request.GET.get('denominacion', '').strip()
+        if not denominacion or len(denominacion) < 3:
+            return Response({
+                'similitud': 0,
+                'productos_similares': [],
+                'sugerencia': 'Denominación demasiado corta para buscar similitudes.'
+            })
+        
+        # Normalizar la denominación de entrada
+        denominacion_normalizada = self.normalizar_denominacion(denominacion)
+        
+        # Obtener todas las denominaciones existentes
+        productos_existentes = Stock.objects.filter(acti='S').values('id', 'codvta', 'codcom', 'deno', 'unidad')
+        
+        productos_similares = []
+        
+        for producto in productos_existentes:
+            if not producto['deno']:
+                continue
+                
+            denominacion_existente = self.normalizar_denominacion(producto['deno'])
+            similitud = self.calcular_similitud(denominacion_normalizada, denominacion_existente)
+            
+            if similitud >= 60:  # Umbral mínimo de similitud
+                productos_similares.append({
+                    'id': producto['id'],
+                    'codigo_venta': producto['codvta'],
+                    'codigo_compra': producto['codcom'],
+                    'denominacion': producto['deno'],
+                    'unidad': producto['unidad'],
+                    'similitud': similitud,
+                    'tipo_similitud': self.determinar_tipo_similitud(denominacion, producto['deno'])
+                })
+        
+        # Ordenar por similitud descendente
+        productos_similares.sort(key=lambda x: x['similitud'], reverse=True)
+        
+        # Limitar a los 5 más similares
+        productos_similares = productos_similares[:5]
+        
+        # Calcular similitud máxima
+        similitud_maxima = productos_similares[0]['similitud'] if productos_similares else 0
+        
+        # Generar sugerencia
+        sugerencia = self.generar_sugerencia(productos_similares, similitud_maxima)
+        
+        return Response({
+            'similitud': similitud_maxima,
+            'productos_similares': productos_similares,
+            'sugerencia': sugerencia
+        })
+    
+    def normalizar_denominacion(self, denominacion):
+        """Normaliza una denominación para comparación"""
+        if not denominacion:
+            return ""
+        
+        # Convertir a minúsculas
+        normalizada = denominacion.lower()
+        
+        # Normalizar espacios múltiples
+        normalizada = ' '.join(normalizada.split())
+        
+        # Normalizar caracteres especiales
+        normalizada = normalizada.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u').replace('ñ', 'n')
+        
+        return normalizada
+    
+    def extraer_componentes(self, denominacion):
+        """Extrae componentes clave de una denominación"""
+        componentes = {
+            'tipo': '',
+            'material': '',
+            'dimensiones': '',
+            'especificaciones': '',
+            'marca': '',
+            'unidad': ''
+        }
+        
+        # Patrones para extraer componentes
+        
+        # Tipo de producto
+        tipos = ['tubo', 'codo', 'curva', 'ramal', 'pila', 'buje', 'portarrej', 'rejilla', 'cupla', 'reduccion', 'sombrerete', 'tapa', 'embudo', 'caño']
+        for tipo in tipos:
+            if tipo in denominacion:
+                componentes['tipo'] = tipo
+                break
+        
+        # Material
+        materiales = ['pvc', 'hierro', 'acero', 'plastico']
+        for material in materiales:
+            if material in denominacion:
+                componentes['material'] = material
+                break
+        
+        # Dimensiones (patrón: números con / o *)
+        dim_pattern = r'(\d+(?:\/\d+|\*\d+|\s*x\s*\d+))'
+        dim_match = re.search(dim_pattern, denominacion)
+        if dim_match:
+            componentes['dimensiones'] = dim_match.group(1)
+        
+        # Especificaciones (patrón: entre paréntesis o CL.)
+        espec_pattern = r'(?:\(([^)]+)\)|CL\.([^)]+)\))'
+        espec_match = re.search(espec_pattern, denominacion)
+        if espec_match:
+            componentes['especificaciones'] = espec_match.group(1) or espec_match.group(2) or ''
+        
+        # Marca
+        marcas = ['fortiflex', 'tuboforte', 'classic', 'tubofor', 'iram', 'jp']
+        for marca in marcas:
+            if marca in denominacion:
+                componentes['marca'] = marca
+                break
+        
+        # Unidad
+        unidades = ['tira', 'uno', 'unid', 'unidad']
+        for unidad in unidades:
+            if unidad in denominacion:
+                componentes['unidad'] = unidad
+                break
+        
+        return componentes
+    
+    def calcular_similitud(self, denominacion1, denominacion2):
+        """Calcula la similitud entre dos denominaciones"""
+        # Normalizar para comparación exacta
+        denom1_norm = self.normalizar_denominacion(denominacion1)
+        denom2_norm = self.normalizar_denominacion(denominacion2)
+        
+        if denom1_norm == denom2_norm:
+            return 100.0
+        
+        comp1 = self.extraer_componentes(denominacion1)
+        comp2 = self.extraer_componentes(denominacion2)
+        
+        similitud = 0
+        total_peso = 0
+        
+        # Tipo de producto (peso alto: 30%)
+        if comp1['tipo'] and comp2['tipo']:
+            if comp1['tipo'] == comp2['tipo']:
+                similitud += 30
+            total_peso += 30
+        
+        # Material (peso alto: 25%)
+        if comp1['material'] and comp2['material']:
+            if comp1['material'] == comp2['material']:
+                similitud += 25
+            total_peso += 25
+        
+        # Marca (peso medio: 20%)
+        if comp1['marca'] and comp2['marca']:
+            if comp1['marca'] == comp2['marca']:
+                similitud += 20
+            total_peso += 20
+        
+        # Dimensiones (peso medio: 15%)
+        if comp1['dimensiones'] and comp2['dimensiones']:
+            if comp1['dimensiones'] == comp2['dimensiones']:
+                similitud += 15
+            total_peso += 15
+        
+        # Unidad (peso bajo: 10%)
+        if comp1['unidad'] and comp2['unidad']:
+            if comp1['unidad'] == comp2['unidad']:
+                similitud += 10
+            total_peso += 10
+        
+        # Si no hay componentes para comparar, usar similitud de texto
+        if total_peso == 0:
+            return self.similitud_texto(denominacion1, denominacion2)
+        
+        return (similitud / total_peso) * 100
+    
+    def similitud_texto(self, texto1, texto2):
+        """Calcula similitud basada en texto usando distancia de Levenshtein"""
+        return SequenceMatcher(None, texto1, texto2).ratio() * 100
+    
+    def determinar_tipo_similitud(self, denominacion1, denominacion2):
+        """Determina el tipo de similitud encontrada"""
+        # Normalizar las denominaciones para comparación exacta
+        denom1_norm = self.normalizar_denominacion(denominacion1)
+        denom2_norm = self.normalizar_denominacion(denominacion2)
+        
+        # Solo es exacta si las denominaciones normalizadas son idénticas
+        if denom1_norm == denom2_norm:
+            return 'exacta'
+        
+        comp1 = self.extraer_componentes(denominacion1)
+        comp2 = self.extraer_componentes(denominacion2)
+        
+        # Verificar si solo cambian las dimensiones
+        if (comp1['tipo'] == comp2['tipo'] and 
+            comp1['material'] == comp2['material'] and 
+            comp1['marca'] == comp2['marca'] and 
+            comp1['dimensiones'] != comp2['dimensiones']):
+            return 'dimensiones'
+        
+        # Verificar si solo cambian las especificaciones
+        if (comp1['tipo'] == comp2['tipo'] and 
+            comp1['material'] == comp2['material'] and 
+            comp1['marca'] == comp2['marca'] and 
+            comp1['especificaciones'] != comp2['especificaciones']):
+            return 'especificaciones'
+        
+        return 'parcial'
+    
+    def generar_sugerencia(self, productos_similares, similitud_maxima):
+        """Genera una sugerencia basada en los productos similares encontrados"""
+        if not productos_similares:
+            return "No se encontraron productos similares."
+        
+        # Verificar si hay coincidencia exacta real (denominaciones idénticas)
+        hay_coincidencia_exacta = any(
+            producto['tipo_similitud'] == 'exacta' 
+            for producto in productos_similares
+        )
+        
+        if hay_coincidencia_exacta:
+            return "Se encontró una coincidencia exacta. Te sugerimos verificar si es el mismo producto."
+        
+        if similitud_maxima >= 80:
+            return "Se encontró un producto muy similar. Te sugerimos verificar si es el mismo producto con pequeñas diferencias."
+        
+        if similitud_maxima >= 60:
+            return "Se encontraron productos similares. Te sugerimos revisar si alguno corresponde al producto que estás creando."
+        
+        return "Se encontraron productos con cierta similitud. Te sugerimos revisar antes de continuar."

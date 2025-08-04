@@ -19,13 +19,7 @@ class Ferreteria(models.Model):
         help_text='Condición fiscal del negocio/emisor para comprobantes.'
     )
     
-    # Configuración Fiscal
-    alicuota_iva_por_defecto = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        default=21.00,
-        help_text='Alícuota de IVA por defecto para productos'
-    )
+
     
     # Punto de Venta (ARCA)
     punto_venta_arca = models.CharField(
@@ -49,6 +43,21 @@ class Ferreteria(models.Model):
         blank=True,
         null=True,
         help_text='Razón social de la empresa'
+    )
+    
+    # Ingresos Brutos
+    ingresos_brutos = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text='Ingresos Brutos de la empresa'
+    )
+    
+    # Inicio de Actividad
+    inicio_actividad = models.DateField(
+        blank=True,
+        null=True,
+        help_text='Fecha de inicio de actividad'
     )
     
     # Logo de la Empresa
@@ -108,8 +117,262 @@ class Ferreteria(models.Model):
 
     # Configuración de Impresión
     
+    # Configuración ARCA - Integración con servicios web de AFIP
+    certificado_arca = models.FileField(
+        upload_to='arca/ferreteria_1/certificados/',
+        blank=True,
+        null=True,
+        help_text='Certificado ARCA (.pem) para autenticación con servicios web de AFIP'
+    )
+    
+    clave_privada_arca = models.FileField(
+        upload_to='arca/ferreteria_1/claves_privadas/',
+        blank=True,
+        null=True,
+        help_text='Clave privada ARCA (.pem) para firma digital de comprobantes'
+    )
+    
+    MODO_ARCA_CHOICES = [
+        ('HOM', 'Homologación'),
+        ('PROD', 'Producción'),
+    ]
+    modo_arca = models.CharField(
+        max_length=4,
+        choices=MODO_ARCA_CHOICES,
+        default='HOM',
+        help_text='Modo de operación ARCA (Homologación para pruebas, Producción para uso real)'
+    )
+    
+    url_wsaa_arca = models.URLField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='URL del servicio WSAA de ARCA (se configura automáticamente según modo)'
+    )
+    
+    url_wsfev1_arca = models.URLField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='URL del servicio WSFEv1 de ARCA (se configura automáticamente según modo)'
+    )
+    
+    arca_habilitado = models.BooleanField(
+        default=False,
+        help_text='Activar/desactivar la emisión automática de comprobantes ARCA'
+    )
+    
+    # Estado de configuración ARCA
+    arca_configurado = models.BooleanField(
+        default=False,
+        help_text='Indica si la configuración ARCA está completa y válida'
+    )
+    
+    # Fecha de última validación ARCA
+    arca_ultima_validacion = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text='Fecha y hora de la última validación exitosa de la configuración ARCA'
+    )
+    
+    # Mensaje de error de configuración ARCA
+    arca_error_configuracion = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Mensaje de error si la configuración ARCA no es válida'
+    )
+    
     def __str__(self):
         return self.nombre
+    
+    def get_configuracion_arca_urls(self):
+        """
+        Retorna las URLs de configuración ARCA según el modo seleccionado.
+        """
+        if self.modo_arca == 'PROD':
+            return {
+                'wsaa': 'https://wsaa.afip.gov.ar/ws/services/LoginCms?WSDL',
+                'wsfev1': 'https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL'
+            }
+        else:  # HOM (Homologación)
+            return {
+                'wsaa': 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms?WSDL',
+                'wsfev1': 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL'
+            }
+    
+    def validar_configuracion_arca(self):
+        """
+        Valida que la configuración ARCA esté completa y sea correcta.
+        Retorna (es_valido, mensaje_error)
+        """
+        errores = []
+        
+        # Verificar que los archivos estén presentes
+        if not self.certificado_arca:
+            errores.append("Certificado ARCA no está configurado")
+        
+        if not self.clave_privada_arca:
+            errores.append("Clave privada ARCA no está configurada")
+        
+        # Verificar datos fiscales requeridos
+        if not self.cuit_cuil:
+            errores.append("CUIT/CUIL no está configurado")
+        
+        if not self.razon_social:
+            errores.append("Razón social no está configurada")
+        
+        if not self.punto_venta_arca:
+            errores.append("Punto de venta ARCA no está configurado")
+        
+        # Verificar que el CUIT tenga formato válido (11 dígitos)
+        if self.cuit_cuil and len(str(self.cuit_cuil).replace('-', '').replace(' ', '')) != 11:
+            errores.append("CUIT debe tener 11 dígitos")
+        
+        if errores:
+            self.arca_configurado = False
+            self.arca_error_configuracion = "; ".join(errores)
+            return False, self.arca_error_configuracion
+        
+        # Si no hay errores, marcar como configurado
+        self.arca_configurado = True
+        self.arca_error_configuracion = ""
+        return True, "Configuración ARCA válida"
+    
+    def get_ruta_tokens_arca(self):
+        """
+        Retorna la ruta donde se almacenarán los tokens ARCA para esta ferretería.
+        """
+        import os
+        from django.conf import settings
+        
+        # Crear directorio si no existe
+        ruta_base = os.path.join(settings.MEDIA_ROOT, 'arca', 'tokens', f'ferreteria_{self.id}')
+        os.makedirs(ruta_base, exist_ok=True)
+        
+        return ruta_base
+    
+    def get_ruta_certificados_arca(self):
+        """
+        Retorna la ruta donde se almacenan los certificados ARCA para esta ferretería.
+        """
+        import os
+        from django.conf import settings
+        
+        # Crear directorio si no existe
+        ruta_base = os.path.join(settings.MEDIA_ROOT, 'arca', 'certificados', f'ferreteria_{self.id}')
+        os.makedirs(ruta_base, exist_ok=True)
+        
+        return ruta_base
+    
+    def save(self, *args, **kwargs):
+        """
+        Método save que renombra automáticamente los archivos ARCA a nombres estándar.
+        """
+        # Verificar si hay archivos nuevos
+        is_new = self.pk is None
+        
+        if not is_new:
+            try:
+                old_instance = Ferreteria.objects.get(pk=self.pk)
+                certificado_nuevo = (
+                    self.certificado_arca != old_instance.certificado_arca and 
+                    self.certificado_arca is not None
+                )
+                clave_privada_nueva = (
+                    self.clave_privada_arca != old_instance.clave_privada_arca and 
+                    self.clave_privada_arca is not None
+                )
+            except Ferreteria.DoesNotExist:
+                certificado_nuevo = self.certificado_arca is not None
+                clave_privada_nueva = self.clave_privada_arca is not None
+        else:
+            certificado_nuevo = self.certificado_arca is not None
+            clave_privada_nueva = self.clave_privada_arca is not None
+        
+        # Guardar primero para obtener el ID
+        super().save(*args, **kwargs)
+        
+        # Renombrar archivos si son nuevos
+        if certificado_nuevo or clave_privada_nueva:
+            self._renombrar_archivos_estandar()
+    
+    def _renombrar_archivos_estandar(self):
+        """
+        Renombra los archivos ARCA a nombres estándar con reemplazo directo.
+        """
+        import os
+        import shutil
+        from django.conf import settings
+        
+        # Crear directorios si no existen
+        base_dir = os.path.join(settings.MEDIA_ROOT, 'arca', f'ferreteria_{self.id}')
+        certificados_dir = os.path.join(base_dir, 'certificados')
+        claves_dir = os.path.join(base_dir, 'claves_privadas')
+        
+        os.makedirs(certificados_dir, exist_ok=True)
+        os.makedirs(claves_dir, exist_ok=True)
+        
+        # Procesar certificado
+        if self.certificado_arca and os.path.exists(self.certificado_arca.path):
+            destino_certificado = os.path.join(certificados_dir, 'certificado.pem')
+            
+            # ELIMINAR archivo anterior si existe (reemplazo directo)
+            if os.path.exists(destino_certificado):
+                os.remove(destino_certificado)
+                print(f"Archivo anterior eliminado: {destino_certificado}")
+            
+            # Mover archivo nuevo a nombre estándar
+            shutil.move(self.certificado_arca.path, destino_certificado)
+            
+            # Actualizar referencia en el modelo
+            self.certificado_arca.name = f'arca/ferreteria_{self.id}/certificados/certificado.pem'
+            
+            # LIMPIAR cualquier archivo duplicado restante
+            for archivo in os.listdir(certificados_dir):
+                if archivo != 'certificado.pem':
+                    archivo_path = os.path.join(certificados_dir, archivo)
+                    os.remove(archivo_path)
+                    print(f"Archivo duplicado eliminado: {archivo}")
+            
+            print(f"✅ Certificado reemplazado: {destino_certificado}")
+        
+        # Procesar clave privada
+        if self.clave_privada_arca and os.path.exists(self.clave_privada_arca.path):
+            destino_clave = os.path.join(claves_dir, 'clave_privada.pem')
+            
+            # ELIMINAR archivo anterior si existe (reemplazo directo)
+            if os.path.exists(destino_clave):
+                os.remove(destino_clave)
+                print(f"Archivo anterior eliminado: {destino_clave}")
+            
+            # Mover archivo nuevo a nombre estándar
+            shutil.move(self.clave_privada_arca.path, destino_clave)
+            
+            # Actualizar referencia en el modelo
+            self.clave_privada_arca.name = f'arca/ferreteria_{self.id}/claves_privadas/clave_privada.pem'
+            
+            # LIMPIAR cualquier archivo duplicado restante
+            for archivo in os.listdir(claves_dir):
+                if archivo != 'clave_privada.pem':
+                    archivo_path = os.path.join(claves_dir, archivo)
+                    os.remove(archivo_path)
+                    print(f"Archivo duplicado eliminado: {archivo}")
+            
+            print(f"✅ Clave privada reemplazada: {destino_clave}")
+        
+        # Guardar cambios en la BD (sin llamar save() para evitar bucle)
+        from django.db import connection
+        with connection.cursor() as cursor:
+            if self.certificado_arca:
+                cursor.execute(
+                    "UPDATE productos_ferreteria SET certificado_arca = %s WHERE id = %s",
+                    [self.certificado_arca.name, self.id]
+                )
+            if self.clave_privada_arca:
+                cursor.execute(
+                    "UPDATE productos_ferreteria SET clave_privada_arca = %s WHERE id = %s",
+                    [self.clave_privada_arca.name, self.id]
+                )
 
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100)
@@ -246,6 +509,7 @@ class PrecioProveedorExcel(models.Model):
     proveedor = models.ForeignKey('Proveedor', on_delete=models.CASCADE, related_name='precios_excel')
     codigo_producto_excel = models.CharField(max_length=100, db_index=True)
     precio = models.DecimalField(max_digits=15, decimal_places=2)
+    denominacion = models.CharField(max_length=200, blank=True, null=True, help_text='Denominación del producto desde Excel')
     fecha_carga = models.DateTimeField(auto_now_add=True)
     nombre_archivo = models.CharField(max_length=255)
 
@@ -281,6 +545,8 @@ class VistaStockProducto(models.Model):
     cantidad_minima = models.IntegerField(null=True, blank=True)
     stock_total = models.DecimalField(max_digits=15, decimal_places=2)
     necesita_reposicion = models.IntegerField()
+    proveedor_razon = models.CharField(max_length=50, null=True, blank=True)
+    proveedor_fantasia = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         managed = False  # Importante: Django no debe crear/alterar la vista

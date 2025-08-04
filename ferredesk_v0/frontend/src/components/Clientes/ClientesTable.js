@@ -115,7 +115,7 @@ const ClientesTable = ({
       <React.Fragment key={cli.id}>
         {/* Fila principal */}
         <tr
-          className="hover:bg-slate-50 transition-colors cursor-pointer"
+          className="hover:bg-slate-100 transition-colors cursor-pointer"
           onClick={() => setExpandedClientId(expandedClientId === cli.id ? null : cli.id)}
         >
           {columnas.map((col) => {

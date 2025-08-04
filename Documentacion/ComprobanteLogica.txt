@@ -1,0 +1,449 @@
+DOCUMENTACIÓN: REFACTORIZACIÓN DE LÓGICA DE COMPROBANTES
+================================================================
+
+OBJETIVO GENERAL:
+================
+Eliminar completamente los hardcodeos en la asignación de comprobantes y crear un sistema dinámico, 
+flexible y mantenible que pueda manejar cualquier tipo de comprobante sin modificaciones de código.
+
+ESTADO ACTUAL DEL SISTEMA:
+==========================
+
+Comprobantes en Base de Datos:
+-----------------------------
+[FACTURAS CON LÓGICA FISCAL - Requieren letra A/B/C según situación IVA]
+- ID 1:  Factura A        (001) - tipo: "factura"  - letra: "A"
+- ID 4:  Factura B        (006) - tipo: "factura"  - letra: "B" 
+- ID 7:  Factura C        (011) - tipo: "factura"  - letra: "C"
+
+[NOTAS DE DÉBITO CON LÓGICA FISCAL]
+- ID 2:  Nota Débito A    (003) - tipo: "nota_debito" - letra: "A"
+- ID 5:  Nota Débito B    (007) - tipo: "nota_debito" - letra: "B"
+- ID 8:  Nota Débito C    (012) - tipo: "nota_debito" - letra: "C"
+
+[NOTAS DE CRÉDITO CON LÓGICA FISCAL]
+- ID 3:  Nota Crédito A   (002) - tipo: "nota_credito" - letra: "A"
+- ID 6:  Nota Crédito B   (008) - tipo: "nota_credito" - letra: "B"
+- ID 9:  Nota Crédito C   (013) - tipo: "nota_credito" - letra: "C"
+
+[COMPROBANTES SIN LÓGICA FISCAL - Un solo comprobante por tipo]
+- ID 13: Presupuesto      (9997) - tipo: "presupuesto"          - letra: "P"
+- ID 14: Nota Crédito Int (9998) - tipo: "nota_credito_interna" - letra: "NC"
+- ID 15: Factura Interna  (9999) - tipo: "factura_interna"     - letra: "I"
+
+Problemas Actuales:
+------------------
+1. BACKEND - ferreapps/ventas/utils.py línea 53:
+   - Hardcodeo: if tipo_comprobante == 'recibo': letra_objetivo = 'X'
+
+2. BACKEND - ferreapps/ventas/views.py líneas 188-223:
+   - Hardcodeo: if tipo_comprobante == 'nota_credito' and comprobante_id_enviado:
+   - Hardcodeo: elif tipo_comprobante == 'presupuesto': busca código '9997'
+   - Hardcodeo: elif tipo_comprobante == 'venta': busca código '9999'
+
+3. FRONTEND - VentaForm.js líneas 150-165:
+   - Busca tipo "venta" que ya no existe
+   - Textos "Nueva Venta" en lugar de "Nueva Factura"
+
+4. FRONTEND - PresupuestosManager.js líneas 261, 722:
+   - Textos "Nueva Venta" en lugar de "Nueva Factura"
+
+CAMBIOS A REALIZAR:
+==================
+
+1. REFACTORIZACIÓN DE BACKEND
+=============================
+
+A) Archivo: ferreapps/ventas/utils.py
+------------------------------------
+
+CAMBIO 1: Función asignar_comprobante() completamente refactorizada
+------------------------------------------------------------------
+ANTES (líneas 26-78):
+- Lógica hardcodeada para 'recibo' → 'X'
+- Código duplicado para construir respuesta
+- Validaciones básicas
+
+DESPUÉS:
+- Nueva función principal: asignar_comprobante(tipo_comprobante, situacion_iva_cliente)
+- Nueva función auxiliar: _aplicar_logica_fiscal(comprobantes, tipo_comprobante, situacion_iva_cliente)  
+- Nueva función auxiliar: _construir_respuesta_comprobante(comprobante)
+
+LÓGICA NUEVA:
+1. Filtrar comprobantes activos por tipo
+2. Si hay UN SOLO comprobante del tipo → devolverlo directamente (sin lógica fiscal)
+3. Si hay MÚLTIPLES comprobantes del tipo → aplicar lógica fiscal para letra A/B/C
+4. Validaciones robustas con mensajes de error descriptivos
+
+CAMBIO 2: Función get_requisitos_por_letra() ampliada
+----------------------------------------------------
+ANTES (líneas 80-115):
+- Solo maneja letras A, B, C, X, V
+
+DESPUÉS:
+- Maneja todas las letras: A, B, C, P, I, NC
+- Estructura de datos centralizada (diccionario requisitos_por_letra)
+- Requisitos por defecto para letras no definidas
+
+B) Archivo: ferreapps/ventas/views.py
+------------------------------------
+
+CAMBIO 3: Eliminación completa de lógica hardcodeada en create()
+---------------------------------------------------------------
+ANTES (líneas 188-223):
+- Múltiples if/elif con búsquedas hardcodeadas por código AFIP
+- Construcción manual de diccionarios de comprobante
+- Lógica especial para cada tipo
+
+DESPUÉS (reemplazar líneas 188-223):
+- Una sola llamada a asignar_comprobante() para todos los casos
+- Manejo especial solo cuando frontend envía comprobante_id específico
+- Uso de función auxiliar _construir_respuesta_comprobante()
+
+CAMBIO 4: Actualización en convertir_a_venta()
+----------------------------------------------
+ANTES (línea 291):
+- comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
+
+DESPUÉS:
+- Mantener igual, pero ahora funcionará con la nueva lógica sin hardcodeos
+
+2. REFACTORIZACIÓN DE FRONTEND
+==============================
+
+A) Archivo: components/Presupuestos y Ventas/VentaForm.js
+---------------------------------------------------------
+
+CAMBIO 5: Actualización de búsqueda de comprobante
+--------------------------------------------------
+ANTES (líneas 150-165):
+- Busca tipo "venta" que ya no existe
+- Fallback básico
+
+DESPUÉS:
+- Buscar tipo "factura_interna" como primera opción
+- Fallback a cualquier tipo que contenga "factura"
+- Mejor manejo de errores
+
+CAMBIO 6: Actualización de textos de usuario
+--------------------------------------------
+ANTES (línea 479):
+- "Nueva Venta", "Editar Venta", "Ver Venta"
+
+DESPUÉS:
+- "Nueva Factura", "Editar Factura", "Ver Factura"
+
+B) Archivo: components/Presupuestos y Ventas/PresupuestosManager.js
+------------------------------------------------------------------
+
+CAMBIO 7: Actualización de textos de usuario
+--------------------------------------------
+ANTES (líneas 261, 722):
+- "Nueva Venta"
+
+DESPUÉS:
+- "Nueva Factura"
+
+3. CONFIGURACIÓN DE DATOS
+=========================
+
+CAMBIO 8: Validación de datos en base de datos
+----------------------------------------------
+VERIFICAR que el comprobante ID 15 tenga:
+- codigo_afip: "9999"
+- nombre: "Factura Interna" (o similar)
+- tipo: "factura_interna"
+- letra: "I"
+- activo: true
+
+FLUJO COMPLETO DE DATOS - NUEVO SISTEMA:
+========================================
+
+1. INTERACCIÓN DEL USUARIO EN FRONTEND
+======================================
+
+Usuario accede a: Nueva Factura
+-------------------------------
+1. Usuario hace clic en "Nueva Factura" en PresupuestosManager
+2. Se abre VentaForm.js en una nueva pestaña
+3. VentaForm busca comprobantes de tipo "factura_interna"
+4. Si encuentra, setTipoComprobante("factura_interna")
+5. Si no encuentra, busca cualquier tipo que contenga "factura"
+
+Usuario llena el formulario:
+---------------------------
+- Cliente: Obligatorio (puede usar selector modal)
+- Productos: Agrega items via ItemsGrid
+- Datos fiscales: Automáticos según cliente seleccionado
+- Comprobante: Ya preseleccionado como "factura_interna"
+
+2. ENVÍO DE DATOS AL BACKEND
+============================
+
+Payload JSON enviado a /api/ventas/:
+------------------------------------
+{
+  "tipo_comprobante": "factura_interna",    // ← CLAVE: tipo enviado desde frontend
+  "ven_idcli": 123,
+  "ven_punto": 1,
+  "ven_sucursal": 1,
+  "ven_idvdo": 1,
+  "ven_idpla": 1,
+  "fecha": "2025-01-01",
+  "items": [
+    {
+      "vdi_idsto": 456,
+      "vdi_idpro": 789,
+      "vdi_cantidad": 2.00,
+      "vdi_costo": 100.00,
+      "vdi_margen": 25.00,
+      "vdi_bonifica": 0.00,
+      "vdi_idaliiva": 1
+    }
+  ],
+  "bonificacionGeneral": 0.0,
+  "descu1": 0.0,
+  "descu2": 0.0,
+  "descu3": 0.0
+}
+
+3. PROCESAMIENTO EN BACKEND
+============================
+
+VentaViewSet.create() recibe la petición:
+-----------------------------------------
+
+PASO 1: Validación de items
+---------------------------
+- Verifica que items no esté vacío
+- Aplica bonificación general a items sin bonificación particular
+
+PASO 2: Gestión de stock (si no es presupuesto)
+-----------------------------------------------
+- Para cada item con vdi_idsto y vdi_idpro
+- Verifica existencia de StockProve
+- Valida stock disponible vs cantidad solicitada
+- Actualiza stock si es válido
+
+PASO 3: Obtención de datos del cliente
+--------------------------------------
+- cliente_id = data.get('ven_idcli')
+- cliente = Cliente.objects.filter(id=cliente_id).first()
+- tipo_iva_cliente = cliente.iva.nombre.strip().lower()
+
+PASO 4: Asignación de comprobante (NUEVA LÓGICA)
+------------------------------------------------
+comprobante_id_enviado = data.get('comprobante_id')
+
+if comprobante_id_enviado:
+    # Caso especial: frontend envía comprobante específico
+    comprobante_obj = Comprobante.objects.filter(
+        codigo_afip=comprobante_id_enviado, 
+        activo=True
+    ).first()
+    comprobante = _construir_respuesta_comprobante(comprobante_obj)
+else:
+    # Caso normal: lógica automática
+    comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+
+PASO 5: Llamada a asignar_comprobante()
+---------------------------------------
+asignar_comprobante("factura_interna", "responsable_inscripto")
+
+Dentro de asignar_comprobante():
+1. comprobantes = Comprobante.objects.filter(activo=True, tipo="factura_interna")
+2. Resultado: [Comprobante ID 15 - Factura Interna - letra I]
+3. comprobantes.count() == 1 → No requiere lógica fiscal
+4. Devuelve directamente el comprobante ID 15
+
+PASO 6: Generación de número correlativo
+----------------------------------------
+- Busca última venta con mismo punto de venta y código AFIP
+- Genera nuevo_numero = ultima.ven_numero + 1
+- Maneja colisiones con reintentos
+
+PASO 7: Creación del registro
+-----------------------------
+- Crea registro en tabla VENTA con comprobante_id = "9999"
+- Crea registros en VENTA_DETAITEM para cada item
+- Los totales se calculan automáticamente via vistas SQL
+
+4. RESPUESTA AL FRONTEND
+========================
+
+Backend devuelve:
+-----------------
+{
+  "ven_id": 123,
+  "ven_numero": 42,
+  "comprobante_letra": "I",
+  "comprobante_nombre": "Factura Interna", 
+  "comprobante_codigo_afip": "9999",
+  "stock_actualizado": [...],
+  ...resto de datos de la venta
+}
+
+Frontend procesa:
+-----------------
+- Muestra mensaje de éxito
+- Actualiza la lista de ventas/facturas
+- Cierra el formulario o permite crear otra
+
+5. CONSULTA DE DATOS (LISTA DE FACTURAS)
+=========================================
+
+Cuando usuario ve lista de ventas:
+----------------------------------
+1. Frontend llama GET /api/ventas/
+2. Backend usa VentaCalculada (vista SQL) que incluye todos los cálculos
+3. Vista JOIN con tabla COMPROBANTES para obtener datos del comprobante
+4. Frontend recibe datos completos incluyendo:
+   - comprobante_tipo: "factura_interna"
+   - comprobante_letra: "I" 
+   - comprobante_nombre: "Factura Interna"
+   - ven_total: (calculado automáticamente)
+
+CASOS DE USO ESPECÍFICOS:
+========================
+
+CASO 1: Factura con lógica fiscal
+---------------------------------
+Usuario selecciona tipo: "factura"
+Cliente: Responsable Inscripto
+Emisor: Responsable Inscripto
+→ asignar_comprobante("factura", "responsable_inscripto")
+→ Múltiples comprobantes tipo "factura" → Aplica lógica fiscal
+→ Emisor RI + Cliente (excepto consumidor final) = Letra A
+→ Emisor RI + Cliente consumidor final = Letra B
+→ Devuelve Factura A (código 001)
+
+CASO 2: Factura Interna
+-----------------------
+Usuario selecciona tipo: "factura_interna"
+Cliente: Cualquiera
+→ asignar_comprobante("factura_interna", "cualquier_tipo")
+→ Un solo comprobante tipo "factura_interna" → Sin lógica fiscal
+→ Devuelve Factura Interna (código 9999, letra I)
+
+CASO 3: Presupuesto
+-------------------
+Usuario selecciona tipo: "presupuesto"
+Cliente: Cualquiera
+→ asignar_comprobante("presupuesto", "cualquier_tipo")
+→ Un solo comprobante tipo "presupuesto" → Sin lógica fiscal  
+→ Devuelve Presupuesto (código 9997, letra P)
+
+CASO 4: Nota de Crédito con comprobante específico
+--------------------------------------------------
+Usuario selecciona nota de crédito para Factura A específica
+Frontend envía: comprobante_id = "002"
+→ Backend busca comprobante con código "002"
+→ Devuelve Nota de Crédito A directamente
+
+VENTAJAS DEL NUEVO SISTEMA:
+===========================
+
+1. MANTENIBILIDAD
+-----------------
+- Agregar nuevos tipos de comprobante: Solo insertar en base de datos
+- No requiere cambios de código
+- Lógica centralizada y consistente
+
+2. FLEXIBILIDAD
+---------------
+- Soporte automático para cualquier configuración de comprobantes
+- Lógica fiscal se aplica solo cuando es necesaria
+- Frontend puede enviar tipo específico o dejar que backend decida
+
+3. ROBUSTEZ
+-----------
+- Validaciones exhaustivas con mensajes claros
+- Manejo de errores en cada paso
+- Fallbacks seguros
+
+4. ESCALABILIDAD
+----------------
+- Sistema preparado para múltiples tipos de comprobantes
+- Fácil extensión para nuevos países/regiones fiscales
+- Separación clara de responsabilidades
+
+ARCHIVOS A MODIFICAR:
+====================
+
+BACKEND:
+-------
+1. ferredesk_v0/backend/ferreapps/ventas/utils.py
+   - Refactorizar asignar_comprobante()
+   - Ampliar get_requisitos_por_letra()
+   - Agregar funciones auxiliares
+
+2. ferredesk_v0/backend/ferreapps/ventas/views.py  
+   - Simplificar create() eliminando hardcodeos
+   - Mantener convertir_a_venta() (funciona con nueva lógica)
+
+FRONTEND:
+--------
+3. ferredesk_v0/frontend/src/components/Presupuestos y Ventas/VentaForm.js
+   - Cambiar búsqueda de "venta" a "factura_interna"
+   - Actualizar textos de "Nueva Venta" a "Nueva Factura"
+
+4. ferredesk_v0/frontend/src/components/Presupuestos y Ventas/PresupuestosManager.js
+   - Actualizar textos de "Nueva Venta" a "Nueva Factura"
+
+VALIDACIONES PREVIAS:
+====================
+- Verificar que comprobante ID 15 tenga tipo "factura_interna"
+- Confirmar que no hay referencias hardcodeadas adicionales
+- Probar que ComprobanteDropdown maneja correctamente "factura_interna"
+
+ORDEN DE IMPLEMENTACIÓN SUGERIDO:
+=================================
+1. Refactorizar utils.py (funciones auxiliares)
+2. Simplificar views.py (eliminar hardcodeos)  
+3. Actualizar VentaForm.js (búsqueda y textos)
+4. Actualizar PresupuestosManager.js (textos)
+5. Pruebas exhaustivas de cada tipo de comprobante
+6. Verificación de flujo completo end-to-end 
+
+IMPLEMENTACIÓN COMPLETADA:
+=========================
+
+1. BACKEND:
+----------
+- utils.py:
+  - Refactorizada función asignar_comprobante() para eliminar hardcodeos
+  - Creadas funciones auxiliares _construir_respuesta_comprobante() y _aplicar_logica_fiscal()
+  - Mejorada función get_requisitos_por_letra() con un diccionario centralizado y soporte para más letras
+  - Añadidos requisitos para letras I (Factura Interna) y NC (Nota de Crédito Interna)
+  - Implementada lógica para comprobantes sin letra fiscal
+
+- views.py:
+  - Eliminados todos los hardcodeos en el método create() de VentaViewSet
+  - Reemplazadas las condiciones if/elif por un manejo unificado de comprobantes
+  - Mejorado el manejo de errores con mensajes más descriptivos
+  - Incorporada la importación de _construir_respuesta_comprobante
+
+2. FRONTEND:
+-----------
+- VentaForm.js:
+  - Cambiados textos de "Nueva Venta" a "Nueva Factura"
+  - Actualizada inicialización de comprobante para buscar "factura_interna" en lugar de "venta"
+  - Cambiado tipo por defecto a "Factura Interna"
+  - Modificado handleSubmit para usar tipo "factura_interna" en lugar de "venta"
+  - Actualizadas las opciones del dropdown de comprobantes
+
+- PresupuestosManager.js:
+  - Actualizado texto de botón a "Nueva Factura"
+  - Cambiado el label de la pestaña a "Nueva Factura"
+  - Modificado el mensaje en la conversión a "Factura creada correctamente"
+  - Actualizada etiqueta "Conversión a Factura" en lugar de "Conversión a Venta"
+
+3. RESULTADOS:
+------------
+- Sistema ahora utiliza correctamente "factura_interna" en lugar de "venta"
+- Eliminados todos los hardcodeos detectados en el backend y frontend
+- Implementada una arquitectura flexible y mantenible para manejar cualquier tipo de comprobante
+- Interfaces de usuario actualizadas para reflejar los nuevos términos correctos
+- Documentación completa del sistema en este archivo
+
+NOTA: Se recomienda seguir verificando el sistema con pruebas exhaustivas para cada tipo de comprobante y asegurar que no queden referencias adicionales a "venta" en otros componentes del sistema. 

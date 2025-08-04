@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
-import { useCalculosFormulario, TotalesVisualizacion } from './herramientasforms/useCalculosFormulario';
+import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
+import { useArcaEstado } from '../../utils/useArcaEstado';
+import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
   if (!clienteSeleccionado) return {}; 
@@ -36,54 +39,37 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
 };
 
 // Función de normalización adaptada para Nota de Crédito
-function normalizarItems(itemsSeleccionados, productosDisponibles = []) {
-  if (!Array.isArray(itemsSeleccionados)) return [];
-  return itemsSeleccionados.map((item, idx) => {
-    let prod = item.producto || (productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id))) || null;
-
-    // Para NC, el margen suele ser 0, y el costo es el precio de devolución.
-    const margen = item.margen ?? 0;
-    
-    // El precio base es el que se ingresa en la grilla.
-    let precioBase = item.precio || item.costo || 0;
-
-    if (!precioBase && prod?.costo) {
-      precioBase = parseFloat(prod.costo) * (1 + parseFloat(margen) / 100);
-    }
-
-    // Asegurar que idaliiva sea numérico
-    const idaliivaRaw = prod?.idaliiva ?? item.vdi_idaliiva ?? item.idaliiva ?? null;
-    const idaliiva = (idaliivaRaw && typeof idaliivaRaw === 'object') ? idaliivaRaw.id : idaliivaRaw;
-
-    const costoFinal = item.costo ?? item.vdi_costo ?? precioBase ?? 0;
-
-    const obj = {
-      id: item.id || idx + Date.now(),
-      producto: prod,
-      codigo: item.codigo || prod?.codvta || '',
-      denominacion: item.denominacion || prod?.deno || item.detalle1 || '',
-      unidad: item.unidad || prod?.unidad || '-',
-      cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: precioBase,
-      // CRÍTICO: Asegurar que el costo se mapee desde el precio para genéricos.
-      costo: costoFinal,
-      vdi_costo: costoFinal,
-      margen: margen,
-      bonificacion: item.bonificacion || item.vdi_bonifica || 0,
-      proveedorId: item.proveedorId || item.vdi_idpro || null,
-      idaliiva: idaliiva,
-      precioFinal: item.precioFinal, // Mantener el precio con IVA que calcula la grilla
-    };
-
-    return obj;
+function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
+  return normalizarItems(itemsSeleccionados, { 
+    productos: productosDisponibles, 
+    modo: 'nota_credito', 
+    alicuotasMap 
   });
 }
+
+// Definir constantes descriptivas para tipos y letras de comprobantes
+const TIPO_NOTA_CREDITO = 'nota_credito';
+const TIPO_NOTA_CREDITO_INTERNA = 'nota_credito_interna';
+const LETRAS_FISCALES = ['A', 'B', 'C'];
+const LETRA_INTERNA = 'I';
+
+// Utilidad para determinar el tipo de nota de crédito y la letra según las facturas asociadas
+const obtenerTipoYLetraNotaCredito = (facturasAsociadas) => {
+  if (!facturasAsociadas || facturasAsociadas.length === 0) {
+    return { tipo: TIPO_NOTA_CREDITO, letra: null };
+  }
+  const letras = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
+  if (letras.length > 1) return { tipo: null, letra: null };
+  if (letras[0] === LETRA_INTERNA) return { tipo: TIPO_NOTA_CREDITO_INTERNA, letra: LETRA_INTERNA };
+  if (LETRAS_FISCALES.includes(letras[0])) return { tipo: TIPO_NOTA_CREDITO, letra: letras[0] };
+  return { tipo: TIPO_NOTA_CREDITO, letra: letras[0] };
+};
 
 const NotaCreditoForm = ({
   onSave,
   onCancel,
   clienteSeleccionado,
-  facturasAsociadas,
+  facturasAsociadas = [],
   comprobantes,
   plazos,
   vendedores,
@@ -101,6 +87,16 @@ const NotaCreditoForm = ({
 }) => {
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca
+  } = useArcaEstado()
+  
   const { 
     formulario, 
     setFormulario, 
@@ -111,7 +107,7 @@ const NotaCreditoForm = ({
     datosIniciales: getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos),
     combinarConValoresPorDefecto: (data) => ({ ...getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos), ...data }),
     parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItems(items, productos),
+    normalizarItems: (items) => normalizarItemsNC(items, productos, alicuotasMap),
     validarBorrador: (borradorGuardado) => {
       return borradorGuardado.clienteId === clienteSeleccionado?.id;
     }
@@ -151,24 +147,20 @@ const NotaCreditoForm = ({
     return map;
   }, [productos]);
 
-  // Lógica mejorada para encontrar el comprobante de NC correcto
-  const letraFacturaOriginal = facturasAsociadas?.[0]?.comprobante?.letra;
+  // Lógica mejorada para determinar el tipo de NC automáticamente
+  const { tipo: tipoNotaCredito, letra: letraNotaCredito } = useMemo(() => obtenerTipoYLetraNotaCredito(facturasAsociadas), [facturasAsociadas]);
+
   const comprobanteNC = useMemo(() => {
-    if (!letraFacturaOriginal) {
-      // Fallback a la primera NC que encuentre si no hay facturas de referencia
-      return comprobantes.find(c => c.tipo === 'nota_credito');
-    }
-    // Busca la NC que coincida en tipo 'nota_credito' y letra con la factura original
-    return comprobantes.find(c =>
-      c.tipo === 'nota_credito' && c.letra === letraFacturaOriginal
-    );
-  }, [comprobantes, letraFacturaOriginal]);
+    if (!tipoNotaCredito) return null;
+    // Buscar comprobante que coincida con tipo y letra
+    return comprobantes.find(c => c.tipo === tipoNotaCredito && (letraNotaCredito ? c.letra === letraNotaCredito : true));
+  }, [comprobantes, tipoNotaCredito, letraNotaCredito]);
   
-  const comprobanteIdNC = comprobanteNC?.id || null;
+
   const codigoAfipNC = comprobanteNC?.codigo_afip || '';
   const letraNC = comprobanteNC?.letra || 'X';
 
-  const { datosFiscales, loadingFiscal } = useComprobanteFiscal({
+  useComprobanteFiscal({
     puntoVenta: formulario.puntoVentaId,
     codigoAfip: codigoAfipNC,
     clienteId: formulario.clienteId,
@@ -176,8 +168,31 @@ const NotaCreditoForm = ({
 
   const handleChange = manejarCambioFormulario(setFormulario);
 
+  // Validación de consistencia de letras
+  const validarConsistenciaLetras = () => {
+    if (!facturasAsociadas || facturasAsociadas.length === 0) return true;
+    
+    const letrasFacturas = [...new Set(facturasAsociadas.map(f => f.comprobante?.letra))];
+    
+    if (letrasFacturas.length > 1) {
+      alert(`Error: Todas las facturas asociadas deben tener la misma letra.\n` +
+            `Se encontraron letras: ${letrasFacturas.join(', ')}\n\n` +
+            `Según la normativa argentina, una Nota de Crédito solo puede anular ` +
+            `facturas de una misma letra.`);
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validar consistencia de letras antes de continuar
+    if (!validarConsistenciaLetras()) {
+      return;
+    }
+    
     if (!formulario.clienteId) {
       alert("No se ha seleccionado un cliente.");
       return;
@@ -197,15 +212,21 @@ const NotaCreditoForm = ({
       return;
     }
 
+    // Verificar si requiere emisión ARCA y iniciar estado de espera
+    const tipoComprobanteSeleccionado = comprobanteNC?.tipo || 'nota_credito';
+    if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+      iniciarEsperaArca();
+    }
+
     const payload = {
       // Campos alineados con VentaForm.js para consistencia y robustez
       ven_estado: "CE", // Las NC se crean como 'Cerrado'
       ven_tipo: "Nota de Crédito", // Tipo de operación explícito
       permitir_stock_negativo: true, // CRÍTICO: Permite que la lógica de suma de stock no falle
 
-      // Datos del formulario
-      comprobante_id: codigoAfipNC, // Usar el código AFIP para consistencia con VentaForm
-      tipo_comprobante: 'nota_credito',
+      // NUEVO: Enviar tipo determinado automáticamente
+      tipo_comprobante: tipoComprobanteSeleccionado,
+      comprobante_id: comprobanteNC?.codigo_afip || '',
       comprobantes_asociados_ids: (formulario.facturasAsociadas || []).map(f => f.id || f.ven_id),
       
       ven_fecha: formulario.fecha,
@@ -228,11 +249,35 @@ const NotaCreditoForm = ({
       items: itemsParaGuardar.map((item, idx) => mapearCamposItem(item, idx))
     };
     
-    await onSave(payload, limpiarBorrador);
+    try {
+      const resultado = await onSave(payload, limpiarBorrador);
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+    } catch (error) {
+      console.error("Error al guardar nota de crédito:", error);
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la nota de crédito")
+      }
+    }
   };
 
   const handleCancel = () => {
     if (window.confirm('¿Está seguro de que desea cancelar? Se perderán todos los cambios no guardados.')) {
+      limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
       limpiarBorrador();
       onCancel();
     }
@@ -386,6 +431,17 @@ const NotaCreditoForm = ({
           </div>
         </div>
       </form>
+      
+      {/* Overlay de espera de ARCA */}
+      <ArcaEsperaOverlay 
+        estaEsperando={esperandoArca}
+        mensajePersonalizado={
+          comprobanteNC?.tipo === "nota_credito" 
+            ? "Esperando autorización de AFIP para la nota de crédito fiscal..." 
+            : null
+        }
+        mostrarDetalles={true}
+      />
     </div>
   );
 };

@@ -352,7 +352,7 @@ const NotasManager = () => {
     }
   }
 
-  const totalPaginas = Math.ceil(notas.length / notasPorPagina) || 1
+
   const notasPagina = notas.slice((pagina - 1) * notasPorPagina, pagina * notasPorPagina)
 
   const formatDateForInput = (date) => {

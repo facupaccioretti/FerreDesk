@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'ferreapps.reservas',
     'ferreapps.notas',
     'ferreapps.alertas',
+    'ferreapps.informes',
     'rest_framework',
     'django_filters',
     'django_extensions',
@@ -95,6 +96,44 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',  # Motor de base de datos SQLite
         'NAME': 'db.sqlite3'  # Ruta y nombre del archivo de la base de datos
     }
+}
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'ferredesk_arca': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'ferreapps.ventas': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }
 
 
@@ -151,6 +190,10 @@ if DEBUG:
         os.path.join(BASE_DIR.parent, 'frontend', 'build'),
         os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
     ]
+
+# Configuración de archivos media (subidos por usuarios)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

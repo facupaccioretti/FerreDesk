@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
-import { manejarCambioFormulario, manejarCambioCliente, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -11,98 +11,16 @@ import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-
-const getInitialFormState = (presupuestoOrigen, itemsSeleccionados, sucursales = [], puntosVenta = [], productos = []) => {
-  if (!presupuestoOrigen) return {
-    numero: '',
-    cliente: '',
-    clienteId: '',
-    plazoId: '',
-    vendedorId: '',
-    sucursalId: sucursales[0]?.id || '',
-    puntoVentaId: puntosVenta[0]?.id || '',
-    fecha: new Date().toISOString().split('T')[0],
-    estado: 'Abierto',
-    tipo: 'Venta',
-    items: [],
-    bonificacionGeneral: 0,
-    total: 0,
-    descu1: 0,
-    descu2: 0,
-    descu3: 0,
-    copia: 1,
-    cae: '',
-  };
-  return {
-    numero: presupuestoOrigen.numero || '',
-    cliente: presupuestoOrigen.clienteId || presupuestoOrigen.ven_idcli || '',
-    clienteId: presupuestoOrigen.clienteId || presupuestoOrigen.ven_idcli || '',
-    plazoId: presupuestoOrigen.plazoId || presupuestoOrigen.ven_idpla || '',
-    vendedorId: presupuestoOrigen.vendedorId || presupuestoOrigen.ven_idvdo || '',
-    sucursalId: presupuestoOrigen.sucursalId || presupuestoOrigen.ven_sucursal || sucursales[0]?.id || '',
-    puntoVentaId: presupuestoOrigen.puntoVentaId || presupuestoOrigen.ven_punto || puntosVenta[0]?.id || '',
-    fecha: presupuestoOrigen.fecha || new Date().toISOString().split('T')[0],
-    estado: 'Abierto',
-    tipo: 'Venta',
-    items: normalizarItems(itemsSeleccionados, productos),
-    bonificacionGeneral: presupuestoOrigen.bonificacionGeneral || 0,
-    total: presupuestoOrigen.total || 0,
-    descu1: presupuestoOrigen.descu1 || 0,
-    descu2: presupuestoOrigen.descu2 || 0,
-    descu3: presupuestoOrigen.descu3 || 0,
-    copia: presupuestoOrigen.copia || 1,
-    cae: '',
-  };
-};
-
-// Función para normalizar los ítems seleccionados antes de pasarlos a la grilla
-function normalizarItems(itemsSeleccionados, productosDisponibles = []) {
-  if (!Array.isArray(itemsSeleccionados)) return [];
-  return itemsSeleccionados.map((item, idx) => {
-    let prod = item.producto || productosDisponibles.find(p => p.id === (item.vdi_idsto || item.idSto || item.idsto || item.id));
-
-    // Determinar margen priorizando el de la línea distinta de 0
-    const margen = (item.vdi_margen && Number(item.vdi_margen) !== 0)
-                    ? item.vdi_margen
-                    : (item.margen && Number(item.margen) !== 0)
-                    ? item.margen
-                    : (prod?.margen ?? 0);
-
-    let precioBase = item.precio || item.costo || item.precio_unitario_lista || item.vdi_importe || 0;
-    console.debug('[ConVentaForm/normalizarItems] Márgenes/Precio preliminar', { idx, margen, precioBase });
-    if (!precioBase || Number(precioBase) === 0) {
-      const costo = item.vdi_costo ?? item.costo ?? prod?.costo ?? 0;
-      precioBase = parseFloat(costo) * (1 + parseFloat(margen) / 100);
-    }
-
-    // Asegurar que idaliiva sea numérico
-    const idaliivaRaw = prod?.idaliiva ?? item.vdi_idaliiva ?? null;
-    const idaliiva = (idaliivaRaw && typeof idaliivaRaw === 'object') ? idaliivaRaw.id : idaliivaRaw;
-
-    const obj = {
-      id: item.id || idx + 1,
-      producto: prod,
-      codigo: item.codigo || prod?.codvta || prod?.codigo || '',
-      denominacion: item.denominacion || prod?.deno || prod?.nombre || '',
-      unidad: item.unidad || prod?.unidad || prod?.unidadmedida || '-',
-      cantidad: item.cantidad || item.vdi_cantidad || 1,
-      precio: precioBase,
-      vdi_costo: item.vdi_costo ?? item.costo ?? 0,
-      margen: margen,
-      bonificacion: item.bonificacion || item.vdi_bonifica || 0,
-      proveedorId: item.proveedorId || item.vdi_idpro || item.idPro || '',
-      idaliiva: idaliiva,
-    };
-
-    console.debug('[ConVentaForm/normalizarItems] Ítem normalizado:', { idx, obj });
-    return obj;
-  });
-}
+import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { useArcaEstado } from '../../utils/useArcaEstado';
+import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const ConVentaForm = ({
   onSave,
   onCancel,
   presupuestoOrigen,
+  facturaInternaOrigen,  // NUEVO: para conversiones de facturas internas
+  tipoConversion,        // NUEVO: 'presupuesto_venta' | 'factura_i_factura'
   itemsSeleccionados,
   itemsSeleccionadosIds,
   comprobantes,
@@ -130,7 +48,7 @@ const ConVentaForm = ({
   setAutoSumarDuplicados,
   tabKey
 }) => {
-  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto();
+  const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
   // Estados de carga centralizados
@@ -139,20 +57,15 @@ const ConVentaForm = ({
 
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
 
-  // Usar el hook useFormularioDraft
-  const { 
-    formulario, 
-    setFormulario, 
-    limpiarBorrador, 
-    actualizarItems 
-  } = useFormularioDraft({
-    claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
-    datosIniciales: getInitialFormState(presupuestoOrigen, itemsSeleccionados, sucursales, puntosVenta, productos),
-    combinarConValoresPorDefecto: (data) => ({ ...data }),
-    parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItems(items, productos),
-    validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
-  });
+  // Hook para manejar estado de ARCA
+  const {
+    esperandoArca,
+    iniciarEsperaArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    limpiarEstadoArca,
+    requiereEmisionArca
+  } = useArcaEstado()
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -162,6 +75,101 @@ const ConVentaForm = ({
         }, {})
       : {}
   ), [alicuotasIVA]);
+
+  // Estados sincronizados para comprobante y tipo (igual que VentaForm)
+  const [inicializado, setInicializado] = useState(false);
+  const [tipoComprobante, setTipoComprobante] = useState("");
+  const [comprobanteId, setComprobanteId] = useState("");
+
+  // Efecto de inicialización sincronizada (igual que VentaForm)
+  useEffect(() => {
+    if (!inicializado && comprobantes.length > 0) {
+      const comprobanteFacturaInterna = comprobantes.find((c) => (c.tipo || "").toLowerCase() === "factura_interna");
+      if (comprobanteFacturaInterna) {
+        setTipoComprobante("factura_interna");
+        setComprobanteId(comprobanteFacturaInterna.id);
+      } else {
+        setTipoComprobante(comprobantes[0].tipo?.toLowerCase() || "factura_interna");
+        setComprobanteId(comprobantes[0].id);
+      }
+      setInicializado(true);
+    }
+  }, [inicializado, comprobantes]);
+
+  useEffect(() => {
+    if (comprobantes.length > 0 && !comprobanteId) {
+      setComprobanteId(comprobantes[0].id);
+    }
+  }, [comprobantes, comprobanteId]);
+
+  // Determinar origen de datos
+  const origenDatos = facturaInternaOrigen || presupuestoOrigen;
+  const esConversionFacturaI = tipoConversion === 'factura_i_factura';
+
+  // Usar el hook useFormularioDraft
+  const { 
+    formulario, 
+    setFormulario, 
+    limpiarBorrador, 
+    actualizarItems 
+  } = useFormularioDraft({
+    claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
+    datosIniciales: origenDatos,
+    combinarConValoresPorDefecto: (data) => {
+      if (!data) return {
+        numero: '',
+        cliente: '',
+        clienteId: '',
+        plazoId: '',
+        vendedorId: '',
+        sucursalId: sucursales[0]?.id || '',
+        puntoVentaId: puntosVenta[0]?.id || '',
+        fecha: new Date().toISOString().split('T')[0],
+        estado: 'Abierto',
+        tipo: 'Venta',
+        items: [],
+        bonificacionGeneral: 0,
+        total: 0,
+        descu1: 0,
+        descu2: 0,
+        descu3: 0,
+        copia: 1,
+        cae: '',
+      };
+      return {
+        clienteId: data.ven_idcli ?? data.clienteId ?? '',
+        cuit: data.ven_cuit ?? data.cuit ?? '',
+        domicilio: data.ven_domicilio ?? data.domicilio ?? '',
+        plazoId: data.ven_idpla ?? data.plazoId ?? '',
+        vendedorId: data.ven_idvdo ?? data.vendedorId ?? '',
+        sucursalId: data.ven_sucursal ?? data.sucursalId ?? sucursales?.[0]?.id ?? '',
+        puntoVentaId: data.ven_punto ?? data.puntoVentaId ?? puntosVenta?.[0]?.id ?? '',
+        bonificacionGeneral: data.ven_bonificacion_general ?? data.bonificacionGeneral ?? 0,
+        descu1: data.ven_descu1 ?? data.descu1 ?? 0,
+        descu2: data.ven_descu2 ?? data.descu2 ?? 0,
+        descu3: data.ven_descu3 ?? data.descu3 ?? 0,
+        copia: data.ven_copia ?? data.copia ?? 1,
+        fecha: new Date().toISOString().split('T')[0],
+        estado: 'Abierto',
+        tipo: 'Venta',
+        items: normalizarItems(itemsSeleccionados, { 
+          productos, 
+          alicuotasMap, 
+          modo: 'venta',
+          // NUEVO: metadata para conversión de facturas internas
+          metadataConversion: esConversionFacturaI ? {
+            tipoConversion: 'factura_i_factura',
+            facturaInternaOrigenId: facturaInternaOrigen?.id
+          } : null
+        }),
+        cae: '',
+        total: 0,
+      };
+    },
+    parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
+    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap, modo: 'venta' }),
+    validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
+  });
 
   const { totales } = useCalculosFormulario(formulario.items, {
     bonificacionGeneral: formulario.bonificacionGeneral,
@@ -197,11 +205,11 @@ const ConVentaForm = ({
 
     const faltanProductos = formulario.items.some(it => !it.producto);
     if (faltanProductos) {
-      const itemsNormalizados = normalizarItems(formulario.items, productos);
+      const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
       actualizarItems(itemsNormalizados);
       setGridKey(Date.now());
     }
-  }, [productos]);
+  }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
   const stockProveedores = useMemo(() => {
     const map = {};
@@ -214,27 +222,30 @@ const ConVentaForm = ({
   // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
 
-  // Estado sincronizado para comprobante seleccionado
-  const [comprobanteId, setComprobanteId] = useState('');
-
-  // Estado de tipo de comprobante como string ('venta' | 'factura') y flag de inicialización
-  const [tipoComprobante, setTipoComprobante] = useState('');
-  const [inicializado, setInicializado] = useState(false);
-
   // Efecto de inicialización sincronizada (similar a VentaForm)
   useEffect(() => {
     if (!inicializado && comprobantesVenta.length > 0) {
-      const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
-      if (compFactura) {
-        setTipoComprobante('factura');
-        setComprobanteId(compFactura.id);
+      // Si es conversión de factura interna, forzar tipo 'factura'
+      if (esConversionFacturaI) {
+        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
+        if (compFactura) {
+          setTipoComprobante('factura');
+          setComprobanteId(compFactura.id);
+        }
       } else {
-        setTipoComprobante('venta');
-        setComprobanteId(comprobantesVenta[0].id);
+        // Para presupuestos, lógica normal
+        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
+        if (compFactura) {
+          setTipoComprobante('factura');
+          setComprobanteId(compFactura.id);
+        } else {
+          setTipoComprobante('venta');
+          setComprobanteId(comprobantesVenta[0].id);
+        }
       }
       setInicializado(true);
     }
-  }, [inicializado, comprobantesVenta]);
+  }, [inicializado, comprobantesVenta, esConversionFacturaI]);
 
   // Mantener comprobanteId sincronizado con tipoComprobante (segunda fase)
   useEffect(() => {
@@ -244,9 +255,8 @@ const ConVentaForm = ({
     }
   }, [tipoComprobante, comprobantesVenta, comprobanteId]);
 
-  // Obtener comprobante seleccionado y su código AFIP
-  const compSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-  const comprobanteCodigoAfip = compSeleccionado?.codigo_afip || '';
+  // HÍBRIDO: useComprobanteFiscal solo para preview visual
+  // El backend ejecutará su propia lógica fiscal autoritaria
 
   // Calcular el número de comprobante basado en el último número del comprobante seleccionado
   const numeroComprobante = useMemo(() => {
@@ -294,7 +304,7 @@ const ConVentaForm = ({
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
   const handleChange = manejarCambioFormulario(setFormulario);
-  const handleClienteChange = manejarCambioCliente(setFormulario, clientes);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -311,6 +321,11 @@ const ConVentaForm = ({
       const items = itemsGridRef.current.getItems();
       limpiarBorrador();
 
+      // Verificar si requiere emisión ARCA y iniciar estado de espera
+      if (requiereEmisionArca(tipoComprobante)) {
+        iniciarEsperaArca();
+      }
+
       // Constantes descriptivas
       const ESTADO_VENTA_CERRADA = 'CE';
       const TIPO_VENTA = 'Venta';
@@ -319,7 +334,7 @@ const ConVentaForm = ({
         ven_estado: ESTADO_VENTA_CERRADA,
         ven_tipo: TIPO_VENTA,
         tipo_comprobante: tipoComprobante,
-        comprobante_id: comprobanteCodigoAfip,
+        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
         ven_sucursal: formulario.sucursalId || 1,
         ven_fecha: formulario.fecha,
@@ -338,22 +353,60 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        presupuesto_origen: presupuestoOrigen.id,
-        items_seleccionados: idsSeleccionados,
         permitir_stock_negativo: false
       };
+
+      // NUEVO: Incluir metadata de conversión para facturas internas
+      if (esConversionFacturaI) {
+        payload.factura_interna_origen = facturaInternaOrigen.id;
+        payload.tipo_conversion = 'factura_i_factura';
+        payload.items_seleccionados = idsSeleccionados;
+        payload.conversion_metadata = {
+          items_originales: items.filter(item => item.idOriginal).map(item => ({
+            id_original: item.idOriginal,
+            no_descontar_stock: item.noDescontarStock
+          }))
+        };
+      } else {
+        payload.presupuesto_origen = presupuestoOrigen.id;
+        payload.items_seleccionados = idsSeleccionados;
+      }
 
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
 
-      await onSave(payload, tabKey);
+      // Llamar al endpoint apropiado
+      const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
+      
+      const resultado = await onSave(payload, tabKey, endpoint);
+      
+      // Procesar respuesta de ARCA si corresponde
+      if (requiereEmisionArca(tipoComprobante)) {
+        if (resultado?.arca_emitido && resultado?.cae) {
+          finalizarEsperaArcaExito({
+            cae: resultado.cae,
+            cae_vencimiento: resultado.cae_vencimiento,
+            qr_generado: resultado.qr_generado
+          })
+        } else if (resultado?.error) {
+          finalizarEsperaArcaError(resultado.error)
+        } else {
+          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+        }
+      }
+      
       onCancel();
     } catch (error) {
       console.error('Error al guardar venta:', error);
+      // Si hay error y estaba esperando ARCA, finalizar con error
+      if (esperandoArca) {
+        finalizarEsperaArcaError(error.message || "Error al procesar la conversión")
+      }
     }
   };
 
   const handleCancel = () => {
+    limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
     limpiarBorrador();
     onCancel();
   };
@@ -365,11 +418,21 @@ const ConVentaForm = ({
     }
   };
 
-  // Opciones fijas para el dropdown
-  const opcionesComprobante = [
-    { value: 'venta', label: 'Venta', tipo: 'venta', letra: 'V' },
-    { value: 'factura', label: 'Factura', tipo: 'factura' }
-  ];
+  // Opciones dinámicas para el dropdown según tipo de conversión
+  const opcionesComprobante = useMemo(() => {
+    // Si es conversión de factura interna, solo permitir factura
+    if (esConversionFacturaI) {
+      return [
+        { value: 'factura', label: 'Factura', tipo: 'factura' }
+      ];
+    }
+    
+    // Si es conversión de presupuesto, permitir factura interna y factura (igual que VentaForm)
+    return [
+      { value: 'factura_interna', label: 'Factura Interna', tipo: 'factura_interna', letra: 'I' },
+      { value: 'factura', label: 'Factura', tipo: 'factura' }
+    ];
+  }, [esConversionFacturaI]);
 
   const isReadOnly = formulario.estado === 'Cerrado';
 
@@ -400,10 +463,21 @@ const ConVentaForm = ({
     tipoComprobante: usarFiscal ? 'factura' : '',
     cliente: usarFiscal ? clienteParaFiscal : null
   });
-  const comprobanteLetra = usarFiscal ? fiscal.letra : 'V';
   const comprobanteRequisitos = usarFiscal ? fiscal.requisitos : null;
-  const loadingComprobanteFiscal = usarFiscal ? fiscal.loading : false;
-  const errorComprobanteFiscal = usarFiscal ? fiscal.error : null;
+
+  // Determinar el código AFIP y la letra a mostrar en el badge (igual que VentaForm)
+  let letraComprobanteMostrar = "V";
+  let codigoAfipMostrar = "";
+  if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
+    letraComprobanteMostrar = fiscal.letra || "A";
+    codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
+  } else if (comprobantes.length > 0 && comprobanteId) {
+    const compSeleccionado = comprobantes.find((c) => c.id === comprobanteId);
+    if (compSeleccionado) {
+      letraComprobanteMostrar = compSeleccionado.letra || "V";
+      codigoAfipMostrar = compSeleccionado.codigo_afip || "";
+    }
+  }
 
   // Renderizado condicional centralizado
   if (isLoading) {
@@ -439,11 +513,11 @@ const ConVentaForm = ({
           <div className="px-8 pt-4 pb-6">
 
             {/* Badge de letra del comprobante */}
-            {comprobanteLetra && (
+            {letraComprobanteMostrar && (
               <div className="absolute top-6 right-6 z-10">
                 <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
-                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{comprobanteLetra}</span>
-                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {comprobanteCodigoAfip || ''}</span>
+                  <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{letraComprobanteMostrar}</span>
+                  <span className="text-[9px] font-mono text-slate-600 mt-0.5 font-medium">COD {codigoAfipMostrar}</span>
                 </div>
               </div>
             )}
@@ -468,7 +542,7 @@ const ConVentaForm = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
                   </svg>
                 </div>
-                Conversión de Presupuesto a Venta
+{esConversionFacturaI ? 'Conversión de Factura Interna a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
@@ -646,7 +720,7 @@ const ConVentaForm = ({
                     opciones={opcionesComprobante}
                     value={tipoComprobante}
                     onChange={setTipoComprobante}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || esConversionFacturaI}
                     className="w-full max-w-[120px]"
                   />
                 </div>
@@ -725,6 +799,17 @@ const ConVentaForm = ({
             onSeleccionar={handleClienteSelect}
             cargando={loadingClientes}
             error={errorClientes}
+          />
+          
+          {/* Overlay de espera de ARCA */}
+          <ArcaEsperaOverlay 
+            estaEsperando={esperandoArca}
+            mensajePersonalizado={
+              tipoComprobante === "factura" 
+                ? "Esperando autorización de AFIP para la conversión a factura fiscal..." 
+                : null
+            }
+            mostrarDetalles={true}
           />
         </form>
       </div>

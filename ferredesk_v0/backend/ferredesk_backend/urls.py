@@ -17,6 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, FerreteriaAPIView
 
@@ -33,7 +35,13 @@ urlpatterns = [
     path('api/clientes/', include('ferreapps.clientes.urls')),
     path('api/productos/', include('ferreapps.productos.urls')),
     path('api/', include('ferreapps.ventas.urls')),
-    path('api/', include('ferreapps.urls')),  # Rutas centralizadas para notas, alertas y notificaciones
+    path('api/', include('ferreapps.alertas.urls')),
+    path('api/', include('ferreapps.notas.urls')),
+    path('api/informes/', include('ferreapps.informes.urls')),
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     path('', include('ferreapps.login.urls')),
 ]
+
+# Configuración para servir archivos media en desarrollo
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

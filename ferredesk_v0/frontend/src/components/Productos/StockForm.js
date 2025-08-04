@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { useStockProveAPI, useStockProveEditAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import AsociarCodigoProveedorModal from "./AsociarCodigoProveedorModal"
+import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
+import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
@@ -92,7 +94,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
 
-  const [codigoProveedorDetectado, setCodigoProveedorDetectado] = useState(false)
+  // Hook para detectar denominaciones similares
+  const { sugerencias, isLoading: isLoadingSugerencias, error: errorSugerencias, mostrarTooltip, handleDenominacionBlur, limpiarSugerencias, toggleTooltip } = useDetectorDenominaciones()
+
+  
 
   useEffect(() => {
     if (stock) {
@@ -164,7 +169,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     let detectado = false
     const proveedorId = newStockProve.proveedor
     if (!proveedorId) {
-      setCodigoProveedorDetectado(false)
       return
     }
 
@@ -198,8 +202,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       )
       if (codigoPendiente) detectado = true
     }
-
-    setCodigoProveedorDetectado(detectado)
   }, [newStockProve.proveedor, stockProve, codigosPendientes, codigosPendientesEdicion, form.stock_proveedores, isEdicion, stock?.id])
 
   useEffect(() => {
@@ -825,14 +827,42 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Denominación *</label>
-                  <input
-                    type="text"
-                    name="deno"
-                    value={form.deno}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="deno"
+                      value={form.deno}
+                      onChange={handleChange}
+                      onBlur={modo === "nuevo" ? (e) => handleDenominacionBlur(e.target.value) : undefined}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                    />
+                    {/* Botón de alerta para mostrar sugerencias - SOLO en modo nuevo */}
+                    {modo === "nuevo" && sugerencias && !isLoadingSugerencias && !errorSugerencias && (
+                      <button
+                        type="button"
+                        onClick={toggleTooltip}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-orange-600 hover:text-orange-800 transition-colors"
+                        title="Ver productos similares"
+                        aria-label="Ver productos similares"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                    {/* Tooltip de sugerencias de denominaciones similares - SOLO en modo nuevo */}
+                    {modo === "nuevo" && (sugerencias || isLoadingSugerencias || errorSugerencias) && (
+                      <DenominacionSugerenciasTooltip
+                        sugerencias={sugerencias}
+                        onIgnorar={limpiarSugerencias}
+                        isLoading={isLoadingSugerencias}
+                        error={errorSugerencias}
+                        mostrarTooltip={mostrarTooltip}
+                        onToggle={toggleTooltip}
+                      />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Unidad</label>

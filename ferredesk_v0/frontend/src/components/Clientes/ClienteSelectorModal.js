@@ -1,12 +1,13 @@
 "use client"
 
-import { Fragment, useState, useMemo, useEffect } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import Buscador from "../Buscador"
 
 // Constantes descriptivas para la UI
 const ALTURA_MAX_TABLA = "60vh" // evita que la tabla crezca demasiado
-const MIN_CARACTERES_BUSQUEDA = 1
+const MIN_CARACTERES_BUSQUEDA = 3
+const DEBOUNCE_DELAY = 300 // ms
 
 /**
  * ClienteSelectorModal
@@ -15,7 +16,6 @@ const MIN_CARACTERES_BUSQUEDA = 1
  * Props:
  *  - abierto: boolean            -> controla visibilidad
  *  - onCerrar: function()         -> callback para cerrar sin seleccionar
- *  - clientes: array<object>      -> lista completa de clientes (incluye mostrador id 1)
  *  - onSeleccionar: function(cli) -> callback con el cliente elegido
  *  - cargando: boolean            -> opcional, muestra spinner
  *  - error: string               -> opcional, muestra mensaje de error
@@ -23,43 +23,73 @@ const MIN_CARACTERES_BUSQUEDA = 1
 export default function ClienteSelectorModal({
   abierto = false,
   onCerrar = () => {},
-  clientes = [],
   onSeleccionar = () => {},
   cargando = false,
   error = null,
 }) {
   const [termino, setTermino] = useState("")
   const [filaSeleccionada, setFilaSeleccionada] = useState(null)
+  const [resultadosBusqueda, setResultadosBusqueda] = useState([])
+  const [buscando, setBuscando] = useState(false)
 
   // Reiniciar al abrir
   useEffect(() => {
     if (abierto) {
       setTermino("")
       setFilaSeleccionada(null)
+      setResultadosBusqueda([])
+      setBuscando(false)
     }
   }, [abierto])
 
-  // Filtrado memoizado (solo si hay 2+ caracteres)
-  const clientesFiltrados = useMemo(() => {
-    if (termino.length < MIN_CARACTERES_BUSQUEDA) return []
-    const lower = termino.toLowerCase()
-    return clientes
-      .filter((cli) =>
-        [
-          cli.codigo,
-          cli.razon,
-          cli.nombre,
-          cli.fantasia,
-          cli.cuit,
-          cli.dni,
-          cli.domicilio,
-          cli.iva?.nombre,
-        ]
-          .filter(Boolean)
-          .some((campo) => campo.toString().toLowerCase().includes(lower)),
-      )
-      .sort((a, b) => (a.codigo || 0) - (b.codigo || 0))
-  }, [clientes, termino])
+  // Lógica de búsqueda "debounced" contra la API
+  useEffect(() => {
+    if (termino.length < MIN_CARACTERES_BUSQUEDA) {
+      setResultadosBusqueda([])
+      setBuscando(false)
+      return
+    }
+
+    setBuscando(true)
+    const timerId = setTimeout(() => {
+      // El backend de Django REST Framework puede devolver un objeto con 'results',
+      // por eso accedemos a data.results o data.
+      fetch(`/api/clientes/clientes/?search=${encodeURIComponent(termino)}`)
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error("Error en la respuesta de la API")
+          }
+          return res.json()
+        })
+        .then((data) => {
+          // El ViewSet de DRF usualmente pagina, así que los resultados están en `data.results`.
+          // Si no está paginado, será `data`.
+          console.log("Respuesta de la API:", data) // Debug: ver qué devuelve la API
+          
+          let resultados = data
+          if (data && data.results) {
+            resultados = data.results
+          }
+          
+          // Asegurar que siempre sea un array
+          if (!Array.isArray(resultados)) {
+            console.warn("La API no devolvió un array:", resultados)
+            resultados = []
+          }
+          
+          setResultadosBusqueda(resultados)
+        })
+        .catch((err) => {
+          console.error("Error al buscar clientes:", err)
+          setResultadosBusqueda([]) // Limpiar en caso de error
+        })
+        .finally(() => {
+          setBuscando(false)
+        })
+    }, DEBOUNCE_DELAY)
+
+    return () => clearTimeout(timerId) // Limpieza del temporizador
+  }, [termino])
 
   return (
     <Transition show={abierto} as={Fragment} appear>
@@ -114,26 +144,17 @@ export default function ClienteSelectorModal({
               {/* Buscador */}
               <div className="px-6 py-4">
                 <Buscador
-                  items={clientes}
-                  camposBusqueda={[
-                    "codigo",
-                    "razon",
-                    "nombre",
-                    "fantasia",
-                    "cuit",
-                    "dni",
-                    "domicilio",
-                  ]}
+                  // 'items' ya no es necesario ya que la búsqueda es manejada por el backend
                   deshabilitarDropdown={true}
                   onInputChange={setTermino}
                   obtenerEtiqueta={() => termino}
-                  placeholder="Buscar cliente..."
+                  placeholder="Buscar por código, razón social, CUIT..."
                 />
               </div>
 
               {/* Contenido */}
-              {cargando ? (
-                <div className="p-8 text-center text-slate-500">Cargando clientes…</div>
+              {cargando ? ( // Prop 'cargando' para una carga inicial general si fuese necesario
+                <div className="p-8 text-center text-slate-500">Cargando...</div>
               ) : error ? (
                 <div className="p-8 text-center text-red-600">{error}</div>
               ) : (
@@ -155,17 +176,23 @@ export default function ClienteSelectorModal({
                       {termino.length < MIN_CARACTERES_BUSQUEDA ? (
                         <tr>
                           <td colSpan={8} className="text-center py-6 text-slate-500">
-                            Escribe al menos {MIN_CARACTERES_BUSQUEDA} caracteres para buscar…
+                            Escribe al menos {MIN_CARACTERES_BUSQUEDA} caracteres para buscar...
                           </td>
                         </tr>
-                      ) : clientesFiltrados.length === 0 ? (
+                      ) : buscando ? (
                         <tr>
                           <td colSpan={8} className="text-center py-6 text-slate-500">
-                            Sin resultados
+                            Buscando cliente...
+                          </td>
+                        </tr>
+                      ) : resultadosBusqueda.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="text-center py-6 text-slate-500">
+                            No se encontraron resultados para "{termino}"
                           </td>
                         </tr>
                       ) : (
-                        clientesFiltrados.map((cli) => {
+                        Array.isArray(resultadosBusqueda) ? resultadosBusqueda.map((cli) => {
                           const selected = filaSeleccionada?.id === cli.id
                           return (
                             <tr
@@ -184,7 +211,7 @@ export default function ClienteSelectorModal({
                               <td className="px-3 py-1">{cli.fantasia || "-"}</td>
                               <td className="px-3 py-1">{cli.cuit || cli.dni || "-"}</td>
                               <td className="px-3 py-1">{cli.domicilio || "-"}</td>
-                              <td className="px-3 py-1">{cli.iva?.nombre || "-"}</td>
+                              <td className="px-3 py-1">{cli.iva_nombre || cli.iva?.nombre || "-"}</td>
                               <td className="px-3 py-1">
                                 {`${cli.descu1 || 0} / ${cli.descu2 || 0}`}
                               </td>
@@ -206,7 +233,13 @@ export default function ClienteSelectorModal({
                               </td>
                             </tr>
                           )
-                        })
+                        }) : (
+                          <tr>
+                            <td colSpan={8} className="text-center py-6 text-red-500">
+                              Error: Datos inválidos de la API
+                            </td>
+                          </tr>
+                        )
                       )}
                     </tbody>
                   </table>

@@ -17,7 +17,7 @@ class Command(BaseCommand):
             telefono="011-1234-5678",
             email="ejemplo@gmferreteria.com",
             situacion_iva="RI",
-            alicuota_iva_por_defecto=21.00,
+    
             margen_ganancia_por_defecto=30.00,
             comprobante_por_defecto="FA",
             notificaciones_email=True,

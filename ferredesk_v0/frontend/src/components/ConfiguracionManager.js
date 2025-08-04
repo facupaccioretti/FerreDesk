@@ -135,23 +135,6 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
           </select>
         </FormField>
 
-        <FormField label="Alícuota IVA por Defecto" required>
-          <div className="relative">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={config.alicuota_iva_por_defecto || "21.00"}
-              onChange={(e) => onConfigChange("alicuota_iva_por_defecto", e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 pr-12"
-              placeholder="21.00"
-              disabled={loading}
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-          </div>
-        </FormField>
-
         <FormField label="Punto de Venta (ARCA)">
           <input
             type="text"
@@ -203,8 +186,9 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
               onChange={(e) => {
                 const file = e.target.files[0];
                 if (file) {
-                  // Aquí se manejaría la subida del archivo
-                  // Por ahora solo actualizamos el estado
+                  // Guardar el archivo para subirlo cuando se guarde la configuración
+                  onConfigChange("logo_empresa_file", file);
+                  // Mostrar preview temporal
                   onConfigChange("logo_empresa", URL.createObjectURL(file));
                 }
               }}
@@ -243,26 +227,6 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h5 className="font-medium text-slate-800">Notificaciones por Email</h5>
-                <p className="text-sm text-slate-600">Recibir notificaciones importantes por correo electrónico</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_email")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_email ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_email ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
                 <h5 className="font-medium text-slate-800">Stock Bajo</h5>
                 <p className="text-sm text-slate-600">Notificar cuando los productos tengan stock bajo</p>
               </div>
@@ -276,46 +240,6 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     config.notificaciones_stock_bajo ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h5 className="font-medium text-slate-800">Vencimientos</h5>
-                <p className="text-sm text-slate-600">Notificar vencimientos próximos de productos</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_vencimientos")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_vencimientos ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_vencimientos ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h5 className="font-medium text-slate-800">Pagos Pendientes</h5>
-                <p className="text-sm text-slate-600">Notificar pagos pendientes de clientes</p>
-              </div>
-              <button
-                onClick={() => handleToggle("notificaciones_pagos_pendientes")}
-                disabled={loading}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                  config.notificaciones_pagos_pendientes ? "bg-orange-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.notificaciones_pagos_pendientes ? "translate-x-6" : "translate-x-1"
                   }`}
                 />
               </button>
@@ -377,23 +301,7 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h4 className="text-base font-semibold text-slate-800 mb-4">Configuración de Comprobantes</h4>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField label="Comprobante por Defecto" required>
-              <select
-                value={config.comprobante_por_defecto || "FA"}
-                onChange={(e) => onConfigChange("comprobante_por_defecto", e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                disabled={loading}
-              >
-                <option value="FA">Factura A</option>
-                <option value="FB">Factura B</option>
-                <option value="FC">Factura C</option>
-                <option value="BA">Boleta A</option>
-                <option value="BB">Boleta B</option>
-                <option value="BC">Boleta C</option>
-              </select>
-            </FormField>
-
+          <div className="grid grid-cols-1 gap-6">
             <FormField label="Margen de Ganancia por Defecto" required>
               <div className="relative">
                 <input
@@ -417,10 +325,137 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
   )
 }
 
+// Pestaña: Configuración ARCA
+const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
+  const handleFileChange = (field, file) => {
+    onConfigChange(field, file)
+  }
+
+
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-purple-50 to-purple-100/60 rounded-2xl p-6 border border-purple-200/50">
+        <h3 className="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          Configuración ARCA
+        </h3>
+        <p className="text-purple-700 text-sm mb-6">Configura la integración con servicios web de AFIP para emisión automática de comprobantes</p>
+      </div>
+
+      <div className="space-y-6">
+        {/* Estado de Configuración ARCA - Solo Información */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h4 className="text-base font-semibold text-slate-800 mb-4">Estado de Configuración</h4>
+          
+          <div className="space-y-4">
+            {/* Estado de configuración */}
+            {config.arca_configurado && (
+              <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                <span className="text-sm text-emerald-700">Configuración ARCA válida</span>
+              </div>
+            )}
+
+            {config.arca_error_configuracion && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+                <span className="text-sm text-red-700">{config.arca_error_configuracion}</span>
+              </div>
+            )}
+
+            {/* Información de configuración interna */}
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+              <span className="text-sm text-blue-700">
+                Configuración interna: {config.arca_habilitado ? 'Habilitado' : 'Deshabilitado'} | 
+                Modo: {config.modo_arca === 'PROD' ? 'Producción' : 'Homologación'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Certificados ARCA */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h4 className="text-base font-semibold text-slate-800 mb-4">Certificados ARCA</h4>
+          
+          <div className="space-y-6">
+            <FormField label="Certificado ARCA (.pem)" required>
+              <div className="space-y-3">
+                {config.certificado_arca && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    </svg>
+                    <span className="text-sm text-slate-600">Certificado actual cargado</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pem"
+                  onChange={(e) => handleFileChange("certificado_arca_file", e.target.files[0])}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  disabled={loading}
+                />
+                <p className="text-xs text-slate-500">
+                  Archivo certificado.pem proporcionado por AFIP para autenticación
+                </p>
+              </div>
+            </FormField>
+
+            <FormField label="Clave Privada ARCA (.pem)" required>
+              <div className="space-y-3">
+                {config.clave_privada_arca && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                    </svg>
+                    <span className="text-sm text-slate-600">Clave privada actual cargada</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pem"
+                  onChange={(e) => handleFileChange("clave_privada_arca_file", e.target.files[0])}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  disabled={loading}
+                />
+                <p className="text-xs text-slate-500">
+                  Archivo clave_privada.pem para firma digital de comprobantes
+                </p>
+              </div>
+            </FormField>
+          </div>
+        </div>
+
+        {/* Información Adicional */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h4 className="text-base font-semibold text-blue-800 mb-3">Información Importante</h4>
+          <ul className="text-sm text-blue-700 space-y-2">
+            <li>• Los certificados deben ser archivos .pem válidos proporcionados por AFIP</li>
+            <li>• En modo Homologación se usan servicios de prueba de AFIP</li>
+            <li>• En modo Producción se usan servicios reales de AFIP</li>
+            <li>• Solo usuarios administradores pueden modificar esta configuración</li>
+            <li>• Los archivos se almacenan de forma segura en el servidor</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const ConfiguracionManager = () => {
   const [user, setUser] = useState(null)
   const [config, setConfig] = useState({})
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("negocio")
   const [feedback, setFeedback] = useState("")
@@ -468,14 +503,43 @@ const ConfiguracionManager = () => {
     
     try {
       const csrftoken = getCookie("csrftoken")
+      
+      // Preparar datos para envío
+      const formData = new FormData()
+      
+      // Agregar todos los campos de configuración excepto archivos
+      Object.keys(config).forEach(key => {
+        if (key !== 'logo_empresa_file' && key !== 'logo_empresa' && 
+            key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
+            key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca') {
+          if (config[key] !== null && config[key] !== undefined) {
+            formData.append(key, config[key])
+          }
+        }
+      })
+      
+      // Agregar el archivo del logo si existe
+      if (config.logo_empresa_file) {
+        formData.append('logo_empresa', config.logo_empresa_file)
+      }
+      
+      // Agregar archivos ARCA si existen
+      if (config.certificado_arca_file) {
+        formData.append('certificado_arca', config.certificado_arca_file)
+      }
+      
+      if (config.clave_privada_arca_file) {
+        formData.append('clave_privada_arca', config.clave_privada_arca_file)
+      }
+      
       const res = await fetch("/api/ferreteria/", {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
           "X-CSRFToken": csrftoken,
+          // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
         },
         credentials: "include",
-        body: JSON.stringify(config),
+        body: formData,
       })
       
       if (!res.ok) throw new Error("Error al guardar configuración")
@@ -535,10 +599,25 @@ const ConfiguracionManager = () => {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
         </svg>
       )
+    },
+    {
+      key: "arca",
+      label: "Configuración ARCA",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      )
     }
   ]
 
   const renderActiveTab = () => {
+    // Si el usuario no es admin y está en la pestaña ARCA, redirigir a negocio
+    if (activeTab === "arca" && !user?.is_staff) {
+      setActiveTab("negocio")
+      return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+    }
+    
     switch (activeTab) {
       case "negocio":
         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
@@ -548,6 +627,8 @@ const ConfiguracionManager = () => {
         return <Notificaciones config={config} onConfigChange={handleConfigChange} loading={loading} />
       case "sistema":
         return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "arca":
+        return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
       default:
         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
     }
@@ -574,7 +655,7 @@ const ConfiguracionManager = () => {
           <div className="max-w-6xl mx-auto">
             {/* Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-extrabold text-slate-800 text-center mb-2 drop-shadow-sm">
+              <h1 className="text-3xl font-extrabold text-slate-800 text-center mb-2">
                 Configuración del Sistema
               </h1>
               <p className="text-slate-600 text-center">
@@ -583,18 +664,25 @@ const ConfiguracionManager = () => {
             </div>
 
             {/* Tabs */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-300/60 shadow-xl mb-8">
+            <div className="bg-white/80 rounded-2xl border border-slate-300/60 shadow-xl mb-8">
               <div className="flex flex-wrap gap-2 p-6 border-b border-slate-200">
-                {tabs.map((tab) => (
-                  <TabButton
-                    key={tab.key}
-                    isActive={activeTab === tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    icon={tab.icon}
-                  >
-                    {tab.label}
-                  </TabButton>
-                ))}
+                {tabs.map((tab) => {
+                  // Solo mostrar pestaña ARCA a usuarios admin
+                  if (tab.key === "arca" && !user?.is_staff) {
+                    return null
+                  }
+                  
+                  return (
+                    <TabButton
+                      key={tab.key}
+                      isActive={activeTab === tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      icon={tab.icon}
+                    >
+                      {tab.label}
+                    </TabButton>
+                  )
+                })}
               </div>
 
               {/* Tab Content */}
