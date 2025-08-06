@@ -4,9 +4,15 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
-// Polyfill para Buffer (necesario para @react-pdf/renderer)
+// Polyfills para módulos de Node.js
 import { Buffer } from 'buffer';
+import process from 'process';
+
+// Hacer disponibles globalmente
 window.Buffer = Buffer;
+window.process = process;
+global.Buffer = Buffer;
+global.process = process;
 
 // Verificar si hay una redirección pendiente
 const redirectHeader = document.querySelector('meta[name="x-redirect"]')?.content;

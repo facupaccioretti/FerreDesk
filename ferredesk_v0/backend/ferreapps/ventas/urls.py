@@ -29,12 +29,15 @@ urlpatterns = router.urls + [
     path('convertir-presupuesto/', views.convertir_presupuesto_a_venta, name='convertir_presupuesto_a_venta'),
     path('convertir-factura-interna/', views.convertir_factura_interna_a_fiscal, name='convertir_factura_interna'),
     
-
-    
     # Endpoints del Libro IVA Ventas
     path('libro-iva-ventas/generar/', libro_iva_views.generar_libro_iva_ventas_endpoint, name='generar_libro_iva_ventas'),
     path('libro-iva-ventas/estadisticas/', libro_iva_views.obtener_estadisticas_libro_iva, name='estadisticas_libro_iva'),
     path('libro-iva-ventas/export/pdf/', libro_iva_export_views.exportar_libro_iva_pdf, name='exportar_libro_iva_pdf'),
     path('libro-iva-ventas/export/excel/', libro_iva_export_views.exportar_libro_iva_excel, name='exportar_libro_iva_excel'),
     path('libro-iva-ventas/export/json/', libro_iva_export_views.exportar_libro_iva_json, name='exportar_libro_iva_json'),
+    
+    # Endpoints de Dashboard
+    path('dashboard/productos-mas-vendidos/', views.productos_mas_vendidos, name='productos_mas_vendidos'),
+    path('dashboard/ventas-por-dia/', views.ventas_por_dia, name='ventas_por_dia'),
+    path('dashboard/clientes-mas-ventas/', views.clientes_mas_ventas, name='clientes_mas_ventas'),
 ] 

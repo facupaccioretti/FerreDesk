@@ -14,6 +14,7 @@ import NotasManager from './components/NotasManager';
 import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
 import ConfiguracionManager from './components/ConfiguracionManager';
 import InformesManager from './components/Informes/InformesManager';
+import DashboardsManager from './components/DashboardsManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -26,6 +27,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <Home />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboards"
+          element={
+            <PrivateRoute>
+              <DashboardsManager />
             </PrivateRoute>
           }
         />

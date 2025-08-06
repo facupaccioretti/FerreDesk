@@ -290,6 +290,9 @@ const Home = () => {
     if (label === "Notas") {
       window.open("/dashboard/notas", "_blank")
     }
+    if (label === "Dashboards") {
+      window.open("/dashboards", "_blank")
+    }
 
     // Puedes agregar navegación para otras tarjetas aquí
   }, [])
@@ -337,4 +340,4 @@ const Home = () => {
   )
 }
 
-export default Home;
+export default Home; 
