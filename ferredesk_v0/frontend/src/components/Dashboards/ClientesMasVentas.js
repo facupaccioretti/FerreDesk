@@ -196,21 +196,21 @@ const ClientesMasVentas = () => {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+    <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4 lg:p-6 container container-type-inline">
       {/* Header con controles */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-0 mb-4 lg:mb-6">
         <div>
-          <h3 className="text-xl font-bold text-slate-800">Clientes con Más Ventas</h3>
-          <p className="text-slate-600 text-sm">Análisis de los clientes más importantes</p>
+          <h3 className="@container text-base @container/md:text-lg @container/lg:text-xl font-bold text-slate-800">Clientes con Más Ventas</h3>
+          <p className="@container text-xs @container/md:text-sm text-slate-600">Análisis de los clientes más importantes</p>
         </div>
         
         {/* Selector de métrica */}
         <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-slate-700">Métrica:</span>
+          <span className="@container text-xs @container/md:text-sm font-medium text-slate-700">Métrica:</span>
           <select
             value={tipoMetrica}
             onChange={(e) => setTipoMetrica(e.target.value)}
-            className="px-3 py-1 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="@container px-2 @container/md:px-3 py-1 border border-slate-300 rounded-lg @container text-xs @container/md:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           >
             <option value="total">Por Total Facturado</option>
             <option value="cantidad">Por Cantidad de Productos</option>
@@ -220,38 +220,38 @@ const ClientesMasVentas = () => {
       </div>
 
       {/* Gráfico */}
-      <div className="h-96">
+      <div className="@container h-48 @container/md:h-56 @container/lg:h-64 min-h-[200px] w-full">
         <Bar data={data} options={options} />
       </div>
 
       {/* Información adicional */}
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-purple-50 rounded-lg p-4">
+      <div className="@container mt-4 @container/md:mt-6 grid grid-cols-1 sm:grid-cols-3 @container gap-2 @container/md:gap-4">
+        <div className="bg-purple-50 rounded-lg @container p-2 @container/md:p-4">
           <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="@container p-1 @container/md:p-2 bg-purple-100 rounded-lg">
+              <svg className="@container w-4 h-4 @container/md:w-5 @container/md:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-slate-600">Cliente #1</p>
-              <p className="text-lg font-bold text-slate-800">
+            <div className="@container ml-2 @container/md:ml-3">
+              <p className="@container text-xs @container/md:text-sm font-medium text-slate-600">Cliente #1</p>
+              <p className="@container text-sm @container/md:text-lg font-bold text-slate-800 truncate">
                 {data?.labels[0] || 'N/A'}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-green-50 rounded-lg p-4">
+        <div className="bg-green-50 rounded-lg @container p-2 @container/md:p-4">
           <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="@container p-1 @container/md:p-2 bg-green-100 rounded-lg">
+              <svg className="@container w-4 h-4 @container/md:w-5 @container/md:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
               </svg>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-slate-600">Valor</p>
-              <p className="text-lg font-bold text-slate-800">
+            <div className="@container ml-2 @container/md:ml-3">
+              <p className="@container text-xs @container/md:text-sm font-medium text-slate-600">Valor</p>
+              <p className="@container text-sm @container/md:text-lg font-bold text-slate-800">
                 {tipoMetrica === 'total' 
                   ? `$${data?.datasets[0]?.data[0]?.toLocaleString() || 0}`
                   : `${data?.datasets[0]?.data[0]?.toLocaleString() || 0} ${tipoMetrica === 'cantidad' ? 'productos' : 'compras'}`
@@ -261,16 +261,16 @@ const ClientesMasVentas = () => {
           </div>
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-4">
+        <div className="bg-blue-50 rounded-lg @container p-2 @container/md:p-4">
           <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="@container p-1 @container/md:p-2 bg-blue-100 rounded-lg">
+              <svg className="@container w-4 h-4 @container/md:w-5 @container/md:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-slate-600">Participación</p>
-              <p className="text-lg font-bold text-slate-800">
+            <div className="@container ml-2 @container/md:ml-3">
+              <p className="@container text-xs @container/md:text-sm font-medium text-slate-600">Participación</p>
+              <p className="@container text-sm @container/md:text-lg font-bold text-slate-800">
                 {data?.datasets[0]?.data[0] && data?.datasets[0]?.data[9] 
                   ? `${((data.datasets[0].data[0] / data.datasets[0].data[0]) * 100).toFixed(1)}%`
                   : 'N/A'
