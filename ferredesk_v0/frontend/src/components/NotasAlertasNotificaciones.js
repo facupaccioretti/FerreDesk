@@ -40,7 +40,7 @@ const NotasAlertasNotificaciones = () => {
             ),
             iconColor: '',
             bgColor: 'bg-white',
-            path: '/dashboard/notas'
+            path: '/home/notas'
         },
         {
             label: 'Alertas',
@@ -50,7 +50,7 @@ const NotasAlertasNotificaciones = () => {
             ),
             iconColor: '',
             bgColor: 'bg-white',
-            path: '/dashboard/alertas'
+            path: '/home/alertas'
         },
         {
             label: 'Notificaciones',
@@ -60,7 +60,7 @@ const NotasAlertasNotificaciones = () => {
             ),
             iconColor: '',
             bgColor: 'bg-white',
-            path: '/dashboard/notificaciones'
+            path: '/home/notificaciones'
         }
     ];
 

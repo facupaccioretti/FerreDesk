@@ -47,8 +47,8 @@ export default function Navbar({ user, onLogout }) {
         <div className="flex items-center gap-2 bg-slate-600/50 rounded-2xl p-2 shadow-lg border border-slate-500/40">
           {/* Panel Principal */}
           <a
-            href="/dashboard"
-            onClick={(e) => handleLinkClick(e, "/dashboard")}
+            href="/home"
+            onClick={(e) => handleLinkClick(e, "/home")}
             className="p-3 rounded-xl hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
@@ -72,8 +72,8 @@ export default function Navbar({ user, onLogout }) {
 
           {/* Clientes */}
           <a
-            href="/dashboard/clientes"
-            onClick={(e) => handleLinkClick(e, "/dashboard/clientes")}
+            href="/home/clientes"
+            onClick={(e) => handleLinkClick(e, "/home/clientes")}
             className="p-3 rounded-xl hover:bg-blue-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
@@ -97,8 +97,8 @@ export default function Navbar({ user, onLogout }) {
 
           {/* Presupuestos y Ventas */}
           <a
-            href="/dashboard/presupuestos"
-            onClick={(e) => handleLinkClick(e, "/dashboard/presupuestos")}
+            href="/home/presupuestos"
+            onClick={(e) => handleLinkClick(e, "/home/presupuestos")}
             className="p-3 rounded-xl hover:bg-emerald-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
@@ -122,8 +122,8 @@ export default function Navbar({ user, onLogout }) {
 
           {/* Productos */}
           <a
-            href="/dashboard/productos"
-            onClick={(e) => handleLinkClick(e, "/dashboard/productos")}
+            href="/home/productos"
+            onClick={(e) => handleLinkClick(e, "/home/productos")}
             className="p-3 rounded-xl hover:bg-purple-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
@@ -147,8 +147,8 @@ export default function Navbar({ user, onLogout }) {
 
           {/* Proveedores */}
           <a
-            href="/dashboard/proveedores"
-            onClick={(e) => handleLinkClick(e, "/dashboard/proveedores")}
+            href="/home/proveedores"
+            onClick={(e) => handleLinkClick(e, "/home/proveedores")}
             className="p-3 rounded-xl hover:bg-red-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
             <svg
@@ -199,8 +199,8 @@ export default function Navbar({ user, onLogout }) {
                 </div>
 
                 <a
-                  href="/dashboard/notas"
-                  onClick={(e) => handleLinkClick(e, "/dashboard/notas")}
+                  href="/home/notas"
+                  onClick={(e) => handleLinkClick(e, "/home/notas")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-yellow-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
@@ -221,8 +221,8 @@ export default function Navbar({ user, onLogout }) {
                 </a>
 
                 <a
-                  href="/dashboard/notas-alertas-notificaciones"
-                  onClick={(e) => handleLinkClick(e, "/dashboard/notas-alertas-notificaciones")}
+                  href="/home/notas-alertas-notificaciones"
+                  onClick={(e) => handleLinkClick(e, "/home/notas-alertas-notificaciones")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
@@ -243,7 +243,7 @@ export default function Navbar({ user, onLogout }) {
                 </a>
 
                 <a
-                  href="/dashboard/dashboards"
+                  href="/dashboards"
                   onClick={(e) => handleLinkClick(e, "/dashboards")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
@@ -264,8 +264,8 @@ export default function Navbar({ user, onLogout }) {
                 </a>
 
                 <a
-                  href="/dashboard/informes"
-                  onClick={(e) => handleLinkClick(e, "/dashboard/informes")}
+                  href="/home/informes"
+                  onClick={(e) => handleLinkClick(e, "/home/informes")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
@@ -294,8 +294,8 @@ export default function Navbar({ user, onLogout }) {
       <div className="flex items-center gap-3">
         {/* Configuration Button */}
         <a
-          href="/dashboard/configuracion"
-          onClick={(e) => handleLinkClick(e, "/dashboard/configuracion")}
+          href="/home/configuracion"
+          onClick={(e) => handleLinkClick(e, "/home/configuracion")}
           className="p-2.5 rounded-xl bg-slate-600/50 hover:bg-slate-500/60 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 border border-slate-500/40 cursor-pointer"
         >
           <svg

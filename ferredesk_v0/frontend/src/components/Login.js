@@ -51,7 +51,7 @@ function Login() {
       if (response.ok) {
         console.log('Login exitoso:', data);
         // Redirigir al dashboard después del login exitoso
-        window.location.href = 'http://127.0.0.1:8000/dashboard/';
+        window.location.href = 'http://127.0.0.1:8000/home/';
       } else {
         setError(data.message || 'Error al iniciar sesión');
       }

@@ -32,7 +32,7 @@ const ProductosMasVendidos = () => {
   const fetchProductosMasVendidos = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/productos-mas-vendidos/?tipo=${tipoMetrica}`, {
+      const response = await fetch(`/api/home/productos-mas-vendidos/?tipo=${tipoMetrica}`, {
         credentials: 'include'
       });
       

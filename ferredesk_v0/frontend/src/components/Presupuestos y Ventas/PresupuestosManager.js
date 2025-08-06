@@ -238,7 +238,7 @@
     }
 
     const handleGenerarLibroIva = () => {
-      navigate('/dashboard/libro-iva-ventas')
+      navigate('/home/libro-iva-ventas')
     }
 
 

@@ -36,7 +36,7 @@ const VentasPorDia = () => {
   const fetchVentasPorDia = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/ventas-por-dia/?periodo=${periodo}`, {
+      const response = await fetch(`/api/home/ventas-por-dia/?periodo=${periodo}`, {
         credentials: 'include'
       });
       

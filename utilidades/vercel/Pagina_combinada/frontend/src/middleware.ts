@@ -12,15 +12,15 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Si no hay token ni sessionid y la ruta es /dashboard, redirigir a /login
-  if ((!token && !sessionid) && req.nextUrl.pathname.startsWith('/dashboard')) {
+  // Si no hay token ni sessionid y la ruta es /home, redirigir a /login
+  if ((!token && !sessionid) && req.nextUrl.pathname.startsWith('/home')) {
     const loginUrl = new URL('/login', req.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Si hay token o sessionid y la ruta es /login o /register, redirigir a /dashboard
+  // Si hay token o sessionid y la ruta es /login o /register, redirigir a /home
   if ((token || sessionid) && (req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/register')) {
-    const dashboardUrl = new URL('/dashboard', req.url);
+    const dashboardUrl = new URL('/home', req.url);
     return NextResponse.redirect(dashboardUrl);
   }
 
@@ -29,5 +29,5 @@ export async function middleware(req: NextRequest) {
 
 // Configurar las rutas que deben ser protegidas
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/register']
+  matcher: ['/home/:path*', '/login', '/register']
 } 

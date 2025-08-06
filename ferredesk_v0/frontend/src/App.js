@@ -23,7 +23,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route
-          path="/dashboard"
+          path="/home"
           element={
             <PrivateRoute>
               <Home />
@@ -39,7 +39,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/clientes"
+          path="/home/clientes"
           element={
             <PrivateRoute>
               <ClientesManager />
@@ -47,7 +47,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/productos"
+          path="/home/productos"
           element={
             <PrivateRoute>
               <ProductosManager />
@@ -55,7 +55,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/proveedores"
+          path="/home/proveedores"
           element={
             <PrivateRoute>
               <ProveedoresManager />
@@ -63,7 +63,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/presupuestos"
+          path="/home/presupuestos"
           element={
             <PrivateRoute>
               <PresupuestosManager />
@@ -71,7 +71,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/libro-iva-ventas"
+          path="/home/libro-iva-ventas"
           element={
             <PrivateRoute>
               <LibroIvaVentasManager />
@@ -79,7 +79,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/notas"
+          path="/home/notas"
           element={
             <PrivateRoute>
               <NotasManager />
@@ -87,7 +87,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/notas-alertas-notificaciones"
+          path="/home/notas-alertas-notificaciones"
           element={
             <PrivateRoute>
               <NotasAlertasNotificaciones />
@@ -95,7 +95,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/configuracion"
+          path="/home/configuracion"
           element={
             <PrivateRoute>
               <ConfiguracionManager />
@@ -103,7 +103,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard/informes"
+          path="/home/informes"
           element={
             <PrivateRoute>
               <InformesManager />

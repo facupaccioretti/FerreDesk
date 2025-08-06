@@ -12,8 +12,8 @@ from ferreapps.usuarios.models import CliUsuario
 # Create your views here.
 
 def index(request):
-    # Si el usuario NO está autenticado y está intentando acceder al dashboard, redirigir a la landing
-    if not request.user.is_authenticated and request.path.startswith('/dashboard'):
+    # Si el usuario NO está autenticado y está intentando acceder al home, redirigir a la landing
+    if not request.user.is_authenticated and request.path.startswith('/home'):
         with open(os.path.join(settings.REACT_APP_DIR, 'index.html'), 'rb') as f:
             content = f.read()
             # Insertar el meta tag de redirección después del <head>

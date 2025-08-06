@@ -41,7 +41,7 @@ export default function Login() {
       if (response.ok) {
         console.log('Login exitoso, redirigiendo...');
         // Añadir parámetro de autenticación a la URL
-        window.location.href = '/dashboard?authFlow=true';
+        window.location.href = '/home?authFlow=true';
       } else {
         setError(data.error || data.detail || 'Error al iniciar sesión');
       }

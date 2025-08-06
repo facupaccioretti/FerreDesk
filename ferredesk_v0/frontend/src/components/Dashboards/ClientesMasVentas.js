@@ -32,7 +32,7 @@ const ClientesMasVentas = () => {
   const fetchClientesMasVentas = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/clientes-mas-ventas/?tipo=${tipoMetrica}`, {
+      const response = await fetch(`/api/home/clientes-mas-ventas/?tipo=${tipoMetrica}`, {
         credentials: 'include'
       });
       

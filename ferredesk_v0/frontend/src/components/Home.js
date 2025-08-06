@@ -273,22 +273,22 @@ const Home = () => {
 
   const handleCardClick = useCallback((label) => {
     if (label === "Configuración") {
-      window.open("/dashboard/configuracion", "_blank")
+      window.open("/home/configuracion", "_blank")
     }
     if (label === "Clientes") {
-      window.open("/dashboard/clientes", "_blank")
+      window.open("/home/clientes", "_blank")
     }
     if (label === "Productos") {
-      window.open("/dashboard/productos", "_blank")
+      window.open("/home/productos", "_blank")
     }
     if (label === "Proveedores") {
-      window.open("/dashboard/proveedores", "_blank")
+      window.open("/home/proveedores", "_blank")
     }
     if (label === "Presupuestos y Ventas") {
-      window.open("/dashboard/presupuestos", "_blank")
+      window.open("/home/presupuestos", "_blank")
     }
     if (label === "Notas") {
-      window.open("/dashboard/notas", "_blank")
+      window.open("/home/notas", "_blank")
     }
     if (label === "Dashboards") {
       window.open("/dashboards", "_blank")
