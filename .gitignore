@@ -61,7 +61,11 @@ wheels/
 # Django
 *.log
 local_settings.py
-# db.sqlite3  # Comentado para permitir compartir la base de datos
+db.sqlite3  # Base de datos local - no incluir en repositorio
+*.sqlite3  # Ignorar cualquier archivo SQLite
+ferredesk_v0/backend/db.sqlite3
+backend/db.sqlite3  # Ruta relativa para bases de datos
+utilidades/vercel/Pagina_combinada/backend/db.sqlite3  # Base de datos de utilidades
 db.sqlite3-journal
 media/
 staticfiles/
