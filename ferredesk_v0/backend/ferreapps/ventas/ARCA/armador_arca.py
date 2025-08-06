@@ -42,13 +42,17 @@ def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_v
     # Obtener datos del cliente (solo datos específicos de la venta, sin segunda prioridad)
     cuit_cliente = getattr(venta, 'ven_cuit', None) or ""
     dni_cliente = getattr(venta, 'ven_dni', None) or ""
-    condicion_iva_cliente = getattr(cliente.iva, 'nombre', None) if getattr(cliente, 'iva', None) else "Consumidor Final"
+    
+    # Obtener condición IVA usando ID directamente (más robusto que usar nombres)
+    condicion_iva_id = getattr(cliente.iva, 'id', 5) if getattr(cliente, 'iva', None) else 5  # Default a Consumidor Final (ID 5)
+    condicion_iva_nombre = getattr(cliente.iva, 'nombre', 'Consumidor Final') if getattr(cliente, 'iva', None) else 'Consumidor Final'
 
     # Log de datos del cliente
     logger.info(f"DATOS DEL CLIENTE:")
     logger.info(f"   • CUIT: {cuit_cliente}")
     logger.info(f"   • DNI: {dni_cliente}")
-    logger.info(f"   • Condición IVA: {condicion_iva_cliente}")
+    logger.info(f"   • Condición IVA ID: {condicion_iva_id}")
+    logger.info(f"   • Condición IVA Nombre: {condicion_iva_nombre}")
 
     # Determinar tipo y número de documento según tipo de comprobante
     doc_tipo, doc_numero, tipo_documento_usado = _determinar_tipo_documento(tipo_cbte, cuit_cliente, dni_cliente, cliente.razon)
@@ -58,35 +62,32 @@ def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_v
     logger.info(f"   • Número: {doc_numero}")
     logger.info(f"   • Documento usado: {tipo_documento_usado}")
 
-    # Mapear condición IVA a ID AFIP (códigos oficiales de AFIP)
-    mapeo_condiciones = {
-        'responsable_inscripto': 1,
-        'responsable_no_inscripto': 9,
-        'monotributista': 6,  # Responsable Monotributo
-        'exento': 4,  # Sujeto Exento
-        'consumidor_final': 5,  # Consumidor Final
-        'monotributista_social': 13,  # Monotributo Social
-        'monotributista_trabajador': 16,  # Monotributo Trabajador
-        'pequeno_contribuyente_eventual': 12,
-        'pequeno_contribuyente_eventual_social': 13,
-        'monoimpuesto_social': 15,
-        'pequeno_contribuyente_social': 16,
-        'pequeno_contribuyente': 17
+    # Mapeo directo de IDs de TipoIVA a códigos AFIP
+    # Los IDs de la tabla TIPOSIVA coinciden directamente con los códigos AFIP
+    mapeo_ids_afip = {
+        1: 1,   # Responsable Inscripto
+        4: 4,   # Sujeto Exento
+        5: 5,   # Consumidor Final
+        6: 6,   # Responsable Monotributo
+        13: 13, # Monotributo Social
+        16: 16, # Monotributo Trabajador
+        # Agregar más mapeos según sea necesario
     }
-    condicion_normalizada = condicion_iva_cliente.strip().lower().replace(' ', '_')
-    condicion_iva_id = mapeo_condiciones.get(condicion_normalizada, 5)  # Default a Consumidor Final (ID 5)
+    
+    # Usar el ID directamente, con fallback a Consumidor Final
+    condicion_iva_id_afip = mapeo_ids_afip.get(condicion_iva_id, 5)
     
     logger.info(f"CONDICIÓN IVA MAPEADA:")
-    logger.info(f"   • Original: {condicion_iva_cliente}")
-    logger.info(f"   • Normalizada: {condicion_normalizada}")
-    logger.info(f"   • ID AFIP: {condicion_iva_id}")
+    logger.info(f"   • ID en BD: {condicion_iva_id}")
+    logger.info(f"   • Nombre en BD: {condicion_iva_nombre}")
+    logger.info(f"   • ID AFIP resultante: {condicion_iva_id_afip}")
 
     # Construir el diccionario base
     datos_comprobante = {
         'Concepto': 1,  # Productos (obligatorio siempre)
         'DocTipo': doc_tipo,
         'DocNro': doc_numero,
-        'CondicionIVAReceptorId': condicion_iva_id,
+        'CondicionIVAReceptorId': condicion_iva_id_afip,
         'CbteDesde': venta.ven_numero,
         'CbteHasta': venta.ven_numero,
         'CbteFch': int(venta.ven_fecha.strftime('%Y%m%d')),
@@ -104,7 +105,7 @@ def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_v
         'Compradores': None
     }
     
-    logger.info(f"CondicionIVAReceptorId agregado al payload: {condicion_iva_id}")
+    logger.info(f"CondicionIVAReceptorId agregado al payload: {condicion_iva_id_afip}")
 
     # Construir campos según tipo de comprobante
     _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, alicuotas_venta)
@@ -225,19 +226,32 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
 def _construir_alicuotas_afip(alicuotas_venta):
     """
     Construye el array de alícuotas de IVA para AFIP.
+    Mapea el porcentaje al ID correcto de AFIP.
     """
     def obtener_id_afip_por_porcentaje(porcentaje):
-        mapeo_alicuotas = {0: 1, 10.5: 4, 21: 5, 27: 6}
-        return mapeo_alicuotas.get(float(porcentaje), 5)
+        # Mapeo correcto según AFIP - IDs válidos consultados
+        mapeo_alicuotas = {
+            0: 3,      # 0% → ID 3
+            5: 8,      # 5% → ID 8
+            10.5: 4,   # 10.5% → ID 4
+            21: 5,     # 21% → ID 5
+            27: 6,     # 27% → ID 6
+            2.5: 9     # 2.5% → ID 9
+        }
+        return mapeo_alicuotas.get(float(porcentaje), 5)  # Default a 21% si no se encuentra
     
     alicuotas_afip = []
     for alicuota in alicuotas_venta:
+        # Usar el porcentaje para obtener el ID correcto de AFIP
         id_afip = obtener_id_afip_por_porcentaje(alicuota.ali_porce)
+        
         alicuotas_afip.append({
             'Id': id_afip,
             'BaseImp': float(alicuota.neto_gravado),
             'Importe': float(alicuota.iva_total)
         })
+        
+        logger.info(f"Alícuota agregada: ID {id_afip} ({alicuota.ali_porce}%) - Base: {alicuota.neto_gravado}, Importe: {alicuota.iva_total}")
     
     return alicuotas_afip
 

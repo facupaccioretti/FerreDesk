@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
@@ -93,6 +93,12 @@ const VentaForm = ({
   // Hooks existentes movidos al inicio
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
+  
+  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
+  const handleAceptarResultadoArca = () => {
+    aceptarResultadoArca()
+    onCancel()
+  }
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -102,11 +108,15 @@ const VentaForm = ({
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
+    respuestaArca,
+    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca
+    aceptarResultadoArca,
+    requiereEmisionArca,
+    obtenerMensajePersonalizado
   } = useArcaEstado()
 
   // Función para normalizar items
@@ -270,6 +280,9 @@ const VentaForm = ({
   // Estado para modal selector de clientes
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 
+  // Estado para controlar si es la carga inicial desde formularioDraft
+  const [esCargaInicial, setEsCargaInicial] = useState(true)
+
   // Estado para manejar documento (CUIT/DNI)
   const [documentoInfo, setDocumentoInfo] = useState({
     tipo: 'cuit',
@@ -277,26 +290,63 @@ const VentaForm = ({
     esValido: false
   })
 
+
+
   // Sincronizar documentoInfo cuando cambie el formulario (por ejemplo, al seleccionar cliente)
+  // Solo se ejecuta después de la carga inicial para evitar sobrescribir datos del formularioDraft
   useEffect(() => {
-    // Si el formulario tiene ven_cuit, usar CUIT
-    if (formulario.ven_cuit) {
+    // No sincronizar durante la carga inicial
+    if (esCargaInicial) return
+    
+    // Si el formulario tiene cuit, validar y actualizar documentoInfo
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      // Si no tiene cuit, limpiar el documento
       setDocumentoInfo({
         tipo: 'cuit',
-        valor: formulario.ven_cuit,
-        esValido: true
+        valor: '',
+        esValido: false
       })
     }
-    // Si el formulario tiene ven_dni, usar DNI
-    else if (formulario.ven_dni) {
-      setDocumentoInfo({
-        tipo: 'dni',
-        valor: formulario.ven_dni,
-        esValido: true
-      })
+  }, [formulario.cuit, esCargaInicial])
+
+  // Inicializar documentoInfo cuando se carga desde formularioDraft
+  useEffect(() => {
+    if (esCargaInicial && formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+      // Marcar que ya no es carga inicial
+      setEsCargaInicial(false)
     }
-    // Si no tiene ninguno, mantener el estado actual
-  }, [formulario.ven_cuit, formulario.ven_dni])
+  }, [formulario.cuit, esCargaInicial])
 
   // Función para manejar cambios en el documento
   const handleDocumentoChange = (nuevaInfo) => {
@@ -305,46 +355,28 @@ const VentaForm = ({
     // Actualizar el formulario con el nuevo valor
     setFormulario(prevForm => ({
       ...prevForm,
-      cuit: nuevaInfo.valor,
-      ven_cuit: nuevaInfo.tipo === 'cuit' ? nuevaInfo.valor : '',
-      ven_dni: nuevaInfo.tipo === 'dni' ? nuevaInfo.valor : ''
+      cuit: nuevaInfo.valor
     }))
+    
+    // Marcar que ya no es carga inicial
+    setEsCargaInicial(false)
   }
 
   const abrirSelector = () => setSelectorAbierto(true)
   const cerrarSelector = () => setSelectorAbierto(false)
   const onSeleccionarDesdeModal = (cli) => {
+    console.log('[onSeleccionarDesdeModal] Cliente seleccionado:', cli)
+    
+    // Usar la función estándar para autocompletar todos los campos del cliente
     handleClienteSelect(cli)
     
-    // Lógica de validación y autocompletado del documento cuando se selecciona un cliente
-    if (cli.cuit) {
-      // Limpiar el CUIT de espacios y guiones para validar
-      const cuitLimpio = cli.cuit.replace(/[-\s]/g, '')
-      
-      // Validar si tiene exactamente 11 dígitos (CUIT válido)
-      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
-        // Es un CUIT válido: marcar checkbox CUIT y autocompletar
-        setDocumentoInfo({
-          tipo: 'cuit',
-          valor: cli.cuit,
-          esValido: true
-        })
-      } else {
-        // No es un CUIT válido: marcar checkbox DNI y autocompletar
-        setDocumentoInfo({
-          tipo: 'dni',
-          valor: cli.cuit,
-          esValido: true
-        })
-      }
-    } else {
-      // No hay CUIT: limpiar el selector de documento
-      setDocumentoInfo({
-        tipo: 'cuit',
-        valor: '',
-        esValido: false
-      })
-    }
+    // Usar la función centralizada para validar y actualizar el documento
+    const documentoValidado = validarDocumentoCliente(cli)
+    console.log('[onSeleccionarDesdeModal] Documento validado:', documentoValidado)
+    setDocumentoInfo(documentoValidado)
+    
+    // Marcar que ya no es carga inicial
+    setEsCargaInicial(false)
   }
 
   // Bloquear envío de formulario al presionar Enter en cualquier campo
@@ -436,16 +468,21 @@ const VentaForm = ({
           finalizarEsperaArcaExito({
             cae: resultado.cae,
             cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado
+            qr_generado: resultado.qr_generado,
+            observaciones: resultado.observaciones || []
           })
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else if (resultado?.error) {
           finalizarEsperaArcaError(resultado.error)
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else {
           finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         }
+      } else {
+        // Solo cerrar la pestaña si NO requiere emisión ARCA
+        onCancel()
       }
-      
-      onCancel()
     } catch (error) {
       console.error("Error al guardar venta:", error)
       // Si hay error y estaba esperando ARCA, finalizar con error
@@ -482,8 +519,12 @@ const VentaForm = ({
   ]
 
   // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  // Solo se ejecuta si el formulario está vacío (no hay datos del formularioDraft)
   useEffect(() => {
-    if (!formulario.clienteId && clientesConDefecto.length > 0) {
+    // Verificar si el formulario tiene datos del formularioDraft
+    const tieneDatosDraft = formulario.clienteId || formulario.cuit || formulario.domicilio
+    
+    if (!tieneDatosDraft && clientesConDefecto.length > 0) {
       const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
       if (mostrador) {
         setFormulario((prev) => ({
@@ -493,9 +534,11 @@ const VentaForm = ({
           domicilio: mostrador.domicilio || "",
           plazoId: mostrador.plazoId || mostrador.plazo || "",
         }))
+        // Marcar que ya no es carga inicial
+        setEsCargaInicial(false)
       }
     }
-  }, [clientesConDefecto, formulario.clienteId, setFormulario])
+  }, [clientesConDefecto, formulario.clienteId, formulario.cuit, formulario.domicilio, setFormulario])
 
   // Renderizado condicional al final
   if (isLoading) {
@@ -894,12 +937,11 @@ const VentaForm = ({
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay 
         estaEsperando={esperandoArca}
-        mensajePersonalizado={
-          tipoComprobante === "factura" 
-            ? "Esperando autorización de AFIP para la factura fiscal..." 
-            : null
-        }
+        mensajePersonalizado={obtenerMensajePersonalizado(tipoComprobante)}
         mostrarDetalles={true}
+        respuestaArca={respuestaArca}
+        errorArca={errorArca}
+        onAceptar={handleAceptarResultadoArca}
       />
     </div>
   )

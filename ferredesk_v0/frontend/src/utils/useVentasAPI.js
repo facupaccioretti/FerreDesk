@@ -52,15 +52,22 @@ export function useVentasAPI() {
         credentials: 'include',
         body: JSON.stringify(ventaMapped)
       });
+      
+      // Obtener la respuesta del backend
+      const responseData = await res.json();
+      
       if (!res.ok) {
         let msg = 'Error al crear venta';
         try {
-          const data = await res.json();
-          msg = data.detail || JSON.stringify(data);
+          msg = responseData.detail || JSON.stringify(responseData);
         } catch {}
         throw new Error(msg);
       }
+      
       await fetchVentas();
+      
+      // Devolver la respuesta del backend para que VentaForm pueda procesar los datos de ARCA
+      return responseData;
     } catch (err) {
       setError(err.message);
       throw err;

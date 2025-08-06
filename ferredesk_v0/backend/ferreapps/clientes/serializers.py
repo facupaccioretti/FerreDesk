@@ -67,5 +67,8 @@ class ClienteBusquedaSerializer(serializers.ModelSerializer):
             'iva_nombre',
             'iva',  # 
             'descu1',
-            'descu2'
+            'descu2',
+            'descu3',
+            'vendedor',  # ForeignKey al vendedor
+            'plazo',     # ForeignKey al plazo
         ] 

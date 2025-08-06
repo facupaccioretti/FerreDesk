@@ -271,6 +271,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         response.data['cae'] = resultado_arca.get('cae')
                         response.data['cae_vencimiento'] = resultado_arca.get('cae_vencimiento')
                         response.data['qr_generado'] = resultado_arca.get('qr_generado', False)
+                        response.data['observaciones'] = resultado_arca.get('observaciones', [])
                         
                         logger.info(f"Emisión ARCA exitosa para venta {venta_creada.ven_id}: CAE {resultado_arca.get('cae')}")
                         
@@ -617,7 +618,8 @@ def convertir_presupuesto_a_venta(request):
                         'arca_emitido': True,
                         'cae': resultado_arca.get('cae'),
                         'cae_vencimiento': resultado_arca.get('cae_vencimiento'),
-                        'qr_generado': resultado_arca.get('qr_generado', False)
+                        'qr_generado': resultado_arca.get('qr_generado', False),
+                        'observaciones': resultado_arca.get('observaciones', [])
                     }
                     
                     logger.info(f"Emisión ARCA exitosa para conversión presupuesto {presupuesto.id} a venta {venta.ven_id}: CAE {resultado_arca.get('cae')}")
@@ -942,6 +944,7 @@ def convertir_factura_interna_a_fiscal(request):
                 response_data['cae'] = resultado_arca.get('cae')
                 response_data['cae_vencimiento'] = resultado_arca.get('cae_vencimiento')
                 response_data['qr_generado'] = resultado_arca.get('qr_generado', False)
+                response_data['observaciones'] = resultado_arca.get('observaciones', [])
                 
                 logger.info(f"Emisión ARCA exitosa para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: CAE {resultado_arca.get('cae')}")
                 

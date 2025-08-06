@@ -308,7 +308,8 @@ class FerreDeskARCA:
                 'cae': resultado_arca['cae'],
                 'cae_vencimiento': resultado_arca['cae_fch_vto'],
                 'qr_generado': True,
-                'venta_actualizada': True
+                'venta_actualizada': True,
+                'observaciones': resultado_arca.get('motivos', [])
             }
             
         except Exception as e:

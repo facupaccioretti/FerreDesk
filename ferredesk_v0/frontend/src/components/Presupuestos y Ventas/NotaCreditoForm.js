@@ -87,14 +87,24 @@ const NotaCreditoForm = ({
 }) => {
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
+  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
+  const handleAceptarResultadoArca = () => {
+    aceptarResultadoArca()
+    onCancel()
+  }
+  
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
+    respuestaArca,
+    errorArca,
     iniciarEsperaArca,
     finalizarEsperaArcaExito,
     finalizarEsperaArcaError,
     limpiarEstadoArca,
-    requiereEmisionArca
+    aceptarResultadoArca,
+    requiereEmisionArca,
+    obtenerMensajePersonalizado
   } = useArcaEstado()
   
   const { 
@@ -258,13 +268,20 @@ const NotaCreditoForm = ({
           finalizarEsperaArcaExito({
             cae: resultado.cae,
             cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado
+            qr_generado: resultado.qr_generado,
+            observaciones: resultado.observaciones || []
           })
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else if (resultado?.error) {
           finalizarEsperaArcaError(resultado.error)
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         } else {
           finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
+          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
         }
+      } else {
+        // Solo cerrar la pestaña si NO requiere emisión ARCA
+        onCancel()
       }
     } catch (error) {
       console.error("Error al guardar nota de crédito:", error);
@@ -435,12 +452,11 @@ const NotaCreditoForm = ({
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay 
         estaEsperando={esperandoArca}
-        mensajePersonalizado={
-          comprobanteNC?.tipo === "nota_credito" 
-            ? "Esperando autorización de AFIP para la nota de crédito fiscal..." 
-            : null
-        }
+        mensajePersonalizado={obtenerMensajePersonalizado(comprobanteNC?.tipo)}
         mostrarDetalles={true}
+        respuestaArca={respuestaArca}
+        errorArca={errorArca}
+        onAceptar={handleAceptarResultadoArca}
       />
     </div>
   );
