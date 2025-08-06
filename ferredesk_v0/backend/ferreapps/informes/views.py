@@ -61,10 +61,10 @@ class StockBajoPDFView(APIView):
                 necesita_reposicion=1
             ).order_by('denominacion')
             
-            # Crear el PDF
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4)
-            elements = []
+           
+            buffer = BytesIO() #reserva un espacio en memoria pal pdf
+            doc = SimpleDocTemplate(buffer, pagesize=A4) #aca lo crea
+            elements = [] #aca va agregando el contenido.
             
             # Estilos
             styles = getSampleStyleSheet()
