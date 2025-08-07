@@ -457,6 +457,7 @@ class Stock(models.Model):
         choices=ACTIVO_CHOICES,
         null=False,
         blank=False,
+        default='S',
         db_column='STO_ACTI'
     )
 

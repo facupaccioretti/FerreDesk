@@ -44,6 +44,18 @@ class StockViewSet(viewsets.ModelViewSet):
         'idfam1', 'idfam2', 'idfam3',
     ]
 
+    def get_queryset(self):
+        """
+        Aplicar filtro de productos activos solo si no se especifica acti explícitamente
+        """
+        queryset = Stock.objects.all()
+        
+        # Si no se especifica acti en los parámetros, filtrar por activos por defecto
+        if 'acti' not in self.request.query_params:
+            queryset = queryset.filter(acti='S')
+        
+        return queryset
+
     @transaction.atomic
     def perform_create(self, serializer):
         serializer.save()

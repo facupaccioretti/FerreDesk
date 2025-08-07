@@ -13,7 +13,12 @@ export function useProductosAPI() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      Object.entries(filtros).forEach(([k,v])=>{
+      // Si el filtro no trae 'acti', lo agrego como 'S' por defecto
+      const filtrosConActi = { ...filtros };
+      if (!('acti' in filtrosConActi)) {
+        filtrosConActi.acti = 'S'; // Solo productos activos por defecto
+      }
+      Object.entries(filtrosConActi).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') params.append(k, v);
       });
       const url = params.toString() ? `/api/productos/stock/?${params.toString()}` : '/api/productos/stock/';
@@ -56,11 +61,18 @@ export function useProductosAPI() {
   const updateProducto = useCallback(async (id, updated) => {
     setError(null);
     try {
-      const res = await fetch(`/api/productos/stock/${id}/`, {
+      // Usar el endpoint correcto para editar productos con relaciones
+      const url = `/api/productos/editar-producto-con-relaciones/`;
+      console.log('Actualizando producto:', url, { producto: updated, stock_proveedores: updated.stock_proveedores || [] });
+      
+      const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
         credentials: 'include',
-        body: JSON.stringify(updated)
+        body: JSON.stringify({
+          producto: updated,
+          stock_proveedores: updated.stock_proveedores || []
+        })
       });
       if (!res.ok) {
         let msg = 'Error al editar producto';

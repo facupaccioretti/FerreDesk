@@ -3,7 +3,7 @@ from .views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaVie
 from django.urls import path
 
 router = DefaultRouter()
-router.register(r'stock', StockViewSet)
+router.register(r'stock', StockViewSet, basename='stock')
 router.register(r'proveedores', ProveedorViewSet)
 router.register(r'stockprove', StockProveViewSet)
 router.register(r'familias', FamiliaViewSet)

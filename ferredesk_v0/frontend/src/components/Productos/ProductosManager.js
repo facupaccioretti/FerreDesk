@@ -235,8 +235,22 @@ const ProductosManager = () => {
   window.setEditStatesProductosManager = setEditStates
 
   // Filtrar productos activos/inactivos con memo para rendimiento
-  const productosActivosBase = useMemo(() => productos.filter((p) => p.acti === "S"), [productos])
-  const productosInactivosBase = useMemo(() => productos.filter((p) => p.acti === "N"), [productos])
+  // Si el campo acti no está presente, mostrar todos los productos como activos
+  const productosActivosBase = useMemo(() => {
+    if (productos.length > 0 && productos[0].acti === undefined) {
+      // Si el campo acti no está presente, mostrar todos los productos
+      return productos
+    }
+    return productos.filter((p) => p.acti === "S")
+  }, [productos])
+  
+  const productosInactivosBase = useMemo(() => {
+    if (productos.length > 0 && productos[0].acti === undefined) {
+      // Si el campo acti no está presente, no mostrar productos inactivos
+      return []
+    }
+    return productos.filter((p) => p.acti === "N")
+  }, [productos])
 
   const aplicaFiltrosFamilia = useCallback((prod) => {
     const fam1 = prod.idfam1 && typeof prod.idfam1 === "object" ? prod.idfam1.id : prod.idfam1
@@ -252,19 +266,25 @@ const ProductosManager = () => {
   const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, aplicaFiltrosFamilia])
 
   // ------------------------------------------------------------------
-  // Efecto: recarga productos desde el backend cuando cambian búsqueda o filtros
-  // de familia.  Delegamos la lógica de filtrado al servidor.
+  // Efecto: recarga productos desde el backend cuando cambian búsqueda, filtros o tab activa
   useEffect(() => {
     const timeout = setTimeout(() => {
-      const filtros = {}
-      if (search && search.trim() !== "") filtros.deno__icontains = search.trim()
-      if (fam1Filtro) filtros.idfam1 = fam1Filtro
-      if (fam2Filtro) filtros.idfam2 = fam2Filtro
-      if (fam3Filtro) filtros.idfam3 = fam3Filtro
-      fetchProductos(filtros)
-    }, 300)
-    return () => clearTimeout(timeout)
-  }, [search, fam1Filtro, fam2Filtro, fam3Filtro, fetchProductos])
+      const filtros = {};
+      if (search && search.trim() !== "" && activeTab === "lista") filtros.deno__icontains = search.trim();
+      if (searchInactivos && searchInactivos.trim() !== "" && activeTab === "inactivos") filtros.deno__icontains = searchInactivos.trim();
+      if (fam1Filtro) filtros.idfam1 = fam1Filtro;
+      if (fam2Filtro) filtros.idfam2 = fam2Filtro;
+      if (fam3Filtro) filtros.idfam3 = fam3Filtro;
+      // Filtro por estado según la tab activa
+      if (activeTab === "lista") {
+        filtros.acti = "S";
+      } else if (activeTab === "inactivos") {
+        filtros.acti = "N";
+      }
+      fetchProductos(filtros);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [search, searchInactivos, fam1Filtro, fam2Filtro, fam3Filtro, activeTab, fetchProductos]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">

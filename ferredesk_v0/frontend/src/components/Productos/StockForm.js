@@ -207,20 +207,39 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   useEffect(() => {
     const proveedorId = newStockProve.proveedor
     let codigoProveedor = ""
+    let costoAsociado = null
+    
     if (proveedorId) {
       if (!isEdicion) {
         const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(proveedorId))
         if (codigoPendiente) {
           codigoProveedor = codigoPendiente.codigo_producto_proveedor
+          costoAsociado = codigoPendiente.costo
         }
-      } else if (form && Array.isArray(form.stock_proveedores)) {
-        const relacion = form.stock_proveedores.find((sp) => String(sp.proveedor_id) === String(proveedorId))
-        if (relacion && relacion.codigo_producto_proveedor) {
-          codigoProveedor = relacion.codigo_producto_proveedor
+      } else {
+        // En modo edición, buscar primero en códigos pendientes de edición
+        const codigoPendienteEdicion = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
+        if (codigoPendienteEdicion) {
+          codigoProveedor = codigoPendienteEdicion.codigo_producto_proveedor
+          costoAsociado = codigoPendienteEdicion.costo
+        } else if (form && Array.isArray(form.stock_proveedores)) {
+          // Si no está en pendientes, buscar en stock_proveedores existentes
+          const relacion = form.stock_proveedores.find((sp) => String(sp.proveedor_id) === String(proveedorId))
+          if (relacion && relacion.codigo_producto_proveedor) {
+            codigoProveedor = relacion.codigo_producto_proveedor
+            costoAsociado = relacion.costo
+          }
         }
       }
     }
-    if (proveedorId && codigoProveedor) {
+    
+    // Si hay un costo asociado del código, usarlo directamente
+    if (proveedorId && codigoProveedor && costoAsociado) {
+      setNewStockProve((prev) => ({ ...prev, costo: String(costoAsociado) }))
+      setPermitirCostoManual(true)
+      setCargarPrecioManual(false)
+    } else if (proveedorId && codigoProveedor) {
+      // Si hay código pero no costo, buscar precio en el backend
       fetch(
         `/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,
       )
@@ -246,7 +265,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       setCargarPrecioManual(false)
       setNewStockProve((prev) => ({ ...prev, costo: "" }))
     }
-  }, [newStockProve.proveedor, form, codigosPendientes, isEdicion])
+  }, [newStockProve.proveedor, form, codigosPendientes, codigosPendientesEdicion, isEdicion])
 
   // Handler genérico y corregido para todos los campos del formulario
   const handleChange = (e) => {
