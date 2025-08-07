@@ -14,6 +14,7 @@ Arquitectura corregida basada en los principios de arca_arg:
 
 from .services.FerreDeskARCA import FerreDeskARCA, FerreDeskARCAError
 from .services.WSFEv1Service import WSFEv1Service
+from .services.WSPadronA5Service import WSPadronA5Service
 from .auth.FerreDeskAuth import FerreDeskAuth
 from .auth.TokenManager import TokenManager
 from .utils.ConfigManager import ConfigManager
@@ -26,6 +27,7 @@ __all__ = [
     'FerreDeskARCA',
     'FerreDeskARCAError', 
     'WSFEv1Service',
+    'WSPadronA5Service',
     'FerreDeskAuth',
     'TokenManager',
     'ConfigManager',

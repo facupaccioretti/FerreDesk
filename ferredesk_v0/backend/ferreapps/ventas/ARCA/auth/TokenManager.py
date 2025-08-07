@@ -67,25 +67,26 @@ class TokenManager:
     original de FerreDesk.
     """
     
-    def __init__(self, ferreteria_id: int, modo: str = 'HOM'):
+    def __init__(self, ferreteria_id: int, modo: str = 'HOM', service: str = 'wsfe'):
         """
-        Inicializa el gestor de tokens para una ferretería específica.
+        Inicializa el gestor de tokens para un servicio específico.
         
         Args:
             ferreteria_id: ID de la ferretería
             modo: Modo de operación ('HOM' o 'PROD')
+            service: Nombre del servicio ('wsfe', 'ws_sr_padron_a5', etc.)
         """
         self.ferreteria_id = ferreteria_id
         self.modo = modo
-        self.service = 'wsfe'  # Solo wsfev1
+        self.service = service  # Configurable
         self.ta_data = None
         
         # Configuración
         self.config = ConfigManager(ferreteria_id, modo)
         self.token_config = self.config.get_token_config()
         
-        # Configurar paths
-        self.token_path = self.config.get_token_path()
+        # Configurar paths específicos para el servicio
+        self.token_path = self.config.get_token_path(service)
         
         # Cargar token existente o solicitar uno nuevo
         self.ta_data = self.load_ta()
@@ -131,7 +132,7 @@ class TokenManager:
         """
         from .FerreDeskAuth import FerreDeskAuth
         
-        auth = FerreDeskAuth(self.ferreteria_id, self.modo)
+        auth = FerreDeskAuth(self.ferreteria_id, self.modo, self.service)
         self.ta_data = auth.request_new_ta()
         
         # Crear directorios si no existen

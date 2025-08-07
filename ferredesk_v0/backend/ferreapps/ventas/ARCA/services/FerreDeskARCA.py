@@ -497,4 +497,58 @@ class FerreDeskARCA:
             return self.wsfev1_service.fe_param_get_condicion_iva_receptor(clase_comprobante)
         except Exception as e:
             logger.error(f"Error consultando condiciones de IVA: {e}")
-            raise FerreDeskARCAError(f"Error consultando condiciones de IVA: {e}") 
+            raise FerreDeskARCAError(f"Error consultando condiciones de IVA: {e}")
+    
+    def consultar_padron(self, cuit: str) -> Dict[str, Any]:
+        """
+        Consulta datos de una persona en el padrón de AFIP.
+        
+        Args:
+            cuit: CUIT a consultar
+            
+        Returns:
+            Datos de la persona
+        """
+        try:
+            from .WSPadronA5Service import WSPadronA5Service
+            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
+            return padron_service.get_persona(cuit)
+        except Exception as e:
+            logger.error(f"Error consultando padrón: {e}")
+            raise FerreDeskARCAError(f"Error consultando padrón: {e}")
+    
+    def consultar_padron_list(self, cuit_list: list) -> Dict[str, Any]:
+        """
+        Consulta datos de múltiples personas en el padrón de AFIP.
+        
+        Args:
+            cuit_list: Lista de CUITs a consultar
+            
+        Returns:
+            Datos de las personas
+        """
+        try:
+            from .WSPadronA5Service import WSPadronA5Service
+            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
+            return padron_service.get_persona_list(cuit_list)
+        except Exception as e:
+            logger.error(f"Error consultando lista de padrón: {e}")
+            raise FerreDeskARCAError(f"Error consultando lista de padrón: {e}")
+    
+    def validar_servicio_padron(self) -> Dict[str, Any]:
+        """
+        Valida que el servicio de padrón esté funcionando correctamente.
+        
+        Returns:
+            Resultado de la validación
+        """
+        try:
+            from .WSPadronA5Service import WSPadronA5Service
+            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
+            return padron_service.validate_service()
+        except Exception as e:
+            logger.error(f"Error validando servicio de padrón: {e}")
+            return {
+                'status': 'error',
+                'message': f'Error validando servicio de padrón: {e}'
+            } 

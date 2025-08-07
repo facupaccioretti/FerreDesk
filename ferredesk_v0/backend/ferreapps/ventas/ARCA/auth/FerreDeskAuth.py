@@ -31,17 +31,18 @@ class FerreDeskAuth:
     del modelo Ferreteria como el sistema original.
     """
     
-    def __init__(self, ferreteria_id: int, modo: str = 'HOM'):
+    def __init__(self, ferreteria_id: int, modo: str = 'HOM', service: str = 'wsfe'):
         """
-        Inicializa la autenticación para una ferretería específica.
+        Inicializa la autenticación para un servicio específico.
         
         Args:
             ferreteria_id: ID de la ferretería
             modo: Modo de operación ('HOM' o 'PROD')
+            service: Nombre del servicio ('wsfe', 'ws_sr_padron_a5', etc.)
         """
         self.ferreteria_id = ferreteria_id
         self.modo = modo
-        self.service = 'wsfe'  # Solo wsfev1
+        self.service = service  # Ahora es configurable
         
         # Configuración
         self.config = ConfigManager(ferreteria_id, modo)
@@ -234,7 +235,7 @@ class FerreDeskAuth:
         from .TokenManager import TokenManager
         
         # Usar TokenManager para obtener token válido
-        token_manager = TokenManager(self.ferreteria_id, self.modo)
+        token_manager = TokenManager(self.ferreteria_id, self.modo, self.service)
         token, sign = token_manager.get_token_sign()
         
         return {

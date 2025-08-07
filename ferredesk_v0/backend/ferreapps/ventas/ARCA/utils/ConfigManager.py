@@ -87,14 +87,17 @@ class ConfigManager:
         """
         return self.paths['certificado'], self.paths['clave_privada']
     
-    def get_token_path(self) -> str:
+    def get_token_path(self, service: str = 'wsfe') -> str:
         """
-        Obtiene la ruta del archivo de token.
+        Obtiene la ruta del archivo de token para un servicio específico.
         
+        Args:
+            service: Nombre del servicio ('wsfe', 'ws_sr_padron_a5', etc.)
+            
         Returns:
             Ruta del archivo de token
         """
-        return self.paths['token_file']
+        return os.path.join(self.paths['tokens_dir'], f'{service}.pkl')
     
     def get_log_path(self) -> str:
         """
@@ -189,4 +192,20 @@ class ConfigManager:
         Returns:
             Diccionario con configuración de tokens
         """
-        return ARCA_TOKEN_CONFIG 
+        return ARCA_TOKEN_CONFIG
+    
+    def get_service_config(self, service: str) -> Dict[str, Any]:
+        """
+        Obtiene la configuración para un servicio específico.
+        
+        Args:
+            service: Nombre del servicio
+            
+        Returns:
+            Configuración del servicio
+        """
+        return {
+            'url': self.urls.get(service),
+            'timeout': self.timeouts.get('conexion', 30),
+            'service_name': service
+        } 
