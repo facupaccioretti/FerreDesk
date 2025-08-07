@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import permissions
+import logging
 from .models import Localidad, Provincia, Barrio, TipoIVA, Transporte, Vendedor, Plazo, CategoriaCliente, Cliente
 from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
@@ -16,6 +17,22 @@ from django.db.models import Q, ProtectedError
 from .algoritmo_cuit_utils import validar_cuit
 
 # Create your views here.
+logger = logging.getLogger('ferredesk_arca.procesar_cuit_arca')
+
+# -----------------------------------------------------------------------------
+# Constantes para detección de condición de IVA a partir de ARCA
+# -----------------------------------------------------------------------------
+# Descripciones de impuestos relevantes para IVA según ARCA/AFIP
+DESCRIPCIONES_IVA_RELEVANTES = {
+    'MONOTRIBUTO',
+    'IVA',
+    'IVA EXENTO',
+    'MONOTRIBUTO SOCIAL',
+    'MONOTRIBUTO TRABAJADOR',
+}
+
+# Estado de impuesto considerado activo
+ESTADO_IMPUESTO_ACTIVO = 'AC'
 
 class LocalidadViewSet(viewsets.ModelViewSet):
     queryset = Localidad.objects.all()
@@ -232,9 +249,36 @@ class ProcesarCuitArcaAPIView(APIView):
             # Crear instancia de FerreDeskARCA y consultar ARCA
             arca = FerreDeskARCA(ferreteria)
             datos_arca = arca.consultar_padron(cuit)
+            logger.info("Respuesta ARCA recibida. Iniciando procesamiento de datos para mapeo de cliente.")
+            
+            # Log de datos ARCA recibidos (para debug del IVA)
+            logger.info("DATOS ARCA RECIBIDOS:")
+            logger.info("-" * 40)
+            logger.info(str(datos_arca))
+
+            # Si ARCA devolvió error o no hay bloques de datos, retornar el mensaje de error
+            if self._tiene_error_arca(datos_arca):
+                mensaje_error = self._extraer_mensaje_error_arca(datos_arca, cuit)
+                try:
+                    logger.warning("ARCA devolvió error para CUIT %s: %s", cuit, mensaje_error)
+                except Exception:
+                    pass
+                return Response({'error': mensaje_error})
             
             # Procesar los datos de ARCA y mapearlos a campos del cliente
             datos_procesados = self._procesar_datos_arca(datos_arca)
+            # Log de salida procesada (enfocado en IVA y básicos)
+            try:
+                logger.info(
+                    "Datos procesados ARCA → cliente: cuit=%s, razon=%s, provincia=%s, localidad=%s, condicion_iva=%s",
+                    datos_procesados.get('cuit'),
+                    datos_procesados.get('razon'),
+                    datos_procesados.get('provincia'),
+                    datos_procesados.get('localidad'),
+                    datos_procesados.get('condicion_iva'),
+                )
+            except Exception:
+                pass
             
             return Response(datos_procesados)
             
@@ -255,6 +299,10 @@ class ProcesarCuitArcaAPIView(APIView):
         """
         if not datos_arca:
             return {'error': 'No se encontraron datos en ARCA'}
+
+        # Si ARCA vino con error, salir temprano con el mensaje
+        if self._tiene_error_arca(datos_arca):
+            return {'error': self._extraer_mensaje_error_arca(datos_arca)}
         
         # Inicializar diccionario de datos procesados
         datos_procesados = {
@@ -326,34 +374,21 @@ class ProcesarCuitArcaAPIView(APIView):
                     if desc_localidad and desc_localidad != 'N/A':
                         datos_procesados['localidad'] = desc_localidad
             
-            # Procesar condición IVA desde datosRegimenGeneral
-            if hasattr(datos_arca, 'datosRegimenGeneral') and datos_arca.datosRegimenGeneral:
-                regimen = datos_arca.datosRegimenGeneral
-                if hasattr(regimen, 'impuesto') and regimen.impuesto:
-                    # Buscar IVA en la lista de impuestos
-                    for impuesto in regimen.impuesto:
-                        id_imp = getattr(impuesto, 'idImpuesto', '')
-                        desc_imp = getattr(impuesto, 'descripcionImpuesto', '')
-                        estado_imp = getattr(impuesto, 'estadoImpuesto', '')
-                        
-                        # Buscar IVA (código 30) o IVA EXENTO (código 32)
-                        if id_imp in ['30', '32'] and estado_imp == 'AC':
-                            datos_procesados['condicion_iva'] = desc_imp
-                            break
-            
-            # Si no se encontró IVA en régimen general, buscar en monotributo
-            if not datos_procesados['condicion_iva'] and hasattr(datos_arca, 'datosMonotributo') and datos_arca.datosMonotributo:
-                monotributo = datos_arca.datosMonotributo
-                if hasattr(monotributo, 'impuesto') and monotributo.impuesto:
-                    for impuesto in monotributo.impuesto:
-                        id_imp = getattr(impuesto, 'idImpuesto', '')
-                        desc_imp = getattr(impuesto, 'descripcionImpuesto', '')
-                        estado_imp = getattr(impuesto, 'estadoImpuesto', '')
-                        
-                        # Buscar MONOTRIBUTO (código 20)
-                        if id_imp == '20' and estado_imp == 'AC':
-                            datos_procesados['condicion_iva'] = desc_imp
-                            break
+            # Detectar condición de IVA usando helper por período más reciente
+            condicion_iva_detectada, impuesto_origen = self._detectar_condicion_iva_mas_reciente(datos_arca)
+            if condicion_iva_detectada:
+                datos_procesados['condicion_iva'] = condicion_iva_detectada
+                try:
+                    logger.info(
+                        "IVA seleccionado por período: descripcion=%s, id=%s, estado=%s, periodo=%s, origen=%s",
+                        impuesto_origen.get('descripcionImpuesto'),
+                        impuesto_origen.get('idImpuesto'),
+                        impuesto_origen.get('estadoImpuesto'),
+                        impuesto_origen.get('periodo'),
+                        impuesto_origen.get('origen'),
+                    )
+                except Exception:
+                    pass
             
             return datos_procesados
             
@@ -361,3 +396,124 @@ class ProcesarCuitArcaAPIView(APIView):
             return {
                 'error': f'Error procesando datos de ARCA: {str(e)}'
             }
+
+    def _tiene_error_arca(self, datos_arca) -> bool:
+        """Determina si la respuesta de ARCA contiene un error real o carece de datos."""
+        try:
+            # Considerar error de constancia solo si hay mensajes concretos
+            error_constancia = getattr(datos_arca, 'errorConstancia', None)
+            if error_constancia is not None:
+                mensajes = getattr(error_constancia, 'error', None)
+
+                # Lista de mensajes no vacía
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return True
+
+                # Mensaje único en string no vacío
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return True
+
+            # Sin datos en los bloques principales se considera error
+            tiene_datos = any([
+                getattr(datos_arca, 'datosGenerales', None),
+                getattr(datos_arca, 'datosMonotributo', None),
+                getattr(datos_arca, 'datosRegimenGeneral', None)
+            ])
+            return not tiene_datos
+        except Exception:
+            return False
+
+    def _extraer_mensaje_error_arca(self, datos_arca, cuit: str | None = None) -> str:
+        """Extrae un mensaje de error amigable desde la estructura de ARCA si existe."""
+        try:
+            error_constancia = getattr(datos_arca, 'errorConstancia', None)
+            if error_constancia is not None:
+                mensajes = getattr(error_constancia, 'error', None)
+
+                # Lista de mensajes
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return ", ".join(str(m) for m in mensajes)
+
+                # Mensaje único
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return mensajes.strip()
+
+            # Si no hay mensajes reales, informar falta de datos
+            base = f"ARCA no devolvió datos para el CUIT {cuit}." if cuit else "ARCA no devolvió datos."
+            return base
+        except Exception:
+            return "No fue posible interpretar el error devuelto por ARCA"
+
+    def _detectar_condicion_iva_mas_reciente(self, datos_arca):
+        """
+        Detecta la condición de IVA del contribuyente extrayendo impuestos de
+        datosMonotributo.impuesto y datosRegimenGeneral.impuesto, filtrando por
+        estado activo y relevancia IVA, y seleccionando por período más reciente.
+
+        Args:
+            datos_arca: Objeto personaReturn de ARCA con la constancia.
+
+        Returns:
+            Tuple[str|None, dict]: (descripcion_iva, impuesto_origen)
+                - descripcion_iva: Descripción del impuesto a usar (ej. 'IVA EXENTO', 'MONOTRIBUTO', 'IVA')
+                - impuesto_origen: Diccionario con datos del impuesto seleccionado para logging
+        """
+        try:
+            impuestos_unificados = []
+
+            # Extraer de datosRegimenGeneral.impuesto
+            if hasattr(datos_arca, 'datosRegimenGeneral') and datos_arca.datosRegimenGeneral:
+                regimen = datos_arca.datosRegimenGeneral
+                if hasattr(regimen, 'impuesto') and regimen.impuesto:
+                    for imp in regimen.impuesto:
+                        impuestos_unificados.append({
+                            'idImpuesto': str(getattr(imp, 'idImpuesto', '')).strip(),
+                            'descripcionImpuesto': str(getattr(imp, 'descripcionImpuesto', '')).strip(),
+                            'estadoImpuesto': str(getattr(imp, 'estadoImpuesto', '')).strip(),
+                            'periodo': getattr(imp, 'periodo', None),
+                            'origen': 'datosRegimenGeneral',
+                        })
+
+            # Extraer de datosMonotributo.impuesto
+            if hasattr(datos_arca, 'datosMonotributo') and datos_arca.datosMonotributo:
+                mono = datos_arca.datosMonotributo
+                if hasattr(mono, 'impuesto') and mono.impuesto:
+                    for imp in mono.impuesto:
+                        impuestos_unificados.append({
+                            'idImpuesto': str(getattr(imp, 'idImpuesto', '')).strip(),
+                            'descripcionImpuesto': str(getattr(imp, 'descripcionImpuesto', '')).strip(),
+                            'estadoImpuesto': str(getattr(imp, 'estadoImpuesto', '')).strip(),
+                            'periodo': getattr(imp, 'periodo', None),
+                            'origen': 'datosMonotributo',
+                        })
+
+            if not impuestos_unificados:
+                return None, {}
+
+            # Filtrar activos
+            activos = [imp for imp in impuestos_unificados if imp.get('estadoImpuesto') == ESTADO_IMPUESTO_ACTIVO]
+            if not activos:
+                return None, {}
+
+            # Filtrar solo relevantes (por descripción)
+            relevantes = [
+                imp for imp in activos
+                if imp.get('descripcionImpuesto') in DESCRIPCIONES_IVA_RELEVANTES
+            ]
+            if not relevantes:
+                return None, {}
+
+            # Normalizar período (None -> 0) y elegir el más reciente
+            def obtener_periodo(imp):
+                periodo = imp.get('periodo')
+                try:
+                    return int(periodo) if periodo is not None else 0
+                except Exception:
+                    return 0
+
+            impuesto_seleccionado = max(relevantes, key=obtener_periodo)
+            return impuesto_seleccionado.get('descripcionImpuesto'), impuesto_seleccionado
+
+        except Exception:
+            # En caso de error silencioso, no bloquear el flujo
+            return None, {}

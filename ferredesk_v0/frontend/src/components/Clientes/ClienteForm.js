@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { getCookie } from "../../utils/csrf"
 import FilterableSelect from "./FilterableSelect"
 import useValidacionCUIT from "../../utils/useValidacionCUIT"
@@ -60,6 +60,17 @@ const ClienteForm = ({
     descu3: initialData?.descu3 || "",
   })
 
+  // Estado para trackear campos autocompletados por ARCA
+  const [camposAutocompletados, setCamposAutocompletados] = useState({
+    razon: false,
+    fantasia: false,
+    domicilio: false,
+    cpostal: false,
+    provincia: false,
+    localidad: false,
+    iva: false
+  })
+
   const [error, setError] = useState("")
   const [modal, setModal] = useState(null)
   const [modalForm, setModalForm] = useState({})
@@ -73,7 +84,13 @@ const ClienteForm = ({
     mostrarTooltip, 
     handleCUITBlur, 
     limpiarResultado, 
-    toggleTooltip 
+    toggleTooltip,
+    // Estados y funciones de ARCA
+    datosARCA,
+    isLoadingARCA,
+    errorARCA,
+    consultarARCA,
+    limpiarEstadosARCA
   } = useValidacionCUIT()
 
   const handleChange = useCallback((e) => {
@@ -83,9 +100,127 @@ const ClienteForm = ({
       return
     }
     
+    // Si se está cambiando el CUIT, limpiar estados de ARCA y campos autocompletados
+    if (name === "cuit") {
+      limpiarEstadosARCA()
+      setCamposAutocompletados({
+        razon: false,
+        fantasia: false,
+        domicilio: false,
+        cpostal: false,
+        provincia: false,
+        localidad: false,
+        iva: false
+      })
+    }
+    
     // Actualizamos de forma inmutable manteniendo resto del estado
     setForm((f) => ({ ...f, [name]: value }))
-  }, [])
+  }, [limpiarEstadosARCA])
+
+  // Función para autocompletar campos con datos de ARCA
+  const autocompletarCampos = useCallback((datos) => {
+    if (!datos) return
+    
+    // Función para buscar coincidencia en opciones de FilterableSelect
+    const buscarCoincidencia = (valor, opciones) => {
+      if (!valor || !opciones || !Array.isArray(opciones)) return null
+      
+      // Buscar coincidencia exacta (case-insensitive)
+      let encontrada = opciones.find(opt => 
+        opt.nombre && opt.nombre.toLowerCase() === valor.toLowerCase()
+      )
+      
+      if (encontrada) return encontrada
+      
+      // Si no hay coincidencia exacta, buscar coincidencia parcial
+      encontrada = opciones.find(opt => 
+        opt.nombre && opt.nombre.toLowerCase().includes(valor.toLowerCase())
+      )
+      
+      return encontrada
+    }
+    
+    // Mapeo de tipos de IVA de ARCA a nombres de BD
+    const mapearTipoIVA = (descripcionARCA) => {
+      const mapeo = {
+        "IVA": "Responsable Inscripto",
+        "IVA EXENTO": "Sujeto Exento", 
+        "MONOTRIBUTO": "Responsable Monotributo",
+        "MONOTRIBUTO SOCIAL": "Monotributo Social",
+        "MONOTRIBUTO TRABAJADOR": "Monotributo Trabajador"
+      }
+      return mapeo[descripcionARCA] || descripcionARCA
+    }
+    
+    setForm(prev => {
+      const nuevosDatos = { ...prev }
+      const nuevosCamposAutocompletados = { ...camposAutocompletados }
+      
+      // Campos de texto simple (autocompletado directo - SIEMPRE sobreescribir)
+      if (datos.razon) {
+        nuevosDatos.razon = datos.razon
+        nuevosCamposAutocompletados.razon = true
+      }
+      if (datos.fantasia) {
+        nuevosDatos.fantasia = datos.fantasia
+        nuevosCamposAutocompletados.fantasia = true
+      }
+      if (datos.domicilio) {
+        nuevosDatos.domicilio = datos.domicilio
+        nuevosCamposAutocompletados.domicilio = true
+      }
+      if (datos.cpostal) {
+        nuevosDatos.cpostal = datos.cpostal
+        nuevosCamposAutocompletados.cpostal = true
+      }
+      
+      // Campos FilterableSelect (buscar coincidencias - SIEMPRE sobreescribir)
+      if (datos.provincia) {
+        const provinciaEncontrada = buscarCoincidencia(datos.provincia, provincias)
+        if (provinciaEncontrada) {
+          nuevosDatos.provincia = provinciaEncontrada.id
+          nuevosCamposAutocompletados.provincia = true
+        }
+      }
+      
+      if (datos.localidad) {
+        const localidadEncontrada = buscarCoincidencia(datos.localidad, localidades)
+        if (localidadEncontrada) {
+          nuevosDatos.localidad = localidadEncontrada.id
+          nuevosCamposAutocompletados.localidad = true
+        }
+      }
+      
+      if (datos.condicion_iva) {
+        const nombreMapeado = mapearTipoIVA(datos.condicion_iva)
+        const tipoIVAEncontrado = buscarCoincidencia(nombreMapeado, tiposIVA)
+        if (tipoIVAEncontrado) {
+          nuevosDatos.iva = tipoIVAEncontrado.id
+          nuevosCamposAutocompletados.iva = true
+        }
+      }
+      
+      // Actualizar el estado de campos autocompletados
+      setCamposAutocompletados(nuevosCamposAutocompletados)
+      
+      return nuevosDatos
+    })
+  }, [provincias, localidades, tiposIVA])
+
+  // Efecto para autocompletar cuando llegan datos de ARCA
+  useEffect(() => {
+    if (datosARCA && !errorARCA) {
+      autocompletarCampos(datosARCA)
+      
+      // Limpiar el mensaje de éxito después de 3 segundos
+      const timer = setTimeout(() => {
+        limpiarEstadosARCA()
+      }, 3000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [datosARCA, errorARCA, autocompletarCampos, limpiarEstadosARCA])
 
   // ----- Modal para agregar entidades relacionales -----
   const openAddModal = (type) => {
@@ -461,13 +596,25 @@ const ClienteForm = ({
                     )}
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Razón Social *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      Razón Social *
+                      {camposAutocompletados.razon && (
+                        <span className="ml-2 text-xs text-emerald-600 font-normal">
+                          (Autocompletado por ARCA)
+                        </span>
+                      )}
+                    </label>
                     <input
                       name="razon"
                       value={form.razon}
                       onChange={handleChange}
                       required
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      disabled={camposAutocompletados.razon}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
+                        camposAutocompletados.razon 
+                          ? 'border-emerald-300 bg-emerald-50 text-slate-600 cursor-not-allowed' 
+                          : 'border-slate-300'
+                      }`}
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -536,51 +683,81 @@ const ClienteForm = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/40">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">CUIT</label>
-                    <div className="relative">
-                      <input
-                        name="cuit"
-                        value={form.cuit}
-                        onChange={handleChange}
-                        onBlur={(e) => handleCUITBlur(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleCUITBlur(e.target.value)
-                          }
-                        }}
-                        maxLength={11}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      />
-                      
-                      {/* Botón de alerta para mostrar validación */}
-                      {resultado && !isLoadingCUIT && !errorCUIT && (
-                        <button
-                          type="button"
-                          onClick={toggleTooltip}
-                          className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 transition-colors ${
-                            resultado.es_valido ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
-                          }`}
-                          title={resultado.es_valido ? 'CUIT válido' : 'CUIT inválido'}
-                        >
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            {resultado.es_valido ? (
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            ) : (
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            )}
+                    <div>
+                      {/* Input group */}
+                      <div className="relative h-[38px] mb-2">
+                        <input
+                          name="cuit"
+                          value={form.cuit}
+                          onChange={handleChange}
+                          onBlur={(e) => {
+                            if (!initialData) {
+                              handleCUITBlur(e.target.value)
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !initialData) {
+                              handleCUITBlur(e.target.value)
+                            }
+                          }}
+                          maxLength={11}
+                          className="w-full h-full border border-slate-300 rounded-lg px-3 pr-10 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        />
+                        
+                        {/* Botón de alerta para mostrar validación - SIEMPRE VISIBLE Y FIJO */}
+                        <div className="absolute top-0 right-2 h-full flex items-center">
+                          {resultado && !isLoadingCUIT && !errorCUIT ? (
+                            <button
+                              type="button"
+                              onClick={toggleTooltip}
+                              className={`transition-colors ${
+                                resultado.es_valido ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
+                              }`}
+                              title={resultado.es_valido ? 'CUIT válido' : 'CUIT inválido'}
+                            >
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                {resultado.es_valido ? (
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                ) : (
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                )}
+                              </svg>
+                            </button>
+                          ) : (
+                            <div className="w-5 h-5"></div>
+                          )}
+                        </div>
+                        
+                        {/* Tooltip de validación */}
+                        {resultado && (
+                          <CUITValidacionTooltip
+                            resultado={resultado}
+                            onIgnorar={limpiarResultado}
+                            isLoading={isLoadingCUIT}
+                            error={errorCUIT}
+                            mostrarTooltip={mostrarTooltip}
+                            onToggle={toggleTooltip}
+                          />
+                        )}
+                      </div>
+
+                      {/* Mensajes de ARCA */}
+                      {errorARCA && (
+                        <div className="text-red-600 text-sm flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                           </svg>
-                        </button>
+                          Error: {errorARCA}
+                        </div>
                       )}
                       
-                      {/* Tooltip de validación */}
-                      {resultado && (
-                        <CUITValidacionTooltip
-                          resultado={resultado}
-                          onIgnorar={limpiarResultado}
-                          isLoading={isLoadingCUIT}
-                          error={errorCUIT}
-                          mostrarTooltip={mostrarTooltip}
-                          onToggle={toggleTooltip}
-                        />
+                      {datosARCA && !errorARCA && (
+                        <div className="text-green-600 text-sm flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          Datos autocompletados exitosamente
+                        </div>
                       )}
                     </div>
                   </div>

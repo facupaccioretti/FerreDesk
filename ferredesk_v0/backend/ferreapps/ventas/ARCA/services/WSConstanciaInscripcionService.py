@@ -8,9 +8,11 @@ Mantiene compatibilidad con el manejo de errores del sistema original.
 """
 
 import logging
+import json
 from typing import Dict, Any
 from zeep import Client, exceptions
 from zeep.transports import Transport
+from zeep.helpers import serialize_object
 from requests import Session
 
 from ..auth.FerreDeskAuth import FerreDeskAuth
@@ -117,6 +119,10 @@ class WSConstanciaInscripcionService:
             
             logger.info("RESPUESTA RECIBIDA EXITOSAMENTE")
             logger.info(f"TIPO DE RESPUESTA: {type(response)}")
+            # Mostrar respuesta como lo hace consultar_padron_afip.py
+            logger.info("ESTRUCTURA COMPLETA DE ARCA:")
+            logger.info("-" * 40)
+            logger.info(str(response))
             
             return response
             

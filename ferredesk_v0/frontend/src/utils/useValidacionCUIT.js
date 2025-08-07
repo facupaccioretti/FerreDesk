@@ -11,6 +11,11 @@ const useValidacionCUIT = () => {
   const [error, setError] = useState(null)
   const [mostrarTooltip, setMostrarTooltip] = useState(false)
   const timeoutRef = useRef(null)
+  
+  // Estados para ARCA
+  const [datosARCA, setDatosARCA] = useState(null)
+  const [isLoadingARCA, setIsLoadingARCA] = useState(false)
+  const [errorARCA, setErrorARCA] = useState(null)
 
   /**
    * Valida un CUIT en el backend
@@ -57,6 +62,14 @@ const useValidacionCUIT = () => {
         if (data) {
           setResultado(data)
           setMostrarTooltip(false) // Inicialmente oculto
+          // Si el CUIT es válido, encadenar consulta a ARCA
+          if (data.es_valido) {
+            try {
+              await consultarARCA(cuit.trim())
+            } catch (_) {
+              // Silenciar errores aquí; se reflejan en errorARCA
+            }
+          }
         } else {
           setResultado(null)
         }
@@ -71,13 +84,67 @@ const useValidacionCUIT = () => {
   }, [])
 
   /**
+   * Consulta datos de ARCA usando el CUIT
+   * @param {string} cuit - El CUIT a consultar en ARCA
+   */
+  const consultarARCA = useCallback(async (cuit) => {
+    if (!cuit) return
+    
+    setIsLoadingARCA(true)
+    setErrorARCA(null)
+    
+    try {
+      const response = await fetch(
+        `/api/clientes/procesar-cuit-arca/?cuit=${encodeURIComponent(cuit)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          credentials: 'include',
+        }
+      )
+      
+      if (!response.ok) {
+        throw new Error('Error al consultar ARCA')
+      }
+      
+      const data = await response.json()
+      
+      if (data.error) {
+        setErrorARCA(data.error)
+        setDatosARCA(null)
+      } else {
+        setDatosARCA(data)
+        setErrorARCA(null)
+      }
+      
+    } catch (err) {
+      setErrorARCA(err.message)
+      setDatosARCA(null)
+    } finally {
+      setIsLoadingARCA(false)
+    }
+  }, [])
+
+  /**
+   * Limpia todos los estados de ARCA
+   */
+  const limpiarEstadosARCA = useCallback(() => {
+    setDatosARCA(null)
+    setErrorARCA(null)
+  }, [])
+
+  /**
    * Limpia el resultado de la validación (usado cuando el usuario ignora la validación)
    */
   const limpiarResultado = useCallback(() => {
     setResultado(null)
     setError(null)
     setMostrarTooltip(false)
-  }, [])
+    limpiarEstadosARCA()
+  }, [limpiarEstadosARCA])
 
   /**
    * Alterna la visibilidad del tooltip
@@ -111,7 +178,13 @@ const useValidacionCUIT = () => {
     limpiarResultado,
     toggleTooltip,
     handleCUITBlur,
-    handleCUITKeyDown
+    handleCUITKeyDown,
+    // Estados y funciones de ARCA
+    datosARCA,
+    isLoadingARCA,
+    errorARCA,
+    consultarARCA,
+    limpiarEstadosARCA
   }
 }
 
