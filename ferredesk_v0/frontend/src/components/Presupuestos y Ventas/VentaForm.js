@@ -15,6 +15,7 @@ import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 import { useArcaEstado } from "../../utils/useArcaEstado"
+import { useArcaResultadoHandler } from "../../utils/useArcaResultadoHandler"
 import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
@@ -93,12 +94,6 @@ const VentaForm = ({
   // Hooks existentes movidos al inicio
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
-  
-  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
-  const handleAceptarResultadoArca = () => {
-    aceptarResultadoArca()
-    onCancel()
-  }
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -118,6 +113,27 @@ const VentaForm = ({
     requiereEmisionArca,
     obtenerMensajePersonalizado
   } = useArcaEstado()
+
+  // Hook para manejar resultados de ARCA de manera modularizada
+  const {
+    procesarResultadoArca,
+    manejarErrorArca,
+    crearHandleAceptarResultadoArca
+  } = useArcaResultadoHandler({
+    requiereEmisionArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    esperandoArca,
+    iniciarEsperaArca
+  })
+
+  // Función personalizada para aceptar resultado de ARCA (modularizada)
+  const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
+    aceptarResultadoArca, 
+    onCancel, 
+    () => respuestaArca, 
+    () => errorArca
+  )
 
   // Función para normalizar items
   const normalizarItemsVenta = (items) => {
@@ -411,11 +427,6 @@ const VentaForm = ({
           ? "factura"
           : "factura_interna"
       
-      // Verificar si requiere emisión ARCA y iniciar estado de espera
-      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-        iniciarEsperaArca()
-      }
-      
       // HÍBRIDO: Enviar solo el TIPO al backend, no código AFIP específico
       // El backend ejecutará su propia lógica fiscal autoritaria
 
@@ -460,35 +471,18 @@ const VentaForm = ({
       }
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
 
+      // Iniciar modal de espera ARCA inmediatamente si requiere emisión
+      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
+        iniciarEsperaArca()
+      }
+
       const resultado = await onSave(payload)
       
-      // Procesar respuesta de ARCA si corresponde
-      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-        if (resultado?.arca_emitido && resultado?.cae) {
-          finalizarEsperaArcaExito({
-            cae: resultado.cae,
-            cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado,
-            observaciones: resultado.observaciones || []
-          })
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else if (resultado?.error) {
-          finalizarEsperaArcaError(resultado.error)
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else {
-          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        }
-      } else {
-        // Solo cerrar la pestaña si NO requiere emisión ARCA
-        onCancel()
-      }
+      // Procesar respuesta de ARCA usando la lógica modularizada
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
     } catch (error) {
-      console.error("Error al guardar venta:", error)
-      // Si hay error y estaba esperando ARCA, finalizar con error
-      if (esperandoArca) {
-        finalizarEsperaArcaError(error.message || "Error al procesar la venta")
-      }
+      // Manejar error usando la lógica modularizada
+      manejarErrorArca(error, "Error al procesar la venta")
     }
   }
 

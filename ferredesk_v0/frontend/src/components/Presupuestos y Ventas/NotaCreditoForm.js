@@ -10,6 +10,7 @@ import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import { useArcaEstado } from '../../utils/useArcaEstado';
+import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
@@ -87,12 +88,6 @@ const NotaCreditoForm = ({
 }) => {
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
-  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
-  const handleAceptarResultadoArca = () => {
-    aceptarResultadoArca()
-    onCancel()
-  }
-  
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
@@ -106,6 +101,27 @@ const NotaCreditoForm = ({
     requiereEmisionArca,
     obtenerMensajePersonalizado
   } = useArcaEstado()
+
+  // Hook para manejar resultados de ARCA de manera modularizada
+  const {
+    procesarResultadoArca,
+    manejarErrorArca,
+    crearHandleAceptarResultadoArca
+  } = useArcaResultadoHandler({
+    requiereEmisionArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    esperandoArca,
+    iniciarEsperaArca
+  })
+
+  // Función personalizada para aceptar resultado de ARCA (modularizada)
+  const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
+    aceptarResultadoArca, 
+    onCancel, 
+    () => respuestaArca, 
+    () => errorArca
+  )
   
   const { 
     formulario, 
@@ -262,33 +278,11 @@ const NotaCreditoForm = ({
     try {
       const resultado = await onSave(payload, limpiarBorrador);
       
-      // Procesar respuesta de ARCA si corresponde
-      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-        if (resultado?.arca_emitido && resultado?.cae) {
-          finalizarEsperaArcaExito({
-            cae: resultado.cae,
-            cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado,
-            observaciones: resultado.observaciones || []
-          })
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else if (resultado?.error) {
-          finalizarEsperaArcaError(resultado.error)
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else {
-          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        }
-      } else {
-        // Solo cerrar la pestaña si NO requiere emisión ARCA
-        onCancel()
-      }
+      // Procesar respuesta de ARCA usando la lógica modularizada
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
     } catch (error) {
-      console.error("Error al guardar nota de crédito:", error);
-      // Si hay error y estaba esperando ARCA, finalizar con error
-      if (esperandoArca) {
-        finalizarEsperaArcaError(error.message || "Error al procesar la nota de crédito")
-      }
+      // Manejar error usando la lógica modularizada
+      manejarErrorArca(error, "Error al procesar la nota de crédito")
     }
   };
 

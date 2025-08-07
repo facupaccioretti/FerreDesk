@@ -79,6 +79,7 @@ class Venta(models.Model):
     ven_cae = models.CharField(max_length=20, db_column='VEN_CAE', null=True, blank=True)
     ven_caevencimiento = models.DateField(db_column='VEN_CAEVENCIMIENTO', null=True, blank=True)
     ven_qr = models.BinaryField(db_column='VEN_QR', null=True, blank=True)
+    ven_observacion = models.TextField(db_column='VEN_OBSERVACION', null=True, blank=True)
     ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
     # Fecha hasta la cual el presupuesto/venta es válido.  En presupuestos se

@@ -189,12 +189,43 @@ class FerreDeskARCA:
                     logger.info(f"CAE encontrado: {cae}")
                     logger.info(f"CAEFchVto encontrado: {cae_fch_vto}")
                     
+                    # Procesar observaciones con estructura completa
+                    observaciones_raw = getattr(det_resp, 'Observaciones', {})
+                    observaciones_procesadas = []
+                    
+                    # Procesar estructura Obs
+                    if observaciones_raw:
+                        if hasattr(observaciones_raw, 'Obs') and observaciones_raw.Obs:
+                            # Estructura: Observaciones.Obs[].Code y Observaciones.Obs[].Msg
+                            for obs in observaciones_raw.Obs:
+                                if hasattr(obs, 'Code') and hasattr(obs, 'Msg'):
+                                    observaciones_procesadas.append(f"Código {obs.Code}: {obs.Msg}")
+                                elif hasattr(obs, 'Msg'):
+                                    observaciones_procesadas.append(obs.Msg)
+                                else:
+                                    observaciones_procesadas.append(str(obs))
+                        
+                        elif hasattr(observaciones_raw, 'Msg'):
+                            # Estructura simple: Observaciones.Msg
+                            observaciones_procesadas.append(observaciones_raw.Msg)
+                        
+                        elif isinstance(observaciones_raw, list):
+                            # Estructura: lista directa
+                            observaciones_procesadas = observaciones_raw
+                        
+                        elif isinstance(observaciones_raw, str):
+                            # Estructura: string directo
+                            observaciones_procesadas = [observaciones_raw]
+                    
+                    logger.info(f"Observaciones procesadas: {observaciones_procesadas}")
+                    
                     if cae:
                         return {
                             'cae': cae,
                             'cae_fch_vto': cae_fch_vto,
                             'resultado': cab_resp.Resultado,
-                            'motivos': getattr(det_resp, 'Observaciones', []),
+                            'observaciones': observaciones_procesadas if observaciones_procesadas is not None else [],  # Lista procesada para frontend
+                            'observaciones_raw': observaciones_raw,     # Estructura completa para debugging
                             'fecha_emision': datetime.now()
                         }
                     else:
@@ -309,7 +340,7 @@ class FerreDeskARCA:
                 'cae_vencimiento': resultado_arca['cae_fch_vto'],
                 'qr_generado': True,
                 'venta_actualizada': True,
-                'observaciones': resultado_arca.get('motivos', [])
+                'observaciones': resultado_arca.get('observaciones', [])
             }
             
         except Exception as e:

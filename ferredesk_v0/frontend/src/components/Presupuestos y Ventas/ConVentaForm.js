@@ -13,6 +13,7 @@ import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 import { normalizarItems } from './herramientasforms/normalizadorItems';
 import { useArcaEstado } from '../../utils/useArcaEstado';
+import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 
 const ConVentaForm = ({
@@ -51,12 +52,6 @@ const ConVentaForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
-  // Función personalizada para aceptar resultado de ARCA y cerrar pestaña
-  const handleAceptarResultadoArca = () => {
-    aceptarResultadoArca()
-    onCancel()
-  }
-
   // Estados de carga centralizados
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(null);
@@ -76,6 +71,27 @@ const ConVentaForm = ({
     requiereEmisionArca,
     obtenerMensajePersonalizado
   } = useArcaEstado()
+
+  // Hook para manejar resultados de ARCA de manera modularizada
+  const {
+    procesarResultadoArca,
+    manejarErrorArca,
+    crearHandleAceptarResultadoArca
+  } = useArcaResultadoHandler({
+    requiereEmisionArca,
+    finalizarEsperaArcaExito,
+    finalizarEsperaArcaError,
+    esperandoArca,
+    iniciarEsperaArca
+  })
+
+  // Función personalizada para aceptar resultado de ARCA (modularizada)
+  const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
+    aceptarResultadoArca, 
+    onCancel, 
+    () => respuestaArca, 
+    () => errorArca
+  )
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -390,33 +406,11 @@ const ConVentaForm = ({
       
       const resultado = await onSave(payload, tabKey, endpoint);
       
-      // Procesar respuesta de ARCA si corresponde
-      if (requiereEmisionArca(tipoComprobante)) {
-        if (resultado?.arca_emitido && resultado?.cae) {
-          finalizarEsperaArcaExito({
-            cae: resultado.cae,
-            cae_vencimiento: resultado.cae_vencimiento,
-            qr_generado: resultado.qr_generado,
-            observaciones: resultado.observaciones || []
-          })
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else if (resultado?.error) {
-          finalizarEsperaArcaError(resultado.error)
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        } else {
-          finalizarEsperaArcaError("Error desconocido en la emisión ARCA")
-          // NO llamar onCancel() aquí - se llamará desde handleAceptarResultadoArca
-        }
-      } else {
-        // Solo cerrar la pestaña si NO requiere emisión ARCA
-        onCancel();
-      }
+      // Procesar respuesta de ARCA usando la lógica modularizada
+      procesarResultadoArca(resultado, tipoComprobante)
     } catch (error) {
-      console.error('Error al guardar venta:', error);
-      // Si hay error y estaba esperando ARCA, finalizar con error
-      if (esperandoArca) {
-        finalizarEsperaArcaError(error.message || "Error al procesar la conversión")
-      }
+      // Manejar error usando la lógica modularizada
+      manejarErrorArca(error, "Error al procesar la conversión")
     }
   };
 

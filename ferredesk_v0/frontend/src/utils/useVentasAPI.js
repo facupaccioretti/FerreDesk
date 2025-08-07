@@ -54,14 +54,21 @@ export function useVentasAPI() {
       });
       
       // Obtener la respuesta del backend
-      const responseData = await res.json();
+      let responseData
+      try {
+        responseData = await res.json()
+      } catch (parseError) {
+        // Si no se puede parsear como JSON, es probable que sea HTML (error del servidor)
+        console.error('Error parseando respuesta como JSON:', parseError)
+        throw new Error('Error al crear venta - Respuesta del servidor no válida')
+      }
       
       if (!res.ok) {
-        let msg = 'Error al crear venta';
+        let msg = 'Error al crear venta'
         try {
-          msg = responseData.detail || JSON.stringify(responseData);
+          msg = responseData.detail || JSON.stringify(responseData)
         } catch {}
-        throw new Error(msg);
+        throw new Error(msg)
       }
       
       await fetchVentas();

@@ -94,29 +94,43 @@ const ArcaEsperaOverlay = ({
 
             {/* Título de éxito */}
             <h3 className="text-lg font-semibold text-green-800 mb-2">
-              Comprobante Emitido Exitosamente
+              {respuestaArca.cae ? 'Comprobante Emitido Exitosamente' : 'Comprobante Creado Exitosamente'}
             </h3>
             
-            {/* Información del CAE */}
+            {/* Información del CAE o mensaje de comprobante interno */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 w-full mb-4">
               <div className="space-y-2 text-sm">
-                {respuestaArca.cae && (
-                  <div className="flex justify-between">
-                    <span className="font-medium text-green-700">CAE:</span>
-                    <span className="text-green-800">{respuestaArca.cae}</span>
-                  </div>
-                )}
-                {respuestaArca.cae_vencimiento && (
-                  <div className="flex justify-between">
-                    <span className="font-medium text-green-700">Vencimiento:</span>
-                    <span className="text-green-800">{respuestaArca.cae_vencimiento}</span>
+                {respuestaArca.cae ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-green-700">CAE:</span>
+                      <span className="text-green-800">{respuestaArca.cae}</span>
+                    </div>
+                    {respuestaArca.cae_vencimiento && (
+                      <div className="flex justify-between">
+                        <span className="font-medium text-green-700">Vencimiento:</span>
+                        <span className="text-green-800">{respuestaArca.cae_vencimiento}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center">
+                    <span className="text-green-700 font-medium">Comprobante Interno</span>
+                    <p className="text-green-600 text-xs mt-1">No requiere emisión fiscal</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Observaciones si las hay */}
-            {respuestaArca.observaciones && respuestaArca.observaciones.length > 0 && (
+            {(() => {
+              console.log('🔍 [OVERLAY DEBUG] respuestaArca:', respuestaArca);
+              console.log('🔍 [OVERLAY DEBUG] observaciones:', respuestaArca.observaciones);
+              console.log('🔍 [OVERLAY DEBUG] ¿Tiene observaciones?', !!respuestaArca.observaciones);
+              console.log('🔍 [OVERLAY DEBUG] ¿Es array?', Array.isArray(respuestaArca.observaciones));
+              console.log('🔍 [OVERLAY DEBUG] ¿Tiene length?', respuestaArca.observaciones?.length);
+              
+                             return Array.isArray(respuestaArca.observaciones) && respuestaArca.observaciones.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 w-full mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -139,7 +153,8 @@ const ArcaEsperaOverlay = ({
                   )}
                 </div>
               </div>
-            )}
+            );
+            })()}
 
             {/* Botón de aceptar */}
             <button
