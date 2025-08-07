@@ -264,6 +264,7 @@ class VentaCalculada(models.Model):
     ven_cae = models.CharField(max_length=20, null=True)
     ven_caevencimiento = models.DateField(null=True)
     ven_qr = models.BinaryField(null=True)
+    ven_observacion = models.TextField(null=True)
     ven_bonificacion_general = models.FloatField(default=0.0)
     subtotal_bruto = models.DecimalField(max_digits=15, decimal_places=3)
     ven_impneto = models.DecimalField(max_digits=15, decimal_places=3)

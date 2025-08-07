@@ -331,6 +331,16 @@ class FerreDeskARCA:
                     resultado_arca['cae_fch_vto'], '%Y%m%d'
                 ).date()
                 venta.ven_qr = qr_bytes
+                
+                # Guardar observaciones como texto (None si no hay observaciones)
+                observaciones_texto = None
+                if resultado_arca.get('observaciones'):
+                    if isinstance(resultado_arca['observaciones'], list):
+                        observaciones_texto = '; '.join(resultado_arca['observaciones'])
+                    else:
+                        observaciones_texto = str(resultado_arca['observaciones'])
+                
+                venta.ven_observacion = observaciones_texto
                 venta.save()
             
             logger.info(f"Emisión ARCA exitosa para venta {venta.ven_id}: CAE {resultado_arca['cae']}")
