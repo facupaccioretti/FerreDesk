@@ -44,20 +44,7 @@ const ProductosMasVendidos = () => {
       setData(result);
     } catch (err) {
       setError(err.message);
-      // Datos de ejemplo para desarrollo
-      setData({
-        labels: ['Tornillos 3x20', 'Cable Eléctrico 2.5mm', 'Pintura Blanca 20L', 'Cemento 50kg', 'Clavos 2"', 'Cinta Aisladora', 'Destornillador Phillips', 'Martillo 500g', 'Escalera 6 escalones', 'Brocha 2"'],
-        datasets: [{
-          label: tipoMetrica === 'cantidad' ? 'Cantidad Vendida' : 'Total Facturado ($)',
-          data: tipoMetrica === 'cantidad' 
-            ? [1250, 980, 750, 650, 520, 480, 420, 380, 320, 280]
-            : [125000, 98000, 75000, 65000, 52000, 48000, 42000, 38000, 32000, 28000],
-          backgroundColor: 'rgba(59, 130, 246, 0.8)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
-          borderRadius: 4,
-        }]
-      });
+      setData(null);
     } finally {
       setLoading(false);
     }

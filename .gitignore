@@ -200,3 +200,6 @@ htmlcov/
 
 .specstory/
 .cursor/
+
+# Librería externa ARCA
+arca_arg/

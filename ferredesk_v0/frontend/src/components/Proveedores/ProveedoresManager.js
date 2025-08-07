@@ -9,10 +9,6 @@ import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { BotonEditar, BotonEliminar, BotonHistorial, BotonCargarLista } from "../Botones"
 import Tabla from "../Tabla"
 
-const mockHistorial = [
-  { fecha: "2024-06-01", archivo: "macons_junio.xlsx", usuario: "ferreadmin", productosActualizados: 120 },
-  { fecha: "2024-05-01", archivo: "macons_mayo.xlsx", usuario: "ferreadmin", productosActualizados: 110 },
-]
 
 const ProveedoresManager = () => {
   // Hook API real
@@ -446,7 +442,6 @@ const ProveedoresManager = () => {
         open={showHistorialModal}
         onClose={() => setShowHistorialModal(false)}
         proveedor={proveedorHistorial}
-        historial={mockHistorial}
       />
     </div>
   )

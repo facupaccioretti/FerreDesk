@@ -44,37 +44,7 @@ const ClientesMasVentas = () => {
       setData(result);
     } catch (err) {
       setError(err.message);
-      // Datos de ejemplo para desarrollo
-      const clientes = [
-        'Constructora ABC S.A.',
-        'Ferretería Central',
-        'Obras Públicas Municipal',
-        'Empresa XYZ Ltda.',
-        'Distribuidora Norte',
-        'Constructora Sur',
-        'Ferretería del Este',
-        'Empresa Constructora',
-        'Distribuidora Oeste',
-        'Constructora Nacional'
-      ];
-      
-      const valores = tipoMetrica === 'total' 
-        ? [450000, 380000, 320000, 280000, 250000, 220000, 190000, 170000, 150000, 130000]
-        : tipoMetrica === 'cantidad'
-        ? [45, 38, 32, 28, 25, 22, 19, 17, 15, 13]
-        : [12, 10, 8, 7, 6, 5, 4, 3, 3, 2];
-      
-      setData({
-        labels: clientes,
-        datasets: [{
-          label: tipoMetrica === 'total' ? 'Total Facturado ($)' : tipoMetrica === 'cantidad' ? 'Cantidad de Productos' : 'Frecuencia de Compras',
-          data: valores,
-          backgroundColor: 'rgba(168, 85, 247, 0.8)',
-          borderColor: 'rgba(168, 85, 247, 1)',
-          borderWidth: 1,
-          borderRadius: 4,
-        }]
-      });
+      setData(null);
     } finally {
       setLoading(false);
     }

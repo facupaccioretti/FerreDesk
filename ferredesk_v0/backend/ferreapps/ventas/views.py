@@ -1013,12 +1013,11 @@ def productos_mas_vendidos(request):
             results = cursor.fetchall()
             
             if not results:
-                # Si no hay datos, devolver datos de ejemplo
                 return JsonResponse({
-                    'labels': ['Tornillos 3x20', 'Cable Eléctrico 2.5mm', 'Pintura Blanca 20L', 'Cemento 50kg', 'Clavos 2"', 'Cinta Aisladora', 'Destornillador Phillips', 'Martillo 500g', 'Escalera 6 escalones', 'Brocha 2"'],
+                    'labels': [],
                     'datasets': [{
                         'label': 'Cantidad Vendida' if tipo == 'cantidad' else 'Total Facturado ($)',
-                        'data': [1250, 980, 750, 650, 520, 480, 420, 380, 320, 280] if tipo == 'cantidad' else [125000, 98000, 75000, 65000, 52000, 48000, 42000, 38000, 32000, 28000],
+                        'data': [],
                         'backgroundColor': 'rgba(59, 130, 246, 0.8)',
                         'borderColor': 'rgba(59, 130, 246, 1)',
                         'borderWidth': 1,
@@ -1077,19 +1076,11 @@ def ventas_por_dia(request):
             results = cursor.fetchall()
             
             if not results:
-                # Si no hay datos, devolver datos de ejemplo
-                fechas = []
-                ventas = []
-                for i in range(7):
-                    fecha = hoy - timedelta(days=6-i)
-                    fechas.append(fecha.strftime('%d/%m'))
-                    ventas.append(10000 + (i * 5000) + (i * 1000))  # Datos de ejemplo
-                
                 return JsonResponse({
-                    'labels': fechas,
+                    'labels': [],
                     'datasets': [{
                         'label': 'Ventas Diarias ($)',
-                        'data': ventas,
+                        'data': [],
                         'borderColor': 'rgba(34, 197, 94, 1)',
                         'backgroundColor': 'rgba(34, 197, 94, 0.1)',
                         'borderWidth': 3,
@@ -1182,27 +1173,11 @@ def clientes_mas_ventas(request):
             results = cursor.fetchall()
             
             if not results:
-                # Si no hay datos, devolver datos de ejemplo
-                clientes = [
-                    'Constructora ABC S.A.',
-                    'Ferretería Central',
-                    'Obras Públicas Municipal',
-                    'Empresa XYZ Ltda.',
-                    'Distribuidora Norte',
-                    'Constructora Sur',
-                    'Ferretería del Este',
-                    'Empresa Constructora',
-                    'Distribuidora Oeste',
-                    'Constructora Nacional'
-                ]
-                
-                valores = [450000, 380000, 320000, 250000, 220000, 190000, 170000, 150000, 130000, 110000] if tipo == 'total' else [45, 38, 32, 28, 25, 22, 19, 17, 15, 13] if tipo == 'cantidad' else [12, 10, 8, 7, 6, 5, 4, 3, 3, 2]
-                
                 return JsonResponse({
-                    'labels': clientes,
+                    'labels': [],
                     'datasets': [{
                         'label': 'Total Facturado ($)' if tipo == 'total' else 'Cantidad de Productos' if tipo == 'cantidad' else 'Frecuencia de Compras',
-                        'data': valores,
+                        'data': [],
                         'backgroundColor': 'rgba(168, 85, 247, 0.8)',
                         'borderColor': 'rgba(168, 85, 247, 1)',
                         'borderWidth': 1,

@@ -69,6 +69,7 @@ const ClienteForm = ({
     if (name === "codigo" && value && !/^\d*$/.test(value)) {
       return
     }
+    
     // Actualizamos de forma inmutable manteniendo resto del estado
     setForm((f) => ({ ...f, [name]: value }))
   }, [])
@@ -338,9 +339,6 @@ const ClienteForm = ({
       !form.codigo ||
       !form.razon ||
       !form.domicilio ||
-      !form.lineacred ||
-      !form.impsalcta ||
-      !form.fecsalcta ||
       !form.zona
     ) {
       setError("Por favor completa todos los campos obligatorios.")
@@ -350,8 +348,23 @@ const ClienteForm = ({
       setError("El campo Zona no debe exceder los 10 caracteres.")
       return
     }
+    
+    // Procesar campos antes de enviar al backend
+    const processedForm = { ...form }
+    
+    // Convertir cadenas vacías en null para campos opcionales
+    if (processedForm.fecsalcta === "") {
+      processedForm.fecsalcta = null
+    }
+    if (processedForm.lineacred === "") {
+      processedForm.lineacred = null
+    }
+    if (processedForm.impsalcta === "") {
+      processedForm.impsalcta = null
+    }
+    
     setError("")
-    onSave(form)
+    onSave(processedForm)
   }
 
   return (
@@ -558,24 +571,22 @@ const ClienteForm = ({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3 p-4 bg-gradient-to-r from-purple-50 to-purple-100/80 rounded-xl border border-purple-200/40">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Línea de Crédito *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Línea de Crédito</label>
                     <input
                       name="lineacred"
                       value={form.lineacred}
                       onChange={handleChange}
-                      required
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       type="number"
                       min="0"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Importe Saldo Cta. *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Importe Saldo Cta.</label>
                     <input
                       name="impsalcta"
                       value={form.impsalcta}
                       onChange={handleChange}
-                      required
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       type="number"
                       step="any"
@@ -583,12 +594,11 @@ const ClienteForm = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Fecha Saldo Cta. *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Fecha Saldo Cta.</label>
                     <input
                       name="fecsalcta"
                       value={form.fecsalcta}
                       onChange={handleChange}
-                      required
                       type="date"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     />
@@ -804,7 +814,9 @@ const ClienteForm = ({
                       options={plazos}
                       value={form.plazo}
                       onChange={handleChange}
+                      onAdd={() => openAddModal("plazo")}
                       placeholder="Buscar plazo..."
+                      addLabel="Agregar"
                     />
                   </div>
                   <div>

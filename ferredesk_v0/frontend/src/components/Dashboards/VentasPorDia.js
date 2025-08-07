@@ -48,40 +48,7 @@ const VentasPorDia = () => {
       setData(result);
     } catch (err) {
       setError(err.message);
-      // Datos de ejemplo para desarrollo
-      const fechas = [];
-      const ventas = [];
-      const hoy = new Date();
-      
-      // Generar datos de ejemplo para los últimos 7 días
-      for (let i = 6; i >= 0; i--) {
-        const fecha = new Date(hoy);
-        fecha.setDate(hoy.getDate() - i);
-        fechas.push(fecha.toLocaleDateString('es-ES', { 
-          weekday: 'short', 
-          month: 'short', 
-          day: 'numeric' 
-        }));
-        ventas.push(Math.floor(Math.random() * 50000) + 10000); // Entre 10k y 60k
-      }
-      
-      setData({
-        labels: fechas,
-        datasets: [{
-          label: 'Ventas Diarias ($)',
-          data: ventas,
-          borderColor: 'rgba(34, 197, 94, 1)',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: 'rgba(34, 197, 94, 1)',
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-        }]
-      });
+      setData(null);
     } finally {
       setLoading(false);
     }
