@@ -3,7 +3,7 @@ Comando para consultar datos del padrón de AFIP
 ==============================================
 
 Este comando consulta directamente a AFIP los datos de contribuyentes
-usando el servicio ws_sr_padron_a5, especialmente útil para validar
+usando el servicio ws_sr_constancia_inscripcion, especialmente útil para validar
 CUITs y obtener información fiscal de clientes.
 """
 
@@ -64,12 +64,8 @@ class Command(BaseCommand):
             self.stdout.write(f'Consultando padrón para CUIT: {cuit}...')
             datos_padron = self._consultar_padron(arca, cuit)
             
-            if options['formato'] == 'json':
-                self._mostrar_json(datos_padron)
-            elif options['formato'] == 'table':
-                self._mostrar_tabla(datos_padron)
-            else:
-                self._mostrar_simple(datos_padron)
+            # SIEMPRE mostrar en formato JSON para ver la respuesta completa de AFIP
+            self._mostrar_json(datos_padron)
             
         except Exception as e:
             self.stdout.write(
@@ -111,16 +107,53 @@ class Command(BaseCommand):
     def _mostrar_json(self, datos_padron):
         """Muestra los datos del padrón en formato JSON"""
         self.stdout.write('RESPUESTA COMPLETA DE AFIP:')
-        self.stdout.write(json.dumps(datos_padron, indent=2, default=str))
+        self.stdout.write('=' * 80)
+        
+        if datos_padron:
+            # Mostrar tipo de objeto
+            self.stdout.write(f'TIPO DE OBJETO: {type(datos_padron)}')
+            self.stdout.write('')
+            
+            # Mostrar atributos disponibles
+            self.stdout.write('ATRIBUTOS DISPONIBLES:')
+            self.stdout.write('-' * 40)
+            for attr in dir(datos_padron):
+                if not attr.startswith('_'):  # Solo atributos públicos
+                    self.stdout.write(f'• {attr}')
+            self.stdout.write('')
+            
+            # Mostrar valores de cada atributo
+            self.stdout.write('VALORES DE LOS ATRIBUTOS:')
+            self.stdout.write('-' * 40)
+            for attr in dir(datos_padron):
+                if not attr.startswith('_'):  # Solo atributos públicos
+                    try:
+                        valor = getattr(datos_padron, attr)
+                        if valor is not None:
+                            self.stdout.write(f'{attr}: {valor}')
+                        else:
+                            self.stdout.write(f'{attr}: None')
+                    except Exception as e:
+                        self.stdout.write(f'{attr}: Error al obtener valor - {e}')
+            self.stdout.write('')
+            
+            # Mostrar estructura completa (como wsfev1)
+            self.stdout.write('ESTRUCTURA COMPLETA:')
+            self.stdout.write('-' * 40)
+            self.stdout.write(str(datos_padron))
+            
+        else:
+            self.stdout.write('No se encontraron datos en la respuesta')
 
     def _mostrar_tabla(self, datos_padron):
         """Muestra los datos del padrón en formato tabla"""
         self.stdout.write('DATOS DEL PADRÓN DE AFIP:')
         self.stdout.write('=' * 80)
         
-        # Procesar la respuesta SOAP original
-        if hasattr(datos_padron, 'personaReturn') and datos_padron.personaReturn:
-            persona = datos_padron.personaReturn
+        # Procesar la respuesta SOAP original (como arca_arg)
+        # La respuesta de getPersona_v2 es directamente el objeto personaReturn
+        if datos_padron:
+            persona = datos_padron
             
             # Datos básicos
             self.stdout.write(f"{'Campo':<25} {'Valor':<50}")
@@ -138,8 +171,8 @@ class Command(BaseCommand):
             estado = getattr(persona, 'estadoClave', 'N/A')
             self.stdout.write(f"{'Estado':<25} {estado:<50}")
             
-            # Datos según tipo de persona
-            if hasattr(persona, 'datosGenerales'):
+            # Datos según tipo de persona (como arca_arg)
+            if hasattr(persona, 'datosGenerales') and persona.datosGenerales:
                 datos_gen = persona.datosGenerales
                 
                 # Nombre/Razón social
@@ -160,8 +193,8 @@ class Command(BaseCommand):
                 num_doc = getattr(datos_gen, 'numeroDocumento', 'N/A')
                 self.stdout.write(f"{'Número Documento':<25} {num_doc:<50}")
             
-            # Domicilio fiscal
-            if hasattr(persona, 'domicilioFiscal'):
+            # Domicilio fiscal (como arca_arg)
+            if hasattr(persona, 'domicilioFiscal') and persona.domicilioFiscal:
                 domicilio = persona.domicilioFiscal
                 self.stdout.write('')
                 self.stdout.write('DOMICILIO FISCAL:')
@@ -179,26 +212,26 @@ class Command(BaseCommand):
                 desc_localidad = getattr(domicilio, 'descripcionLocalidad', 'N/A')
                 self.stdout.write(f"{'Localidad':<25} {desc_localidad:<50}")
             
-            # Actividades económicas
-            if hasattr(persona, 'actividades'):
-                actividades = persona.actividades
-                if hasattr(actividades, 'actividad'):
+            # Actividades económicas (como arca_arg)
+            if hasattr(persona, 'datosRegimenGeneral') and persona.datosRegimenGeneral:
+                regimen = persona.datosRegimenGeneral
+                if hasattr(regimen, 'actividad') and regimen.actividad:
                     self.stdout.write('')
                     self.stdout.write('ACTIVIDADES ECONÓMICAS:')
                     self.stdout.write('-' * 40)
-                    for actividad in actividades.actividad:
+                    for actividad in regimen.actividad:
                         id_act = getattr(actividad, 'idActividad', 'N/A')
                         desc_act = getattr(actividad, 'descripcionActividad', 'N/A')
                         self.stdout.write(f"• {id_act}: {desc_act}")
             
-            # Impuestos
-            if hasattr(persona, 'impuestos'):
-                impuestos = persona.impuestos
-                if hasattr(impuestos, 'impuesto'):
+            # Impuestos (como arca_arg)
+            if hasattr(persona, 'datosRegimenGeneral') and persona.datosRegimenGeneral:
+                regimen = persona.datosRegimenGeneral
+                if hasattr(regimen, 'impuesto') and regimen.impuesto:
                     self.stdout.write('')
                     self.stdout.write('IMPUESTOS:')
                     self.stdout.write('-' * 40)
-                    for impuesto in impuestos.impuesto:
+                    for impuesto in regimen.impuesto:
                         id_imp = getattr(impuesto, 'idImpuesto', 'N/A')
                         desc_imp = getattr(impuesto, 'descripcionImpuesto', 'N/A')
                         self.stdout.write(f"• {id_imp}: {desc_imp}")
@@ -211,9 +244,10 @@ class Command(BaseCommand):
         self.stdout.write('DATOS DEL PADRÓN:')
         self.stdout.write('-' * 40)
         
-        # Procesar la respuesta SOAP original
-        if hasattr(datos_padron, 'personaReturn') and datos_padron.personaReturn:
-            persona = datos_padron.personaReturn
+        # Procesar la respuesta SOAP original (como arca_arg)
+        # La respuesta de getPersona_v2 es directamente el objeto personaReturn
+        if datos_padron:
+            persona = datos_padron
             
             # CUIT
             cuit = getattr(persona, 'idPersona', 'N/A')
@@ -223,8 +257,8 @@ class Command(BaseCommand):
             estado = getattr(persona, 'estadoClave', 'N/A')
             self.stdout.write(f"• Estado: {estado}")
             
-            # Datos según tipo de persona
-            if hasattr(persona, 'datosGenerales'):
+            # Datos según tipo de persona (como arca_arg)
+            if hasattr(persona, 'datosGenerales') and persona.datosGenerales:
                 datos_gen = persona.datosGenerales
                 
                 # Nombre/Razón social
@@ -239,8 +273,8 @@ class Command(BaseCommand):
                     if razon_social != 'N/A':
                         self.stdout.write(f"• Razón Social: {razon_social}")
             
-            # Domicilio fiscal
-            if hasattr(persona, 'domicilioFiscal'):
+            # Domicilio fiscal (como arca_arg)
+            if hasattr(persona, 'domicilioFiscal') and persona.domicilioFiscal:
                 domicilio = persona.domicilioFiscal
                 direccion = getattr(domicilio, 'direccion', 'N/A')
                 if direccion != 'N/A':

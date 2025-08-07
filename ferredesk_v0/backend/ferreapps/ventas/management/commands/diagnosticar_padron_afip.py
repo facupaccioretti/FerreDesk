@@ -118,22 +118,22 @@ class Command(BaseCommand):
                 certificado_path = certificado.path
                 if os.path.exists(certificado_path):
                     self.stdout.write(
-                        self.style.SUCCESS(f"✓ Certificado existe: {certificado_path}")
+                        self.style.SUCCESS(f"Certificado existe: {certificado_path}")
                     )
                     # Verificar tamaño
                     size = os.path.getsize(certificado_path)
                     self.stdout.write(f"  Tamaño: {size} bytes")
                 else:
                     self.stdout.write(
-                        self.style.ERROR(f"✗ Certificado NO existe: {certificado_path}")
+                        self.style.ERROR(f"Certificado NO existe: {certificado_path}")
                     )
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"✗ Error verificando certificado: {e}")
+                    self.style.ERROR(f"Error verificando certificado: {e}")
                 )
         else:
             self.stdout.write(
-                self.style.ERROR("✗ Certificado no configurado")
+                self.style.ERROR("Certificado no configurado")
             )
         
         if clave_privada:
@@ -142,22 +142,22 @@ class Command(BaseCommand):
                 clave_privada_path = clave_privada.path
                 if os.path.exists(clave_privada_path):
                     self.stdout.write(
-                        self.style.SUCCESS(f"✓ Clave privada existe: {clave_privada_path}")
+                        self.style.SUCCESS(f"Clave privada existe: {clave_privada_path}")
                     )
                     # Verificar tamaño
                     size = os.path.getsize(clave_privada_path)
                     self.stdout.write(f"  Tamaño: {size} bytes")
                 else:
                     self.stdout.write(
-                        self.style.ERROR(f"✗ Clave privada NO existe: {clave_privada_path}")
+                        self.style.ERROR(f"Clave privada NO existe: {clave_privada_path}")
                     )
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"✗ Error verificando clave privada: {e}")
+                    self.style.ERROR(f"Error verificando clave privada: {e}")
                 )
         else:
             self.stdout.write(
-                self.style.ERROR("✗ Clave privada no configurada")
+                self.style.ERROR("Clave privada no configurada")
             )
         
         self.stdout.write('')
@@ -189,7 +189,7 @@ class Command(BaseCommand):
             if tokens_dir:
                 if os.path.exists(tokens_dir):
                     self.stdout.write(
-                        self.style.SUCCESS(f"✓ Directorio de tokens existe: {tokens_dir}")
+                        self.style.SUCCESS(f"Directorio de tokens existe: {tokens_dir}")
                     )
                     # Listar tokens existentes
                     tokens = [f for f in os.listdir(tokens_dir) if f.endswith('.pkl')]
@@ -199,12 +199,12 @@ class Command(BaseCommand):
                         self.stdout.write("  No hay tokens guardados")
                 else:
                     self.stdout.write(
-                        self.style.WARNING(f"⚠ Directorio de tokens NO existe: {tokens_dir}")
+                        self.style.WARNING(f"Directorio de tokens NO existe: {tokens_dir}")
                     )
             
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f"✗ Error verificando configuración ARCA: {e}")
+                self.style.ERROR(f"Error verificando configuración ARCA: {e}")
             )
         
         self.stdout.write('')
@@ -218,27 +218,27 @@ class Command(BaseCommand):
             arca = FerreDeskARCA(ferreteria)
             
             # Validar servicio
-            self.stdout.write("• Validando servicio de padrón...")
+            self.stdout.write("Validando servicio de padrón...")
             resultado = arca.validar_servicio_padron()
             
             if resultado['status'] == 'success':
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ {resultado['message']}")
+                    self.style.SUCCESS(f"{resultado['message']}")
                 )
                 self.stdout.write(f"  Métodos disponibles: {', '.join(resultado['available_methods'])}")
             else:
                 self.stdout.write(
-                    self.style.WARNING(f"⚠ {resultado['message']}")
+                    self.style.WARNING(f"{resultado['message']}")
                 )
             
             # Intentar autenticación
-            self.stdout.write("• Probando autenticación...")
+            self.stdout.write(" Probando autenticación...")
             try:
                 from ferreapps.ventas.ARCA.auth.FerreDeskAuth import FerreDeskAuth
-                auth = FerreDeskAuth(ferreteria.id, ferreteria.modo_arca or 'HOM', 'ws_sr_padron_a5')
+                auth = FerreDeskAuth(ferreteria.id, ferreteria.modo_arca or 'HOM', 'ws_sr_constancia_inscripcion')
                 auth_data = auth.get_auth_data()
                 self.stdout.write(
-                    self.style.SUCCESS("✓ Autenticación exitosa")
+                    self.style.SUCCESS("Autenticación exitosa")
                 )
                 self.stdout.write(f"  Token: {auth_data['Token'][:20]}...")
                 self.stdout.write(f"  Sign: {auth_data['Sign'][:20]}...")
@@ -246,7 +246,7 @@ class Command(BaseCommand):
                 
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"✗ Error en autenticación: {e}")
+                    self.style.ERROR(f"Error en autenticación: {e}")
                 )
                 
                 # Análisis del error
@@ -255,15 +255,15 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.WARNING("ANÁLISIS DEL ERROR:")
                     )
-                    self.stdout.write("• El certificado no está autorizado para el servicio ws_sr_padron_a5")
-                    self.stdout.write("• Necesitas solicitar autorización específica en AFIP")
-                    self.stdout.write("• Ve a https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp")
-                    self.stdout.write("• Solicita acceso al servicio 'ws_sr_padron_a5'")
-                    self.stdout.write("• El certificado actual solo está autorizado para 'wsfev1'")
+                    self.stdout.write(" El certificado no está autorizado para el servicio ws_sr_constancia_inscripcion")
+                    self.stdout.write(" Necesitas solicitar autorización específica en AFIP")
+                    self.stdout.write(" Ve a https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp")
+                    self.stdout.write(" Solicita acceso al servicio 'ws_sr_constancia_inscripcion'")
+                    self.stdout.write(" El certificado actual solo está autorizado para 'wsfev1'")
                 
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f"✗ Error verificando servicio: {e}")
+                self.style.ERROR(f" Error verificando servicio: {e}")
             )
         
         self.stdout.write('')
@@ -274,7 +274,7 @@ class Command(BaseCommand):
         self.stdout.write('-' * 50)
         
         # Información del modelo Ferreteria
-        self.stdout.write("• Campos del modelo Ferreteria:")
+        self.stdout.write(" Campos del modelo Ferreteria:")
         for field in ferreteria._meta.fields:
             if 'arca' in field.name.lower():
                 value = getattr(ferreteria, field.name)
@@ -287,7 +287,7 @@ class Command(BaseCommand):
             tokens_dir = config.paths.get('tokens_dir')
             
             if tokens_dir and os.path.exists(tokens_dir):
-                self.stdout.write("• Tokens existentes:")
+                self.stdout.write(" Tokens existentes:")
                 for file in os.listdir(tokens_dir):
                     if file.endswith('.pkl'):
                         file_path = os.path.join(tokens_dir, file)
@@ -307,7 +307,7 @@ class Command(BaseCommand):
         self.stdout.write('6. RECOMENDACIONES:')
         self.stdout.write('-' * 50)
         
-        self.stdout.write("• Si el error es 'Computador no autorizado':")
+        self.stdout.write(" Si el error es 'Computador no autorizado':")
         self.stdout.write("  1. Ve a https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp")
         self.stdout.write("  2. Inicia sesión con tu CUIT")
         self.stdout.write("  3. Ve a 'Solicitud de Certificado'")
@@ -322,5 +322,5 @@ class Command(BaseCommand):
         self.stdout.write("  3. Asegúrate de que los nombres de archivo coincidan")
         
         self.stdout.write("")
-        self.stdout.write("• Para verificar que wsfev1 sigue funcionando:")
+        self.stdout.write(" Para verificar que wsfev1 sigue funcionando:")
         self.stdout.write("  python manage.py probar_arca") 

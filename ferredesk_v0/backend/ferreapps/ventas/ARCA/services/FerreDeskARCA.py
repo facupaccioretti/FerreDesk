@@ -510,9 +510,9 @@ class FerreDeskARCA:
             Datos de la persona
         """
         try:
-            from .WSPadronA5Service import WSPadronA5Service
-            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
-            return padron_service.get_persona(cuit)
+            from .WSConstanciaInscripcionService import WSConstanciaInscripcionService
+            constancia_service = WSConstanciaInscripcionService(self.ferreteria_id, self.modo)
+            return constancia_service.get_persona_v2(cuit)  # Usar getPersona_v2 como arca_arg
         except Exception as e:
             logger.error(f"Error consultando padrón: {e}")
             raise FerreDeskARCAError(f"Error consultando padrón: {e}")
@@ -528,27 +528,27 @@ class FerreDeskARCA:
             Datos de las personas
         """
         try:
-            from .WSPadronA5Service import WSPadronA5Service
-            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
-            return padron_service.get_persona_list(cuit_list)
+            from .WSConstanciaInscripcionService import WSConstanciaInscripcionService
+            constancia_service = WSConstanciaInscripcionService(self.ferreteria_id, self.modo)
+            return constancia_service.get_persona_list_v2(cuit_list)  # Usar getPersonaList_v2 como arca_arg
         except Exception as e:
             logger.error(f"Error consultando lista de padrón: {e}")
             raise FerreDeskARCAError(f"Error consultando lista de padrón: {e}")
     
     def validar_servicio_padron(self) -> Dict[str, Any]:
         """
-        Valida que el servicio de padrón esté funcionando correctamente.
+        Valida que el servicio de constancia de inscripción esté funcionando correctamente.
         
         Returns:
             Resultado de la validación
         """
         try:
-            from .WSPadronA5Service import WSPadronA5Service
-            padron_service = WSPadronA5Service(self.ferreteria_id, self.modo)
-            return padron_service.validate_service()
+            from .WSConstanciaInscripcionService import WSConstanciaInscripcionService
+            constancia_service = WSConstanciaInscripcionService(self.ferreteria_id, self.modo)
+            return constancia_service.validate_service()
         except Exception as e:
-            logger.error(f"Error validando servicio de padrón: {e}")
+            logger.error(f"Error validando servicio de constancia de inscripción: {e}")
             return {
                 'status': 'error',
-                'message': f'Error validando servicio de padrón: {e}'
+                'message': f'Error validando servicio de constancia de inscripción: {e}'
             } 

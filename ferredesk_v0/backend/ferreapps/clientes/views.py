@@ -191,3 +191,173 @@ class ValidarCUITAPIView(APIView):
         resultado = validar_cuit(cuit)
         
         return Response(resultado)
+
+
+class ProcesarCuitArcaAPIView(APIView):
+    """
+    API endpoint para consultar datos de un contribuyente en ARCA usando su CUIT.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Consulta datos de un contribuyente en ARCA usando su CUIT.
+        
+        Parámetros:
+        - cuit: El CUIT a consultar
+        
+        Retorna:
+        - datos_procesados: Diccionario con los datos mapeados para el formulario de cliente
+        - error: Mensaje de error si algo falla
+        """
+        cuit = request.GET.get('cuit', '').strip()
+        
+        if not cuit:
+            return Response({
+                'error': 'CUIT no proporcionado'
+            }, status=400)
+        
+        try:
+            # Importar las dependencias necesarias
+            from ferreapps.ventas.ARCA import FerreDeskARCA
+            from ferreapps.productos.models import Ferreteria
+            
+            # Obtener la ferretería configurada
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                return Response({
+                    'error': 'No se encontró ferretería configurada'
+                }, status=500)
+            
+            # Crear instancia de FerreDeskARCA y consultar ARCA
+            arca = FerreDeskARCA(ferreteria)
+            datos_arca = arca.consultar_padron(cuit)
+            
+            # Procesar los datos de ARCA y mapearlos a campos del cliente
+            datos_procesados = self._procesar_datos_arca(datos_arca)
+            
+            return Response(datos_procesados)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Error consultando ARCA: {str(e)}'
+            }, status=500)
+    
+    def _procesar_datos_arca(self, datos_arca):
+        """
+        Procesa los datos recibidos de ARCA y los mapea a los campos del modelo Cliente.
+        
+        Args:
+            datos_arca: Respuesta del servicio de constancia de inscripción de ARCA
+            
+        Returns:
+            Diccionario con los datos mapeados para el formulario de cliente
+        """
+        if not datos_arca:
+            return {'error': 'No se encontraron datos en ARCA'}
+        
+        # Inicializar diccionario de datos procesados
+        datos_procesados = {
+            'cuit': '',
+            'razon': '',
+            'fantasia': '',
+            'domicilio': '',
+            'cpostal': '',
+            'provincia': '',
+            'localidad': '',
+            'condicion_iva': '',
+            'estado_contribuyente': '',
+            'mensaje': 'Datos obtenidos exitosamente de ARCA'
+        }
+        
+        try:
+            # La respuesta de ARCA es directamente el objeto personaReturn
+            # Según la estructura mostrada, los datos están en datosGenerales
+            if hasattr(datos_arca, 'datosGenerales') and datos_arca.datosGenerales:
+                datos_gen = datos_arca.datosGenerales
+                
+                # CUIT - está en idPersona dentro de datosGenerales
+                cuit = getattr(datos_gen, 'idPersona', '')
+                if cuit:
+                    datos_procesados['cuit'] = str(cuit)
+                
+                # Estado del contribuyente
+                estado = getattr(datos_gen, 'estadoClave', '')
+                datos_procesados['estado_contribuyente'] = estado
+                
+                # Razón social (para empresas)
+                if hasattr(datos_gen, 'razonSocial'):
+                    razon_social = getattr(datos_gen, 'razonSocial', '')
+                    if razon_social and razon_social != 'N/A':
+                        datos_procesados['razon'] = razon_social
+                        datos_procesados['fantasia'] = razon_social
+                
+                # Nombre y apellido (para personas físicas)
+                if hasattr(datos_gen, 'apellido') and hasattr(datos_gen, 'nombre'):
+                    apellido = getattr(datos_gen, 'apellido', '')
+                    nombre = getattr(datos_gen, 'nombre', '')
+                    if apellido or nombre:
+                        nombre_completo = f"{apellido} {nombre}".strip()
+                        if not datos_procesados['razon']:  # Solo si no hay razón social
+                            datos_procesados['razon'] = nombre_completo
+                            datos_procesados['fantasia'] = nombre_completo
+                
+                # Procesar domicilio fiscal - está anidado dentro de datosGenerales
+                if hasattr(datos_gen, 'domicilioFiscal') and datos_gen.domicilioFiscal:
+                    domicilio = datos_gen.domicilioFiscal
+                    
+                    # Dirección
+                    direccion = getattr(domicilio, 'direccion', '')
+                    if direccion and direccion != 'N/A':
+                        datos_procesados['domicilio'] = direccion
+                    
+                    # Código postal
+                    cod_postal = getattr(domicilio, 'codPostal', '')
+                    if cod_postal and cod_postal != 'N/A':
+                        datos_procesados['cpostal'] = str(cod_postal)
+                    
+                    # Provincia
+                    desc_provincia = getattr(domicilio, 'descripcionProvincia', '')
+                    if desc_provincia and desc_provincia != 'N/A':
+                        datos_procesados['provincia'] = desc_provincia
+                    
+                    # Localidad
+                    desc_localidad = getattr(domicilio, 'localidad', '')
+                    if desc_localidad and desc_localidad != 'N/A':
+                        datos_procesados['localidad'] = desc_localidad
+            
+            # Procesar condición IVA desde datosRegimenGeneral
+            if hasattr(datos_arca, 'datosRegimenGeneral') and datos_arca.datosRegimenGeneral:
+                regimen = datos_arca.datosRegimenGeneral
+                if hasattr(regimen, 'impuesto') and regimen.impuesto:
+                    # Buscar IVA en la lista de impuestos
+                    for impuesto in regimen.impuesto:
+                        id_imp = getattr(impuesto, 'idImpuesto', '')
+                        desc_imp = getattr(impuesto, 'descripcionImpuesto', '')
+                        estado_imp = getattr(impuesto, 'estadoImpuesto', '')
+                        
+                        # Buscar IVA (código 30) o IVA EXENTO (código 32)
+                        if id_imp in ['30', '32'] and estado_imp == 'AC':
+                            datos_procesados['condicion_iva'] = desc_imp
+                            break
+            
+            # Si no se encontró IVA en régimen general, buscar en monotributo
+            if not datos_procesados['condicion_iva'] and hasattr(datos_arca, 'datosMonotributo') and datos_arca.datosMonotributo:
+                monotributo = datos_arca.datosMonotributo
+                if hasattr(monotributo, 'impuesto') and monotributo.impuesto:
+                    for impuesto in monotributo.impuesto:
+                        id_imp = getattr(impuesto, 'idImpuesto', '')
+                        desc_imp = getattr(impuesto, 'descripcionImpuesto', '')
+                        estado_imp = getattr(impuesto, 'estadoImpuesto', '')
+                        
+                        # Buscar MONOTRIBUTO (código 20)
+                        if id_imp == '20' and estado_imp == 'AC':
+                            datos_procesados['condicion_iva'] = desc_imp
+                            break
+            
+            return datos_procesados
+            
+        except Exception as e:
+            return {
+                'error': f'Error procesando datos de ARCA: {str(e)}'
+            }
