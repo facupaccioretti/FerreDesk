@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react"
 import { getCookie } from "../../utils/csrf"
 import FilterableSelect from "./FilterableSelect"
+import useValidacionCUIT from "../../utils/useValidacionCUIT"
+import CUITValidacionTooltip from "./CUITValidacionTooltip"
 
 const ClienteForm = ({
   onSave,
@@ -62,6 +64,17 @@ const ClienteForm = ({
   const [modal, setModal] = useState(null)
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
+
+  // Hook para validación de CUIT
+  const { 
+    resultado, 
+    isLoading: isLoadingCUIT, 
+    error: errorCUIT, 
+    mostrarTooltip, 
+    handleCUITBlur, 
+    limpiarResultado, 
+    toggleTooltip 
+  } = useValidacionCUIT()
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target
@@ -523,13 +536,53 @@ const ClienteForm = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/40">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">CUIT</label>
-                    <input
-                      name="cuit"
-                      value={form.cuit}
-                      onChange={handleChange}
-                      maxLength={11}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
+                    <div className="relative">
+                      <input
+                        name="cuit"
+                        value={form.cuit}
+                        onChange={handleChange}
+                        onBlur={(e) => handleCUITBlur(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCUITBlur(e.target.value)
+                          }
+                        }}
+                        maxLength={11}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      />
+                      
+                      {/* Botón de alerta para mostrar validación */}
+                      {resultado && !isLoadingCUIT && !errorCUIT && (
+                        <button
+                          type="button"
+                          onClick={toggleTooltip}
+                          className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 transition-colors ${
+                            resultado.es_valido ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
+                          }`}
+                          title={resultado.es_valido ? 'CUIT válido' : 'CUIT inválido'}
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            {resultado.es_valido ? (
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            ) : (
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            )}
+                          </svg>
+                        </button>
+                      )}
+                      
+                      {/* Tooltip de validación */}
+                      {resultado && (
+                        <CUITValidacionTooltip
+                          resultado={resultado}
+                          onIgnorar={limpiarResultado}
+                          isLoading={isLoadingCUIT}
+                          error={errorCUIT}
+                          mostrarTooltip={mostrarTooltip}
+                          onToggle={toggleTooltip}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">IB</label>

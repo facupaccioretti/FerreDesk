@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     LocalidadViewSet, ProvinciaViewSet, BarrioViewSet, TipoIVAViewSet, TransporteViewSet,
     VendedorViewSet, PlazoViewSet, CategoriaClienteViewSet, ClienteViewSet,
-    BarrioList, LocalidadList, ProvinciaList, TipoIVAList, TransporteList, VendedorList, PlazoList, CategoriaClienteList
+    BarrioList, LocalidadList, ProvinciaList, TipoIVAList, TransporteList, VendedorList, PlazoList, CategoriaClienteList,
+    ValidarCUITAPIView
 )
 
 router = DefaultRouter()
@@ -17,4 +18,6 @@ router.register(r'plazos', PlazoViewSet)
 router.register(r'categorias', CategoriaClienteViewSet)
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 
-urlpatterns = router.urls 
+urlpatterns = [
+    path('validar-cuit/', ValidarCUITAPIView.as_view(), name='validar-cuit'),
+] + router.urls 

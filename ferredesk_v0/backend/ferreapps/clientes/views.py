@@ -2,6 +2,8 @@ from django.shortcuts import render
 from rest_framework import viewsets, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import permissions
 from .models import Localidad, Provincia, Barrio, TipoIVA, Transporte, Vendedor, Plazo, CategoriaCliente, Cliente
 from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
@@ -11,6 +13,7 @@ from django.db import transaction
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, ProtectedError
+from .algoritmo_cuit_utils import validar_cuit
 
 # Create your views here.
 
@@ -153,3 +156,38 @@ class PlazoList(generics.ListAPIView):
 class CategoriaClienteList(generics.ListAPIView):
     queryset = CategoriaCliente.objects.all()
     serializer_class = CategoriaClienteSerializer
+
+
+class ValidarCUITAPIView(APIView):
+    """
+    API endpoint para validar CUITs usando el algoritmo de dígito verificador.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Valida un CUIT proporcionado como parámetro de consulta.
+        
+        Parámetros:
+        - cuit: El CUIT a validar
+        
+        Retorna:
+        - es_valido: Boolean indicando si el CUIT es válido
+        - cuit_original: El CUIT original proporcionado
+        - cuit_formateado: El CUIT formateado (si es válido)
+        - tipo_contribuyente: Tipo de contribuyente (si es válido)
+        - mensaje_error: Mensaje de error (si no es válido)
+        """
+        cuit = request.GET.get('cuit', '').strip()
+        
+        if not cuit:
+            return Response({
+                'es_valido': False,
+                'cuit_original': '',
+                'mensaje_error': 'CUIT no proporcionado'
+            })
+        
+        # Usar el algoritmo de validación
+        resultado = validar_cuit(cuit)
+        
+        return Response(resultado)
