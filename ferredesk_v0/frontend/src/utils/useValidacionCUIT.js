@@ -18,6 +18,86 @@ const useValidacionCUIT = () => {
   const [errorARCA, setErrorARCA] = useState(null)
 
   /**
+   * Limpia todos los estados de ARCA
+   */
+  const limpiarEstadosARCA = useCallback(() => {
+    setDatosARCA(null)
+    setErrorARCA(null)
+  }, [])
+
+  /**
+   * Consulta datos de ARCA usando el CUIT
+   * @param {string} cuit - El CUIT a consultar en ARCA
+   */
+  const consultarARCA = useCallback(async (cuit) => {
+    if (!cuit) return
+    
+    setIsLoadingARCA(true)
+    setErrorARCA(null)
+    
+    try {
+      const response = await fetch(
+        `/api/clientes/procesar-cuit-arca/?cuit=${encodeURIComponent(cuit)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          credentials: 'include',
+        }
+      )
+      
+      // Intentar leer JSON siempre, incluso cuando !response.ok
+      let data = null
+      try {
+        data = await response.json()
+      } catch (_) {
+        data = null
+      }
+
+      // Manejo según contrato de backend
+      // 1) Faults SOAP / fallas técnicas → status 5xx con envelope { ok:false, type:'fault' }
+      if (!response.ok) {
+        const mensaje = data?.message || 'Error consultando AFIP'
+        setErrorARCA(mensaje)
+        setDatosARCA(null)
+        return
+      }
+
+      // 2) Errores de negocio (ok:false, type:'business')
+      if (data && data.ok === false) {
+        const mensaje = data.message || 'ARCA no devolvió datos'
+        setErrorARCA(mensaje)
+        setDatosARCA(null)
+        return
+      }
+
+      // 3) Compatibilidad legacy (backend pudo devolver { error: ... })
+      if (data && typeof data === 'object' && 'error' in data && data.error) {
+        setErrorARCA(data.error)
+        setDatosARCA(null)
+        return
+      }
+
+      // 4) Caso exitoso: datos procesados para autocompletar
+      if (data) {
+        setDatosARCA(data)
+        setErrorARCA(null)
+      } else {
+        setErrorARCA('Respuesta vacía de ARCA')
+        setDatosARCA(null)
+      }
+      
+    } catch (err) {
+      setErrorARCA(err.message)
+      setDatosARCA(null)
+    } finally {
+      setIsLoadingARCA(false)
+    }
+  }, [])
+
+  /**
    * Valida un CUIT en el backend
    * @param {string} cuit - El CUIT a validar
    */
@@ -26,6 +106,8 @@ const useValidacionCUIT = () => {
     if (!cuit || cuit.trim().length < 11) {
       setResultado(null)
       setError(null)
+      // Limpiar estados de ARCA cuando el CUIT está vacío o es muy corto
+      limpiarEstadosARCA()
       return
     }
 
@@ -38,6 +120,8 @@ const useValidacionCUIT = () => {
     timeoutRef.current = setTimeout(async () => {
       setIsLoading(true)
       setError(null)
+      // Limpiar estados de ARCA al iniciar nueva validación
+      limpiarEstadosARCA()
 
       try {
         const response = await fetch(
@@ -81,60 +165,7 @@ const useValidacionCUIT = () => {
         setIsLoading(false)
       }
     }, 500) // Debounce de 500ms
-  }, [])
-
-  /**
-   * Consulta datos de ARCA usando el CUIT
-   * @param {string} cuit - El CUIT a consultar en ARCA
-   */
-  const consultarARCA = useCallback(async (cuit) => {
-    if (!cuit) return
-    
-    setIsLoadingARCA(true)
-    setErrorARCA(null)
-    
-    try {
-      const response = await fetch(
-        `/api/clientes/procesar-cuit-arca/?cuit=${encodeURIComponent(cuit)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-          },
-          credentials: 'include',
-        }
-      )
-      
-      if (!response.ok) {
-        throw new Error('Error al consultar ARCA')
-      }
-      
-      const data = await response.json()
-      
-      if (data.error) {
-        setErrorARCA(data.error)
-        setDatosARCA(null)
-      } else {
-        setDatosARCA(data)
-        setErrorARCA(null)
-      }
-      
-    } catch (err) {
-      setErrorARCA(err.message)
-      setDatosARCA(null)
-    } finally {
-      setIsLoadingARCA(false)
-    }
-  }, [])
-
-  /**
-   * Limpia todos los estados de ARCA
-   */
-  const limpiarEstadosARCA = useCallback(() => {
-    setDatosARCA(null)
-    setErrorARCA(null)
-  }, [])
+  }, [limpiarEstadosARCA, consultarARCA])
 
   /**
    * Limpia el resultado de la validación (usado cuando el usuario ignora la validación)

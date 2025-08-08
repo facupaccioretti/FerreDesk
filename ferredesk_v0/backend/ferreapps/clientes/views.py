@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import permissions
+import re
 import logging
 from .models import Localidad, Provincia, Barrio, TipoIVA, Transporte, Vendedor, Plazo, CategoriaCliente, Cliente
 from .serializers import (
@@ -229,9 +230,26 @@ class ProcesarCuitArcaAPIView(APIView):
         """
         cuit = request.GET.get('cuit', '').strip()
         
+        # Validación de entrada (no llamar a AFIP si el CUIT no es válido)
         if not cuit:
             return Response({
-                'error': 'CUIT no proporcionado'
+                'ok': False,
+                'source': 'backend',
+                'type': 'validation',
+                'code': 'CUIT_FALTANTE',
+                'message': 'CUIT no proporcionado',
+                'retryable': False,
+                'data': None,
+            }, status=400)
+        if not cuit.isdigit() or len(cuit) != 11:
+            return Response({
+                'ok': False,
+                'source': 'backend',
+                'type': 'validation',
+                'code': 'CUIT_FORMATO_INVALIDO',
+                'message': 'El formato del CUIT es inválido',
+                'retryable': False,
+                'data': None,
             }, status=400)
         
         try:
@@ -256,14 +274,23 @@ class ProcesarCuitArcaAPIView(APIView):
             logger.info("-" * 40)
             logger.info(str(datos_arca))
 
-            # Si ARCA devolvió error o no hay bloques de datos, retornar el mensaje de error
+            # Si ARCA devolvió error de negocio (errorConstancia / sin datos), responder 200 con envelope uniforme
             if self._tiene_error_arca(datos_arca):
                 mensaje_error = self._extraer_mensaje_error_arca(datos_arca, cuit)
+                codigo_error = self._extraer_codigo_error_arca(datos_arca) or 'AFIP_BUSINESS_ERROR'
                 try:
                     logger.warning("ARCA devolvió error para CUIT %s: %s", cuit, mensaje_error)
                 except Exception:
                     pass
-                return Response({'error': mensaje_error})
+                return Response({
+                    'ok': False,
+                    'source': 'afip',
+                    'type': 'business',
+                    'code': codigo_error,
+                    'message': mensaje_error,
+                    'retryable': False,
+                    'data': None,
+                })
             
             # Procesar los datos de ARCA y mapearlos a campos del cliente
             datos_procesados = self._procesar_datos_arca(datos_arca)
@@ -283,9 +310,20 @@ class ProcesarCuitArcaAPIView(APIView):
             return Response(datos_procesados)
             
         except Exception as e:
+            # Mapear Faults SOAP / fallas técnicas a 503 con envelope uniforme
+            texto_error = str(e) or 'Falla técnica consultando AFIP'
+            # Intentar extraer un código identificable (ORA-xxxxx, ID AT, TIMEOUT, WSAA, etc.)
+            codigo = self._extraer_codigo_fault(texto_error)
+            headers = {'Retry-After': '60'}
             return Response({
-                'error': f'Error consultando ARCA: {str(e)}'
-            }, status=500)
+                'ok': False,
+                'source': 'afip',
+                'type': 'fault',
+                'code': codigo,
+                'message': 'Error interno de AFIP consultando padrón',
+                'retryable': True,
+                'data': None,
+            }, status=503, headers=headers)
     
     def _procesar_datos_arca(self, datos_arca):
         """
@@ -443,6 +481,55 @@ class ProcesarCuitArcaAPIView(APIView):
             return base
         except Exception:
             return "No fue posible interpretar el error devuelto por ARCA"
+
+    def _extraer_codigo_error_arca(self, datos_arca) -> str | None:
+        """
+        Intenta extraer un código/motivo identificable desde errorConstancia de ARCA.
+        Si no hay un código claro, retorna None.
+        """
+        try:
+            error_constancia = getattr(datos_arca, 'errorConstancia', None)
+            if error_constancia is not None:
+                mensajes = getattr(error_constancia, 'error', None)
+                # Si viene lista, tomar el primero y extraer prefijo tipo CODIGO: mensaje
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    texto = str(mensajes[0])
+                elif isinstance(mensajes, str):
+                    texto = mensajes
+                else:
+                    texto = ''
+                # Buscar un patrón tipo CODIGO o números/identificadores al inicio
+                m = re.match(r"([A-Z_\-]+\d*)[:\-]", texto.strip())
+                if m:
+                    return m.group(1)
+                # Si no, devolver una etiqueta genérica
+                if texto:
+                    return 'AFIP_BUSINESS_ERROR'
+        except Exception:
+            pass
+        return None
+
+    def _extraer_codigo_fault(self, texto_error: str) -> str:
+        """
+        Extrae un código identificable desde mensajes de Faults SOAP o errores técnicos.
+        """
+        try:
+            # ORA-errores
+            m = re.search(r"(ORA-\d{5})", texto_error)
+            if m:
+                return m.group(1)
+            # id AT / Access Ticket
+            if 'id AT' in texto_error or 'ID AT' in texto_error:
+                return 'ID_AT'
+            # timeouts
+            if 'timeout' in texto_error.lower():
+                return 'TIMEOUT'
+            # WSAA caído o similar
+            if 'wsaa' in texto_error.lower():
+                return 'WSAA'
+        except Exception:
+            pass
+        return 'AFIP_FAULT'
 
     def _detectar_condicion_iva_mas_reciente(self, datos_arca):
         """

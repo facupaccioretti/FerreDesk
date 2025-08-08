@@ -66,7 +66,6 @@ const ClienteForm = ({
     fantasia: false,
     domicilio: false,
     cpostal: false,
-    provincia: false,
     localidad: false,
     iva: false
   })
@@ -87,9 +86,7 @@ const ClienteForm = ({
     toggleTooltip,
     // Estados y funciones de ARCA
     datosARCA,
-    isLoadingARCA,
     errorARCA,
-    consultarARCA,
     limpiarEstadosARCA
   } = useValidacionCUIT()
 
@@ -100,15 +97,14 @@ const ClienteForm = ({
       return
     }
     
-    // Si se está cambiando el CUIT, limpiar estados de ARCA y campos autocompletados
+    // Si se está cambiando el CUIT, solo limpiar campos autocompletados
+    // Los estados de ARCA se manejan en el hook useValidacionCUIT
     if (name === "cuit") {
-      limpiarEstadosARCA()
       setCamposAutocompletados({
         razon: false,
         fantasia: false,
         domicilio: false,
         cpostal: false,
-        provincia: false,
         localidad: false,
         iva: false
       })
@@ -116,7 +112,7 @@ const ClienteForm = ({
     
     // Actualizamos de forma inmutable manteniendo resto del estado
     setForm((f) => ({ ...f, [name]: value }))
-  }, [limpiarEstadosARCA])
+  }, [])
 
   // Función para autocompletar campos con datos de ARCA
   const autocompletarCampos = useCallback((datos) => {
@@ -176,14 +172,6 @@ const ClienteForm = ({
       }
       
       // Campos FilterableSelect (buscar coincidencias - SIEMPRE sobreescribir)
-      if (datos.provincia) {
-        const provinciaEncontrada = buscarCoincidencia(datos.provincia, provincias)
-        if (provinciaEncontrada) {
-          nuevosDatos.provincia = provinciaEncontrada.id
-          nuevosCamposAutocompletados.provincia = true
-        }
-      }
-      
       if (datos.localidad) {
         const localidadEncontrada = buscarCoincidencia(datos.localidad, localidades)
         if (localidadEncontrada) {
@@ -206,7 +194,7 @@ const ClienteForm = ({
       
       return nuevosDatos
     })
-  }, [provincias, localidades, tiposIVA])
+  }, [localidades, tiposIVA, camposAutocompletados])
 
   // Efecto para autocompletar cuando llegan datos de ARCA
   useEffect(() => {
@@ -220,7 +208,7 @@ const ClienteForm = ({
       
       return () => clearTimeout(timer)
     }
-  }, [datosARCA, errorARCA, autocompletarCampos, limpiarEstadosARCA])
+  }, [datosARCA, errorARCA, limpiarEstadosARCA])
 
   // ----- Modal para agregar entidades relacionales -----
   const openAddModal = (type) => {
@@ -598,11 +586,6 @@ const ClienteForm = ({
                   <div className="md:col-span-2">
                     <label className="block text-sm font-semibold text-slate-700 mb-1">
                       Razón Social *
-                      {camposAutocompletados.razon && (
-                        <span className="ml-2 text-xs text-emerald-600 font-normal">
-                          (Autocompletado por ARCA)
-                        </span>
-                      )}
                     </label>
                     <input
                       name="razon"
