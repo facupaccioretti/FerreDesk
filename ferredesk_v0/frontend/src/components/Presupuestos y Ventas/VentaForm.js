@@ -664,26 +664,27 @@ const VentaForm = ({
               </div>
             )}
 
-            {/* Banner de estado CUIT para facturas fiscales A */}
-            {mostrarBannerCuit && tipoComprobante === 'factura' && usarFiscal && fiscal.letra === 'A' && (
-              <CuitStatusBanner
-                cuit={formulario.cuit}
-                estado={(() => {
-                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
-                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                    return 'error'
-                  }
-                  return estadoARCAStatus || 'ok'
-                })()}
-                mensajes={(() => {
-                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
-                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                    return ['CUIT faltante o inválido. Verificar datos del cliente.']
-                  }
-                  return mensajesARCAStatus || []
-                })()}
-                onDismiss={ocultarBannerCuit}
-              />
+            {/* Banner de estado CUIT para facturas fiscales A (oculto durante envío/espera ARCA) */}
+            {mostrarBannerCuit && !esperandoArca && tipoComprobante === 'factura' && usarFiscal && fiscal.letra === 'A' && (
+                          <CuitStatusBanner
+              cuit={formulario.cuit}
+              estado={(() => {
+                const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
+                if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                  return 'error'
+                }
+                return estadoARCAStatus || 'ok'
+              })()}
+              mensajes={(() => {
+                const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
+                if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                  return ['CUIT faltante o inválido. Verificar datos del cliente.']
+                }
+                return mensajesARCAStatus || []
+              })()}
+              onDismiss={ocultarBannerCuit}
+              isLoading={isLoadingARCAStatus}
+            />
             )}
 
             <div className="mb-4">

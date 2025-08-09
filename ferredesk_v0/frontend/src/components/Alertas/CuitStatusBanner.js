@@ -5,7 +5,28 @@ import React from 'react'
  * Se muestra solo cuando la letra fiscal es A y hay información relevante del CUIT.
  * No bloquea la emisión, solo informa al usuario sobre observaciones de ARCA.
  */
-const CuitStatusBanner = ({ cuit, estado, mensajes = [], onDismiss }) => {
+const CuitStatusBanner = ({ cuit, estado, mensajes = [], onDismiss, isLoading = false }) => {
+  // Mostrar spinner de loading mientras consulta ARCA
+  if (isLoading) {
+    return (
+      <div className="mb-4 p-4 rounded-lg border bg-blue-50 border-blue-200 text-blue-800">
+        <div className="flex items-center space-x-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-700"></div>
+          <div>
+            <h4 className="font-semibold text-sm">
+              Consultando CUIT en el Padrón...
+            </h4>
+            {cuit && (
+              <p className="text-sm font-mono">
+                <strong>CUIT:</strong> {cuit}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!estado || estado === 'ok') {
     return null
   }
@@ -65,8 +86,7 @@ const CuitStatusBanner = ({ cuit, estado, mensajes = [], onDismiss }) => {
             
             {/* Texto informativo */}
             <p className="text-xs mt-2 opacity-75">
-              Esta información es consultada automáticamente desde ARCA. 
-              Puede continuar con la emisión de todos modos.
+            "No se garantiza la autorización del comprobante; en caso de serlo, podría quedar con observaciones." 
             </p>
           </div>
         </div>

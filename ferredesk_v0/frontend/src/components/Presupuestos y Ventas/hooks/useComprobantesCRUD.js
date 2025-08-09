@@ -457,12 +457,13 @@ const useComprobantesCRUD = ({
     }
     
     // Obtener datos del cliente
+    // Robustez: poblar datos del cliente con múltiples posibles campos
     const cliente = {
       id: factura.ven_idcli,
       razon: factura.cliente_nombre || factura.cliente,
       nombre: factura.cliente_nombre || factura.cliente,
-      cuit: factura.cuit || '',
-      domicilio: factura.domicilio || '',
+      cuit: factura.cuit || factura.ven_cuit || '',
+      domicilio: factura.domicilio || factura.ven_domicilio || '',
       plazo_id: factura.ven_idpla
     };
     

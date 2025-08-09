@@ -399,6 +399,7 @@ const NotaCreditoForm = ({
                 return mensajesARCAStatus || [];
               })()}
               onDismiss={ocultarBannerCuit}
+              isLoading={isLoadingARCAStatus}
             />
           )}
 

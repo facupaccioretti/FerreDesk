@@ -120,6 +120,10 @@ const ConVentaForm = ({
   const [inicializado, setInicializado] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState("");
   const [comprobanteId, setComprobanteId] = useState("");
+  // Estado para evitar disparos en carga inicial (similar a VentaForm)
+  const [esCargaInicial, setEsCargaInicial] = useState(true);
+  // Estado para evitar validación ARCA durante proceso de submit
+  const [procesandoSubmit, setProcesandoSubmit] = useState(false);
 
   // Efecto de inicialización sincronizada (igual que VentaForm)
   useEffect(() => {
@@ -234,8 +238,13 @@ const ConVentaForm = ({
     limpiarEstadosARCAStatus();
   };
 
-  // Callback reutilizable para aplicar datos del cliente al formulario
-  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+  // Callback base para aplicar datos del cliente al formulario
+  const aplicarSeleccionCliente = manejarSeleccionClienteObjeto(setFormulario);
+  // Wrapper para marcar fin de carga inicial al cambiar cliente
+  const handleClienteSelect = (cliente) => {
+    aplicarSeleccionCliente(cliente);
+    setEsCargaInicial(false);
+  };
 
   // Bloqueo de envío accidental con tecla Enter
   const bloquearEnterSubmit = (e) => {
@@ -349,58 +358,25 @@ const ConVentaForm = ({
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
-  // UseEffect para consultar estado CUIT en ARCA cuando aplique (letra fiscal A)
-  useEffect(() => {
-    // Solo consultar si hay datos necesarios
-    if (!inicializado) return;
+  // (El efecto que consulta ARCA se declara más abajo, luego de definir 'usarFiscal' y 'fiscal')
 
-    // Solo consultar si es conversión a factura fiscal
-    if (tipoComprobante !== 'factura') {
-      setMostrarBannerCuit(false);
-      limpiarEstadosARCAStatus();
-      return;
+  // Envoltorio de handleChange para marcar fin de carga inicial en campos clave
+  const handleChangeBase = manejarCambioFormulario(setFormulario);
+  const handleChange = (e) => {
+    handleChangeBase(e);
+    const nombreCampo = e?.target?.name;
+    if (nombreCampo === 'cuit' || nombreCampo === 'domicilio' || nombreCampo === 'clienteId') {
+      setEsCargaInicial(false);
     }
-
-    // Obtener la letra del comprobante seleccionado
-    const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-    const letraFiscal = comprobanteSeleccionado?.letra;
-
-    // Solo consultar si la letra fiscal es A
-    if (letraFiscal !== 'A') {
-      setMostrarBannerCuit(false);
-      limpiarEstadosARCAStatus();
-      return;
-    }
-
-    // Validar que hay CUIT válido
-    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
-    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-      setMostrarBannerCuit(true);
-      // No consultar ARCA pero mostrar mensaje local de CUIT inválido
-      return;
-    }
-
-    // Consultar estado en ARCA
-    consultarARCAStatus(cuitLimpio);
-    setMostrarBannerCuit(true);
-
-  }, [
-    tipoComprobante, 
-    comprobanteId,
-    comprobantesVenta,
-    formulario.cuit, 
-    formulario.clienteId, 
-    inicializado,
-    consultarARCAStatus,
-    limpiarEstadosARCAStatus
-  ]);
-
-  const handleChange = manejarCambioFormulario(setFormulario);
+  };
 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!window.confirm("¿Está seguro de guardar los cambios?")) return;
+    
+    // Activar flag para evitar validación ARCA durante el proceso
+    setProcesandoSubmit(true);
     if (!itemsGridRef.current) return;
 
     try {
@@ -477,6 +453,9 @@ const ConVentaForm = ({
     } catch (error) {
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la conversión")
+    } finally {
+      // Desactivar flag independientemente del resultado
+      setProcesandoSubmit(false);
     }
   };
 
@@ -554,6 +533,59 @@ const ConVentaForm = ({
     }
   }
 
+  // UseEffect para consultar estado CUIT en ARCA cuando aplique (solo letra fiscal A real)
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    // Evitar en carga inicial, si aún no se inicializó el formulario, o durante submit
+    if (!inicializado || esCargaInicial || procesandoSubmit) return;
+
+    // Solo consultar si es comprobante de tipo factura (fiscal)
+    if (tipoComprobante !== 'factura') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Esperar a que la lógica fiscal resuelva el comprobante (como en VentaForm)
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null;
+    if (letraFiscal !== 'A') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Validar que hay CUIT con formato válido
+    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+      setMostrarBannerCuit(true);
+      return;
+    }
+
+    // Debounce de la consulta a ARCA para evitar llamadas al tipear
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      consultarARCAStatus(cuitLimpio);
+      setMostrarBannerCuit(true);
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+
+  }, [
+    tipoComprobante,
+    usarFiscal,
+    fiscal?.letra,
+    fiscal?.comprobanteFiscal,
+    formulario.cuit,
+    formulario.clienteId,
+    inicializado,
+    esCargaInicial,
+    procesandoSubmit,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  ]);
+
   // Renderizado condicional centralizado
   if (isLoading) {
     return (
@@ -565,6 +597,8 @@ const ConVentaForm = ({
       </div>
     );
   }
+
+  // (bloque movido arriba para respetar reglas de hooks)
 
   if (loadingError) {
     return (
@@ -588,7 +622,7 @@ const ConVentaForm = ({
           <div className="px-8 pt-4 pb-6">
 
             {/* Banner de estado CUIT para conversiones a factura fiscal A */}
-            {mostrarBannerCuit && tipoComprobante === 'factura' && (() => {
+            {mostrarBannerCuit && !procesandoSubmit && tipoComprobante === 'factura' && (() => {
               const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
               return comprobanteSeleccionado?.letra === 'A';
             })() && (
@@ -609,6 +643,7 @@ const ConVentaForm = ({
                   return mensajesARCAStatus || [];
                 })()}
                 onDismiss={ocultarBannerCuit}
+                isLoading={isLoadingARCAStatus}
               />
             )}
 
