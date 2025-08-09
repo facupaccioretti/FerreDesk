@@ -747,6 +747,14 @@ const ItemsGridPresupuesto = forwardRef(
       }
     }, [rows, onRowsChange])
 
+    // Función helper para seleccionar todo el texto al hacer foco en un input
+    const manejarFocoSeleccionCompleta = (evento) => {
+      // Solo seleccionar si el input no está deshabilitado
+      if (!evento.target.disabled && !evento.target.readOnly) {
+        evento.target.select()
+      }
+    }
+
     // Manejar cambio de alícuota en ítem genérico procurando mantener constante el precio final
     const handleIvaChange = (idx, nuevoIdAli) => {
       setRows(prevRows => {
@@ -981,6 +989,7 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.codigo}
                           onChange={(e) => handleRowChange(idx, "codigo", e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
+                          onFocus={manejarFocoSeleccionCompleta}
                           className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
                             row.esBloqueado 
                               ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
@@ -1004,6 +1013,7 @@ const ItemsGridPresupuesto = forwardRef(
                             type="text"
                             value={row.denominacion}
                             onChange={(e) => handleRowChange(idx, "denominacion", e.target.value)}
+                            onFocus={manejarFocoSeleccionCompleta}
                             className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
                               row.esBloqueado 
                                 ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
@@ -1026,6 +1036,7 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.cantidad}
                           onChange={(e) => handleCantidadChange(idx, e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "cantidad")}
+                          onFocus={manejarFocoSeleccionCompleta}
                           /* Requerir al menos 1 si es ítem de stock o genérico con precio > 0 */
                           min={row.producto || (Number(row.precio) > 0) ? 1 : 0}
                           className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
@@ -1055,6 +1066,7 @@ const ItemsGridPresupuesto = forwardRef(
                             handleRowChange(idx, "precio", e.target.value)
                           }}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
+                          onFocus={manejarFocoSeleccionCompleta}
                           className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${
                             row.esBloqueado 
                               ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
@@ -1076,6 +1088,7 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.bonificacion}
                           onChange={(e) => handleRowChange(idx, "bonificacion", e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "bonificacion")}
+                          onFocus={manejarFocoSeleccionCompleta}
                           min="0"
                           max="100"
                           step="0.01"
