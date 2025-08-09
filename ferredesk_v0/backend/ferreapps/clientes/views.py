@@ -223,12 +223,15 @@ class ProcesarCuitArcaAPIView(APIView):
         
         Parámetros:
         - cuit: El CUIT a consultar
+        - mode: Modo de consulta ('status' para validación fiscal liviana, sin modo para autocompletado)
         
         Retorna:
         - datos_procesados: Diccionario con los datos mapeados para el formulario de cliente
+        - estado_cuit: Para mode=status, información del estado del CUIT
         - error: Mensaje de error si algo falla
         """
         cuit = request.GET.get('cuit', '').strip()
+        mode = request.GET.get('mode', '').strip()
         
         # Validación de entrada (no llamar a AFIP si el CUIT no es válido)
         if not cuit:
@@ -274,7 +277,7 @@ class ProcesarCuitArcaAPIView(APIView):
             logger.info("-" * 40)
             logger.info(str(datos_arca))
 
-            # Si ARCA devolvió error de negocio (errorConstancia / sin datos), responder 200 con envelope uniforme
+            # Si ARCA devolvió error de negocio (errorConstancia / sin datos), responder según el modo
             if self._tiene_error_arca(datos_arca):
                 mensaje_error = self._extraer_mensaje_error_arca(datos_arca, cuit)
                 codigo_error = self._extraer_codigo_error_arca(datos_arca) or 'AFIP_BUSINESS_ERROR'
@@ -282,6 +285,15 @@ class ProcesarCuitArcaAPIView(APIView):
                     logger.warning("ARCA devolvió error para CUIT %s: %s", cuit, mensaje_error)
                 except Exception:
                     pass
+                
+                # Si es mode=status, devolver respuesta simplificada con estado observado
+                if mode == 'status':
+                    return Response({
+                        'estado': 'observado',
+                        'mensajes': [mensaje_error]
+                    })
+                
+                # Modo normal: devolver envelope completo
                 return Response({
                     'ok': False,
                     'source': 'afip',
@@ -292,7 +304,22 @@ class ProcesarCuitArcaAPIView(APIView):
                     'data': None,
                 })
             
-            # Procesar los datos de ARCA y mapearlos a campos del cliente
+            # Si es mode=status, solo devolver estado e información mínima
+            if mode == 'status':
+                estado_contribuyente = ''
+                try:
+                    if hasattr(datos_arca, 'datosGenerales') and datos_arca.datosGenerales:
+                        estado_contribuyente = getattr(datos_arca.datosGenerales, 'estadoClave', '')
+                except Exception:
+                    pass
+                
+                return Response({
+                    'estado': 'ok',
+                    'mensajes': [],
+                    'estado_contribuyente': estado_contribuyente
+                })
+            
+            # Modo normal: procesar los datos de ARCA y mapearlos a campos del cliente
             datos_procesados = self._procesar_datos_arca(datos_arca)
             # Log de salida procesada (enfocado en IVA y básicos)
             try:
@@ -310,10 +337,19 @@ class ProcesarCuitArcaAPIView(APIView):
             return Response(datos_procesados)
             
         except Exception as e:
-            # Mapear Faults SOAP / fallas técnicas a 503 con envelope uniforme
+            # Mapear Faults SOAP / fallas técnicas según el modo
             texto_error = str(e) or 'Falla técnica consultando AFIP'
             # Intentar extraer un código identificable (ORA-xxxxx, ID AT, TIMEOUT, WSAA, etc.)
             codigo = self._extraer_codigo_fault(texto_error)
+            
+            # Si es mode=status, devolver respuesta simplificada
+            if mode == 'status':
+                return Response({
+                    'estado': 'error',
+                    'mensajes': ['Error interno de AFIP consultando padrón']
+                }, status=503)
+            
+            # Modo normal: devolver envelope completo
             headers = {'Retry-After': '60'}
             return Response({
                 'ok': False,

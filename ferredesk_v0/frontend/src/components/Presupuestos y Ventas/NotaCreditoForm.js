@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
@@ -12,6 +12,8 @@ import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import { useArcaEstado } from '../../utils/useArcaEstado';
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
+import useValidacionCUIT from '../../utils/useValidacionCUIT';
+import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
   if (!clienteSeleccionado) return {}; 
@@ -88,6 +90,15 @@ const NotaCreditoForm = ({
 }) => {
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
+  // Hook para consulta de estado CUIT en ARCA
+  const { 
+    estadoARCAStatus,
+    mensajesARCAStatus,
+    isLoadingARCAStatus,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  } = useValidacionCUIT();
+  
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
@@ -163,6 +174,15 @@ const NotaCreditoForm = ({
 
   const itemsGridRef = useRef();
   
+  // Estado para controlar visibilidad del banner de estado CUIT
+  const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
+  
+  // Función para ocultar el banner de estado CUIT
+  const ocultarBannerCuit = () => {
+    setMostrarBannerCuit(false);
+    limpiarEstadosARCAStatus();
+  };
+  
   const stockProveedores = useMemo(() => {
     const map = {};
     if (Array.isArray(productos)) {
@@ -191,6 +211,43 @@ const NotaCreditoForm = ({
     codigoAfip: codigoAfipNC,
     clienteId: formulario.clienteId,
   });
+
+  // UseEffect para consultar estado CUIT en ARCA cuando aplique (nota de crédito A)
+  useEffect(() => {
+    // Solo consultar si hay datos necesarios
+    if (!formulario.clienteId || !facturasAsociadas?.length) {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Solo consultar si la letra de la NC es A
+    if (letraNC !== 'A') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Validar que hay CUIT válido
+    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+      setMostrarBannerCuit(true);
+      // No consultar ARCA pero mostrar mensaje local de CUIT inválido
+      return;
+    }
+
+    // Consultar estado en ARCA
+    consultarARCAStatus(cuitLimpio);
+    setMostrarBannerCuit(true);
+
+  }, [
+    letraNC,
+    formulario.cuit, 
+    formulario.clienteId, 
+    facturasAsociadas,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  ]);
 
   const handleChange = manejarCambioFormulario(setFormulario);
 
@@ -323,6 +380,28 @@ const NotaCreditoForm = ({
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600"></div>
 
         <div className="px-8 pt-4 pb-6">
+          {/* Banner de estado CUIT para notas de crédito A */}
+          {mostrarBannerCuit && letraNC === 'A' && (
+            <CuitStatusBanner
+              cuit={formulario.cuit}
+              estado={(() => {
+                const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                  return 'error';
+                }
+                return estadoARCAStatus || 'ok';
+              })()}
+              mensajes={(() => {
+                const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                  return ['CUIT faltante o inválido. Verificar datos del cliente.'];
+                }
+                return mensajesARCAStatus || [];
+              })()}
+              onDismiss={ocultarBannerCuit}
+            />
+          )}
+
           <div className="absolute top-6 right-6 z-10">
             <div className="w-14 h-14 flex flex-col items-center justify-center border-2 border-slate-800 shadow-xl bg-gradient-to-br from-white to-slate-50 rounded-xl ring-1 ring-slate-200/50">
               <span className="text-2xl font-extrabold font-mono text-slate-900 leading-none">{letraNC}</span>

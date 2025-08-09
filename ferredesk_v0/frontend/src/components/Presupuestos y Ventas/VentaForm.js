@@ -10,6 +10,7 @@ import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
+import useValidacionCUIT from "../../utils/useValidacionCUIT"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import { useComprobanteFiscal } from "./herramientasforms/useComprobanteFiscal"
@@ -18,6 +19,7 @@ import { useArcaEstado } from "../../utils/useArcaEstado"
 import { useArcaResultadoHandler } from "../../utils/useArcaResultadoHandler"
 import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
+import CuitStatusBanner from "../Alertas/CuitStatusBanner"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -94,6 +96,15 @@ const VentaForm = ({
   // Hooks existentes movidos al inicio
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
+  
+  // Hook para consulta de estado CUIT en ARCA
+  const { 
+    estadoARCAStatus,
+    mensajesARCAStatus,
+    isLoadingARCAStatus,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  } = useValidacionCUIT()
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -306,6 +317,9 @@ const VentaForm = ({
     esValido: false
   })
 
+  // Estado para controlar visibilidad del banner de estado CUIT
+  const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false)
+
 
 
   // Sincronizar documentoInfo cuando cambie el formulario (por ejemplo, al seleccionar cliente)
@@ -378,8 +392,58 @@ const VentaForm = ({
     setEsCargaInicial(false)
   }
 
+  // UseEffect para consultar estado CUIT en ARCA cuando aplique (letra fiscal A)
+  useEffect(() => {
+    // Solo consultar si no es carga inicial y hay datos necesarios
+    if (esCargaInicial) return
+
+    // Solo consultar si es factura fiscal
+    if (tipoComprobante !== 'factura') {
+      setMostrarBannerCuit(false)
+      limpiarEstadosARCAStatus()
+      return
+    }
+
+    // Solo consultar si la letra fiscal es A
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null
+    if (letraFiscal !== 'A') {
+      setMostrarBannerCuit(false)
+      limpiarEstadosARCAStatus()
+      return
+    }
+
+    // Validar que hay CUIT válido
+    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
+    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+      setMostrarBannerCuit(true)
+      // No consultar ARCA pero mostrar mensaje local de CUIT inválido
+      return
+    }
+
+    // Consultar estado en ARCA
+    consultarARCAStatus(cuitLimpio)
+    setMostrarBannerCuit(true)
+
+  }, [
+    tipoComprobante, 
+    usarFiscal, 
+    fiscal.letra, 
+    fiscal.comprobanteFiscal,
+    formulario.cuit, 
+    formulario.clienteId, 
+    esCargaInicial,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  ])
+
   const abrirSelector = () => setSelectorAbierto(true)
   const cerrarSelector = () => setSelectorAbierto(false)
+  
+  // Función para ocultar el banner de estado CUIT
+  const ocultarBannerCuit = () => {
+    setMostrarBannerCuit(false)
+    limpiarEstadosARCAStatus()
+  }
   const onSeleccionarDesdeModal = (cli) => {
     console.log('[onSeleccionarDesdeModal] Cliente seleccionado:', cli)
     
@@ -598,6 +662,28 @@ const VentaForm = ({
                   {comprobanteRequisitos.mensaje}
                 </div>
               </div>
+            )}
+
+            {/* Banner de estado CUIT para facturas fiscales A */}
+            {mostrarBannerCuit && tipoComprobante === 'factura' && usarFiscal && fiscal.letra === 'A' && (
+              <CuitStatusBanner
+                cuit={formulario.cuit}
+                estado={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return 'error'
+                  }
+                  return estadoARCAStatus || 'ok'
+                })()}
+                mensajes={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '')
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return ['CUIT faltante o inválido. Verificar datos del cliente.']
+                  }
+                  return mensajesARCAStatus || []
+                })()}
+                onDismiss={ocultarBannerCuit}
+              />
             )}
 
             <div className="mb-4">

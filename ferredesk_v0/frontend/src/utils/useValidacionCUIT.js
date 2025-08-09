@@ -17,12 +17,27 @@ const useValidacionCUIT = () => {
   const [isLoadingARCA, setIsLoadingARCA] = useState(false)
   const [errorARCA, setErrorARCA] = useState(null)
 
+  // Estados para consulta de estado ARCA (modo status)
+  const [estadoARCAStatus, setEstadoARCAStatus] = useState(null)
+  const [mensajesARCAStatus, setMensajesARCAStatus] = useState([])
+  const [isLoadingARCAStatus, setIsLoadingARCAStatus] = useState(false)
+  const [errorARCAStatus, setErrorARCAStatus] = useState(null)
+
   /**
    * Limpia todos los estados de ARCA
    */
   const limpiarEstadosARCA = useCallback(() => {
     setDatosARCA(null)
     setErrorARCA(null)
+  }, [])
+
+  /**
+   * Limpia todos los estados de ARCA Status
+   */
+  const limpiarEstadosARCAStatus = useCallback(() => {
+    setEstadoARCAStatus(null)
+    setMensajesARCAStatus([])
+    setErrorARCAStatus(null)
   }, [])
 
   /**
@@ -94,6 +109,66 @@ const useValidacionCUIT = () => {
       setDatosARCA(null)
     } finally {
       setIsLoadingARCA(false)
+    }
+  }, [])
+
+  /**
+   * Consulta estado de CUIT en ARCA (modo liviano para validación fiscal)
+   * @param {string} cuit - El CUIT a consultar en ARCA
+   */
+  const consultarARCAStatus = useCallback(async (cuit) => {
+    if (!cuit) return
+    
+    setIsLoadingARCAStatus(true)
+    setErrorARCAStatus(null)
+    
+    try {
+      const response = await fetch(
+        `/api/clientes/procesar-cuit-arca/?cuit=${encodeURIComponent(cuit)}&mode=status`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          credentials: 'include',
+        }
+      )
+      
+      // Intentar leer JSON siempre, incluso cuando !response.ok
+      let data = null
+      try {
+        data = await response.json()
+      } catch (_) {
+        data = null
+      }
+
+      // Si hay error del servidor (503, etc.)
+      if (!response.ok) {
+        const mensaje = data?.mensajes?.[0] || data?.message || 'Error consultando AFIP'
+        setErrorARCAStatus(mensaje)
+        setEstadoARCAStatus('error')
+        setMensajesARCAStatus([mensaje])
+        return
+      }
+
+      // Procesar respuesta exitosa
+      if (data) {
+        setEstadoARCAStatus(data.estado || 'ok')
+        setMensajesARCAStatus(data.mensajes || [])
+        setErrorARCAStatus(null)
+      } else {
+        setErrorARCAStatus('Respuesta vacía de ARCA')
+        setEstadoARCAStatus('error')
+        setMensajesARCAStatus(['Respuesta vacía de ARCA'])
+      }
+      
+    } catch (err) {
+      setErrorARCAStatus(err.message)
+      setEstadoARCAStatus('error')
+      setMensajesARCAStatus([err.message])
+    } finally {
+      setIsLoadingARCAStatus(false)
     }
   }, [])
 
@@ -175,7 +250,8 @@ const useValidacionCUIT = () => {
     setError(null)
     setMostrarTooltip(false)
     limpiarEstadosARCA()
-  }, [limpiarEstadosARCA])
+    limpiarEstadosARCAStatus()
+  }, [limpiarEstadosARCA, limpiarEstadosARCAStatus])
 
   /**
    * Alterna la visibilidad del tooltip
@@ -215,7 +291,14 @@ const useValidacionCUIT = () => {
     isLoadingARCA,
     errorARCA,
     consultarARCA,
-    limpiarEstadosARCA
+    limpiarEstadosARCA,
+    // Estados y funciones de ARCA Status
+    estadoARCAStatus,
+    mensajesARCAStatus,
+    isLoadingARCAStatus,
+    errorARCAStatus,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
   }
 }
 

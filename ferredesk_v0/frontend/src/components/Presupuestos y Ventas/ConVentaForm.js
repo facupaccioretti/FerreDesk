@@ -15,6 +15,8 @@ import { normalizarItems } from './herramientasforms/normalizadorItems';
 import { useArcaEstado } from '../../utils/useArcaEstado';
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
+import useValidacionCUIT from '../../utils/useValidacionCUIT';
+import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 
 const ConVentaForm = ({
   onSave,
@@ -52,11 +54,23 @@ const ConVentaForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
+  // Hook para consulta de estado CUIT en ARCA
+  const { 
+    estadoARCAStatus,
+    mensajesARCAStatus,
+    isLoadingARCAStatus,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  } = useValidacionCUIT();
+
   // Estados de carga centralizados
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(null);
 
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
+  
+  // Estado para controlar visibilidad del banner de estado CUIT
+  const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
 
   // Hook para manejar estado de ARCA
   const {
@@ -213,6 +227,12 @@ const ConVentaForm = ({
   const [selectorAbierto, setSelectorAbierto] = useState(false);
   const abrirSelector = () => setSelectorAbierto(true);
   const cerrarSelector = () => setSelectorAbierto(false);
+  
+  // Función para ocultar el banner de estado CUIT
+  const ocultarBannerCuit = () => {
+    setMostrarBannerCuit(false);
+    limpiarEstadosARCAStatus();
+  };
 
   // Callback reutilizable para aplicar datos del cliente al formulario
   const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
@@ -328,6 +348,52 @@ const ConVentaForm = ({
       setAutoSumarDuplicados('sumar');
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
+
+  // UseEffect para consultar estado CUIT en ARCA cuando aplique (letra fiscal A)
+  useEffect(() => {
+    // Solo consultar si hay datos necesarios
+    if (!inicializado) return;
+
+    // Solo consultar si es conversión a factura fiscal
+    if (tipoComprobante !== 'factura') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Obtener la letra del comprobante seleccionado
+    const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+    const letraFiscal = comprobanteSeleccionado?.letra;
+
+    // Solo consultar si la letra fiscal es A
+    if (letraFiscal !== 'A') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Validar que hay CUIT válido
+    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+      setMostrarBannerCuit(true);
+      // No consultar ARCA pero mostrar mensaje local de CUIT inválido
+      return;
+    }
+
+    // Consultar estado en ARCA
+    consultarARCAStatus(cuitLimpio);
+    setMostrarBannerCuit(true);
+
+  }, [
+    tipoComprobante, 
+    comprobanteId,
+    comprobantesVenta,
+    formulario.cuit, 
+    formulario.clienteId, 
+    inicializado,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  ]);
 
   const handleChange = manejarCambioFormulario(setFormulario);
 
@@ -520,6 +586,31 @@ const ConVentaForm = ({
 
           {/* Contenedor interior con padding igual a VentaForm */}
           <div className="px-8 pt-4 pb-6">
+
+            {/* Banner de estado CUIT para conversiones a factura fiscal A */}
+            {mostrarBannerCuit && tipoComprobante === 'factura' && (() => {
+              const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+              return comprobanteSeleccionado?.letra === 'A';
+            })() && (
+              <CuitStatusBanner
+                cuit={formulario.cuit}
+                estado={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return 'error';
+                  }
+                  return estadoARCAStatus || 'ok';
+                })()}
+                mensajes={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return ['CUIT faltante o inválido. Verificar datos del cliente.'];
+                  }
+                  return mensajesARCAStatus || [];
+                })()}
+                onDismiss={ocultarBannerCuit}
+              />
+            )}
 
             {/* Badge de letra del comprobante */}
             {letraComprobanteMostrar && (
