@@ -25,6 +25,7 @@ const Tabla = ({
   paginadorVisible = true,
   renderFila = null,
   mostrarBuscador = true,
+  mostrarOrdenamiento = true,
 }) => {
   const [paginaActual, setPaginaActual] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
@@ -74,18 +75,20 @@ const Tabla = ({
           )}
 
           {/* Control de ordenamiento */}
-          <button
-            onClick={() => setOrdenAscendente(!ordenAscendente)}
-            className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
-            title={
-              ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
-            }
-          >
-            <ArrowUpDown
-              className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
-            />
-            <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
-          </button>
+          {mostrarOrdenamiento && (
+            <button
+              onClick={() => setOrdenAscendente(!ordenAscendente)}
+              className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
+              title={
+                ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
+              }
+            >
+              <ArrowUpDown
+                className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
+              />
+              <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
+            </button>
+          )}
         </div>
       </div>
 

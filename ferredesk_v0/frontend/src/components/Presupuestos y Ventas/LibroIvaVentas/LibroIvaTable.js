@@ -255,6 +255,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
         opcionesFilasPorPagina={[10, 20, 35, 50]}
         paginadorVisible={true}
         mostrarBuscador={true}
+        mostrarOrdenamiento={false}
         renderFila={renderFila}
       />
     </div>
