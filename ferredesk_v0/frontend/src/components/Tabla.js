@@ -121,13 +121,13 @@ const Tabla = ({
 
               // Renderizado por defecto por columnas
               return (
-                <tr key={fila.id || indiceGlobal}>
+                <tr key={fila.id || indiceGlobal} className="hover:bg-slate-200 transition-colors duration-150">
                   {columnas.map((col) => {
                     const contenido = col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]
                     return (
                       <td
                         key={col.id}
-                        className={`${CLASES_CELDA_BASE} bg-white hover:bg-slate-700 hover:text-white transition-colors duration-100 ${
+                        className={`${CLASES_CELDA_BASE} bg-white ${
                           { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
                         }`}
                         style={col.ancho ? { width: col.ancho } : undefined}

@@ -272,7 +272,7 @@ const ComprobantesList = ({
               const tieneFacturasAnuladas = facturasAnuladas.length > 0
 
               return (
-                <tr key={p.id} className="hover:bg-slate-100">
+                <tr key={p.id} className="hover:bg-slate-200">
                   {/* Comprobante */}
                   <td className="px-3 py-1 whitespace-nowrap">
                     <div className="flex items-center">

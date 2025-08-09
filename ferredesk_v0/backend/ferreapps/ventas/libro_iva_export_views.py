@@ -244,3 +244,65 @@ def exportar_libro_iva_json(request):
         return Response({
             'detail': 'Error interno del servidor al exportar JSON'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def exportar_libro_iva_txt(request):
+    """
+    Endpoint para exportar el Libro IVA en formato TXT (layout AFIP/ARCA).
+    
+    GET /api/libro-iva-ventas/export/txt/?mes=1&anio=2024&tipo_libro=convencional&incluir_presupuestos=false
+    
+    Returns:
+    Archivo TXT para descarga
+    """
+    try:
+        mes = request.GET.get('mes')
+        anio = request.GET.get('anio')
+        tipo_libro = request.GET.get('tipo_libro', 'convencional')
+        incluir_presupuestos = request.GET.get('incluir_presupuestos', 'false').lower() == 'true'
+
+        if not mes or not anio:
+            return Response({
+                'detail': 'Los parámetros "mes" y "anio" son requeridos'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            mes = int(mes)
+            anio = int(anio)
+        except (ValueError, TypeError):
+            return Response({
+                'detail': 'Los parámetros "mes" y "anio" deben ser números enteros'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        validaciones_periodo = validar_periodo_libro_iva(mes, anio)
+        if validaciones_periodo['errores']:
+            return Response({
+                'detail': 'Período inválido',
+                'errores': validaciones_periodo['errores']
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
+        archivo_txt = exportar_libro_iva('txt', datos_libro)
+        nombre_archivo = obtener_nombre_archivo('txt', mes, anio, tipo_libro, incluir_presupuestos)
+
+        usuario = request.user.username if request.user else None
+        logger.info(f"Libro IVA exportado a TXT - Usuario: {usuario}, Período: {mes:02d}/{anio}, Tipo: {tipo_libro}")
+
+        response = HttpResponse(
+            archivo_txt.getvalue(),
+            content_type='text/plain; charset=windows-1252'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+        return response
+
+    except ValueError as e:
+        return Response({
+            'detail': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error exportando libro IVA a TXT: {str(e)}", exc_info=True)
+        return Response({
+            'detail': 'Error interno del servidor al exportar TXT'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

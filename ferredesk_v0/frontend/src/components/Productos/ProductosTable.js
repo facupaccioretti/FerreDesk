@@ -548,7 +548,7 @@ export default function ProductosTable({
                   <tr
                     key={p.id}
                     onClick={() => toggleRow(p.id)}
-                    className="hover:bg-slate-100 transition-colors cursor-pointer"
+                    className="hover:bg-slate-200 transition-colors cursor-pointer"
                   >
                     {columnas.map((col) => {
                       let contenido

@@ -163,13 +163,26 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
             'razon_social': nombre_comprador,  # Razón social del cliente
             'condicion_iva': condicion_iva,  # Condición IVA del cliente (RI, CF, MT, EX)
             'neto_sin_iva': Decimal('0.00'),  # Neto sin IVA (suma de todos los netos)
+            # Desgloses por alícuota requeridos para exportación TXT
+            'neto_21': Decimal('0.00'),        # Neto gravado 21%
+            'neto_105': Decimal('0.00'),       # Neto gravado 10.5%
+            'neto_27': Decimal('0.00'),        # Neto gravado 27%
             'iva_21': Decimal('0.00'),        # IVA 21%
             'iva_105': Decimal('0.00'),       # IVA 10.5%
             'iva_27': Decimal('0.00'),        # IVA 27%
             'iva_otras': Decimal('0.00'),     # Otras alícuotas de IVA
             'importe_exento': Decimal('0.00'), # Importes exentos
+            'no_gravado': Decimal('0.00'),    # Importes no gravados (para Factura C u otros casos)
             'total': venta.ven_total or Decimal('0.00')  # Total de la operación
         }
+
+        # Campos auxiliares útiles para exportaciones (no afectan PDF/Excel actuales)
+        linea_libro['ven_punto'] = venta.ven_punto
+        linea_libro['ven_numero'] = venta.ven_numero
+        linea_libro['comprobante_codigo_afip'] = venta.comprobante_codigo_afip
+        linea_libro['comprobante_letra'] = venta.comprobante_letra
+        linea_libro['ven_cae'] = venta.ven_cae
+        linea_libro['ven_caevencimiento'] = venta.ven_caevencimiento
         
         # Consolidar importes por alícuota (datos ya calculados)
         neto_total_sin_iva = Decimal('0.00')  # Para calcular el neto sin IVA total
@@ -185,12 +198,18 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
                 neto_total_sin_iva += neto
             
             if alicuota == Decimal('21.0'):
+                # Neto e IVA 21%
+                linea_libro['neto_21'] = linea_libro['neto_21'] + neto
                 linea_libro['iva_21'] = linea_libro['iva_21'] + iva    #  ACUMULA
                 subtotales['total_iva_21'] += iva
             elif alicuota == Decimal('10.5'):
+                # Neto e IVA 10.5%
+                linea_libro['neto_105'] = linea_libro['neto_105'] + neto
                 linea_libro['iva_105'] = linea_libro['iva_105'] + iva    #  ACUMULA
                 subtotales['total_iva_105'] += iva
             elif alicuota == Decimal('27.0'):
+                # Neto e IVA 27%
+                linea_libro['neto_27'] = linea_libro['neto_27'] + neto
                 linea_libro['iva_27'] = linea_libro['iva_27'] + iva    # ACUMULA
                 subtotales['total_iva_27'] += iva
             elif alicuota == Decimal('0.0'):
