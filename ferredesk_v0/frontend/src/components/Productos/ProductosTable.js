@@ -337,7 +337,7 @@ export default function ProductosTable({
 }) {
   const [showProvModal, setShowProvModal] = useState(false)
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
-  const [expandedRows, setExpandedRows] = useState(new Set())
+  // Removido expandedRows local, ahora usa expandedId del props
 
   const productosFiltrados = productos.filter(
     (prod) =>
@@ -346,17 +346,9 @@ export default function ProductosTable({
       prod.deno?.toLowerCase().includes(search.toLowerCase()),
   )
 
-  // Función para manejar la expansión/colapso
+  // Función para manejar la expansión/colapso (comportamiento como clientes: solo una fila abierta)
   const toggleRow = (productId) => {
-    setExpandedRows((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(productId)) {
-        newSet.delete(productId)
-      } else {
-        newSet.add(productId)
-      }
-      return newSet
-    })
+    setExpandedId(expandedId === productId ? null : productId)
   }
 
   // Función auxiliar para obtener el nombre de familia por id
@@ -577,7 +569,7 @@ export default function ProductosTable({
                   </tr>
                 )
 
-                if (!expandedRows.has(p.id)) {
+                if (expandedId !== p.id) {
                   return filaPrincipal
                 }
 

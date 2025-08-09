@@ -1022,6 +1022,7 @@ const ItemsGridPresupuesto = forwardRef(
                       <td className="px-3 py-3 whitespace-nowrap">
                         <input
                           type="number"
+                          step="0.01"
                           value={row.cantidad}
                           onChange={(e) => handleCantidadChange(idx, e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "cantidad")}
