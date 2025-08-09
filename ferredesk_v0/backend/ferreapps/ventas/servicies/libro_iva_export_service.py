@@ -21,13 +21,13 @@ from reportlab.lib import colors
 # Constantes de formato para exportación PDF Libro IVA
 # =====================
 # Cantidad máxima de comprobantes por página (cada comprobante ocupa 2 filas)
-MAX_COMPROBANTES_POR_PAGINA = 4  # Para pruebas, 4 comprobantes por página
+MAX_COMPROBANTES_POR_PAGINA = 14  # Aumentado para aprovechar mejor el espacio
 # Altura de página y márgenes (en puntos)
 ALTO_PAGINA = A4[1]
-MARGEN_SUPERIOR = inch
-MARGEN_INFERIOR = inch
-ALTO_TITULO = 32  # Altura aproximada del título
-ALTO_INFO_PERIODO = 24  # Altura aproximada de la info de período
+MARGEN_SUPERIOR = 0.55 * inch  # Reducido de 1 inch a 0.5 inch
+MARGEN_INFERIOR = 0.5 * inch  # Reducido de 1 inch a 0.5 inch
+ALTO_TITULO = 16  # Reducido de 20 a 16
+ALTO_INFO_PERIODO = 16  # Reducido de 24 a 16
 ALTO_ENCABEZADO = 32  # Altura de los encabezados (2 filas)
 ALTO_FILA = 18  # Altura de cada fila de comprobante
 ALTO_SUBTOTAL = 18  # Altura de la fila de subtotal
@@ -161,9 +161,9 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
         # Título y periodo solo en la primera página
         if idx == 0:
             story.append(Paragraph(titulo, title_style))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 10))  # Reducido de 20 a 10
             story.append(Paragraph(info_periodo, styles['Normal']))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 10))  # Reducido de 20 a 10
         else:
             story.append(PageBreak())
             # Al inicio de la página, encabezado de traslado y luego importes
@@ -285,7 +285,7 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
             acumulado_anterior[k] += subtotal_pagina[k]
 
     # Al final, total general
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))  # Reducido de 20 a 10
     total_general_data = [
         ['Total Gral.', 'Neto Sin IVA', 'IVA 21%', 'IVA 10.5%', 'IVA 27%', 'Exento'],
         [
