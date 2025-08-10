@@ -166,7 +166,7 @@ class VentaSerializer(serializers.ModelSerializer):
             if facturas_asociadas.exists():
                 # NUEVA VALIDACIÓN: Verificar que solo se asocien facturas válidas
                 tipos_comprobantes_asociados = set(facturas_asociadas.values_list('comprobante__tipo', flat=True))
-                tipos_invalidos = tipos_comprobantes_asociados - {'factura', 'venta'}  # 'venta' es el tipo de factura interna
+                tipos_invalidos = tipos_comprobantes_asociados - {'factura', 'factura_interna'}  # Tipos válidos para notas de crédito
                 
                 if tipos_invalidos:
                     raise serializers.ValidationError({
