@@ -230,6 +230,12 @@ class FerreDeskARCA:
                         }
                     else:
                         logger.error(f"CAE no encontrado en la respuesta")
+                        # Si hay observaciones procesadas, propagarlas como 'Errores ARCA: ...' para que
+                        # el handler del backend las formatee igual que en casos exitosos
+                        if observaciones_procesadas:
+                            texto_obs = '; '.join([str(o) for o in observaciones_procesadas])
+                            raise FerreDeskARCAError(f"Errores ARCA: {texto_obs}")
+                        # Si no hay observaciones, mantener el mensaje genérico
                         raise FerreDeskARCAError("CAE no encontrado en la respuesta de AFIP")
                 else:
                     logger.error(f"FECAEDetResponse vacío o no encontrado")

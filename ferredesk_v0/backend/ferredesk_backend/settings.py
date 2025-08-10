@@ -217,7 +217,8 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
-    )
+    ),
+    'EXCEPTION_HANDLER': 'ferreapps.ventas.utils.ferre_exception_handler',
 }
 
 # Configuración de CORS

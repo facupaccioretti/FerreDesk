@@ -3,6 +3,48 @@ from ferreapps.ventas.models import Comprobante
 from ferreapps.clientes.models import TipoIVA
 from ferreapps.productos.models import Ferreteria
 
+# Handler de excepciones DRF para formatear errores ARCA con observaciones
+from rest_framework.views import exception_handler as drf_exception_handler
+from rest_framework.response import Response
+from rest_framework import status
+from .ARCA import FerreDeskARCAError
+
+def ferre_exception_handler(exc, context):
+    """
+    Manejador de excepciones centralizado.
+
+    - Si la excepción es FerreDeskARCAError (falla fiscal con rollback),
+      devolver JSON con el mismo contrato de observaciones que en éxito:
+        { 'detail': <mensaje>, 'observaciones': [ ... ] }
+    - Para otras excepciones, delegar al handler por defecto de DRF.
+    """
+    if isinstance(exc, FerreDeskARCAError):
+        mensaje_base = str(exc) or 'Error en emisión ARCA'
+
+        # Extraer observaciones en el mismo formato que éxito (lista de strings)
+        # Criterio de comparación: cuando el servicio arma mensajes múltiples,
+        # vienen concatenados después de "Errores ARCA:" separados por ';'
+        texto_util = mensaje_base
+        if 'Errores ARCA:' in texto_util:
+            texto_util = texto_util.split('Errores ARCA:')[-1].strip()
+
+        # Separar posibles múltiples mensajes por ';'
+        partes = [p.strip() for p in texto_util.split(';') if p and p.strip()]
+        if partes:
+            observaciones = partes
+        else:
+            observaciones = [texto_util] if texto_util else []
+
+        payload = {
+            'detail': texto_util or mensaje_base,
+            'observaciones': observaciones
+        }
+        # 422 Unprocessable Entity o 400 Bad Request (ambos válidos para validación fiscal)
+        return Response(payload, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+    # Delegar al handler estándar para el resto
+    return drf_exception_handler(exc, context)
+
 def normalizar_situacion_iva(valor):
     # Si es un número (ID), buscar el nombre en TipoIVA
     if isinstance(valor, int) or (isinstance(valor, str) and valor.isdigit()):
