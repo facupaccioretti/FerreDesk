@@ -329,6 +329,9 @@ const NotaCreditoForm = ({
       ven_vdocomvta: 0,
       ven_vdocomcob: 0,
 
+      // CRÍTICO: Enviar CUIT del cliente para que ARCA pueda validarlo
+      ven_cuit: formulario.cuit || '',
+
       items: itemsParaGuardar.map((item, idx) => mapearCamposItem(item, idx))
     };
     
