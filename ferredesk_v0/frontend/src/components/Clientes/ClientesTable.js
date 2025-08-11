@@ -36,12 +36,12 @@ const ClientesTable = ({
     {
       id: "razon",
       titulo: "RAZÓN SOCIAL",
-      render: (cli) => <span className="font-bold">{cli.razon}</span>,
+      render: (cli) => <span className="text-sm font-medium text-slate-800">{cli.razon}</span>,
     },
     {
       id: "fantasia",
       titulo: "NOMBRE COMERCIAL",
-      render: (cli) => cli.fantasia,
+      render: (cli) => <span className="text-sm text-slate-600">{cli.fantasia}</span>,
     },
     {
       id: "__acciones",
