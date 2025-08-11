@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'ferreapps.notas',
     'ferreapps.alertas',
     'ferreapps.informes',
+    'ferreapps.compras',
     'rest_framework',
     'django_filters',
     'django_extensions',
