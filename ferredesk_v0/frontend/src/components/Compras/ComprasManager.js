@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import Navbar from "../Navbar"
 import ComprasList from "./ComprasList"
 import CompraForm from "./CompraForm"
@@ -14,6 +14,7 @@ const MAIN_TAB_KEY = "compras"
 
 const ComprasManager = () => {
   const [user, setUser] = useState(null)
+  const [search, setSearch] = useState("")
 
   // Tabs estado (persistencia simple en localStorage)
   const [tabs, setTabs] = useState(() => {
@@ -40,18 +41,18 @@ const ComprasManager = () => {
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])
 
-  const openTab = (key, label, data = null, tipo = null) => {
+  const openTab = useCallback((key, label, data = null, tipo = null) => {
     setTabs((prev) => {
       if (prev.find((t) => t.key === key)) return prev
       return [...prev, { key, label, closable: true, data, tipo }]
     })
     setActiveTab(key)
-  }
+  }, []) // Las funciones setState son estables
 
-  const closeTab = (key) => {
+  const closeTab = useCallback((key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
     if (activeTab === key) setActiveTab(MAIN_TAB_KEY)
-  }
+  }, [activeTab]) // Depende del valor de activeTab
 
   // APIs
   const {
@@ -89,23 +90,33 @@ const ComprasManager = () => {
     document.title = "Compras FerreDesk"
   }, [])
 
+  // Efecto para cargar compras con filtros
+  useEffect(() => {
+    const filters = {}
+    if (search.trim()) {
+      // Buscar en número de factura o razón social del proveedor
+      filters.search = search.trim()
+    }
+    fetchCompras(filters)
+  }, [search, fetchCompras])
+
   // Acciones tabs
-  const handleNuevaCompra = () => {
+  const handleNuevaCompra = useCallback(() => {
     const key = `nueva-compra-${Date.now()}`
     openTab(key, "Nueva Compra", null, "form")
-  }
+  }, [openTab])
 
-  const handleEditarCompra = (compra) => {
+  const handleEditarCompra = useCallback((compra) => {
     const key = `editar-${compra.comp_id}`
     openTab(key, `Editar ${compra.comp_numero_factura || compra.comp_id}`, compra, "form")
-  }
+  }, [openTab])
 
-  const handleVerCompra = (compra) => {
+  const handleVerCompra = useCallback((compra) => {
     const key = `ver-${compra.comp_id}`
     openTab(key, `Ver ${compra.comp_numero_factura || compra.comp_id}`, compra, "view")
-  }
+  }, [openTab])
 
-  const handleGuardarCompra = async (tabKey, compraData, existing = null) => {
+  const handleGuardarCompra = useCallback(async (tabKey, compraData, existing = null) => {
     try {
       if (existing && existing.comp_id) {
         await updateCompra(existing.comp_id, compraData)
@@ -117,27 +128,27 @@ const ComprasManager = () => {
     } catch (error) {
       console.error("Error al guardar compra:", error)
     }
-  }
+  }, [updateCompra, addCompra, fetchCompras, closeTab])
 
-  const handleCerrarCompra = async (compraId) => {
+  const handleCerrarCompra = useCallback(async (compraId) => {
     try {
       await cerrarCompra(compraId)
       fetchCompras()
     } catch (error) {
       console.error("Error al cerrar compra:", error)
     }
-  }
+  }, [cerrarCompra, fetchCompras])
 
-  const handleAnularCompra = async (compraId) => {
+  const handleAnularCompra = useCallback(async (compraId) => {
     try {
       await anularCompra(compraId)
       fetchCompras()
     } catch (error) {
       console.error("Error al anular compra:", error)
     }
-  }
+  }, [anularCompra, fetchCompras])
 
-  const handleEliminarCompra = async (compraId) => {
+  const handleEliminarCompra = useCallback(async (compraId) => {
     if (window.confirm("¿Está seguro de que desea eliminar esta compra?")) {
       try {
         await deleteCompra(compraId)
@@ -146,7 +157,7 @@ const ComprasManager = () => {
         console.error("Error al eliminar compra:", error)
       }
     }
-  }
+  }, [deleteCompra, fetchCompras])
 
   const activeTabData = useMemo(() => tabs.find((t) => t.key === activeTab)?.data || null, [tabs, activeTab])
 
@@ -206,18 +217,20 @@ const ComprasManager = () => {
             <div className="flex-1 p-6">
               {activeTab === MAIN_TAB_KEY ? (
                 <>
-                  <ComprasList
-                    compras={compras}
-                    loading={loadingCompras}
-                    error={errorCompras}
-                    onNuevaCompra={handleNuevaCompra}
-                    onEditarCompra={handleEditarCompra}
-                    onVerCompra={handleVerCompra}
-                    onCerrarCompra={handleCerrarCompra}
-                    onAnularCompra={handleAnularCompra}
-                    onEliminarCompra={handleEliminarCompra}
-                    onRefresh={fetchCompras}
-                  />
+                                     <ComprasList
+                     compras={compras}
+                     loading={loadingCompras}
+                     error={errorCompras}
+                     search={search}
+                     setSearch={setSearch}
+                     onNuevaCompra={handleNuevaCompra}
+                     onEditarCompra={handleEditarCompra}
+                     onVerCompra={handleVerCompra}
+                     onCerrarCompra={handleCerrarCompra}
+                     onAnularCompra={handleAnularCompra}
+                     onEliminarCompra={handleEliminarCompra}
+                     onRefresh={fetchCompras}
+                   />
                 </>
               ) : (
                 tabs.find((t) => t.key === activeTab)?.tipo === "view" ? (

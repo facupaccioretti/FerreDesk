@@ -22,7 +22,7 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
-from django.db.models import Subquery, OuterRef
+from django.db.models import Subquery, OuterRef, Q
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -38,12 +38,23 @@ class CompraFilter(FilterSet):
     comp_numero_factura = CharFilter(field_name='comp_numero_factura', lookup_expr='icontains')
     comp_razon_social = CharFilter(field_name='comp_razon_social', lookup_expr='icontains')
     comp_cuit = CharFilter(field_name='comp_cuit', lookup_expr='icontains')
+    search = CharFilter(method='filter_search')
+
+    def filter_search(self, queryset, name, value):
+        """Búsqueda general en número de factura y razón social del proveedor"""
+        if value:
+            return queryset.filter(
+                Q(comp_numero_factura__icontains=value) |
+                Q(comp_razon_social__icontains=value) |
+                Q(comp_idpro__razon__icontains=value)
+            )
+        return queryset
 
     class Meta:
         model = Compra
         fields = [
             'comp_fecha', 'comp_idpro', 'comp_tipo', 'comp_estado',
-            'comp_sucursal', 'comp_numero_factura', 'comp_razon_social', 'comp_cuit'
+            'comp_sucursal', 'comp_numero_factura', 'comp_razon_social', 'comp_cuit', 'search'
         ]
 
 
