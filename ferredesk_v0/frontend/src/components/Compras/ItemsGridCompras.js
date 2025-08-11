@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useMemo } from "react"
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 
 function getEmptyRow() {
   return {
@@ -31,10 +31,7 @@ const ItemsGridCompras = forwardRef(
     },
     ref,
   ) => {
-    const alicuotasMap = useMemo(
-      () => (Array.isArray(alicuotas) ? alicuotas.reduce((acc, a) => ((acc[a.id] = Number(a.porce) || 0), acc), {}) : {}),
-      [alicuotas],
-    )
+    
 
     // No precargamos productos - haremos búsqueda directa como en ItemsGrid original
 
@@ -122,12 +119,18 @@ const ItemsGridCompras = forwardRef(
     }
 
     const emitirCambio = (currentRows) => {
+      // Asegurar que siempre haya un proveedor seleccionado
+      if (!selectedProveedor?.id) {
+        console.error("No hay proveedor seleccionado")
+        return
+      }
+
       const itemsCompra = currentRows
         .filter((r) => isRowLleno(r))
         .map((r, idx) => ({
           cdi_orden: idx + 1,
           cdi_idsto: r.producto ? r.producto.id : r.cdi_idsto,
-          cdi_idpro: r.cdi_idpro || selectedProveedor?.id || null,
+          cdi_idpro: selectedProveedor.id, // Siempre usar el proveedor de la compra
           cdi_cantidad: Number(r.cdi_cantidad) || 0,
           cdi_costo: Number(r.cdi_costo) || 0,
           cdi_detalle1: r.cdi_detalle1 || (r.producto?.deno ?? ""),
@@ -161,66 +164,7 @@ const ItemsGridCompras = forwardRef(
       }
     }, [idxCodigoFoco])
 
-    const resolverCodigoProveedor = async (index, codigo) => {
-      const provId = selectedProveedor?.id
-      if (!codigo || !provId) return false
-      try {
-        const params = new URLSearchParams({ codigo: String(codigo), proveedor_id: String(provId) })
-        const resp = await fetch(`/api/productos/buscar-codigo/?${params.toString()}`, { credentials: "include" })
-        if (!resp.ok) return false
-        const data = await resp.json()
-        const aliPorc = Number(data.alicuota_porcentaje) || 0
-        let aliId = 3
-        const foundAli = alicuotas.find((a) => Number(a.porce) === aliPorc)
-        if (foundAli) aliId = foundAli.id
-
-        setRows((prev) => {
-          const nuevo = [...prev]
-          const filaActual = { ...nuevo[index] }
-          const targetProdId = data.id
-          const targetProvId = provId
-
-          // Buscar si ya existe una fila con mismo producto y proveedor (para sumar cantidades)
-          const idxExistente = nuevo.findIndex(
-            (r, i) => i !== index && (r.producto?.id || r.cdi_idsto) === targetProdId && (r.cdi_idpro || selectedProveedor?.id || null) === targetProvId
-          )
-
-          if (idxExistente !== -1) {
-            // SUMAR CANTIDADES: Si ya existe el mismo producto/proveedor, sumar cantidad
-            const cantidadASumar = Number(filaActual.cdi_cantidad) > 0 ? Number(filaActual.cdi_cantidad) : 1
-            const merged = nuevo.map((r, i) =>
-              i === idxExistente ? { ...r, cdi_cantidad: (Number(r.cdi_cantidad) || 0) + cantidadASumar } : r,
-            )
-            // Vaciar solo la fila actual, preservando su id
-            merged[index] = { ...getEmptyRow(), id: filaActual.id }
-            const ensured = ensureSoloUnEditable(merged)
-            emitirCambio(ensured)
-            // Mover foco a cantidad de la fila existente
-            setIdxCantidadFoco(idxExistente)
-            return ensured
-          }
-
-          // No existe duplicado: completar la fila actual con los datos del producto
-          filaActual.codigo_proveedor = codigo
-          filaActual.producto = { id: data.id, deno: data.deno, unidad: data.unidad, idaliiva: aliId, codvta: data.codvta }
-          filaActual.cdi_idsto = data.id
-          filaActual.cdi_idpro = filaActual.cdi_idpro || targetProvId
-          filaActual.cdi_detalle1 = data.deno || ""
-          filaActual.cdi_detalle2 = data.unidad || ""
-          filaActual.cdi_idaliiva = aliId
-          if (!filaActual.cdi_cantidad || filaActual.cdi_cantidad === 0) filaActual.cdi_cantidad = 1
-          nuevo[index] = filaActual
-          const ensured = ensureSoloUnEditable(nuevo)
-          emitirCambio(ensured)
-          // Enfocar cantidad de la misma fila tras cargar producto
-          setIdxCantidadFoco(index)
-          return ensured
-        })
-        return true
-      } catch (e) {
-        return false
-      }
-    }
+    
 
     const handleRowChange = (idx, field, value) => {
       setRows((prevRows) => {
@@ -402,7 +346,7 @@ const ItemsGridCompras = forwardRef(
               codigo_proveedor: r.codigo_proveedor || "",
             })),
       }),
-      [rows, selectedProveedor?.id, alicuotasMap],
+      [rows, selectedProveedor?.id],
     )
 
     return (

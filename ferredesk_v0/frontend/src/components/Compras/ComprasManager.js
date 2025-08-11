@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useNavigate } from "react-router-dom"
 import Navbar from "../Navbar"
 import ComprasList from "./ComprasList"
 import CompraForm from "./CompraForm"
+import DetalleCompra from "./DetalleCompra"
 import { useComprasAPI } from "../../utils/useComprasAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useProductosAPI } from "../../utils/useProductosAPI"
@@ -14,7 +14,6 @@ const MAIN_TAB_KEY = "compras"
 
 const ComprasManager = () => {
   const [user, setUser] = useState(null)
-  const navigate = useNavigate()
 
   // Tabs estado (persistencia simple en localStorage)
   const [tabs, setTabs] = useState(() => {
@@ -54,17 +53,6 @@ const ComprasManager = () => {
     if (activeTab === key) setActiveTab(MAIN_TAB_KEY)
   }
 
-  const updateTabData = (key, label, data, tipo = null) => {
-    setTabs((prev) => {
-      const exists = prev.find((t) => t.key === key)
-      if (exists) {
-        return prev.map((t) => (t.key === key ? { ...t, label: label || t.label, data, tipo: tipo || t.tipo } : t))
-      }
-      return [...prev, { key, label, closable: true, data, tipo }]
-    })
-    setActiveTab(key)
-  }
-
   // APIs
   const {
     compras,
@@ -98,7 +86,7 @@ const ComprasManager = () => {
   }
 
   useEffect(() => {
-    document.title = "Sistema de Compras FerreDesk"
+    document.title = "Compras FerreDesk"
   }, [])
 
   // Acciones tabs
@@ -170,7 +158,7 @@ const ComprasManager = () => {
         <div className="max-w-[1400px] w-full mx-auto">
           {/* Título de la página (fuera del contenedor) */}
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold text-slate-800">Sistema de Compras</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Gestión de Compras</h2>
           </div>
 
           {/* Tarjeta contenedora principal con tabs */}
@@ -202,22 +190,22 @@ const ComprasManager = () => {
                   )}
                 </div>
               ))}
+              {activeTab === MAIN_TAB_KEY && (
+                <div className="flex-1 flex justify-end mb-2">
+                  <button
+                    onClick={handleNuevaCompra}
+                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                  >
+                    <span className="text-lg">+</span> Nueva Compra
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Contenido por tab */}
             <div className="flex-1 p-6">
               {activeTab === MAIN_TAB_KEY ? (
                 <>
-                  {/* Toolbar dentro del contenedor */}
-                  <div className="mb-4 flex gap-2">
-                    <button
-                      onClick={handleNuevaCompra}
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                    >
-                      <span className="text-lg">+</span> Nueva Compra
-                    </button>
-                  </div>
-
                   <ComprasList
                     compras={compras}
                     loading={loadingCompras}
@@ -232,24 +220,31 @@ const ComprasManager = () => {
                   />
                 </>
               ) : (
-                // Formularios de compra en pestañas dinámicas (crear/editar/ver)
-                <CompraForm
-                  key={activeTab}
-                  onSave={(data) => handleGuardarCompra(activeTab, data, activeTabData)}
-                  onCancel={() => closeTab(activeTab)}
-                  initialData={activeTabData}
-                  readOnly={tabs.find((t) => t.key === activeTab)?.tipo === "view"}
-                  proveedores={proveedores}
-                  productos={productos}
-                  alicuotas={alicuotas}
-                  sucursales={sucursales}
-                  loadingProveedores={loadingProveedores}
-                  loadingProductos={loadingProductos}
-                  loadingAlicuotas={loadingAlicuotas}
-                  errorProveedores={errorProveedores}
-                  errorProductos={errorProductos}
-                  errorAlicuotas={errorAlicuotas}
-                />
+                tabs.find((t) => t.key === activeTab)?.tipo === "view" ? (
+                  <DetalleCompra
+                    key={activeTab}
+                    compra={activeTabData}
+                    onClose={() => closeTab(activeTab)}
+                  />
+                ) : (
+                  <CompraForm
+                    key={activeTab}
+                    onSave={(data) => handleGuardarCompra(activeTab, data, activeTabData)}
+                    onCancel={() => closeTab(activeTab)}
+                    initialData={activeTabData}
+                    readOnly={false}
+                    proveedores={proveedores}
+                    productos={productos}
+                    alicuotas={alicuotas}
+                    sucursales={sucursales}
+                    loadingProveedores={loadingProveedores}
+                    loadingProductos={loadingProductos}
+                    loadingAlicuotas={loadingAlicuotas}
+                    errorProveedores={errorProveedores}
+                    errorProductos={errorProductos}
+                    errorAlicuotas={errorAlicuotas}
+                  />
+                )
               )}
             </div>
           </div>

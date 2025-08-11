@@ -273,7 +273,7 @@
         <div className="py-8 px-4">
           <div className="max-w-[1400px] w-full mx-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
             </div>
             {ventasError && (
               <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">

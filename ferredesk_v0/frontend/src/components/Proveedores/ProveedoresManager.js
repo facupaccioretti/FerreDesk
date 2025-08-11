@@ -132,7 +132,7 @@ const ProveedoresManager = () => {
         <div className="max-w-[1400px] w-full mx-auto flex flex-col flex-1">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold text-slate-800">Gestión de Proveedores</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Gestión de Proveedores</h2>
           </div>
           <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200">
             {/* Tabs tipo browser */}
@@ -315,7 +315,7 @@ const ProveedoresManager = () => {
                       const filaPrincipal = (
                         <tr
                           key={p.id}
-                          className="hover:bg-slate-100 transition-colors cursor-pointer"
+                          className="hover:bg-slate-200 transition-colors cursor-pointer"
                           onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
                         >
                           {/* Celda enumeración */}

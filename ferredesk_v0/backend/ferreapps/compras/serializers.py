@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Compra, CompraDetalleItem
-from ferreapps.productos.models import Proveedor, Stock, AlicuotaIVA
+from ferreapps.productos.models import Proveedor, Stock, AlicuotaIVA, StockProve
 from decimal import Decimal
 from django.db import transaction
 import re
@@ -11,7 +11,7 @@ class CompraDetalleItemSerializer(serializers.ModelSerializer):
     producto_denominacion = serializers.SerializerMethodField()
     producto_codigo = serializers.SerializerMethodField()
     producto_unidad = serializers.SerializerMethodField()
-    alicuota_porcentaje = serializers.SerializerMethodField()
+    codigo_proveedor = serializers.SerializerMethodField()
     
     class Meta:
         model = CompraDetalleItem
@@ -19,7 +19,7 @@ class CompraDetalleItemSerializer(serializers.ModelSerializer):
             'cdi_orden', 'cdi_idsto', 'cdi_idpro', 'cdi_cantidad',
             'cdi_costo', 'cdi_detalle1', 'cdi_detalle2', 'cdi_idaliiva',
             'producto_denominacion', 'producto_codigo', 'producto_unidad',
-            'alicuota_porcentaje'
+            'codigo_proveedor'
         ]
         read_only_fields = ['cdi_orden']
     
@@ -37,11 +37,22 @@ class CompraDetalleItemSerializer(serializers.ModelSerializer):
         if obj.cdi_idsto:
             return obj.cdi_idsto.unidad
         return obj.cdi_detalle2
-    
-    def get_alicuota_porcentaje(self, obj):
-        if obj.cdi_idaliiva:
-            return obj.cdi_idaliiva.porce
-        return Decimal('0')
+
+
+    def get_codigo_proveedor(self, obj):
+        try:
+            prov_id = getattr(obj.cdi_idpro, 'id', None)
+            sto_id = getattr(obj.cdi_idsto, 'id', None)
+            if not prov_id or not sto_id:
+                return None
+            return (
+                StockProve.objects
+                .filter(proveedor_id=prov_id, stock_id=sto_id)
+                .values_list('codigo_producto_proveedor', flat=True)
+                .first()
+            )
+        except Exception:
+            return None
 
 
 class CompraSerializer(serializers.ModelSerializer):
@@ -118,14 +129,18 @@ class CompraSerializer(serializers.ModelSerializer):
         return value
     
     def validate_comp_idpro(self, value):
-        """Validar que el proveedor existe y está activo"""
+        """Validar que el proveedor exista (no se valida estado ACTI)."""
         if not value:
             raise serializers.ValidationError("El proveedor es obligatorio")
-        
-        if not value.acti or value.acti != 'S':
-            raise serializers.ValidationError("El proveedor seleccionado no está activo")
-        
-        return value
+
+        # Aceptar tanto instancia como ID crudo
+        if isinstance(value, Proveedor):
+            return value
+
+        try:
+            return Proveedor.objects.get(pk=value)
+        except Proveedor.DoesNotExist:
+            raise serializers.ValidationError("El proveedor seleccionado no existe")
 
 
 class CompraCreateSerializer(CompraSerializer):
@@ -158,12 +173,17 @@ class CompraCreateSerializer(CompraSerializer):
     
     @transaction.atomic
     def create(self, validated_data):
-        """Crear compra con sus items"""
+        """Crear compra con sus items
+        Acepta IDs crudos para claves foráneas en items_data y resuelve las instancias
+        necesarias antes de crear los objetos de detalle. También completa
+        denominación y unidad desde `Stock` cuando corresponde.
+        """
         items_data = validated_data.pop('items_data', [])
+        proveedor_compra = validated_data.get('comp_idpro')
         
         # Auto-completar datos del proveedor si no están
-        if validated_data.get('comp_idpro') and not validated_data.get('comp_razon_social'):
-            proveedor = validated_data['comp_idpro']
+        if proveedor_compra and not validated_data.get('comp_razon_social'):
+            proveedor = proveedor_compra
             validated_data['comp_razon_social'] = proveedor.razon
             validated_data['comp_cuit'] = proveedor.cuit
             validated_data['comp_domicilio'] = proveedor.domicilio
@@ -173,18 +193,68 @@ class CompraCreateSerializer(CompraSerializer):
         
         # Crear los items
         for i, item_data in enumerate(items_data):
+            # Forzar el proveedor de la cabecera en cada item para consistencia
+            item_data['cdi_idpro'] = proveedor_compra
+
+            # Validar que el item tenga proveedor (defensa adicional)
+            if not item_data.get('cdi_idpro'):
+                raise serializers.ValidationError(
+                    f"El item {i + 1} no tiene un proveedor asignado y no se pudo heredar de la compra."
+                )
+
+            # Resolver/normalizar claves foráneas que pueden venir como IDs crudos
+            # cdi_idsto (Stock) puede ser None o un ID o una instancia
+            stock_obj = None
+            if item_data.get('cdi_idsto') is not None:
+                cdi_idsto_val = item_data['cdi_idsto']
+                if isinstance(cdi_idsto_val, Stock):
+                    stock_obj = cdi_idsto_val
+                else:
+                    try:
+                        stock_obj = Stock.objects.get(pk=cdi_idsto_val)
+                    except Stock.DoesNotExist:
+                        raise serializers.ValidationError(
+                            f"El item {i + 1} referencia un producto (stock) inexistente"
+                        )
+                # Reasignar la instancia para el create
+                item_data['cdi_idsto'] = stock_obj
+
+            # cdi_idaliiva (AlicuotaIVA) puede venir como ID. Si no viene, se toma del Stock.
+            if item_data.get('cdi_idaliiva') is not None and not isinstance(item_data['cdi_idaliiva'], AlicuotaIVA):
+                try:
+                    item_data['cdi_idaliiva'] = AlicuotaIVA.objects.get(pk=item_data['cdi_idaliiva'])
+                except AlicuotaIVA.DoesNotExist:
+                    raise serializers.ValidationError(
+                        f"El item {i + 1} referencia una alícuota de IVA inexistente"
+                    )
+            elif item_data.get('cdi_idaliiva') is None and stock_obj is not None and getattr(stock_obj, 'idaliiva_id', None):
+                # Autocompletar desde el producto (Stock)
+                item_data['cdi_idaliiva'] = stock_obj.idaliiva
+
+            # Completar denominación y unidad desde el Stock cuando no fueron provistos
+            if stock_obj is not None and not item_data.get('cdi_detalle1'):
+                item_data['cdi_detalle1'] = stock_obj.deno
+                item_data['cdi_detalle2'] = stock_obj.unidad
+
+            # Asignaciones finales
             item_data['cdi_idca'] = compra
             if not item_data.get('cdi_orden'):
                 item_data['cdi_orden'] = i + 1
-            
-            # Auto-completar datos del producto si existe
-            if item_data.get('cdi_idsto') and not item_data.get('cdi_detalle1'):
-                stock = item_data['cdi_idsto']
-                item_data['cdi_detalle1'] = stock.deno
-                item_data['cdi_detalle2'] = stock.unidad
-            
-            CompraDetalleItem.objects.create(**item_data)
-        
+
+            try:
+                CompraDetalleItem.objects.create(**item_data)
+            except Exception as e:
+                raise serializers.ValidationError(
+                    f"Error al crear item {i + 1}: {str(e)}"
+                )
+
+        # Cerrar automáticamente la compra al finalizar la carga de items
+        try:
+            compra.cerrar_compra()
+        except Exception as e:
+            # Si por algún motivo no se puede cerrar (p.ej., totales inválidos), devolver error claro
+            raise serializers.ValidationError(f"No se pudo finalizar la compra: {str(e)}")
+
         return compra
 
 
@@ -251,13 +321,12 @@ class StockProveedorSerializer(serializers.ModelSerializer):
     stock_denominacion = serializers.SerializerMethodField()
     stock_codigo = serializers.SerializerMethodField()
     stock_unidad = serializers.SerializerMethodField()
-    alicuota_porcentaje = serializers.SerializerMethodField()
     
     class Meta:
         model = Stock
         fields = [
-            'id', 'codvta', 'deno', 'unidad', 'stock_denominacion',
-            'stock_codigo', 'stock_unidad', 'alicuota_porcentaje'
+            'id', 'codvta', 'deno', 'unidad', 'idaliiva', 'stock_denominacion',
+            'stock_codigo', 'stock_unidad'
         ]
     
     def get_stock_denominacion(self, obj):
@@ -268,8 +337,3 @@ class StockProveedorSerializer(serializers.ModelSerializer):
     
     def get_stock_unidad(self, obj):
         return obj.unidad
-    
-    def get_alicuota_porcentaje(self, obj):
-        if obj.idaliiva:
-            return obj.idaliiva.porce
-        return Decimal('0')

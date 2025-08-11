@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import ItemsGridCompras from "./ItemsGridCompras"
 
 const CompraForm = ({
@@ -49,16 +49,16 @@ const CompraForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Helper para construir el string completo
-  const buildNumeroFactura = (letra, pv, numero) => {
+  const buildNumeroFactura = useCallback((letra, pv, numero) => {
     const pvFmt = (pv || "").toString().slice(0, 4).padStart(4, "0")
     const numFmt = (numero || "").toString().slice(0, 8).padStart(8, "0")
     return `${(letra || "A").toString().toUpperCase()}-${pvFmt}-${numFmt}`
-  }
+  }, [])
 
-  const updateNumeroFacturaInForm = (nextFactura) => {
+  const updateNumeroFacturaInForm = useCallback((nextFactura) => {
     const composed = buildNumeroFactura(nextFactura.letra, nextFactura.pv, nextFactura.numero)
     setFormData((prev) => ({ ...prev, comp_numero_factura: composed }))
-  }
+  }, [buildNumeroFactura])
 
   useEffect(() => {
     if (initialData) {
@@ -98,7 +98,7 @@ const CompraForm = ({
         }
       }
     }
-  }, [initialData, proveedores, sucursales])
+  }, [initialData, proveedores, sucursales, updateNumeroFacturaInForm])
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
@@ -116,25 +116,36 @@ const CompraForm = ({
   const handleProveedorChange = (proveedorId) => {
     const proveedor = proveedores.find((p) => p.id === parseInt(proveedorId))
     setSelectedProveedor(proveedor)
-    setFormData((prev) => ({
-      ...prev,
-      comp_idpro: proveedorId,
-      comp_cuit: proveedor?.cuit || "",
-      comp_razon_social: proveedor?.razon || "",
-      comp_domicilio: proveedor?.domicilio || "",
-    }))
+    setFormData((prev) => {
+      const newFormData = {
+        ...prev,
+        comp_idpro: proveedorId,
+        comp_cuit: proveedor?.cuit || "",
+        comp_razon_social: proveedor?.razon || "",
+        comp_domicilio: proveedor?.domicilio || "",
+      }
+      
+      // Actualizar el proveedor en todos los items existentes usando el estado actual
+      if (prev.items_data && prev.items_data.length > 0) {
+        newFormData.items_data = prev.items_data.map(item => ({
+          ...item,
+          cdi_idpro: parseInt(proveedorId)
+        }))
+      }
+      
+      return newFormData
+    })
   }
 
   // Handlers para los subcampos de factura
   const handleFacturaLetra = (letra) => {
-    // Solo permitir caracteres alfabéticos y convertir a mayúsculas
     const clean = (letra || "").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 1)
     const next = { ...factura, letra: clean || "A" }
     setFactura(next)
     updateNumeroFacturaInForm(next)
   }
   const handleFacturaPv = (pv) => {
-    // Solo dígitos, permitir hasta 4 dígitos (igual que handleFacturaNumero)
+    // Solo dígitos, permitir hasta 4 dígitos
     const clean = (pv || "").replace(/\D+/g, "").slice(0, 4)
     const next = { ...factura, pv: clean }
     setFactura(next)
@@ -271,8 +282,19 @@ const CompraForm = ({
             <div className="mb-4">
               <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-3.5 h-3.5 text-white"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
+                    />
                   </svg>
                 </div>
                 {initialData ? (readOnly ? "Ver Compra" : "Editar Compra") : "Nueva Compra"}
@@ -371,29 +393,26 @@ const CompraForm = ({
                       onChange={(e) => handleFacturaLetra(e.target.value)}
                       disabled={readOnly}
                       placeholder="A"
-                      maxLength={1}
                       className="px-2 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
                       style={{ width: 64 }}
                       title="Letra de comprobante (A-Z)"
                     />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="\\d*"
-                      value={factura.pv}
-                      onChange={(e) => handleFacturaPv(e.target.value)}
-                      onBlur={padPvOnBlur}
-                      disabled={readOnly}
-                      placeholder="PV"
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-20 text-center"
-                      ref={pvRef}
-                      title="Punto de venta (4 dígitos)"
-                    />
+                                         <input
+                       type="text"
+                       inputMode="numeric"
+                       value={factura.pv}
+                       onChange={(e) => handleFacturaPv(e.target.value)}
+                       onBlur={padPvOnBlur}
+                       disabled={readOnly}
+                       placeholder="PV"
+                       className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-20 text-center"
+                       ref={pvRef}
+                       title="Punto de venta (4 dígitos)"
+                     />
                     <span className="text-slate-500">-</span>
                     <input
                       type="text"
                       inputMode="numeric"
-                      pattern="\\d*"
                       value={factura.numero}
                       onChange={(e) => handleFacturaNumero(e.target.value)}
                       onBlur={padNumeroOnBlur}

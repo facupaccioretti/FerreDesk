@@ -3,7 +3,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from .models import Compra, CompraDetalleItem
 from .serializers import (
     CompraSerializer,
@@ -21,6 +22,7 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
+from django.db.models import Subquery, OuterRef
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -54,8 +56,17 @@ class CompraViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Optimizar consultas con select_related"""
-        return Compra.objects.select_related('comp_idpro').prefetch_related('items')
+        """Optimizar consultas con select_related y anotar codigo_proveedor en items"""
+        qs = Compra.objects.select_related('comp_idpro').prefetch_related('items', 'items__cdi_idsto', 'items__cdi_idpro')
+        # Anotar codigo_proveedor en cada item usando Subquery sobre StockProve
+        from ferreapps.productos.models import StockProve
+        codigo_subq = StockProve.objects.filter(
+            proveedor_id=OuterRef('items__cdi_idpro_id'),
+            stock_id=OuterRef('items__cdi_idsto_id')
+        ).values('codigo_producto_proveedor')[:1]
+        # Esta anotación no se adjunta directamente a related objects con prefetch; se sugiere resolver en serializer si se requiere estrictamente.
+        # Mantenemos prefetch y dejamos que el serializer lea con un acceso directo si ya viene precargado.
+        return qs
     
     def get_serializer_class(self):
         """Usar serializers específicos según la acción"""
@@ -79,9 +90,15 @@ class CompraViewSet(viewsets.ModelViewSet):
                 CompraSerializer(compra).data,
                 status=status.HTTP_201_CREATED
             )
-        except ValidationError as e:
+        except (DjangoValidationError, DRFValidationError) as e:
             return Response(
                 {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IntegrityError as e:
+            # Duplicado de número de factura por proveedor u otras restricciones únicas
+            return Response(
+                {'detail': 'Violación de integridad: verifique número de factura y proveedor (posible duplicado)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
@@ -299,7 +316,7 @@ def productos_por_proveedor(request, proveedor_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def buscar_producto_por_codigo_proveedor(request):
-    """Buscar producto por código de proveedor"""
+    """Buscar producto por código de proveedor de forma exacta."""
     try:
         codigo = request.query_params.get('codigo')
         proveedor_id = request.query_params.get('proveedor_id')
@@ -310,20 +327,30 @@ def buscar_producto_por_codigo_proveedor(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Buscar en STOCKPROVE por código de proveedor
+        # Limpiar el código para una búsqueda exacta
+        codigo_limpio = codigo.strip()
+        
+        # Buscar en STOCKPROVE por código de proveedor exacto (insensible a mayúsculas)
         from ferreapps.productos.models import StockProve
         
         stock_prove = StockProve.objects.filter(
             proveedor_id=proveedor_id,
-            codigo_producto_proveedor__icontains=codigo
+            codigo_producto_proveedor__iexact=codigo_limpio
         ).select_related('stock', 'stock__idaliiva').first()
         
         if stock_prove:
-            serializer = StockProveedorSerializer(stock_prove.stock)
-            return Response(serializer.data)
+            # Asegurarse de que el producto asociado (stock) está activo
+            if stock_prove.stock and stock_prove.stock.acti == 'S':
+                serializer = StockProveedorSerializer(stock_prove.stock)
+                return Response(serializer.data)
+            else:
+                return Response(
+                    {'detail': 'Producto encontrado pero no está activo'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
         else:
             return Response(
-                {'detail': 'Producto no encontrado'},
+                {'detail': 'Producto no encontrado con ese código para el proveedor seleccionado'},
                 status=status.HTTP_404_NOT_FOUND
             )
     except Exception as e:
