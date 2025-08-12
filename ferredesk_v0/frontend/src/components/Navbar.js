@@ -22,7 +22,7 @@ export default function Navbar({ user, onLogout }) {
 
   return (
     <nav
-      className="w-full flex items-center justify-between px-6 py-1.5 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl relative"
+      className="sticky top-0 z-50 w-full flex items-center justify-between px-6 py-1.5 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl"
       style={{ minHeight: 50 }}
     >
       <div className="flex items-center gap-8">
