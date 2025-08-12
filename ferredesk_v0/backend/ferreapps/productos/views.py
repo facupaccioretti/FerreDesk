@@ -1,23 +1,36 @@
-from django.shortcuts import render
-from rest_framework import viewsets
-from django_filters.rest_framework import DjangoFilterBackend
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, PrecioProveedorExcel, ProductoTempID, Ferreteria, VistaStockProducto
-from .serializers import StockSerializer, ProveedorSerializer, StockProveSerializer, FamiliaSerializer, AlicuotaIVASerializer, FerreteriaSerializer, VistaStockProductoSerializer
+from django.shortcuts import render, get_object_or_404
+from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework import status, permissions
-import pyexcel as pe
-from django.db.models.functions import Lower
+from django.http import HttpResponse, Http404
+from django.core.exceptions import ValidationError
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
+from .serializers import (
+    StockSerializer,
+    ProveedorSerializer,
+    StockProveSerializer,
+    FamiliaSerializer,
+    AlicuotaIVASerializer,
+    FerreteriaSerializer,
+    VistaStockProductoSerializer
+)
 from django.db import transaction
-from django.utils import timezone
+from decimal import Decimal
+from django.db import IntegrityError
+import logging
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
+from django.db.models import Q
 import os
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+import pyexcel as pe
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.http import FileResponse
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.conf import settings
+import mimetypes
+import base64
 import re
 from difflib import SequenceMatcher
 
@@ -72,11 +85,39 @@ class StockProveViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['stock', 'proveedor']
 
+class FamiliaFilter(FilterSet):
+    """
+    Filtro personalizado para familias que permite búsqueda en múltiples campos
+    """
+    # Búsqueda de texto que busca en deno y nivel
+    search = CharFilter(method='filter_search', label='Búsqueda general')
+    
+    # Filtros específicos
+    deno = CharFilter(lookup_expr='icontains', label='Denominación')
+    comentario = CharFilter(lookup_expr='icontains', label='Comentario')
+    nivel = CharFilter(lookup_expr='exact', label='Nivel')
+    acti = CharFilter(lookup_expr='exact', label='Estado')
+
+    def filter_search(self, queryset, name, value):
+        """
+        Búsqueda que incluye denominación y nivel
+        """
+        if value:
+            return queryset.filter(
+                Q(deno__icontains=value) |
+                Q(nivel__icontains=value)
+            )
+        return queryset
+
+    class Meta:
+        model = Familia
+        fields = ['deno', 'comentario', 'nivel', 'acti', 'search']
+
 class FamiliaViewSet(viewsets.ModelViewSet):
     queryset = Familia.objects.all()
     serializer_class = FamiliaSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['deno', 'nivel', 'acti']
+    filterset_class = FamiliaFilter
 
 class AlicuotaIVAViewSet(viewsets.ModelViewSet):
     queryset = AlicuotaIVA.objects.all()

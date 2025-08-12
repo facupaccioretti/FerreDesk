@@ -8,14 +8,16 @@ import ProveedorForm from "./ProveedorForm"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { BotonEditar, BotonEliminar, BotonHistorial, BotonCargarLista } from "../Botones"
 import Tabla from "../Tabla"
-
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const ProveedoresManager = () => {
+  const theme = useFerreDeskTheme()
+  
   // Hook API real
   const { proveedores, addProveedor, updateProveedor, deleteProveedor, loading, error } = useProveedoresAPI()
 
   // Estados para búsqueda y UI
-  const [search, setSearch] = useState("")
+  const [searchProveedores, setSearchProveedores] = useState("")
   const [expandedId, setExpandedId] = useState(null)
   const [tabs, setTabs] = useState([{ key: "lista", label: "Lista de Proveedores", closable: false }])
   const [activeTab, setActiveTab] = useState("lista")
@@ -97,17 +99,6 @@ const ProveedoresManager = () => {
     }
   }
 
-  // Filtro de búsqueda
-  const proveedoresFiltrados = proveedores.filter(
-    (p) =>
-      (p.razon || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.fantasia || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.cuit || "").toLowerCase().includes(search.toLowerCase()),
-  )
-
-
-
-
   // Modales
   const handleOpenListaModal = (proveedor) => {
     setProveedorSeleccionado(proveedor)
@@ -124,23 +115,27 @@ const ProveedoresManager = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
+    <div className={theme.fondo}>
+      <div className={theme.patron}></div>
+      <div className={theme.overlay}></div>
+      
       <Navbar user={user} onLogout={handleLogout} />
 
       {/* Contenedor central con ancho máximo fijo */}
-      <div className="py-8 px-4 flex-1 flex flex-col">
+      <div className="py-8 px-4 flex-1 flex flex-col relative z-10">
         <div className="max-w-[1400px] w-full mx-auto flex flex-col flex-1">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-slate-800">Gestión de Proveedores</h2>
           </div>
-          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200">
-            {/* Tabs tipo browser */}
-            <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-white shadow-sm">
+          
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
+            {/* Tabs tipo browser con encabezado azul FerreDesk */}
+            <div className="border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
               {tabs.map((tab) => (
                 <div
                   key={tab.key}
-                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  className={`inline-flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key ? theme.tabActiva : theme.tabInactiva}`}
                   onClick={() => setActiveTab(tab.key)}
                   style={{ position: "relative" }}
                 >
@@ -151,7 +146,7 @@ const ProveedoresManager = () => {
                         e.stopPropagation()
                         closeTab(tab.key)
                       }}
-                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                      className="ml-3 text-lg font-bold text-slate-300 hover:text-red-400 focus:outline-none transition-colors"
                       title="Cerrar"
                     >
                       ×
@@ -159,46 +154,21 @@ const ProveedoresManager = () => {
                   )}
                 </div>
               ))}
-              {/* Botón Nuevo Proveedor solo en la tab de lista */}
-              {activeTab === "lista" && (
-                <div className="flex-1 flex justify-end mb-1">
-                  <button
-                    onClick={() => openTab("nuevo", "Nuevo Proveedor")}
-                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                  >
-                    <span className="text-lg">+</span> Nuevo Proveedor
-                  </button>
-                </div>
-              )}
             </div>
+            
             <div className="flex-1 p-6">
               {activeTab === "lista" && (
                 <>
-                  <div className="mb-6">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        className="pl-10 pr-4 py-3 w-full rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-                        placeholder="Buscar proveedor por nombre, fantasía o CUIT..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                        className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 transform -translate-y-1/2"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                        />
-                      </svg>
-                    </div>
+                  {/* Botón Nuevo Proveedor arriba de la tabla */}
+                  <div className="mb-4 flex justify-start">
+                    <button
+                      onClick={() => openTab("nuevo", "Nuevo Proveedor")}
+                      className={theme.botonPrimario}
+                    >
+                      <span className="text-lg">+</span> Nuevo Proveedor
+                    </button>
                   </div>
+                  
                   {loading && (
                     <div className="text-slate-600 mb-4 flex items-center">
                       <svg
@@ -306,10 +276,10 @@ const ProveedoresManager = () => {
                         ),
                       },
                     ]}
-                    datos={proveedoresFiltrados}
-                    valorBusqueda=""
-                    onCambioBusqueda={() => {}}
-                    mostrarBuscador={false}
+                    datos={proveedores}
+                    valorBusqueda={searchProveedores}
+                    onCambioBusqueda={setSearchProveedores}
+                    mostrarBuscador={true}
                     renderFila={(p, idxVis, idxInicio) => {
                       const indiceGlobal = idxInicio + idxVis
                       const filaPrincipal = (

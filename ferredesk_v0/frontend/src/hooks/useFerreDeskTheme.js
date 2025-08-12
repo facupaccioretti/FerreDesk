@@ -1,6 +1,5 @@
 /**
- * Hook personalizado para acceder al tema de FerreDesk
- * Proporciona clases y estilos consistentes en toda la aplicación
+cambiar el nombre de esta carpeta 
  */
 export const useFerreDeskTheme = () => {
   return {

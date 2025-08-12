@@ -109,16 +109,14 @@ const ComprasList = ({
   }
 
   return (
-    <div className="p-6 pt-2">
-      <Tabla
-        columnas={columnas}
-        datos={compras}
-        mostrarBuscador={true}
-        valorBusqueda={search}
-        onCambioBusqueda={setSearch}
-        renderFila={renderFila}
-      />
-    </div>
+    <Tabla
+      columnas={columnas}
+      datos={compras}
+      mostrarBuscador={true}
+      valorBusqueda={search}
+      onCambioBusqueda={setSearch}
+      renderFila={renderFila}
+    />
   )
 }
 

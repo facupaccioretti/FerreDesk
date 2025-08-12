@@ -9,10 +9,13 @@ import { useComprasAPI } from "../../utils/useComprasAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const MAIN_TAB_KEY = "compras"
 
 const ComprasManager = () => {
+  const theme = useFerreDeskTheme()
+  
   const [user, setUser] = useState(null)
   const [search, setSearch] = useState("")
   
@@ -164,10 +167,13 @@ const ComprasManager = () => {
   const activeTabData = useMemo(() => tabs.find((t) => t.key === activeTab)?.data || null, [tabs, activeTab])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
+    <div className={theme.fondo}>
+      <div className={theme.patron}></div>
+      <div className={theme.overlay}></div>
+      
       <Navbar user={user} onLogout={handleLogout} />
 
-      <div className="py-8 px-4">
+      <div className="py-8 px-4 relative z-10">
         <div className="max-w-[1400px] w-full mx-auto">
           {/* Título de la página (fuera del contenedor) */}
           <div className="flex justify-between items-center mb-6">
@@ -175,17 +181,13 @@ const ComprasManager = () => {
           </div>
 
           {/* Tarjeta contenedora principal con tabs */}
-          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 max-w-[1400px] mx-auto">
-            {/* Barra de tabs estilo navegador */}
-            <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-slate-50">
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
+            {/* Barra de tabs estilo navegador con encabezado azul FerreDesk */}
+            <div className="border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
               {tabs.map((tab) => (
                 <div
                   key={tab.key}
-                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                    activeTab === tab.key
-                      ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                  className={`inline-flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key ? theme.tabActiva : theme.tabInactiva}`}
                   onClick={() => setActiveTab(tab.key)}
                 >
                   {tab.label}
@@ -195,7 +197,7 @@ const ComprasManager = () => {
                         e.stopPropagation()
                         closeTab(tab.key)
                       }}
-                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                      className="ml-3 text-lg font-bold text-slate-300 hover:text-red-400 focus:outline-none transition-colors"
                       title="Cerrar"
                     >
                       ×
@@ -203,36 +205,36 @@ const ComprasManager = () => {
                   )}
                 </div>
               ))}
-              {activeTab === MAIN_TAB_KEY && (
-                <div className="flex-1 flex justify-end mb-2">
-                  <button
-                    onClick={handleNuevaCompra}
-                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                  >
-                    <span className="text-lg">+</span> Nueva Compra
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Contenido por tab */}
             <div className="flex-1 p-6">
               {activeTab === MAIN_TAB_KEY ? (
                 <>
-                                     <ComprasList
-                     compras={compras}
-                     loading={loadingCompras}
-                     error={errorCompras}
-                     search={search}
-                     setSearch={setSearch}
-                     onNuevaCompra={handleNuevaCompra}
-                     onEditarCompra={handleEditarCompra}
-                     onVerCompra={handleVerCompra}
-                     onCerrarCompra={handleCerrarCompra}
-                     onAnularCompra={handleAnularCompra}
-                     onEliminarCompra={handleEliminarCompra}
-                     onRefresh={fetchCompras}
-                   />
+                  {/* Botón Nueva Compra arriba de la tabla */}
+                  <div className="mb-4 flex justify-start">
+                    <button
+                      onClick={handleNuevaCompra}
+                      className={theme.botonPrimario}
+                    >
+                      <span className="text-lg">+</span> Nueva Compra
+                    </button>
+                  </div>
+                  
+                  <ComprasList
+                    compras={compras}
+                    loading={loadingCompras}
+                    error={errorCompras}
+                    search={search}
+                    setSearch={setSearch}
+                    onNuevaCompra={handleNuevaCompra}
+                    onEditarCompra={handleEditarCompra}
+                    onVerCompra={handleVerCompra}
+                    onCerrarCompra={handleCerrarCompra}
+                    onAnularCompra={handleAnularCompra}
+                    onEliminarCompra={handleEliminarCompra}
+                    onRefresh={fetchCompras}
+                  />
                 </>
               ) : (
                 <CompraForm
