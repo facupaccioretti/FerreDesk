@@ -6,6 +6,8 @@ import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import AsociarCodigoProveedorModal from "./AsociarCodigoProveedorModal"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { BotonEditar } from "../Botones"
 
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
@@ -24,6 +26,9 @@ function getCookie(name) {
 }
 
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => {
+  // Hook del tema de FerreDesk
+  const theme = useFerreDeskTheme()
+  
   // Estado principal del formulario
   const [form, setForm] = useState(() => {
     if (modo === "nuevo") {
@@ -90,6 +95,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const [cargarPrecioManual, setCargarPrecioManual] = useState(false)
   const [editandoCantidadId, setEditandoCantidadId] = useState(null)
   const [nuevaCantidad, setNuevaCantidad] = useState("")
+  const [mostrarTooltipStock, setMostrarTooltipStock] = useState(false)
 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
@@ -760,14 +766,14 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   }, [proveedoresAsociados, form.proveedor_habitual_id])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
+    <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
       <div className="w-full max-w-none">
         <form
           className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSave}
         >
           {/* Gradiente decorativo superior */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
+          <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
 
           <div className="p-6">
             {/* Header */}
@@ -806,452 +812,484 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
               )}
             </div>
 
-            {/* Sección 1: Información Básica del Producto */}
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg">
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                    />
-                  </svg>
-                </div>
-                <h4 className="text-lg font-bold text-slate-800">Información Básica del Producto</h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 p-4 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/40">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Código de Venta *</label>
-                  <input
-                    type="text"
-                    name="codvta"
-                    value={form.codvta}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Código de Compra *</label>
-                  <input
-                    type="text"
-                    name="codcom"
-                    value={form.codcom}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    required
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Denominación *</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="deno"
-                      value={form.deno}
-                      onChange={handleChange}
-                      onBlur={modo === "nuevo" ? (e) => handleDenominacionBlur(e.target.value) : undefined}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      required
-                    />
-                    {/* Botón de alerta para mostrar sugerencias - SOLO en modo nuevo */}
-                    {modo === "nuevo" && sugerencias && !isLoadingSugerencias && !errorSugerencias && (
-                      <button
-                        type="button"
-                        onClick={toggleTooltip}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-orange-600 hover:text-orange-800 transition-colors"
-                        title="Ver productos similares"
-                        aria-label="Ver productos similares"
-                      >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    )}
-                    {/* Tooltip de sugerencias de denominaciones similares - SOLO en modo nuevo */}
-                    {modo === "nuevo" && (sugerencias || isLoadingSugerencias || errorSugerencias) && (
-                      <DenominacionSugerenciasTooltip
-                        sugerencias={sugerencias}
-                        onIgnorar={limpiarSugerencias}
-                        isLoading={isLoadingSugerencias}
-                        error={errorSugerencias}
-                        mostrarTooltip={mostrarTooltip}
-                        onToggle={toggleTooltip}
-                      />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Unidad</label>
-                  <input
-                    type="text"
-                    name="unidad"
-                    value={form.unidad}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Estado</label>
-                  <select
-                    name="acti"
-                    value={form.acti ?? ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    required
-                  >
-                    <option value="">Sin asignar</option>
-                    <option value="S">Activo</option>
-                    <option value="N">Inactivo</option>
-                  </select>
-                </div>
+            {/* Header compacto con denominación */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-800 truncate" title={form.deno}>
+                {form.deno || "Nuevo Producto"}
               </div>
             </div>
 
-            {/* Sección 2: Stock y Costos */}
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg">
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
+            {/* Tarjetas horizontales al estilo del detalle */}
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+              {/* Tarjeta Información Básica */}
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]">
+                <h5 className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
+                  Información Básica
+                </h5>
+                <div className="divide-y divide-slate-200">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Código Venta *</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="text"
+                        name="codvta"
+                        value={form.codvta}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Código Compra *</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="text"
+                        name="codcom"
+                        value={form.codcom}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Denominación *</span>
+                    <div className="min-w-[180px] text-right">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="deno"
+                          value={form.deno}
+                          onChange={handleChange}
+                          onBlur={modo === "nuevo" ? (e) => handleDenominacionBlur(e.target.value) : undefined}
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500 pr-8"
+                          required
+                        />
+                        {modo === "nuevo" && sugerencias && !isLoadingSugerencias && !errorSugerencias && (
+                          <button
+                            type="button"
+                            onClick={toggleTooltip}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-orange-600 hover:text-orange-800 transition-colors"
+                            title="Ver productos similares"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      {modo === "nuevo" && (sugerencias || isLoadingSugerencias || errorSugerencias) && (
+                        <DenominacionSugerenciasTooltip
+                          sugerencias={sugerencias}
+                          onIgnorar={limpiarSugerencias}
+                          isLoading={isLoadingSugerencias}
+                          error={errorSugerencias}
+                          mostrarTooltip={mostrarTooltip}
+                          onToggle={toggleTooltip}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Unidad</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="text"
+                        name="unidad"
+                        value={form.unidad}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Estado</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="acti"
+                        value={form.acti ?? ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        required
+                      >
+                        <option value="">Sin asignar</option>
+                        <option value="S">Activo</option>
+                        <option value="N">Inactivo</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <h4 className="text-lg font-bold text-slate-800">Stock y Costos</h4>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/40">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Stock Total</label>
-                  <input
-                    type="number"
-                    value={stockTotal}
-                    readOnly
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-100 text-slate-700"
-                  />
+
+              {/* Tarjeta Códigos y Proveedores */}
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]">
+                <h5 className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Códigos y Proveedores
+                </h5>
+                <div className="divide-y divide-slate-200">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Proveedor Habitual</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="proveedor_habitual_id"
+                        value={form.proveedor_habitual_id ?? ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        disabled={proveedoresAsociados.length === 1}
+                        required={proveedoresAsociados.length > 1}
+                      >
+                        <option value="">Seleccionar...</option>
+                        {proveedoresAsociados.map((prov) => (
+                          <option key={prov.id} value={String(prov.id)}>
+                            {prov.razon}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {(stock?.id || form.id) && (
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-[12px] text-slate-700">Asociar Código</span>
+                      <div className="min-w-[180px] text-right">
+                        <button
+                          type="button"
+                          onClick={() => setShowAsociarModal(true)}
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-white hover:bg-slate-50 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        >
+                          Asociar código
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Formulario para agregar stock */}
+                  <div className="py-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="text-[12px] text-slate-700">Agregar Stock</div>
+                      <div
+                        className="relative cursor-pointer"
+                        onMouseEnter={() => setMostrarTooltipStock(true)}
+                        onMouseLeave={() => setMostrarTooltipStock(false)}
+                      >
+                        <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth="1.5"
+                            stroke="currentColor"
+                            className="w-2.5 h-2.5 text-slate-600"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                          </svg>
+                        </div>
+                        {mostrarTooltipStock && (
+                          <div className="absolute left-6 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl w-[450px]">
+                            Esta función está pensada para correcciones o ediciones menores, para carga correcta de inventario usar la sección Compras
+                            <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <select
+                          name="proveedor"
+                          value={
+                            typeof newStockProve.proveedor === "string" || typeof newStockProve.proveedor === "number"
+                              ? newStockProve.proveedor
+                              : ""
+                          }
+                          onChange={handleNewStockProveChange}
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        >
+                          <option value="">Proveedor...</option>
+                          {proveedores.map((proveedor) => (
+                            <option key={proveedor.id} value={String(proveedor.id)}>
+                              {proveedor.razon}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          name="cantidad"
+                          value={newStockProve.cantidad}
+                          onChange={handleNewStockProveChange}
+                          placeholder="Cantidad"
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        />
+                        <input
+                          type="number"
+                          name="costo"
+                          value={newStockProve.costo}
+                          onChange={handleNewStockProveChange}
+                          placeholder="Costo"
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          disabled={permitirCostoManual && !cargarPrecioManual}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addStockProveHandler}
+                        className={`w-full px-2 py-1 ${theme.botonPrimario} text-xs`}
+                      >
+                        Agregar
+                      </button>
+                      {permitirCostoManual && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={cargarPrecioManual}
+                            onChange={(e) => setCargarPrecioManual(e.target.checked)}
+                            className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                          />
+                          <label className="text-slate-700">Precio manual</label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Cantidad Mínima</label>
-                  <input
-                    type="number"
-                    name="cantmin"
-                    value={form.cantmin}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Margen (%)</label>
-                  <input
-                    type="number"
-                    name="margen"
-                    value={form.margen ?? ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    step="0.01"
-                    min="0"
-                    placeholder="% ganancia"
-                  />
-                  {form.margen &&
-                    newStockProve.costo &&
-                    !isNaN(Number(form.margen)) &&
-                    !isNaN(Number(newStockProve.costo)) && (
-                      <div className="mt-1 text-xs text-emerald-700">
+              </div>
+
+              {/* Tarjeta Stock y Costos */}
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]">
+                <h5 className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  Stock y Costos
+                </h5>
+                <div className="divide-y divide-slate-200">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Stock Total</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="number"
+                        value={stockTotal}
+                        readOnly
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-slate-100 text-slate-700"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Cantidad Mínima</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="number"
+                        name="cantmin"
+                        value={form.cantmin}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Margen (%)</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="number"
+                        name="margen"
+                        value={form.margen ?? ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        step="0.01"
+                        min="0"
+                        placeholder="% ganancia"
+                      />
+                    </div>
+                  </div>
+                  {form.margen && newStockProve.costo && !isNaN(Number(form.margen)) && !isNaN(Number(newStockProve.costo)) && (
+                    <div className="py-2">
+                      <div className="text-xs text-emerald-700 text-center">
                         Precio sugerido: ${(Number(newStockProve.costo) * (1 + Number(form.margen) / 100)).toFixed(2)}
                       </div>
-                    )}
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Proveedor Habitual</label>
-                  <select
-                    name="proveedor_habitual_id"
-                    value={form.proveedor_habitual_id ?? ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    disabled={proveedoresAsociados.length === 1}
-                    required={proveedoresAsociados.length > 1}
-                  >
-                    <option value="">Seleccione un proveedor</option>
-                    {proveedoresAsociados.map((prov) => (
-                      <option key={prov.id} value={String(prov.id)}>
-                        {prov.razon}
-                      </option>
-                    ))}
-                  </select>
-                  {proveedoresAsociados.length > 1 && !form.proveedor_habitual_id && (
-                    <div className="text-red-600 text-xs mt-1">Debe seleccionar un proveedor habitual.</div>
+                    </div>
+                  )}
+                  
+                  {/* Stock Actual por Proveedor */}
+                  {((stock && stock.id) || (!stock?.id && stockProvePendientes.length > 0)) && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <h6 className="text-[12px] font-semibold text-slate-700 mb-2">Stock por Proveedor</h6>
+                      <div className="space-y-2">
+                        {stockProveParaMostrar.map((sp, index) => {
+                          // Buscar código pendiente si corresponde
+                          let codigoProveedor = sp.codigo_producto_proveedor
+                          if (!codigoProveedor && !stock?.id) {
+                            const codigoPendiente = codigosPendientes.find(
+                              (c) => String(c.proveedor_id) === String(sp.proveedor.id || sp.proveedor),
+                            )
+                            if (codigoPendiente) {
+                              codigoProveedor = codigoPendiente.codigo_producto_proveedor
+                            }
+                          }
+                          return (
+                            <div
+                              key={sp.id || index}
+                              className={`p-2 rounded-sm border ${sp.pendiente ? "bg-yellow-50 border-yellow-300" : "bg-slate-50 border-slate-200"}`}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[12px] font-semibold text-slate-700">
+                                    {typeof sp.proveedor === "object"
+                                      ? sp.proveedor.razon
+                                      : proveedores.find((p) => p.id === sp.proveedor)?.razon || sp.proveedor}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[12px] text-slate-700">
+                                  <span>
+                                    Código: <span className="font-medium text-xs">{codigoProveedor || "N/A"}</span>
+                                  </span>
+                                  <span>
+                                    Cantidad:{" "}
+                                    {editandoCantidadId === sp.id ? (
+                                      <div className="inline-flex items-center gap-2">
+                                        <input
+                                          type="number"
+                                          value={nuevaCantidad}
+                                          onChange={(e) => setNuevaCantidad(e.target.value)}
+                                          className="w-20 border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                          min="0"
+                                        />
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-xs"
+                                          onClick={() => handleEditStockProveSave(sp.id)}
+                                        >
+                                          ✓
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 bg-slate-400 text-white rounded-sm hover:bg-slate-500 text-xs"
+                                          onClick={handleEditStockProveCancel}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="inline-flex items-center gap-2">
+                                        <span className="font-medium text-xs">{sp.cantidad}</span>
+                                        <BotonEditar
+                                          onClick={() => handleEditStockProve(sp)}
+                                        />
+                                      </div>
+                                    )}
+                                  </span>
+                                  <span>
+                                    Costo: <span className="font-medium text-xs">${sp.costo}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Sección 3: Categorización */}
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 flex items-center justify-center shadow-lg">
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {/* Tarjeta Categorización */}
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]">
+                <h5 className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                  <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7H5m14 14H5" />
                   </svg>
-                </div>
-                <h4 className="text-lg font-bold text-slate-800">Categorización y Fiscalización</h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-purple-50 to-purple-100/80 rounded-xl border border-purple-200/40">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Familia</label>
-                  <select
-                    name="idfam1"
-                    value={typeof form.idfam1 === "number" || typeof form.idfam1 === "string" ? form.idfam1 : ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    <option value="">Sin familia</option>
-                    {familias
-                      .filter((fam) => String(fam.nivel) === "1")
-                      .map((fam) => (
-                        <option key={fam.id} value={fam.id}>
-                          {fam.deno}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Subfamilia</label>
-                  <select
-                    name="idfam2"
-                    value={typeof form.idfam2 === "number" || typeof form.idfam2 === "string" ? form.idfam2 : ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    <option value="">Sin subfamilia</option>
-                    {familias
-                      .filter((fam) => String(fam.nivel) === "2")
-                      .map((fam) => (
-                        <option key={fam.id} value={fam.id}>
-                          {fam.deno}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Sub-subfamilia</label>
-                  <select
-                    name="idfam3"
-                    value={typeof form.idfam3 === "number" || typeof form.idfam3 === "string" ? form.idfam3 : ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    <option value="">Sin sub-subfamilia</option>
-                    {familias
-                      .filter((fam) => String(fam.nivel) === "3")
-                      .map((fam) => (
-                        <option key={fam.id} value={fam.id}>
-                          {fam.deno}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Alícuota de IVA *</label>
-                  <select
-                    name="idaliiva"
-                    value={typeof form.idaliiva === "number" || typeof form.idaliiva === "string" ? form.idaliiva : ""}
-                    onChange={handleChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    required
-                  >
-                    <option value="">Seleccione una alícuota</option>
-                    {alicuotas.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.deno} ({a.porce}%)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Sección 4: Gestión de Stock por Proveedor */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                      />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-800">Gestión de Stock por Proveedor</h4>
-                </div>
-                {(stock?.id || form.id) && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAsociarModal(true)}
-                    className="px-4 py-2 bg-[#2F2F2F] text-white rounded-lg hover:bg-slate-700 font-semibold shadow-lg hover:shadow-xl text-sm"
-                  >
-                    Asociar código de proveedor
-                  </button>
-                )}
-              </div>
-
-              {/* Formulario para agregar stock */}
-              <div className="p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 rounded-xl border border-amber-200/40 mb-4">
-                <h5 className="text-md font-semibold text-slate-800 mb-3">Agregar Stock por Proveedor</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Proveedor</label>
-                    <select
-                      name="proveedor"
-                      value={
-                        typeof newStockProve.proveedor === "string" || typeof newStockProve.proveedor === "number"
-                          ? newStockProve.proveedor
-                          : ""
-                      }
-                      onChange={handleNewStockProveChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    >
-                      <option value="">Seleccione un proveedor</option>
-                      {proveedores.map((proveedor) => (
-                        <option key={proveedor.id} value={String(proveedor.id)}>
-                          {proveedor.razon}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Cantidad</label>
-                    <input
-                      type="number"
-                      name="cantidad"
-                      value={newStockProve.cantidad}
-                      onChange={handleNewStockProveChange}
-                      placeholder="Cantidad"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Costo</label>
-                    <input
-                      type="number"
-                      name="costo"
-                      value={newStockProve.costo}
-                      onChange={handleNewStockProveChange}
-                      placeholder="Costo"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      disabled={permitirCostoManual && !cargarPrecioManual}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={addStockProveHandler}
-                      className="w-full px-4 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg hover:from-orange-700 hover:to-orange-800 font-semibold shadow-lg hover:shadow-xl text-sm"
-                    >
-                      Agregar Stock
-                    </button>
-                  </div>
-                </div>
-                {permitirCostoManual && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={cargarPrecioManual}
-                      onChange={(e) => setCargarPrecioManual(e.target.checked)}
-                      className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-                    />
-                    <label className="text-slate-700">Cargar precio manual</label>
-                  </div>
-                )}
-              </div>
-
-              {/* Lista de stock por proveedor */}
-              {((stock && stock.id) || (!stock?.id && stockProvePendientes.length > 0)) && (
-                <div className="space-y-2">
-                  <h5 className="text-md font-semibold text-slate-800 mb-3">Stock Actual por Proveedor</h5>
-                  {stockProveParaMostrar.map((sp, index) => {
-                    // Buscar código pendiente si corresponde
-                    let codigoProveedor = sp.codigo_producto_proveedor
-                    if (!codigoProveedor && !stock?.id) {
-                      const codigoPendiente = codigosPendientes.find(
-                        (c) => String(c.proveedor_id) === String(sp.proveedor.id || sp.proveedor),
-                      )
-                      if (codigoPendiente) {
-                        codigoProveedor = codigoPendiente.codigo_producto_proveedor
-                      }
-                    }
-                    return (
-                      <div
-                        key={sp.id || index}
-                        className={`p-3 rounded-lg border ${sp.pendiente ? "bg-yellow-50 border-yellow-300" : "bg-slate-50 border-slate-200"}`}
+                  Categorización
+                </h5>
+                <div className="divide-y divide-slate-200">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Familia</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="idfam1"
+                        value={typeof form.idfam1 === "number" || typeof form.idfam1 === "string" ? form.idfam1 : ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <span className="font-semibold text-slate-800">
-                              {typeof sp.proveedor === "object"
-                                ? sp.proveedor.razon
-                                : proveedores.find((p) => p.id === sp.proveedor)?.razon || sp.proveedor}
-                            </span>
-                            <span className="text-sm text-slate-600">
-                              Código: <span className="font-medium">{codigoProveedor || "No asociado"}</span>
-                            </span>
-                            <span className="text-sm text-slate-600">
-                              Cantidad:{" "}
-                              {editandoCantidadId === sp.id ? (
-                                <div className="inline-flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    value={nuevaCantidad}
-                                    onChange={(e) => setNuevaCantidad(e.target.value)}
-                                    className="w-20 border border-slate-300 rounded px-2 py-1 text-sm"
-                                    min="0"
-                                  />
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs"
-                                    onClick={() => handleEditStockProveSave(sp.id)}
-                                  >
-                                    ✓
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 bg-slate-400 text-white rounded hover:bg-slate-500 text-xs"
-                                    onClick={handleEditStockProveCancel}
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="inline-flex items-center gap-2">
-                                  <span className="font-medium">{sp.cantidad}</span>
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs"
-                                    onClick={() => handleEditStockProve(sp)}
-                                  >
-                                    Editar
-                                  </button>
-                                </div>
-                              )}
-                            </span>
-                            <span className="text-sm text-slate-600">
-                              Costo: <span className="font-medium">${sp.costo}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
+                        <option value="">Sin familia</option>
+                        {familias
+                          .filter((fam) => String(fam.nivel) === "1")
+                          .map((fam) => (
+                            <option key={fam.id} value={fam.id}>
+                              {fam.deno}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Subfamilia</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="idfam2"
+                        value={typeof form.idfam2 === "number" || typeof form.idfam2 === "string" ? form.idfam2 : ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        <option value="">Sin subfamilia</option>
+                        {familias
+                          .filter((fam) => String(fam.nivel) === "2")
+                          .map((fam) => (
+                            <option key={fam.id} value={fam.id}>
+                              {fam.deno}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Sub-subfamilia</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="idfam3"
+                        value={typeof form.idfam3 === "number" || typeof form.idfam3 === "string" ? form.idfam3 : ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        <option value="">Sin sub-subfamilia</option>
+                        {familias
+                          .filter((fam) => String(fam.nivel) === "3")
+                          .map((fam) => (
+                            <option key={fam.id} value={fam.id}>
+                              {fam.deno}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Alícuota IVA *</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="idaliiva"
+                        value={typeof form.idaliiva === "number" || typeof form.idaliiva === "string" ? form.idaliiva : ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        required
+                      >
+                        <option value="">Seleccionar...</option>
+                        {alicuotas.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.deno} ({a.porce}%)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
+
+
 
             {/* Botones de acción */}
             <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
@@ -1264,7 +1302,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
               </button>
               <button
                 type="submit"
-                className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 font-semibold shadow-lg hover:shadow-xl"
+                className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
               >
                 {stock && stock.id ? "Actualizar Producto" : "Guardar Producto"}
               </button>

@@ -7,6 +7,9 @@ export const useFerreDeskTheme = () => {
     primario: "from-slate-800 to-slate-700",
     secundario: "ring-orange-500/20",
     
+    // Iconos
+    iconoNaranja: "text-orange-600",
+    
     // Tarjetas
     tarjeta: "bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-md border border-slate-800 ring-1 ring-orange-500/20",
     tarjetaClara: "bg-white rounded-lg shadow-md border border-slate-200",
