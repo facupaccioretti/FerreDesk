@@ -200,7 +200,7 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
         {ferreteriaConfig.logo_empresa && (
           <View style={styles.logoEmpresa}>
             <Image 
-              src="http://localhost:8000/api/productos/servir-logo-empresa/"
+              src="/api/productos/servir-logo-empresa/"
               style={styles.logoImagen}
             />
           </View>
@@ -396,7 +396,7 @@ export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPagin
         {/* Logo ARCA */}
         <View style={styles.arcaPlaceholder}>
           <Image 
-            src="http://localhost:8000/api/productos/servir-logo-arca/"
+            src="/api/productos/servir-logo-arca/"
             style={{
               width: 60,
               height: 50,
@@ -618,24 +618,34 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
  * @returns {string}
  */
 export function mapearTipoComprobante(comprobante) {
-  if (!comprobante) return "FACTURA";
+  if (!comprobante) return "Factura";
+  
+  // Función para capitalizar primera letra
+  const capitalizarPrimeraLetra = (texto) => {
+    if (!texto) return "";
+    return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+  };
+  
   const nombre = String(comprobante.nombre || "").toLowerCase();
-  if (nombre.includes("presupuesto")) return "PRESUPUESTO";
-  if (nombre.includes("venta")) return "VENTA";
-  if (nombre.includes("factura")) return "FACTURA";
-  if (nombre.includes("nota de crédito interna")) return "NOTA DE CRÉDITO INTERNA";
-  if (nombre.includes("nota de crédito")) return "NOTA DE CRÉDITO";
-  if (nombre.includes("nota de débito")) return "NOTA DE DÉBITO";
-  if (nombre.includes("recibo")) return "RECIBO";
+  if (nombre.includes("presupuesto")) return "Presupuesto";
+  if (nombre.includes("venta")) return "Venta";
+  if (nombre.includes("factura")) return "Factura";
+  if (nombre.includes("nota de crédito interna")) return "Nota de Crédito";
+  if (nombre.includes("nota de crédito")) return "Nota de Crédito";
+  if (nombre.includes("nota de débito")) return "Nota de Débito";
+  if (nombre.includes("recibo")) return "Recibo";
+  
   // fallback por tipo
   const tipo = String(comprobante.tipo || "").toLowerCase();
-  if (tipo === "presupuesto") return "PRESUPUESTO";
-  if (tipo === "factura_interna") return "FACTURA I";
-  if (tipo === "nota_credito_interna") return "NOTA DE CRÉDITO INTERNA";
-  if (tipo === "nota_credito") return "NOTA DE CRÉDITO";
-  if (tipo === "nota_debito") return "NOTA DE DÉBITO";
-  if (tipo === "recibo") return "RECIBO";
-  return (comprobante.nombre || comprobante.tipo || "FACTURA").toUpperCase();
+  if (tipo === "presupuesto") return "Presupuesto";
+  if (tipo === "factura_interna") return "Factura";
+  if (tipo === "nota_credito_interna") return "Nota de Crédito";
+  if (tipo === "nota_credito") return "Nota de Crédito";
+  if (tipo === "nota_debito") return "Nota de Débito";
+  if (tipo === "recibo") return "Recibo";
+  
+  // Capitalizar primera letra del tipo por defecto
+  return capitalizarPrimeraLetra(comprobante.nombre || comprobante.tipo || "Factura");
 } 
 
 /**

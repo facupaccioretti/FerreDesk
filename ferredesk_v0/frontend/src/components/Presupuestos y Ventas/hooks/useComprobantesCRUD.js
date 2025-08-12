@@ -32,6 +32,9 @@ const useComprobantesCRUD = ({
   const [isFetchingForConversion, setIsFetchingForConversion] = useState(false)
   const [fetchingPresupuestoId, setFetchingPresupuestoId] = useState(null)
 
+  // Estado para el modal de vista
+  const [vistaModal, setVistaModal] = useState({ open: false, data: null })
+
   /**
    * Edita un presupuesto/venta
    * @param {Object} presupuesto - Datos del presupuesto a editar
@@ -363,9 +366,8 @@ const useComprobantesCRUD = ({
    * @param {Object} presupuesto - Datos del presupuesto
    */
   const openVistaTab = (presupuesto) => {
-    const key = `vista-${presupuesto.id}`
-    const label = `Vista ${presupuesto.tipo} ${presupuesto.numero}`
-    openTab(key, label, presupuesto)
+    // En lugar de abrir una tab, abrimos un modal
+    setVistaModal({ open: true, data: presupuesto })
   }
 
   /**
@@ -483,6 +485,7 @@ const useComprobantesCRUD = ({
     conversionModal,
     isFetchingForConversion,
     fetchingPresupuestoId,
+    vistaModal, // Exponer el estado del modal de vista
     
     // Funciones CRUD
     handleEdit,
@@ -504,6 +507,7 @@ const useComprobantesCRUD = ({
     
     // Setters para estados
     setConversionModal,
+    setVistaModal, // Exponer el setter para el modal de vista
   }
 }
 

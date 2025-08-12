@@ -297,65 +297,65 @@ const styles = StyleSheet.create({
     // Sin separación visual entre filas
   },
   colCodigo: {
-    flex: 1,
+    flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
-    flex: 2,
+    flex: 2.4, // Aumentado de 2 a 2.4 (20% más espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "left",
     justifyContent: "center", // Centrar verticalmente
   },
   colCantidad: {
-    flex: 1,
+    flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colPrecio: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescuento: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colPrecioBonificado: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colAlicuota: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colIVA: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colImporte: {
     flex: 1,
     padding: 1, 
-    fontSize: 8, 
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },

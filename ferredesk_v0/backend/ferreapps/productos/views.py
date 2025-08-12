@@ -3,7 +3,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
 from .serializers import (
@@ -22,6 +22,7 @@ import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from django.db.models import Q
+from django.db.models.functions import Lower
 import os
 import pyexcel as pe
 from django.utils import timezone

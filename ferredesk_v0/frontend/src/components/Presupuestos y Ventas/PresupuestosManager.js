@@ -136,6 +136,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
       conversionModal,
       isFetchingForConversion,
       fetchingPresupuestoId,
+      vistaModal,
       handleEdit,
       handleImprimir,
       handleConvertir,
@@ -149,6 +150,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
       esFacturaInternaConvertible,
       handleNotaCredito,
       setConversionModal,
+      setVistaModal,
     } = useComprobantesCRUD({
       openTab,
       closeTab,
@@ -445,11 +447,10 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                     closeTab={closeTab}
                   />
                   {/* Presupuestos: nuevo/editar/vista */}
-                  {(activeTab.startsWith("nuevo-") ||
-                    activeTab.startsWith("editar") ||
-                    activeTab.startsWith("nueva-venta-") ||
-                    activeTab.startsWith("vista-") ||
-                    activeTab.startsWith("nota-credito-")) &&
+                                    {(activeTab.startsWith("nuevo-") ||
+                  activeTab.startsWith("editar") ||
+                  activeTab.startsWith("nueva-venta-") ||
+                  activeTab.startsWith("nota-credito-")) &&
                     !activeTab.startsWith("nuevo-vendedor") &&
                     !activeTab.startsWith("editar-vendedor") &&
                     (activeTab.startsWith("nueva-venta-") ? (
@@ -493,23 +494,6 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                         setAutoSumarDuplicados={setAutoSumarDuplicados}
                         ItemsGrid={ItemsGrid}
                         tabKey={activeTab}
-                      />
-                    ) : activeTab.startsWith("vista-") ? (
-                      <PresupuestoVentaVista
-                        key={activeTab}
-                        data={tabs.find((t) => t.key === activeTab)?.data}
-                        clientes={clientes}
-                        vendedores={vendedores}
-                        plazos={plazos}
-                        sucursales={sucursales}
-                        puntosVenta={puntosVenta}
-                        comprobantes={comprobantes}
-                        onImprimir={handleImprimir}
-                        onEliminar={async (id) => {
-                          await handleDelete(id)
-                          closeTab(activeTab)
-                        }}
-                        onCerrar={() => closeTab(activeTab)}
                       />
                     ) : activeTab.startsWith("editar") ? (
                       <EditarPresupuestoForm
@@ -783,6 +767,25 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
             updateTabData(newKey, label, data, "nota-credito")
           }}
         />
+
+        {/* Modal de vista de presupuesto/venta */}
+        {vistaModal.open && (
+          <PresupuestoVentaVista
+            data={vistaModal.data}
+            clientes={clientes}
+            vendedores={vendedores}
+            plazos={plazos}
+            sucursales={sucursales}
+            puntosVenta={puntosVenta}
+            comprobantes={comprobantes}
+            onImprimir={handleImprimir}
+            onEliminar={async (id) => {
+              await handleDelete(id)
+              setVistaModal({ open: false, data: null })
+            }}
+            onCerrar={() => setVistaModal({ open: false, data: null })}
+          />
+        )}
       </div>
     )
   }

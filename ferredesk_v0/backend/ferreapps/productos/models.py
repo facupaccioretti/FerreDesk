@@ -428,7 +428,7 @@ class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
     codcom = models.CharField(max_length=15, unique=True, db_column='STO_CODCOM')
-    deno = models.CharField(max_length=50, db_column='STO_DENO')
+    deno = models.CharField(max_length=55, db_column='STO_DENO')
     orden = models.SmallIntegerField(null=True, blank=True, db_column='STO_ORDEN')
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
     margen = models.DecimalField(max_digits=5, decimal_places=2, null=False, blank=False, db_column='STO_MARGEN')
