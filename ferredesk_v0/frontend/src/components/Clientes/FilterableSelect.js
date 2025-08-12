@@ -5,7 +5,7 @@ import React, { useState, useMemo, startTransition, useRef, useEffect } from "re
 // Componente reutilizable con búsqueda y opción de agregar
 // Extraído sin modificaciones funcionales de ClientesManager.js
 
-const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder, addLabel, name }) => {
+const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder, addLabel, name, compact = false }) => {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
 
@@ -32,24 +32,42 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
   // Opción actualmente seleccionada (para mostrar su nombre)
   const selected = options.find((opt) => String(opt.id) === String(value))
 
+  // Clases según modo compacto o normal
+  const labelClass = compact
+    ? "text-[11px] font-medium text-slate-600 mb-0.5 flex items-center justify-between"
+    : "block text-sm font-medium text-slate-600 mb-1 flex items-center justify-between"
+  const addBtnClass = compact
+    ? "ml-2 text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-sm hover:bg-orange-200"
+    : "ml-2 text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+  const inputClass = compact
+    ? "w-full px-2 py-1 h-8 border border-slate-300 rounded-sm text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+    : "w-full px-2 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+  const itemClass = (isSelected) =>
+    `${isSelected ? "bg-orange-100 font-semibold text-orange-800" : "text-slate-700"} ${compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"} cursor-pointer hover:bg-orange-50 transition-colors`
+  const dropdownClass = compact
+    ? "absolute z-10 bg-white border border-slate-300 rounded-sm w-full mt-1 max-h-40 overflow-auto shadow-lg"
+    : "absolute z-10 bg-white border border-slate-300 rounded-lg w-full mt-1 max-h-40 overflow-auto shadow-lg"
+
   return (
     <div className="mb-2 relative" ref={contenedorRef}>
-      <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center justify-between">
-        {label}
-        {onAdd && (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="ml-2 text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
-          >
-            Agregar
-          </button>
-        )}
-      </label>
+      {label !== null && (
+        <label className={labelClass}>
+          {label}
+          {onAdd && (
+            <button
+              type="button"
+              onClick={onAdd}
+              className={addBtnClass}
+            >
+              {addLabel || "Agregar"}
+            </button>
+          )}
+        </label>
+      )}
       <div className="relative">
         <input
           type="text"
-          className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+          className={inputClass}
           placeholder={placeholder}
           value={selected ? selected.nombre : search}
           onFocus={() => {
@@ -66,12 +84,12 @@ const FilterableSelect = ({ label, options, value, onChange, onAdd, placeholder,
         />
         {/* Dropdown */}
         {open && filtered.length > 0 && (
-          <div className="absolute z-10 bg-white border border-slate-300 rounded-lg w-full mt-1 max-h-40 overflow-auto shadow-lg">
-            {filtered.length === 0 && <div className="px-3 py-2 text-slate-500 text-sm">Sin resultados</div>}
+          <div className={dropdownClass}>
+            {filtered.length === 0 && <div className={compact ? "px-2 py-1 text-slate-500 text-xs" : "px-3 py-2 text-slate-500 text-sm"}>Sin resultados</div>}
             {filtered.map((opt) => (
               <div
                 key={opt.id}
-                className={`px-3 py-2 cursor-pointer hover:bg-orange-50 text-sm transition-colors ${String(opt.id) === String(value) ? "bg-orange-100 font-semibold text-orange-800" : "text-slate-700"}`}
+                className={itemClass(String(opt.id) === String(value))}
                 onMouseDown={() => {
                   onChange({ target: { name, value: opt.id } })
                   setSearch(opt.nombre)

@@ -1,10 +1,79 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, memo } from "react"
 import { getCookie } from "../../utils/csrf"
 import FilterableSelect from "./FilterableSelect"
 import useValidacionCUIT from "../../utils/useValidacionCUIT"
 import CUITValidacionTooltip from "./CUITValidacionTooltip"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+
+// --- Constantes y Componentes Auxiliares Extraídos ---
+
+// Constantes de clases para un estilo consistente y fácil de mantener
+const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-2"
+const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
+const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+const CLASES_SECCION_TITULO = "mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700"
+const CLASES_SECCION_WRAPPER = "p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]"
+
+// Chip de estado (memoizado)
+const ChipEstado = memo(({ activo }) => (
+  <span className={`px-2 py-0.5 rounded-full text-[11px] ${activo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+    {activo ? "Activo" : "Inactivo"}
+  </span>
+))
+
+// Tarjeta de campo genérica (memoizada)
+const TarjetaCampo = memo(({ etiqueta, children }) => (
+  <div className={CLASES_TARJETA}>
+    <div className={CLASES_ETIQUETA}>{etiqueta}</div>
+    <div className="mt-0.5">
+      {children}
+    </div>
+  </div>
+))
+
+// Contenedor de sección estilo lista (memoizado)
+const SeccionLista = memo(({ titulo, icono, children }) => (
+  <div className={CLASES_SECCION_WRAPPER}>
+    <h5 className={CLASES_SECCION_TITULO}>
+      {icono} {titulo}
+    </h5>
+    <div className="divide-y divide-slate-200">
+      {children}
+    </div>
+  </div>
+))
+
+// Fila editable con etiqueta e input (memoizada)
+const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange, onAdd }) => {
+  const theme = useFerreDeskTheme()
+  
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[12px] text-slate-700">{etiqueta}</span>
+        {onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="w-4 h-4 flex items-center justify-center transition-all duration-300 hover:scale-110"
+            title={`Agregar ${etiqueta}`}
+          >
+            <svg className={`w-4 h-4 text-orange-600 hover:text-orange-700 ${theme.botonPrimario.split(' ').filter(cls => cls.includes('transition')).join(' ')}`} fill="currentColor" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10s10-4.477 10-10S17.523 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+            </svg>
+          </button>
+        )}
+      </div>
+      <div className="min-w-[180px] text-right">
+        {children ? children : (
+          <input className={`${CLASES_INPUT} text-right`} {...inputProps} value={value ?? ""} onChange={onChange} />
+        )}
+      </div>
+    </div>
+  )
+})
 
 const ClienteForm = ({
   onSave,
@@ -75,6 +144,9 @@ const ClienteForm = ({
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
 
+  // Hook para el tema de FerreDesk
+  const theme = useFerreDeskTheme()
+
   // Hook para validación de CUIT
   const { 
     resultado, 
@@ -112,7 +184,7 @@ const ClienteForm = ({
     
     // Actualizamos de forma inmutable manteniendo resto del estado
     setForm((f) => ({ ...f, [name]: value }))
-  }, [])
+  }, [setCamposAutocompletados, setForm])
 
   // Función para autocompletar campos con datos de ARCA
   const autocompletarCampos = useCallback((datos) => {
@@ -194,9 +266,10 @@ const ClienteForm = ({
       
       return nuevosDatos
     })
-  }, [localidades, tiposIVA, camposAutocompletados])
+  }, [localidades, tiposIVA, camposAutocompletados, setForm, setCamposAutocompletados])
 
   // Efecto para autocompletar cuando llegan datos de ARCA
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (datosARCA && !errorARCA) {
       autocompletarCampos(datosARCA)
@@ -208,7 +281,7 @@ const ClienteForm = ({
       
       return () => clearTimeout(timer)
     }
-  }, [datosARCA, errorARCA, limpiarEstadosARCA])
+  }, [datosARCA, errorARCA, limpiarEstadosARCA, autocompletarCampos])
 
   // ----- Modal para agregar entidades relacionales -----
   const openAddModal = (type) => {
@@ -505,14 +578,14 @@ const ClienteForm = ({
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
+      <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
         <div className="w-full max-w-none">
           <form
-            className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-visible"
+            className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
             onSubmit={handleSubmit}
           >
             {/* Gradiente decorativo superior */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
+            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
 
             <div className="p-6">
               {/* Header */}
@@ -552,500 +625,137 @@ const ClienteForm = ({
                 {/* Eliminar cualquier renderizado visual de error relacionado a apiError */}
               </div>
 
-              {/* Sección 1: Información Básica */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+              {/* Header compacto con razón y chip de estado */}
+              <div className="mb-4 flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-800 truncate" title={form.razon || form.fantasia}>
+                  {form.razon || form.fantasia || "Nuevo Cliente"}
                   </div>
-                  <h4 className="text-lg font-bold text-slate-800">Información Básica</h4>
+                <ChipEstado activo={form.activo === "A"} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 p-4 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/40">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Código *</label>
-                    <input
-                      name="codigo"
-                      value={form.codigo}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      type="number"
-                      min="0"
-                    />
-                    {form.codigo && isNaN(Number(form.codigo)) && (
-                      <div className="mt-1 text-xs text-red-600">El código debe ser un número entero.</div>
-                    )}
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">
-                      Razón Social *
-                    </label>
-                    <input
-                      name="razon"
-                      value={form.razon}
-                      onChange={handleChange}
-                      required
-                      disabled={camposAutocompletados.razon}
-                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                        camposAutocompletados.razon 
-                          ? 'border-emerald-300 bg-emerald-50 text-slate-600 cursor-not-allowed' 
-                          : 'border-slate-300'
-                      }`}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Domicilio *</label>
-                    <input
-                      name="domicilio"
-                      value={form.domicilio}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Estado</label>
-                    <select
-                      name="activo"
-                      value={form.activo}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    >
+
+              
+              {/* Tarjetas horizontales al estilo del detalle */}
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+                {/* Tarjeta Información Básica */}
+                <SeccionLista
+                  titulo="Información Básica"
+                  icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                >
+                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: camposAutocompletados.razon, className: `${CLASES_INPUT} ${camposAutocompletados.razon ? 'border-emerald-300 bg-emerald-50 text-slate-600 cursor-not-allowed' : ''}` }} value={form.razon} onChange={handleChange} />
+                  <FilaEditable etiqueta="Código *" inputProps={{ name: "codigo", type: "number", min: 0, required: true }} value={form.codigo} onChange={handleChange} />
+                  <FilaEditable etiqueta="Estado">
+                    <select name="activo" value={form.activo} onChange={handleChange} className={CLASES_INPUT}>
                       <option value="A">Activo</option>
                       <option value="I">Inactivo</option>
                     </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre Comercial</label>
-                    <input
-                      name="fantasia"
-                      value={form.fantasia}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Zona *</label>
-                    <input
-                      name="zona"
-                      value={form.zona}
-                      onChange={handleChange}
-                      required
-                      maxLength={10}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                    {form.zona && form.zona.length > 10 && (
-                      <div className="mt-1 text-xs text-red-600">La zona no debe exceder los 10 caracteres.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 2: Información Fiscal */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-800">Información Fiscal</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/40">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">CUIT</label>
-                    <div>
-                      {/* Input group */}
-                      <div className="relative h-[38px] mb-2">
+                  </FilaEditable>
+                  <FilaEditable etiqueta="CUIT">
+                    <div className="relative h-[34px]">
                         <input
                           name="cuit"
                           value={form.cuit}
                           onChange={handleChange}
-                          onBlur={(e) => {
-                            if (!initialData) {
-                              handleCUITBlur(e.target.value)
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !initialData) {
-                              handleCUITBlur(e.target.value)
-                            }
-                          }}
+                        onBlur={(e) => { if (!initialData) { handleCUITBlur(e.target.value) } }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !initialData) { handleCUITBlur(e.target.value) } }}
                           maxLength={11}
-                          className="w-full h-full border border-slate-300 rounded-lg px-3 pr-10 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className={`${CLASES_INPUT} h-full pr-8`}
                         />
-                        
-                        {/* Botón de alerta para mostrar validación - SIEMPRE VISIBLE Y FIJO */}
                         <div className="absolute top-0 right-2 h-full flex items-center">
-                          {resultado && !isLoadingCUIT && !errorCUIT ? (
+                          {((resultado && !isLoadingCUIT && !errorCUIT) || (errorARCA && errorARCA.trim() !== '')) ? (
                             <button
                               type="button"
                               onClick={toggleTooltip}
-                              className={`transition-colors ${
-                                resultado.es_valido ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
-                              }`}
-                              title={resultado.es_valido ? 'CUIT válido' : 'CUIT inválido'}
-                            >
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                {resultado.es_valido ? (
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                ) : (
+                            className={`transition-colors ${((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
+                            title={((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'Error en CUIT/ARCA' : 'CUIT válido'}
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              {((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? (
                                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              ) : (
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 )}
                               </svg>
                             </button>
-                          ) : (
-                            <div className="w-5 h-5"></div>
-                          )}
+                        ) : (<div className="w-4 h-4"></div>)}
                         </div>
-                        
-                        {/* Tooltip de validación */}
-                        {resultado && (
-                          <CUITValidacionTooltip
-                            resultado={resultado}
-                            onIgnorar={limpiarResultado}
-                            isLoading={isLoadingCUIT}
-                            error={errorCUIT}
-                            mostrarTooltip={mostrarTooltip}
-                            onToggle={toggleTooltip}
-                          />
+                          {(resultado || (errorARCA && errorARCA.trim() !== '')) && (
+                          <CUITValidacionTooltip resultado={resultado} onIgnorar={limpiarResultado} isLoading={isLoadingCUIT} error={errorCUIT} mostrarTooltip={mostrarTooltip} onToggle={toggleTooltip} errorARCA={errorARCA} />
                         )}
                       </div>
+                  </FilaEditable>
+                  <FilaEditable etiqueta="IB" inputProps={{ name: "ib", maxLength: 10 }} value={form.ib} onChange={handleChange} />
+                  <FilaEditable etiqueta="Tipo IVA">
+                    <FilterableSelect compact={true} label={null} name="iva" options={tiposIVA} value={form.iva} onChange={handleChange} placeholder="Buscar tipo de IVA..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Nombre Comercial" inputProps={{ name: "fantasia" }} value={form.fantasia} onChange={handleChange} />
+                </SeccionLista>
 
-                      {/* Mensajes de ARCA */}
-                      {errorARCA && (
-                        <div className="text-red-600 text-sm flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                          Error: {errorARCA}
-                        </div>
-                      )}
-                      
-                      {datosARCA && !errorARCA && (
-                        <div className="text-green-600 text-sm flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          Datos autocompletados exitosamente
-                        </div>
-                      )}
-                    </div>
+                {/* Tarjeta Contacto */}
+                <SeccionLista
+                  titulo="Contacto"
+                  icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>}
+                >
+                  <FilaEditable etiqueta="Teléfono 1" inputProps={{ name: "tel1" }} value={form.tel1} onChange={handleChange} />
+                  <FilaEditable etiqueta="Teléfono 2" inputProps={{ name: "tel2" }} value={form.tel2} onChange={handleChange} />
+                  <FilaEditable etiqueta="Email" inputProps={{ name: "email", type: "email" }} value={form.email} onChange={handleChange} />
+                  <FilaEditable etiqueta="Contacto" inputProps={{ name: "contacto" }} value={form.contacto} onChange={handleChange} />
+                </SeccionLista>
+
+                {/* Tarjeta Ubicación */}
+                <SeccionLista
+                  titulo="Ubicación y Relaciones"
+                  icono={<svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+                >
+                  <FilaEditable etiqueta="Dirección" inputProps={{ name: "domicilio", required: true }} value={form.domicilio} onChange={handleChange} />
+                  <FilaEditable etiqueta="Zona *" inputProps={{ name: "zona", maxLength: 10, required: true }} value={form.zona} onChange={handleChange} />
+                  <FilaEditable etiqueta="Localidad" onAdd={() => openAddModal('localidad')}>
+                    <FilterableSelect compact={true} label={null} name="localidad" options={localidades} value={form.localidad} onChange={handleChange} placeholder="Buscar localidad..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="C.P." inputProps={{ name: "cpostal" }} value={form.cpostal} onChange={handleChange} />
+                  {/* Relaciones integradas */}
+                  <FilaEditable etiqueta="Barrio" onAdd={() => openAddModal('barrio')}>
+                    <FilterableSelect compact={true} label={null} name="barrio" options={barrios} value={form.barrio} onChange={handleChange} placeholder="Buscar barrio..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Provincia" onAdd={() => openAddModal('provincia')}>
+                    <FilterableSelect compact={true} label={null} name="provincia" options={provincias} value={form.provincia} onChange={handleChange} placeholder="Buscar provincia..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Transporte" onAdd={() => openAddModal('transporte')}>
+                    <FilterableSelect compact={true} label={null} name="transporte" options={transportes} value={form.transporte} onChange={handleChange} placeholder="Buscar transporte..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Plazo" onAdd={() => openAddModal('plazo')}>
+                    <FilterableSelect compact={true} label={null} name="plazo" options={plazos} value={form.plazo} onChange={handleChange} placeholder="Buscar plazo..." />
+                  </FilaEditable>
+                </SeccionLista>
+
+                {/* Tarjeta Comercial */}
+                <SeccionLista
+                  titulo="Comercial"
+                  icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2" /></svg>}
+                >
+                  <FilaEditable etiqueta="Vendedor" onAdd={() => openAddModal('vendedor')}>
+                    <FilterableSelect compact={true} label={null} name="vendedor" options={vendedores} value={form.vendedor} onChange={handleChange} placeholder="Buscar vendedor..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Categoría" onAdd={() => openAddModal('categoria')}>
+                    <FilterableSelect compact={true} label={null} name="categoria" options={categorias} value={form.categoria} onChange={handleChange} placeholder="Buscar categoría..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Línea Crédito" inputProps={{ name: "lineacred", type: "number", min: 0 }} value={form.lineacred} onChange={handleChange} />
+                  <FilaEditable etiqueta="Descuentos">
+                    <div className="w-[180px] grid grid-cols-2 gap-2">
+                      <input className={CLASES_INPUT} name="descu1" value={form.descu1 || ""} onChange={handleChange} placeholder="%1" />
+                      <input className={CLASES_INPUT} name="descu2" value={form.descu2 || ""} onChange={handleChange} placeholder="%2" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">IB</label>
-                    <input
-                      name="ib"
-                      value={form.ib}
-                      onChange={handleChange}
-                      maxLength={10}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <FilterableSelect
-                      label="Tipo de IVA"
-                      name="iva"
-                      options={tiposIVA}
-                      value={form.iva}
-                      onChange={handleChange}
-                      placeholder="Buscar tipo de IVA..."
-                    />
-                  </div>
-                </div>
+                  </FilaEditable>
+                </SeccionLista>
               </div>
 
-              {/* Sección 3: Información Financiera */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+              {/* Comentario separado */}
+              {form.comentario && (
+                <div className="mt-4">
+                  <TarjetaCampo etiqueta="Comentario">
+                    <textarea name="comentario" value={form.comentario} onChange={handleChange} rows={2} className={`${CLASES_INPUT} h-16 resize-none`} />
+                  </TarjetaCampo>
                   </div>
-                  <h4 className="text-lg font-bold text-slate-800">Información Financiera</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3 p-4 bg-gradient-to-r from-purple-50 to-purple-100/80 rounded-xl border border-purple-200/40">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Línea de Crédito</label>
-                    <input
-                      name="lineacred"
-                      value={form.lineacred}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      type="number"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Importe Saldo Cta.</label>
-                    <input
-                      name="impsalcta"
-                      value={form.impsalcta}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      type="number"
-                      step="any"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Fecha Saldo Cta.</label>
-                    <input
-                      name="fecsalcta"
-                      value={form.fecsalcta}
-                      onChange={handleChange}
-                      type="date"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Descuento 1</label>
-                    <input
-                      name="descu1"
-                      value={form.descu1}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Descuento 2</label>
-                    <input
-                      name="descu2"
-                      value={form.descu2}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Descuento 3</label>
-                    <input
-                      name="descu3"
-                      value={form.descu3}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Cancela</label>
-                    <input
-                      name="cancela"
-                      value={form.cancela}
-                      onChange={handleChange}
-                      maxLength={1}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 4: Información de Contacto */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-800">Información de Contacto</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 rounded-xl border border-amber-200/40">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Código Postal</label>
-                    <input
-                      name="cpostal"
-                      value={form.cpostal}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Teléfono 1</label>
-                    <input
-                      name="tel1"
-                      value={form.tel1}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Teléfono 2</label>
-                    <input
-                      name="tel2"
-                      value={form.tel2}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Teléfono 3</label>
-                    <input
-                      name="tel3"
-                      value={form.tel3}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-                    <input
-                      name="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      type="email"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Contacto</label>
-                    <input
-                      name="contacto"
-                      value={form.contacto}
-                      onChange={handleChange}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                  <div className="md:col-span-3 xl:col-span-6">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Comentario</label>
-                    <textarea
-                      name="comentario"
-                      value={form.comentario}
-                      onChange={handleChange}
-                      rows={2}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 5: Ubicación y Relaciones */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center shadow-lg">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-800">Ubicación y Relaciones Comerciales</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 p-4 bg-gradient-to-r from-indigo-50 to-indigo-100/80 rounded-xl border border-indigo-200/40">
-                  <div>
-                    <FilterableSelect
-                      label="Barrio"
-                      name="barrio"
-                      options={barrios}
-                      value={form.barrio}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("barrio")}
-                      placeholder="Buscar barrio..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Localidad"
-                      name="localidad"
-                      options={localidades}
-                      value={form.localidad}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("localidad")}
-                      placeholder="Buscar localidad..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Provincia"
-                      name="provincia"
-                      options={provincias}
-                      value={form.provincia}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("provincia")}
-                      placeholder="Buscar provincia..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Transporte"
-                      name="transporte"
-                      options={transportes}
-                      value={form.transporte}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("transporte")}
-                      placeholder="Buscar transporte..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Vendedor"
-                      name="vendedor"
-                      options={vendedores}
-                      value={form.vendedor}
-                      onChange={handleChange}
-                      placeholder="Buscar vendedor..."
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Plazo"
-                      name="plazo"
-                      options={plazos}
-                      value={form.plazo}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("plazo")}
-                      placeholder="Buscar plazo..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                  <div>
-                    <FilterableSelect
-                      label="Categoría"
-                      name="categoria"
-                      options={categorias}
-                      value={form.categoria}
-                      onChange={handleChange}
-                      onAdd={() => openAddModal("categoria")}
-                      placeholder="Buscar categoría..."
-                      addLabel="Agregar"
-                    />
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Botones de acción */}
               <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
@@ -1125,3 +835,7 @@ const ClienteForm = ({
 }
 
 export default ClienteForm;
+
+
+
+
