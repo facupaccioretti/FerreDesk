@@ -45,6 +45,9 @@ export function mapearVentaDetalle({
     };
   }
 
+  // Buscar cliente completo
+  const clienteCompleto = clientes.find(c => c.id === ventaCalculada.ven_idcli);
+
   // Mapear campos de cabecera
   const datos = {
     ...ventaCalculada,
@@ -57,13 +60,17 @@ export function mapearVentaDetalle({
     estado: mapearEstado(ventaCalculada.ven_estado),
     fecha: ventaCalculada.ven_fecha,
     hora_creacion: ventaCalculada.hora_creacion,
-    cliente: clientes.find(c => c.id === ventaCalculada.ven_idcli)?.razon || ventaCalculada.ven_idcli || '-',
+    cliente: clienteCompleto?.razon || ventaCalculada.ven_idcli || '-',
     vendedor: vendedores.find(v => v.id === ventaCalculada.ven_idvdo)?.nombre || ventaCalculada.ven_idvdo || '-',
     sucursal: sucursales.find(s => s.id === ventaCalculada.ven_sucursal)?.nombre || ventaCalculada.ven_sucursal || '-',
     puntoVenta: puntosVenta.find(pv => pv.id === ventaCalculada.ven_punto)?.nombre || ventaCalculada.ven_punto || '-',
     plazo: plazos.find(p => p.id === ventaCalculada.ven_idpla)?.nombre || ventaCalculada.ven_idpla || '-',
-    domicilio: ventaCalculada.ven_domicilio,
-    cuit: ventaCalculada.ven_cuit,
+    domicilio: clienteCompleto?.domicilio || ventaCalculada.ven_domicilio || '',
+    localidad: clienteCompleto?.localidad || '',
+    provincia: clienteCompleto?.provincia || '',
+    cuit: clienteCompleto?.cuit || ventaCalculada.ven_cuit || '',
+    condicion_iva_cliente: clienteCompleto?.condicion_iva || '',
+    telefono_cliente: clienteCompleto?.telefono || '',
     items: itemsCalculados || [],    
     iva_discriminado: ivaDiscriminado || [],
   };

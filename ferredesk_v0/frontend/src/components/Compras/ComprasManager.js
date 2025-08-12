@@ -15,6 +15,9 @@ const MAIN_TAB_KEY = "compras"
 const ComprasManager = () => {
   const [user, setUser] = useState(null)
   const [search, setSearch] = useState("")
+  
+  // Estado para controlar el modal de detalle
+  const [detalleModal, setDetalleModal] = useState({ abierto: false, compra: null })
 
   // Tabs estado (persistencia simple en localStorage)
   const [tabs, setTabs] = useState(() => {
@@ -112,9 +115,8 @@ const ComprasManager = () => {
   }, [openTab])
 
   const handleVerCompra = useCallback((compra) => {
-    const key = `ver-${compra.comp_id}`
-    openTab(key, `Ver ${compra.comp_numero_factura || compra.comp_id}`, compra, "view")
-  }, [openTab])
+    setDetalleModal({ abierto: true, compra })
+  }, [])
 
   const handleGuardarCompra = useCallback(async (tabKey, compraData, existing = null) => {
     try {
@@ -233,36 +235,36 @@ const ComprasManager = () => {
                    />
                 </>
               ) : (
-                tabs.find((t) => t.key === activeTab)?.tipo === "view" ? (
-                  <DetalleCompra
-                    key={activeTab}
-                    compra={activeTabData}
-                    onClose={() => closeTab(activeTab)}
-                  />
-                ) : (
-                  <CompraForm
-                    key={activeTab}
-                    onSave={(data) => handleGuardarCompra(activeTab, data, activeTabData)}
-                    onCancel={() => closeTab(activeTab)}
-                    initialData={activeTabData}
-                    readOnly={false}
-                    proveedores={proveedores}
-                    productos={productos}
-                    alicuotas={alicuotas}
-                    sucursales={sucursales}
-                    loadingProveedores={loadingProveedores}
-                    loadingProductos={loadingProductos}
-                    loadingAlicuotas={loadingAlicuotas}
-                    errorProveedores={errorProveedores}
-                    errorProductos={errorProductos}
-                    errorAlicuotas={errorAlicuotas}
-                  />
-                )
+                <CompraForm
+                  key={activeTab}
+                  onSave={(data) => handleGuardarCompra(activeTab, data, activeTabData)}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={activeTabData}
+                  readOnly={false}
+                  proveedores={proveedores}
+                  productos={productos}
+                  alicuotas={alicuotas}
+                  sucursales={sucursales}
+                  loadingProveedores={loadingProveedores}
+                  loadingProductos={loadingProductos}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProveedores={errorProveedores}
+                  errorProductos={errorProductos}
+                  errorAlicuotas={errorAlicuotas}
+                />
               )}
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Modal de detalle de compra */}
+      {detalleModal.abierto && (
+        <DetalleCompra
+          compra={detalleModal.compra}
+          onClose={() => setDetalleModal({ abierto: false, compra: null })}
+        />
+      )}
     </div>
   )
 }

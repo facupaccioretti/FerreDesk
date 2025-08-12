@@ -9,6 +9,7 @@ import Paginador from "./Paginador"
 // -----------------------------------------------------------------------------
 const ESPACIO_HORIZONTAL_CELDA = "px-3"
 const ESPACIO_VERTICAL_CELDA = "py-2"
+const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 
 const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
 
@@ -26,6 +27,8 @@ const Tabla = ({
   renderFila = null,
   mostrarBuscador = true,
   mostrarOrdenamiento = true,
+  sinEstilos = false,
+  tamañoEncabezado = "normal", // "normal" | "pequeño"
 }) => {
   const [paginaActual, setPaginaActual] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
@@ -56,9 +59,10 @@ const Tabla = ({
     : datosFiltrados
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
+    <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
       {/* Header con buscador y controles */}
-      <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
+      {!sinEstilos && (
+        <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
         <div className="flex items-center justify-between gap-4">
           {/* Buscador */}
           {mostrarBuscador && (
@@ -90,7 +94,8 @@ const Tabla = ({
             </button>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Contenedor de tabla */}
       <div className="flex-1 overflow-auto">
@@ -103,7 +108,7 @@ const Tabla = ({
                   key={col.id}
                   className={`${
                     { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                  } ${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} font-semibold text-sm text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
+                  } ${ESPACIO_HORIZONTAL_CELDA} ${tamañoEncabezado === "pequeño" ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA} font-semibold ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
                   {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
@@ -165,7 +170,7 @@ const Tabla = ({
       </div>
 
       {/* Paginador */}
-      {paginadorVisible && (
+      {paginadorVisible && !sinEstilos && (
         <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
           <Paginador
             totalItems={datosFiltrados.length}

@@ -3,7 +3,7 @@
 import React from 'react';
 import { formatearDescuentosVisual, formatearMoneda } from './helpers';
 
-const PlantillaFacturaB = ({ data }) => {
+const PlantillaFacturaB = ({ data, ferreteriaConfig }) => {
   return (
     <div className="plantilla-comprobante bg-white p-8 max-w-7xl mx-auto">
       {/* Encabezado principal: tres bloques */}
@@ -45,20 +45,20 @@ const PlantillaFacturaB = ({ data }) => {
         {/* Emisor (derecha) */}
         <div className="emisor text-sm text-right space-y-1">
           <div className="font-bold text-lg text-gray-800 mb-2">
-            {data.emisor_razon_social || "Nombre de la Empresa"}
+            {ferreteriaConfig?.nombre || "Nombre de la Empresa"}
           </div>
-          <div className="text-gray-600">{data.emisor_direccion || ""}</div>
+          <div className="text-gray-600">{ferreteriaConfig?.direccion || ""}</div>
           <div className="text-gray-700">
-            <span className="font-medium">CUIT:</span> {data.emisor_cuit || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Ing. Brutos:</span> {data.emisor_ingresos_brutos || ""}
+            <span className="font-medium">CUIT:</span> {ferreteriaConfig?.cuit_cuil || ""}
           </div>
           <div className="text-gray-700">
-            <span className="font-medium">Inicio Actividad:</span> {data.emisor_inicio_actividad || ""}
+            <span className="font-medium">Ing. Brutos:</span> {ferreteriaConfig?.ingresos_brutos || ""}
           </div>
           <div className="text-gray-700">
-            <span className="font-medium">Condición IVA:</span> {data.emisor_condicion_iva || ""}
+            <span className="font-medium">Inicio Actividad:</span> {ferreteriaConfig?.inicio_actividad || ""}
+          </div>
+          <div className="text-gray-700">
+            <span className="font-medium">Condición IVA:</span> {ferreteriaConfig?.situacion_iva || ""}
           </div>
         </div>
       </div>

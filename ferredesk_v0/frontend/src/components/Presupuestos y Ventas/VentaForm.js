@@ -270,7 +270,7 @@ const VentaForm = ({
       razon: formulario.razon || clienteSeleccionado.razon,
       nombre: formulario.nombre || clienteSeleccionado.nombre,
     }
-  }, [clienteSeleccionado, formulario.cuit, formulario.domicilio, formulario.razon, formulario.nombre])
+  }, [clienteSeleccionado, formulario.cuit, formulario.domicilio, formulario.razon, formulario.nombre]);
 
   const usarFiscal = tipoComprobante === "factura"
   const fiscal = useComprobanteFiscal({
@@ -563,6 +563,20 @@ const VentaForm = ({
     }
   }
 
+  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
+  // Se ejecuta solo una vez después de que los clientes se cargan y si no hay un cliente ya seleccionado.
+  useEffect(() => {
+    if (esCargaInicial && clientesConDefecto.length > 0 && !formulario.clienteId) {
+      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1");
+      if (mostrador) {
+        handleClienteSelect(mostrador);
+        // Marcamos que la carga inicial ha terminado para no volver a ejecutar esto.
+        setEsCargaInicial(false);
+      }
+    }
+  }, [clientesConDefecto, esCargaInicial, formulario.clienteId, handleClienteSelect]);
+
+
   const isReadOnly = readOnlyOverride || formulario.estado === "Cerrado"
 
   // Función para actualizar los ítems en tiempo real desde ItemsGrid
@@ -575,28 +589,6 @@ const VentaForm = ({
     { value: "factura_interna", label: "Factura Interna", tipo: "factura_interna", letra: "I" },
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
-
-  // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
-  // Solo se ejecuta si el formulario está vacío (no hay datos del formularioDraft)
-  useEffect(() => {
-    // Verificar si el formulario tiene datos del formularioDraft
-    const tieneDatosDraft = formulario.clienteId || formulario.cuit || formulario.domicilio
-    
-    if (!tieneDatosDraft && clientesConDefecto.length > 0) {
-      const mostrador = clientesConDefecto.find((c) => String(c.id) === "1")
-      if (mostrador) {
-        setFormulario((prev) => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || "",
-          domicilio: mostrador.domicilio || "",
-          plazoId: mostrador.plazoId || mostrador.plazo || "",
-        }))
-        // Marcar que ya no es carga inicial
-        setEsCargaInicial(false)
-      }
-    }
-  }, [clientesConDefecto, formulario.clienteId, formulario.cuit, formulario.domicilio, setFormulario])
 
   // Renderizado condicional al final
   if (isLoading) {

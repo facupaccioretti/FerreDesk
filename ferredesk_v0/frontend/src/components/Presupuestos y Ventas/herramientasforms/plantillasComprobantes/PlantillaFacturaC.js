@@ -6,7 +6,7 @@
 import React from 'react';
 import { formatearDescuentosVisual, formatearMoneda } from './helpers';
 
-const PlantillaFacturaC = ({ data }) => {
+const PlantillaFacturaC = ({ data, ferreteriaConfig }) => {
   // Extraemos información del comprobante de manera flexible: puede venir anidada (data.comprobante) 
   // o aplanada (data.comprobante_letra, etc.) según quién consuma el componente.
   const letraComprobante =
@@ -59,20 +59,20 @@ const PlantillaFacturaC = ({ data }) => {
         {/* Emisor (derecha) */}
         <div className="emisor text-sm text-right space-y-1">
           <div className="font-bold text-lg text-gray-800 mb-2">
-            {data.emisor_razon_social || "Nombre de la Empresa"}
+            {ferreteriaConfig?.nombre || "Nombre de la Empresa"}
           </div>
-          <div className="text-gray-600">{data.emisor_direccion || ""}</div>
+          <div className="text-gray-600">{ferreteriaConfig?.direccion || ""}</div>
           <div className="text-gray-700">
-            <span className="font-medium">CUIT:</span> {data.emisor_cuit || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Ing. Brutos:</span> {data.emisor_ingresos_brutos || ""}
+            <span className="font-medium">CUIT:</span> {ferreteriaConfig?.cuit_cuil || ""}
           </div>
           <div className="text-gray-700">
-            <span className="font-medium">Inicio Actividad:</span> {data.emisor_inicio_actividad || ""}
+            <span className="font-medium">Ing. Brutos:</span> {ferreteriaConfig?.ingresos_brutos || ""}
           </div>
           <div className="text-gray-700">
-            <span className="font-medium">Condición IVA:</span> {data.emisor_condicion_iva || ""}
+            <span className="font-medium">Inicio Actividad:</span> {ferreteriaConfig?.inicio_actividad || ""}
+          </div>
+          <div className="text-gray-700">
+            <span className="font-medium">Condición IVA:</span> {ferreteriaConfig?.situacion_iva || ""}
           </div>
         </div>
       </div>

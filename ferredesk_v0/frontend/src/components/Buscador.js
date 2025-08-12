@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 
 // ============================================================
 // Buscador.js (componente genérico de autocompletado)
@@ -47,37 +47,66 @@ export default function Buscador({
   const [highlighted, setHighlighted] = useState(0)
   const inputRef = useRef(null)
 
+  // Utilidades para estabilizar dependencias y evitar renders innecesarios
+  const claveCampos = useMemo(() => JSON.stringify(camposBusqueda || []), [camposBusqueda])
+  const claveItems = useMemo(() => {
+    try {
+      // Usar id si existe; como fallback usar la etiqueta
+      const ids = (items || []).map((it) => it?.id ?? obtenerEtiqueta?.(it) ?? String(it))
+      return JSON.stringify(ids)
+    } catch {
+      return "[]"
+    }
+  }, [items, obtenerEtiqueta])
+
+  // Versiones memoizadas para usar dentro de efectos sin depender de referencias inestables
+  const camposBusquedaMemo = useMemo(() => camposBusqueda || [], [camposBusqueda])
+  const itemsMemo = useMemo(() => items || [], [items])
+
+  const sonArraysIgualesPorId = (a = [], b = []) => {
+    if (a === b) return true
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i += 1) {
+      const ida = a[i]?.id ?? a[i]
+      const idb = b[i]?.id ?? b[i]
+      if (ida !== idb) return false
+    }
+    return true
+  }
+
   // Efecto: cada vez que cambia "termino", recalcular sugerencias
   useEffect(() => {
     if (deshabilitarDropdown) {
-      setSugerencias([])
-      setMostrarDropdown(false)
+      setSugerencias((prev) => (prev.length === 0 ? prev : []))
+      setMostrarDropdown((prev) => (prev === false ? prev : false))
       return
     }
 
     if (termino.length >= UMBRAL_BUSQUEDA_MINIMO) {
       const lower = termino.toLowerCase()
-      const filtradas = items.filter((item) =>
-        camposBusqueda.some((campo) =>
+      const filtradas = itemsMemo.filter((item) =>
+        camposBusquedaMemo.some((campo) =>
           (item[campo] || "").toString().toLowerCase().includes(lower),
         ),
       )
-      setSugerencias(filtradas.slice(0, CANTIDAD_MAX_SUGERENCIAS))
-      setMostrarDropdown(true)
-      setHighlighted(0)
+      const nuevas = filtradas.slice(0, CANTIDAD_MAX_SUGERENCIAS)
+      setSugerencias((prev) => (sonArraysIgualesPorId(prev, nuevas) ? prev : nuevas))
+      setMostrarDropdown((prev) => (prev === true ? prev : true))
+      setHighlighted((prev) => (prev === 0 ? prev : 0))
     } else {
-      setSugerencias([])
-      setMostrarDropdown(false)
-      setHighlighted(0)
+      setSugerencias((prev) => (prev.length === 0 ? prev : []))
+      setMostrarDropdown((prev) => (prev === false ? prev : false))
+      setHighlighted((prev) => (prev === 0 ? prev : 0))
     }
-  }, [termino, items, camposBusqueda, deshabilitarDropdown])
+  }, [termino, claveItems, claveCampos, deshabilitarDropdown, itemsMemo, camposBusquedaMemo])
 
   // Efecto: si cambia "valor" externo, reflejar etiqueta y cerrar dropdown
   useEffect(() => {
     if (valor) {
-      setTermino(obtenerEtiqueta(valor))
-      setSugerencias([])
-      setMostrarDropdown(false)
+      const etiqueta = obtenerEtiqueta(valor)
+      setTermino((prev) => (prev === etiqueta ? prev : etiqueta))
+      setSugerencias((prev) => (prev.length === 0 ? prev : []))
+      setMostrarDropdown((prev) => (prev === false ? prev : false))
     }
   }, [valor, obtenerEtiqueta])
 

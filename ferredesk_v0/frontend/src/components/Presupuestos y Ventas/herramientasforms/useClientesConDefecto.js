@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useClientesAPI } from '../../../utils/useClientesAPI';
 
 /**
@@ -42,11 +42,15 @@ export function useClientesConDefecto(opciones = {}) {
     }
   }, [errorGenerales, errorDefecto, clearError]);
 
-  // Combinar ambas listas, evitando duplicados por ID
-  const clientes = [
-    ...(clientePorDefecto ? [clientePorDefecto] : []),
-    ...clientesGenerales.filter(c => !clientePorDefecto || String(c.id) !== String(clientePorDefecto.id))
-  ];
+  // Combinar ambas listas, evitando duplicados por ID y memoizando el resultado.
+  const clientes = useMemo(() => {
+    const listaCombinada = [
+      ...(clientePorDefecto ? [clientePorDefecto] : []),
+      ...clientesGenerales.filter(c => !clientePorDefecto || String(c.id) !== String(clientePorDefecto.id))
+    ];
+    // Se retorna la lista combinada, que solo se recalculará si las dependencias cambian.
+    return listaCombinada;
+  }, [clientePorDefecto, clientesGenerales]);
 
   const loading = loadingGenerales || loadingDefecto;
   const error = errorGenerales || errorDefecto;

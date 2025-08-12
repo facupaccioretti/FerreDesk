@@ -1,6 +1,7 @@
 "use client"
 import React from 'react';
 import { useVentaDetalleAPI } from '../../../utils/useVentaDetalleAPI';
+import { useFerreteriaAPI } from '../../../utils/useFerreteriaAPI';
 import { mapearVentaDetalle } from './MapeoVentaDetalle';
 import { PlantillaFacturaA } from './plantillasComprobantes/PlantillaFacturaA';
 import { PlantillaFacturaB } from './plantillasComprobantes/PlantillaFacturaB';
@@ -36,12 +37,14 @@ function obtenerLetraComprobante(comprobante) {
 }
 
 const PresupuestoVentaVista = (props) => {
-  const { data, clientes = [], vendedores = [], plazos = [], sucursales = [], puntosVenta = [] } = props;
+  const { data, clientes = [], vendedores = [], plazos = [], sucursales = [], puntosVenta = [], onCerrar } = props;
   const idVenta = data?.ven_id || data?.id;
   const { ventaCalculada, itemsCalculados, ivaDiscriminado, cargando, error } = useVentaDetalleAPI(idVenta);
+  const { ferreteria: ferreteriaConfig, loading: configLoading, error: configError } = useFerreteriaAPI();
 
-  if (cargando) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Cargando datos de la venta/presupuesto...</div>;
+  if (cargando || configLoading) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Cargando datos...</div>;
   if (error) return <div className="p-8 text-red-600 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Error: {error}</div>;
+  if (configError) return <div className="p-8 text-red-600 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Error de configuración: {configError}</div>;
 
   const datos = ventaCalculada
     ? mapearVentaDetalle({
@@ -67,7 +70,7 @@ const PresupuestoVentaVista = (props) => {
 
   return (
     <div className="w-full h-full py-8 bg-white rounded-xl shadow-lg relative border border-gray-100">
-      <Plantilla data={datos} />
+      <Plantilla data={datos} ferreteriaConfig={ferreteriaConfig} onClose={onCerrar} />
     </div>
   );
 };
