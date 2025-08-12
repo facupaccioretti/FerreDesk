@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import Tabla from "../Tabla"
@@ -26,18 +26,18 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
     setEditId(null)
   }
 
-  const handleEdit = (fam) => {
+  const handleEdit = useCallback((fam) => {
     setForm({ deno: fam.deno, comentario: fam.comentario, nivel: fam.nivel, acti: fam.acti })
     setEditId(fam.id)
-  }
+  }, [])
 
-  const handleDelete = (id) => {
+  const handleDelete = useCallback((id) => {
     if (window.confirm("¿Eliminar familia?")) deleteFamilia(id)
     if (editId === id) {
       setForm({ deno: "", comentario: "", nivel: "", acti: "S" })
       setEditId(null)
     }
-  }
+  }, [editId, deleteFamilia])
 
   // Definición de columnas para Tabla.js
   const columnas = [
@@ -99,7 +99,7 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
         </div>
       )
     }))
-  }, [familias])
+  }, [familias, handleEdit, handleDelete])
 
   return (
     <Transition show={open} as={React.Fragment}>
