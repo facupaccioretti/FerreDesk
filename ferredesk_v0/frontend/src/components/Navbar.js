@@ -22,8 +22,8 @@ export default function Navbar({ user, onLogout }) {
 
   return (
     <nav
-      className="w-full flex items-center justify-between px-6 py-3 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl relative"
-      style={{ minHeight: 60 }}
+      className="w-full flex items-center justify-between px-6 py-1.5 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl relative"
+      style={{ minHeight: 50 }}
     >
       <div className="flex items-center gap-8">
         <div className="flex items-center gap-3">

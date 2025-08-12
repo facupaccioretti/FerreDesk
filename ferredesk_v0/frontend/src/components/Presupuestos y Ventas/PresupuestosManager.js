@@ -32,13 +32,18 @@
   import useFiltrosComprobantes from "./hooks/useFiltrosComprobantes"
   import useVendedoresCRUD from "./hooks/useVendedoresCRUD"
   import ComprobantesList from "./ComprobantesList"
-  import VendedoresTab from "./VendedoresTab"
+import VendedoresTab from "./VendedoresTab"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+  
 
 
 
 
 
   const PresupuestosManager = () => {
+    // Hook del tema de FerreDesk
+    const theme = useFerreDeskTheme()
+    
     // Estado y fetch para el usuario
     const [user, setUser] = useState(null)
     const navigate = useNavigate()
@@ -268,394 +273,203 @@
 
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30">
-        <Navbar user={user} onLogout={handleLogout} />
-        <div className="py-8 px-4">
-          <div className="max-w-[1400px] w-full mx-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
-            </div>
-            {ventasError && (
-              <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
-                <div className="flex items-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  {ventasError}
-                </div>
+      <div className="ferredesk-fondo">
+        <div className="ferredesk-patron"></div>
+        <div className="ferredesk-overlay"></div>
+        
+        <div className="relative z-10">
+          <Navbar user={user} onLogout={handleLogout} />
+          <div className="py-8 px-4">
+            <div className="max-w-[1400px] w-full mx-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
               </div>
-            )}
-            <div className="flex-1 flex flex-col bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 max-w-full">
-              {/* Tabs tipo browser */}
-              <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-slate-50">
-                {tabs.map((tab) => (
-                  <div
-                    key={tab.key}
-                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                      activeTab === tab.key
-                        ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                    onClick={() => setActiveTab(tab.key)}
-                    style={{ position: "relative", zIndex: 1 }}
-                    draggable={tab.closable}
-                    onDragStart={
-                      tab.closable
-                        ? (e) => {
-                            handleDragStart(tab.key)
-                            e.dataTransfer.effectAllowed = "move"
-                          }
-                        : undefined
-                    }
-                    onDrop={
-                      tab.closable
-                        ? (e) => {
-                            e.preventDefault()
-                            handleDrop(tab.key)
-                          }
-                        : undefined
-                    }
-                    onDragEnd={handleDragEnd}
-                  >
-                    {tab.label}
-                    {tab.closable && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          closeTab(tab.key)
-                        }}
-                        className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                        title="Cerrar"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="flex-1 p-6">
-                {/* Presupuestos y Ventas */}
-                {activeTab === "presupuestos" && (
-                  <>
-                    <div className="mb-4">
-                      <FiltrosPresupuestos
-                        comprobantes={comprobantes}
-                        clientes={clientes}
-                        vendedores={vendedores}
-                        onFiltroChange={handleFiltroChange}
-                        comprobanteTipo={comprobanteTipo}
-                        setComprobanteTipo={setComprobanteTipo}
-                        comprobanteLetra={comprobanteLetra}
-                        setComprobanteLetra={setComprobanteLetra}
-                        fechaDesde={fechaDesde}
-                        setFechaDesde={setFechaDesde}
-                        fechaHasta={fechaHasta}
-                        setFechaHasta={setFechaHasta}
-                        clienteId={clienteId}
-                        setClienteId={setClienteId}
-                        vendedorId={vendedorId}
-                        setVendedorId={setVendedorId}
+              {ventasError && (
+                <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
+                  <div className="flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 mr-2"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
+                    </svg>
+                    {ventasError}
+                  </div>
+                </div>
+              )}
+              <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
+                {/* Tabs tipo browser - Encabezado azul oscuro */}
+                <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
+                  {tabs.map((tab) => (
+                    <div
+                      key={tab.key}
+                                          className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
+                      activeTab === tab.key
+                        ? theme.tabActiva
+                        : theme.tabInactiva
+                    }`}
+                      onClick={() => setActiveTab(tab.key)}
+                      style={{ position: "relative", zIndex: 1 }}
+                      draggable={tab.closable}
+                      onDragStart={
+                        tab.closable
+                          ? (e) => {
+                              handleDragStart(tab.key)
+                              e.dataTransfer.effectAllowed = "move"
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        tab.closable
+                          ? (e) => {
+                              e.preventDefault()
+                              handleDrop(tab.key)
+                            }
+                          : undefined
+                      }
+                      onDragEnd={handleDragEnd}
+                    >
+                      {tab.label}
+                      {tab.closable && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            closeTab(tab.key)
+                          }}
+                          className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                          title="Cerrar"
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
-                    <div className="mb-4 flex gap-2">
-                      <button
-                        onClick={handleNuevo}
-                        className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                      >
-                        <span className="text-lg">+</span> Nuevo Presupuesto
-                      </button>
-                      <button
-                        onClick={handleNuevaVenta}
-                        className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                      >
-                        <span className="text-lg">+</span> Nueva Factura
-                      </button>
-                      <button
-                        onClick={handleNuevaNotaCredito}
-                        className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                      >
-                        <span className="text-lg">+</span> Nueva Nota de Crédito
-                      </button>
-                      <button
-                        onClick={handleGenerarLibroIva}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Generar Libro IVA
-                      </button>
-                    </div>
-                    <ComprobantesList
-                      comprobantes={comprobantes}
-                      datosPagina={datosPagina}
-                      acciones={{
-                        handleImprimir,
-                        openVistaTab,
-                        handleEdit,
-                        handleConvertir,
-                        handleDelete,
-                        handleConvertirFacturaI,
-                        handleNotaCredito,
-                      }}
-                      isFetchingForConversion={isFetchingForConversion}
-                      fetchingPresupuestoId={fetchingPresupuestoId}
-                      esFacturaInternaConvertible={esFacturaInternaConvertible}
-                      totalItems={totalItems}
-                      itemsPorPagina={itemsPorPagina}
-                      paginaActual={paginaActual}
-                      setPaginaActual={setPaginaActual}
-                      setItemsPorPagina={setItemsPorPagina}
-                    />
-                  </>
-                )}
-                {/* Vendedores */}
-                <VendedoresTab
-                  activeTab={activeTab}
-                      vendedores={vendedores}
-                  loadingVendedores={loadingVendedores}
-                  errorVendedores={errorVendedores}
-                  searchVendedor={searchVendedor}
-                  setSearchVendedor={setSearchVendedor}
-                  editVendedorData={editVendedorData}
-                      localidades={localidades}
-                  acciones={{
-                    handleNuevoVendedor: () => handleNuevoVendedor(openTab),
-                    handleEditVendedor: (vendedor) => handleEditVendedor(vendedor, openTab),
-                    handleSaveVendedor: (data) => handleSaveVendedor(data, closeTab, activeTab),
-                    handleDeleteVendedor,
-                  }}
-                  closeTab={closeTab}
-                />
-                {/* Presupuestos: nuevo/editar/vista */}
-                {(activeTab.startsWith("nuevo-") ||
-                  activeTab.startsWith("editar") ||
-                  activeTab.startsWith("nueva-venta-") ||
-                  activeTab.startsWith("vista-") ||
-                  activeTab.startsWith("nota-credito-")) &&
-                  !activeTab.startsWith("nuevo-vendedor") &&
-                  !activeTab.startsWith("editar-vendedor") &&
-                  (activeTab.startsWith("nueva-venta-") ? (
-                    <VentaForm
-                      key={activeTab}
-                      onSave={async (payload) => {
-                        const resultado = await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
-                        // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
-                        if (!resultado?.arca_emitido) {
-                          closeTab(activeTab)
-                        }
-                        return resultado
-                      }}
-                      onCancel={() => closeTab(activeTab)}
-                      initialData={null}
-                      readOnlyOverride={false}
-                      comprobantes={comprobantes}
-                      tiposComprobante={tiposComprobante}
-                      tipoComprobante={tipoComprobante}
-                      setTipoComprobante={setTipoComprobante}
-                      clientes={clientes}
-                      plazos={plazos}
-                      vendedores={vendedores}
-                      sucursales={sucursales}
-                      puntosVenta={puntosVenta}
-                      loadingComprobantes={loadingComprobantes}
-                      errorComprobantes={errorComprobantes}
-                      productos={productos}
-                      loadingProductos={loadingProductos}
-                      familias={familias}
-                      loadingFamilias={loadingFamilias}
-                      proveedores={proveedores}
-                      loadingProveedores={loadingProveedores}
-                      alicuotas={alicuotas}
-                      loadingAlicuotas={loadingAlicuotas}
-                      errorProductos={errorProductos}
-                      errorFamilias={errorFamilias}
-                      errorProveedores={errorProveedores}
-                      errorAlicuotas={errorAlicuotas}
-                      autoSumarDuplicados={autoSumarDuplicados}
-                      setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      ItemsGrid={ItemsGrid}
-                      tabKey={activeTab}
-                    />
-                  ) : activeTab.startsWith("vista-") ? (
-                    <PresupuestoVentaVista
-                      key={activeTab}
-                      data={tabs.find((t) => t.key === activeTab)?.data}
-                      clientes={clientes}
-                      vendedores={vendedores}
-                      plazos={plazos}
-                      sucursales={sucursales}
-                      puntosVenta={puntosVenta}
-                      comprobantes={comprobantes}
-                      onImprimir={handleImprimir}
-                      onEliminar={async (id) => {
-                        await handleDelete(id)
-                        closeTab(activeTab)
-                      }}
-                      onCerrar={() => closeTab(activeTab)}
-                    />
-                  ) : activeTab.startsWith("editar") ? (
-                    <EditarPresupuestoForm
-                      key={activeTab}
-                      onSave={async (payload) => {
-                        const idOriginal = activeTabData?.id || activeTabData?.ven_id
-                        if (!idOriginal) {
-                          alert("No se encontró el ID del presupuesto a editar.")
-                          return
-                        }
-                        await updateVenta(idOriginal, {
-                          ...payload,
-                          tipoOriginal: activeTabData?.tipo,
-                          estadoOriginal: activeTabData?.estado,
-                        })
-                        closeTab(activeTab)
-                      }}
-                      onCancel={() => closeTab(activeTab)}
-                      initialData={activeTabData}
-                      comprobantes={comprobantes}
-                      tiposComprobante={tiposComprobante}
-                      tipoComprobante={tipoComprobante}
-                      setTipoComprobante={setTipoComprobante}
-                      clientes={clientes}
-                      plazos={plazos}
-                      vendedores={vendedores}
-                      sucursales={sucursales}
-                      puntosVenta={puntosVenta}
-                      productos={productos}
-                      proveedores={proveedores}
-                      alicuotas={alicuotas}
-                      autoSumarDuplicados={autoSumarDuplicados}
-                      setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      ItemsGrid={ItemsGrid}
-                    />
-                  ) : activeTab.startsWith("nota-credito-") ? (
-                    <NotaCreditoForm
-                      key={activeTab}
-                      onSave={async (payload) => {
-                        try {
-                          const csrftoken = getCookie("csrftoken")
-                          const response = await fetch("/api/ventas/", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                              "X-CSRFToken": csrftoken,
-                            },
-                            credentials: "include",
-                            body: JSON.stringify(payload),
-                          })
-                          
-                          const data = await response.json()
-                          
-                          if (!response.ok) {
-                            let msg = "No se pudo guardar la Nota de Crédito"
-                            try {
-                              msg = data.detail || msg
-                            } catch {}
-                            throw new Error(msg)
-                          }
-                          
-                          // Actualizar lista
-                          await fetchVentas()
-                          
+                  ))}
+                </div>
+                <div className="flex-1 p-6">
+                                     {/* Presupuestos y Ventas */}
+                   {activeTab === "presupuestos" && (
+                     <>
+                       <div className="mb-4 flex gap-2">
+                         <button
+                           onClick={handleNuevo}
+                           className={theme.botonPrimario}
+                         >
+                           <span className="text-lg">+</span> Nuevo Presupuesto
+                         </button>
+                         <button
+                           onClick={handleNuevaVenta}
+                           className={theme.botonPrimario}
+                         >
+                           <span className="text-lg">+</span> Nueva Factura
+                         </button>
+                         <button
+                           onClick={handleNuevaNotaCredito}
+                           className={theme.botonPrimario}
+                         >
+                           <span className="text-lg">+</span> Nueva Nota de Crédito
+                         </button>
+                         <button
+                           onClick={handleGenerarLibroIva}
+                           className={theme.botonPrimario}
+                         >
+                           <span className="text-lg">+</span> Generar Libro IVA
+                         </button>
+                       </div>
+                       <div className="mb-4">
+                         <FiltrosPresupuestos
+                           comprobantes={comprobantes}
+                           clientes={clientes}
+                           vendedores={vendedores}
+                           onFiltroChange={handleFiltroChange}
+                           comprobanteTipo={comprobanteTipo}
+                           setComprobanteTipo={setComprobanteTipo}
+                           comprobanteLetra={comprobanteLetra}
+                           setComprobanteLetra={setComprobanteLetra}
+                           fechaDesde={fechaDesde}
+                           setFechaDesde={setFechaDesde}
+                           fechaHasta={fechaHasta}
+                           setFechaHasta={setFechaHasta}
+                           clienteId={clienteId}
+                           setClienteId={setClienteId}
+                           vendedorId={vendedorId}
+                           setVendedorId={setVendedorId}
+                         />
+                       </div>
+                      <ComprobantesList
+                        comprobantes={comprobantes}
+                        datosPagina={datosPagina}
+                        acciones={{
+                          handleImprimir,
+                          openVistaTab,
+                          handleEdit,
+                          handleConvertir,
+                          handleDelete,
+                          handleConvertirFacturaI,
+                          handleNotaCredito,
+                        }}
+                        isFetchingForConversion={isFetchingForConversion}
+                        fetchingPresupuestoId={fetchingPresupuestoId}
+                        esFacturaInternaConvertible={esFacturaInternaConvertible}
+                        totalItems={totalItems}
+                        itemsPorPagina={itemsPorPagina}
+                        paginaActual={paginaActual}
+                        setPaginaActual={setPaginaActual}
+                        setItemsPorPagina={setItemsPorPagina}
+                      />
+                    </>
+                  )}
+                  {/* Vendedores */}
+                  <VendedoresTab
+                    activeTab={activeTab}
+                        vendedores={vendedores}
+                    loadingVendedores={loadingVendedores}
+                    errorVendedores={errorVendedores}
+                    searchVendedor={searchVendedor}
+                    setSearchVendedor={setSearchVendedor}
+                    editVendedorData={editVendedorData}
+                        localidades={localidades}
+                    acciones={{
+                      handleNuevoVendedor: () => handleNuevoVendedor(openTab),
+                      handleEditVendedor: (vendedor) => handleEditVendedor(vendedor, openTab),
+                      handleSaveVendedor: (data) => handleSaveVendedor(data, closeTab, activeTab),
+                      handleDeleteVendedor,
+                    }}
+                    closeTab={closeTab}
+                  />
+                  {/* Presupuestos: nuevo/editar/vista */}
+                  {(activeTab.startsWith("nuevo-") ||
+                    activeTab.startsWith("editar") ||
+                    activeTab.startsWith("nueva-venta-") ||
+                    activeTab.startsWith("vista-") ||
+                    activeTab.startsWith("nota-credito-")) &&
+                    !activeTab.startsWith("nuevo-vendedor") &&
+                    !activeTab.startsWith("editar-vendedor") &&
+                    (activeTab.startsWith("nueva-venta-") ? (
+                      <VentaForm
+                        key={activeTab}
+                        onSave={async (payload) => {
+                          const resultado = await addVenta({ ...payload, tipo: "Venta", estado: "Cerrado" })
                           // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
-                          if (!data?.arca_emitido) {
+                          if (!resultado?.arca_emitido) {
                             closeTab(activeTab)
                           }
-                          
-                          // Devolver la respuesta del backend para que NotaCreditoForm pueda procesar los datos de ARCA
-                          return data
-                        } catch (err) {
-                          alert(err.message)
-                          throw err
-                        }
-                      }}
-                      onCancel={() => closeTab(activeTab)}
-                      clienteSeleccionado={tabs.find((t) => t.key === activeTab)?.data?.cliente}
-                      facturasAsociadas={tabs.find((t) => t.key === activeTab)?.data?.facturas}
-                      comprobantes={comprobantes}
-                      plazos={plazos}
-                      vendedores={vendedores}
-                      sucursales={[{ id: 1, nombre: "Casa Central" }]}
-                      puntosVenta={[{ id: 1, nombre: "PV 1" }]}
-                      productos={productos}
-                      loadingProductos={loadingProductos}
-                      familias={familias}
-                      loadingFamilias={loadingFamilias}
-                      proveedores={proveedores}
-                      loadingProveedores={loadingProveedores}
-                      autoSumarDuplicados={autoSumarDuplicados}
-                      setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      tabKey={activeTab}
-                    />
-                  ) : (
-                    <PresupuestoForm
-                      key={activeTab}
-                      onSave={async (payload) => {
-                        await addVenta({ ...payload, tipo: "Presupuesto", estado: "Abierto" })
-                        closeTab(activeTab)
-                      }}
-                      onCancel={() => closeTab(activeTab)}
-                      initialData={activeTabData}
-                      readOnlyOverride={false}
-                      comprobantes={comprobantes}
-                      tiposComprobante={tiposComprobante}
-                      tipoComprobante={tipoComprobante}
-                      setTipoComprobante={setTipoComprobante}
-                      clientes={clientes}
-                      plazos={plazos}
-                      vendedores={vendedores}
-                      sucursales={sucursales}
-                      puntosVenta={puntosVenta}
-                      loadingComprobantes={loadingComprobantes}
-                      errorComprobantes={errorComprobantes}
-                      productos={productos}
-                      loadingProductos={loadingProductos}
-                      familias={familias}
-                      loadingFamilias={loadingFamilias}
-                      proveedores={proveedores}
-                      loadingProveedores={loadingProveedores}
-                      alicuotas={alicuotas}
-                      loadingAlicuotas={loadingAlicuotas}
-                      errorProductos={errorProductos}
-                      errorFamilias={errorFamilias}
-                      errorProveedores={errorProveedores}
-                      errorAlicuotas={errorAlicuotas}
-                      autoSumarDuplicados={autoSumarDuplicados}
-                      setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      ItemsGrid={ItemsGrid}
-                      tabKey={activeTab}
-                    />
-                  ))}
-                {tabs.map(
-                  (tab) =>
-                    activeTab === tab.key &&
-                    tab.tipo === "conventa" && (
-                      <ConVentaForm
-                        key={tab.key}
-                        presupuestoOrigen={tab.data.presupuestoOrigen}
-                        itemsSeleccionados={tab.data.itemsSeleccionados}
-                        onSave={async (payload, tk) => {
-                          const resultado = await handleConVentaFormSave(payload, tk)
-                          // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
-                          if (!resultado?.arca_emitido) {
-                            closeTab(tk)
-                          }
                           return resultado
                         }}
-                        onCancel={() => handleConVentaFormCancel(tab.key)}
+                        onCancel={() => closeTab(activeTab)}
+                        initialData={null}
+                        readOnlyOverride={false}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        tiposComprobante={tiposComprobante}
+                        tipoComprobante={tipoComprobante}
+                        setTipoComprobante={setTipoComprobante}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -677,31 +491,133 @@
                         errorAlicuotas={errorAlicuotas}
                         autoSumarDuplicados={autoSumarDuplicados}
                         setAutoSumarDuplicados={setAutoSumarDuplicados}
-                        tabKey={tab.key}
+                        ItemsGrid={ItemsGrid}
+                        tabKey={activeTab}
                       />
-                    ),
-                )}
-                {tabs.map(
-                  (tab) =>
-                    activeTab === tab.key &&
-                    tab.tipo === "conv-factura-i" && (
-                      <ConVentaForm
-                        key={tab.key}
-                        facturaInternaOrigen={tab.data.facturaInternaOrigen}
-                        tipoConversion={tab.data.tipoConversion}
-                        itemsSeleccionados={tab.data.itemsSeleccionados}
-                        itemsSeleccionadosIds={tab.data.itemsSeleccionadosIds}
-                        onSave={async (payload, tk, endpoint) => {
-                          const resultado = await handleConVentaFormSaveFacturaI(payload, tk, endpoint)
-                          // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
-                          if (!resultado?.arca_emitido) {
-                            closeTab(tk)
-                          }
-                          return resultado
-                        }}
-                        onCancel={() => handleConVentaFormCancel(tab.key)}
+                    ) : activeTab.startsWith("vista-") ? (
+                      <PresupuestoVentaVista
+                        key={activeTab}
+                        data={tabs.find((t) => t.key === activeTab)?.data}
+                        clientes={clientes}
+                        vendedores={vendedores}
+                        plazos={plazos}
+                        sucursales={sucursales}
+                        puntosVenta={puntosVenta}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        onImprimir={handleImprimir}
+                        onEliminar={async (id) => {
+                          await handleDelete(id)
+                          closeTab(activeTab)
+                        }}
+                        onCerrar={() => closeTab(activeTab)}
+                      />
+                    ) : activeTab.startsWith("editar") ? (
+                      <EditarPresupuestoForm
+                        key={activeTab}
+                        onSave={async (payload) => {
+                          const idOriginal = activeTabData?.id || activeTabData?.ven_id
+                          if (!idOriginal) {
+                            alert("No se encontró el ID del presupuesto a editar.")
+                            return
+                          }
+                          await updateVenta(idOriginal, {
+                            ...payload,
+                            tipoOriginal: activeTabData?.tipo,
+                            estadoOriginal: activeTabData?.estado,
+                          })
+                          closeTab(activeTab)
+                        }}
+                        onCancel={() => closeTab(activeTab)}
+                        initialData={activeTabData}
+                        comprobantes={comprobantes}
+                        tiposComprobante={tiposComprobante}
+                        tipoComprobante={tipoComprobante}
+                        setTipoComprobante={setTipoComprobante}
+                        clientes={clientes}
+                        plazos={plazos}
+                        vendedores={vendedores}
+                        sucursales={sucursales}
+                        puntosVenta={puntosVenta}
+                        productos={productos}
+                        proveedores={proveedores}
+                        alicuotas={alicuotas}
+                        autoSumarDuplicados={autoSumarDuplicados}
+                        setAutoSumarDuplicados={setAutoSumarDuplicados}
+                        ItemsGrid={ItemsGrid}
+                      />
+                    ) : activeTab.startsWith("nota-credito-") ? (
+                      <NotaCreditoForm
+                        key={activeTab}
+                        onSave={async (payload) => {
+                          try {
+                            const csrftoken = getCookie("csrftoken")
+                            const response = await fetch("/api/ventas/", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "X-CSRFToken": csrftoken,
+                              },
+                              credentials: "include",
+                              body: JSON.stringify(payload),
+                            })
+                            
+                            const data = await response.json()
+                            
+                            if (!response.ok) {
+                              let msg = "No se pudo guardar la Nota de Crédito"
+                              try {
+                                msg = data.detail || msg
+                              } catch {}
+                              throw new Error(msg)
+                            }
+                            
+                            // Actualizar lista
+                            await fetchVentas()
+                            
+                            // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                            if (!data?.arca_emitido) {
+                              closeTab(activeTab)
+                            }
+                            
+                            // Devolver la respuesta del backend para que NotaCreditoForm pueda procesar los datos de ARCA
+                            return data
+                          } catch (err) {
+                            alert(err.message)
+                            throw err
+                          }
+                        }}
+                        onCancel={() => closeTab(activeTab)}
+                        clienteSeleccionado={tabs.find((t) => t.key === activeTab)?.data?.cliente}
+                        facturasAsociadas={tabs.find((t) => t.key === activeTab)?.data?.facturas}
+                        comprobantes={comprobantes}
+                        plazos={plazos}
+                        vendedores={vendedores}
+                        sucursales={[{ id: 1, nombre: "Casa Central" }]}
+                        puntosVenta={[{ id: 1, nombre: "PV 1" }]}
+                        productos={productos}
+                        loadingProductos={loadingProductos}
+                        familias={familias}
+                        loadingFamilias={loadingFamilias}
+                        proveedores={proveedores}
+                        loadingProveedores={loadingProveedores}
+                        autoSumarDuplicados={autoSumarDuplicados}
+                        setAutoSumarDuplicados={setAutoSumarDuplicados}
+                        tabKey={activeTab}
+                      />
+                    ) : (
+                      <PresupuestoForm
+                        key={activeTab}
+                        onSave={async (payload) => {
+                          await addVenta({ ...payload, tipo: "Presupuesto", estado: "Abierto" })
+                          closeTab(activeTab)
+                        }}
+                        onCancel={() => closeTab(activeTab)}
+                        initialData={activeTabData}
+                        readOnlyOverride={false}
+                        comprobantes={comprobantes}
+                        tiposComprobante={tiposComprobante}
+                        tipoComprobante={tipoComprobante}
+                        setTipoComprobante={setTipoComprobante}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -723,10 +639,101 @@
                         errorAlicuotas={errorAlicuotas}
                         autoSumarDuplicados={autoSumarDuplicados}
                         setAutoSumarDuplicados={setAutoSumarDuplicados}
-                        tabKey={tab.key}
+                        ItemsGrid={ItemsGrid}
+                        tabKey={activeTab}
                       />
-                    ),
-                )}
+                    ))}
+                  {tabs.map(
+                    (tab) =>
+                      activeTab === tab.key &&
+                      tab.tipo === "conventa" && (
+                        <ConVentaForm
+                          key={tab.key}
+                          presupuestoOrigen={tab.data.presupuestoOrigen}
+                          itemsSeleccionados={tab.data.itemsSeleccionados}
+                          onSave={async (payload, tk) => {
+                            const resultado = await handleConVentaFormSave(payload, tk)
+                            // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                            if (!resultado?.arca_emitido) {
+                              closeTab(tk)
+                            }
+                            return resultado
+                          }}
+                          onCancel={() => handleConVentaFormCancel(tab.key)}
+                          comprobantes={comprobantes}
+                          ferreteria={null}
+                          clientes={clientes}
+                          plazos={plazos}
+                          vendedores={vendedores}
+                          sucursales={sucursales}
+                          puntosVenta={puntosVenta}
+                          loadingComprobantes={loadingComprobantes}
+                          errorComprobantes={errorComprobantes}
+                          productos={productos}
+                          loadingProductos={loadingProductos}
+                          familias={familias}
+                          loadingFamilias={loadingFamilias}
+                          proveedores={proveedores}
+                          loadingProveedores={loadingProveedores}
+                          alicuotas={alicuotas}
+                          loadingAlicuotas={loadingAlicuotas}
+                          errorProductos={errorProductos}
+                          errorFamilias={errorFamilias}
+                          errorProveedores={errorProveedores}
+                          errorAlicuotas={errorAlicuotas}
+                          autoSumarDuplicados={autoSumarDuplicados}
+                          setAutoSumarDuplicados={setAutoSumarDuplicados}
+                          tabKey={tab.key}
+                        />
+                      ),
+                  )}
+                  {tabs.map(
+                    (tab) =>
+                      activeTab === tab.key &&
+                      tab.tipo === "conv-factura-i" && (
+                        <ConVentaForm
+                          key={tab.key}
+                          facturaInternaOrigen={tab.data.facturaInternaOrigen}
+                          tipoConversion={tab.data.tipoConversion}
+                          itemsSeleccionados={tab.data.itemsSeleccionados}
+                          itemsSeleccionadosIds={tab.data.itemsSeleccionadosIds}
+                          onSave={async (payload, tk, endpoint) => {
+                            const resultado = await handleConVentaFormSaveFacturaI(payload, tk, endpoint)
+                            // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
+                            if (!resultado?.arca_emitido) {
+                              closeTab(tk)
+                            }
+                            return resultado
+                          }}
+                          onCancel={() => handleConVentaFormCancel(tab.key)}
+                          comprobantes={comprobantes}
+                          ferreteria={null}
+                          clientes={clientes}
+                          plazos={plazos}
+                          vendedores={vendedores}
+                          sucursales={sucursales}
+                          puntosVenta={puntosVenta}
+                          loadingComprobantes={loadingComprobantes}
+                          errorComprobantes={errorComprobantes}
+                          productos={productos}
+                          loadingProductos={loadingProductos}
+                          familias={familias}
+                          loadingFamilias={loadingFamilias}
+                          proveedores={proveedores}
+                          loadingProveedores={loadingProveedores}
+                          alicuotas={alicuotas}
+                          loadingAlicuotas={loadingAlicuotas}
+                          errorProductos={errorProductos}
+                          errorFamilias={errorFamilias}
+                          errorProveedores={errorProveedores}
+                          errorAlicuotas={errorAlicuotas}
+                          autoSumarDuplicados={autoSumarDuplicados}
+                          setAutoSumarDuplicados={setAutoSumarDuplicados}
+                          tabKey={tab.key}
+                        />
+                      ),
+                  )}
+                </div>
               </div>
             </div>
           </div>

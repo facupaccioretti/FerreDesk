@@ -1,5 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Importar estilos del sistema de diseño FerreDesk
+import './styles/design-tokens.css';
+import './styles/utilities.css';
+
 import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';

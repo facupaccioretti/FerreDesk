@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
@@ -94,6 +95,7 @@ const VentaForm = ({
   const [loadingError, setLoadingError] = useState(null)
 
   // Hooks existentes movidos al inicio
+  const theme = useFerreDeskTheme()
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
   
@@ -622,7 +624,7 @@ const VentaForm = ({
           onKeyDown={bloquearEnterSubmit}
         >
           {/* Gradiente decorativo superior */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
+          <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
 
           <div className="px-8 pt-4 pb-6">
             {/* Badge de letra de comprobante */}

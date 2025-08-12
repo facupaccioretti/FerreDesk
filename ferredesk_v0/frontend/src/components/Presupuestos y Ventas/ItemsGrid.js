@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 import { BotonDuplicar, BotonEliminar } from "../Botones"
 
@@ -57,7 +58,10 @@ const ItemsGridPresupuesto = forwardRef(
       setDescu3 = () => {},
     },
     ref,
-  ) => {
+      ) => {
+    // Hook del tema de FerreDesk
+    const theme = useFerreDeskTheme();
+    
     // LOG NUEVO: Loggear las props recibidas cada vez que cambian
     useEffect(() => {
     }, [initialItems, productosDisponibles, modo]);
@@ -890,70 +894,70 @@ const ItemsGridPresupuesto = forwardRef(
             </div>
           </div>
 
-          {/* Resumen de Totales compacto */}
-          <div className="col-span-1 flex justify-end items-end">
-            <div className="min-w-[420px]">
-              <div className="w-full bg-gradient-to-r from-slate-50 via-slate-100/80 to-slate-50 rounded-xl shadow border border-slate-300/50 px-6 py-2">
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-600 font-semibold">Subtotal s/IVA:</span>
-                    <span className="text-slate-800 font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-600 font-semibold">Subtotal c/Desc:</span>
-                    <span className="text-slate-800 font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-600 font-semibold">IVA:</span>
-                    <span className="text-slate-800 font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-600 font-semibold">Total c/IVA:</span>
-                    <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-3 py-1 rounded-lg shadow">
-                      <span className="font-bold text-base">${totales.total?.toFixed(2) ?? "0.00"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                     {/* Resumen de Totales compacto */}
+           <div className="col-span-1 flex justify-end items-end">
+             <div className="min-w-[420px]">
+                                                             <div className="w-full bg-slate-700 rounded-xl shadow border border-slate-600/50 px-6 py-2">
+                                   <div className="flex items-center justify-between gap-4 text-sm">
+                     <div className="flex items-center gap-1">
+                       <span className={`${theme.fuente} font-semibold`}>Subtotal s/IVA:</span>
+                       <span className="text-white font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <span className={`${theme.fuente} font-semibold`}>Subtotal c/Desc:</span>
+                       <span className="text-white font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <span className={`${theme.fuente} font-semibold`}>IVA:</span>
+                       <span className="text-white font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <span className={`${theme.fuente} font-semibold`}>Total c/IVA:</span>
+                       <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1 rounded-lg shadow">
+                         <span className="font-bold text-base">${totales.total?.toFixed(2) ?? "0.00"}</span>
+                       </div>
+                     </div>
+                   </div>
+               </div>
+             </div>
+           </div>
         </div>
         <div className="w-full">
           <div className="max-h-[20rem] overflow-y-auto overscroll-contain rounded-xl border border-slate-200/50 shadow-lg">
             <table className="items-grid min-w-full divide-y divide-slate-200">
-              <thead className="bg-gradient-to-r from-slate-50 to-slate-100/80 sticky top-0">
-                <tr className="bg-slate-100">
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-10">
+              <thead className="bg-gradient-to-r from-slate-800 to-slate-700 sticky top-0">
+                <tr className="bg-slate-700">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-10">
                     Nro.
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-14">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-14">
                     Código
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-48">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-48">
                     Detalle
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-14">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-14">
                     Unidad
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-12">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-12">
                     Cantidad
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-32">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-32">
                     Precio Unitario
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">
                     Bonif. %
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">
                     Precio Unit Bonif.
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-20">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-20">
                     IVA %
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">
                     Total
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-700 uppercase tracking-wider w-10">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-10">
                     Acciones
                   </th>
                 </tr>

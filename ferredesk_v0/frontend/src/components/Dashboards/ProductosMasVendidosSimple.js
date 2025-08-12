@@ -73,7 +73,7 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
       legend: {
         position: 'top',
         labels: {
-          color: '#1e293b',
+          color: '#cbd5e1',
           font: {
             size: 12,
             weight: 'bold'
@@ -83,7 +83,7 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
       title: {
         display: true,
         text: `Productos Más Vendidos – ${metricaLabel}`,
-        color: '#1e293b',
+        color: '#e2e8f0',
         font: {
           size: 16,
           weight: 'bold'
@@ -93,7 +93,7 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         titleColor: '#ffffff',
         bodyColor: '#ffffff',
-        borderColor: 'rgba(59, 130, 246, 1)',
+        borderColor: 'rgba(255, 140, 0, 0.8)',
         borderWidth: 1,
         cornerRadius: 8,
         displayColors: false,
@@ -114,7 +114,7 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
       x: {
         beginAtZero: true,
         ticks: {
-          color: '#64748b',
+          color: '#94a3b8',
           font: {
             size: 11
           },
@@ -127,12 +127,12 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
           }
         },
         grid: {
-          color: 'rgba(148, 163, 184, 0.1)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }
       },
       y: {
         ticks: {
-          color: '#64748b',
+          color: '#94a3b8',
           font: {
             size: 11
           },
@@ -140,7 +140,7 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
           minRotation: 0
         },
         grid: {
-          color: 'rgba(148, 163, 184, 0.1)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }
       }
     }
@@ -182,11 +182,11 @@ const ProductosMasVendidosSimple = ({ tipoMetrica = 'cantidad', onMetricaChange 
   return (
     <div className="container container-type-inline">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-bold text-slate-800">Productos Más Vendidos –</span>
+        <span className="text-sm font-bold text-slate-300">Productos Más Vendidos –</span>
         <select
           value={tipoMetrica}
           onChange={e => handleMetricaChange(e.target.value)}
-          className="text-sm font-semibold text-slate-800 bg-transparent border border-slate-300 rounded px-1 py-0 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className="text-sm font-semibold text-slate-300 bg-slate-800/70 border border-slate-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500"
           style={{ minWidth: 100 }}
         >
           {opcionesMetrica.map(op => (

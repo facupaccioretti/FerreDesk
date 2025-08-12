@@ -73,7 +73,7 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
       legend: {
         position: 'top',
         labels: {
-          color: '#1e293b',
+          color: '#cbd5e1',
           font: {
             size: 12,
             weight: 'bold'
@@ -83,7 +83,7 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
       title: {
         display: true,
         text: `Evolución de Ventas – ${periodoLabel}`,
-        color: '#1e293b',
+        color: '#e2e8f0',
         font: {
           size: 16,
           weight: 'bold'
@@ -93,7 +93,7 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         titleColor: '#ffffff',
         bodyColor: '#ffffff',
-        borderColor: 'rgba(34, 197, 94, 1)',
+        borderColor: 'rgba(255, 140, 0, 0.8)',
         borderWidth: 1,
         cornerRadius: 8,
         displayColors: false,
@@ -107,19 +107,19 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
     scales: {
       x: {
         ticks: {
-          color: '#64748b',
+          color: '#94a3b8',
           font: {
             size: 11
           }
         },
         grid: {
-          color: 'rgba(148, 163, 184, 0.1)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }
       },
       y: {
         beginAtZero: true,
         ticks: {
-          color: '#64748b',
+          color: '#94a3b8',
           font: {
             size: 11
           },
@@ -128,7 +128,7 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
           }
         },
         grid: {
-          color: 'rgba(148, 163, 184, 0.1)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }
       }
     },
@@ -174,11 +174,11 @@ const VentasPorDiaSimple = ({ periodo = '7d', onPeriodoChange }) => {
   return (
     <div className="container container-type-inline">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-bold text-slate-800">Evolución de Ventas –</span>
+        <span className="text-sm font-bold text-slate-300">Evolución de Ventas –</span>
         <select
           value={periodo}
           onChange={e => handlePeriodoChange(e.target.value)}
-          className="text-sm font-semibold text-slate-800 bg-transparent border border-slate-300 rounded px-1 py-0 focus:outline-none focus:ring-1 focus:ring-green-400"
+          className="text-sm font-semibold text-slate-300 bg-slate-800/70 border border-slate-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500"
           style={{ minWidth: 100 }}
         >
           {opcionesPeriodo.map(op => (
