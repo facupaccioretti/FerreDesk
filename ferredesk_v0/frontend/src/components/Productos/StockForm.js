@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useStockProveAPI, useStockProveEditAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import AsociarCodigoProveedorModal from "./AsociarCodigoProveedorModal"
@@ -30,6 +30,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const theme = useFerreDeskTheme()
   
   // Estado principal del formulario
+  const refContenedorDenominacion = useRef(null)
   const [form, setForm] = useState(() => {
     if (modo === "nuevo") {
       const savedForm = localStorage.getItem("stockFormDraft")
@@ -769,7 +770,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
       <div className="w-full max-w-none">
         <form
-          className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
+          className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-visible"
           onSubmit={handleSave}
         >
           {/* Gradiente decorativo superior */}
@@ -859,7 +860,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                   <div className="flex items-center justify-between py-2">
                     <span className="text-[12px] text-slate-700">Denominación *</span>
                     <div className="min-w-[180px] text-right">
-                      <div className="relative">
+                      <div className="relative" ref={refContenedorDenominacion}>
                         <input
                           type="text"
                           name="deno"
@@ -890,6 +891,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                           error={errorSugerencias}
                           mostrarTooltip={mostrarTooltip}
                           onToggle={toggleTooltip}
+                          targetRef={refContenedorDenominacion}
                         />
                       )}
                     </div>
