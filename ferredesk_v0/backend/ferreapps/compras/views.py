@@ -13,7 +13,8 @@ from .serializers import (
     CompraListSerializer,
     CompraDetalleItemSerializer,
     ProveedorSerializer,
-    StockProveedorSerializer
+    StockProveedorSerializer,
+    BuscadorProductoProveedorSerializer
 )
 from ferreapps.productos.models import Proveedor, Stock, AlicuotaIVA
 from django.db import transaction
@@ -300,16 +301,21 @@ def proveedores_activos(request):
 def productos_por_proveedor(request, proveedor_id):
     """Obtener productos disponibles para un proveedor específico"""
     try:
-        # Verificar que el proveedor existe
-        proveedor = get_object_or_404(Proveedor, id=proveedor_id, acti='S')
+        # Verificar que el proveedor existe (sin restricción de activo para consistencia con el resto de la app)
+        proveedor = get_object_or_404(Proveedor, id=proveedor_id)
         
         # Obtener productos que tienen stock para este proveedor
-        productos = Stock.objects.filter(
-            proveedor_habitual=proveedor,
-            acti='S'
-        ).select_related('idaliiva').order_by('deno')
+        from ferreapps.productos.models import StockProve
         
-        serializer = StockProveedorSerializer(productos, many=True)
+        # Buscar productos que tienen relación con este proveedor
+        stock_prove_list = StockProve.objects.filter(
+            proveedor_id=proveedor_id
+        ).select_related('stock', 'stock__idaliiva').filter(
+            stock__acti='S'
+        ).order_by('stock__deno')
+        
+        # Usar el serializer para convertir los datos correctamente
+        serializer = BuscadorProductoProveedorSerializer(stock_prove_list, many=True)
         return Response(serializer.data)
     except Http404:
         return Response(

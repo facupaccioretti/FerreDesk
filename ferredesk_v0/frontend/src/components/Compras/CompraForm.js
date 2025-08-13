@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import ItemsGridCompras from "./ItemsGridCompras"
+import BuscadorProductoCompras from "./BuscadorProductoCompras"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const CompraForm = ({
   onSave,
@@ -47,6 +49,10 @@ const CompraForm = ({
   const [selectedProveedor, setSelectedProveedor] = useState(null)
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const itemsGridRef = useRef(null)
+
+  // Hook para el tema de FerreDesk
+  const theme = useFerreDeskTheme()
 
   // Helper para construir el string completo
   const buildNumeroFactura = useCallback((letra, pv, numero) => {
@@ -177,6 +183,33 @@ const CompraForm = ({
     // NO calcular totales aquí para evitar re-renderizado
   }
 
+  const handleAddItemFromBuscador = (producto) => {
+    if (!selectedProveedor?.id) {
+      console.error("No hay proveedor seleccionado")
+      return
+    }
+
+    // Crear un nuevo item con el producto seleccionado
+    const nuevoItem = {
+      id: Date.now() + Math.random(),
+      codigo_proveedor: producto.codigo_proveedor || "",
+      producto: producto,
+      cdi_idsto: producto.id,
+      cdi_idpro: selectedProveedor.id,
+      cdi_detalle1: producto.deno || producto.nombre || "",
+      cdi_detalle2: producto.unidad || producto.unidadmedida || "-",
+      cdi_cantidad: 1,
+      cdi_costo: 0,
+      cdi_idaliiva: typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3),
+      unidad: producto.unidad || producto.unidadmedida || "-",
+    }
+
+    // Agregar el item directamente al grid usando el método imperativo
+    if (itemsGridRef.current && itemsGridRef.current.addItem) {
+      itemsGridRef.current.addItem(nuevoItem)
+    }
+  }
+
   // Usar useEffect para calcular totales solo cuando los items cambian
   useEffect(() => {
     if (formData.items_data) {
@@ -274,14 +307,14 @@ const CompraForm = ({
   return (
     <div className="px-6 pt-4 pb-6">
       <form className="venta-form w-full max-w-[1000px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600" />
+        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`} />
 
         {/* width constraint */}
         <div className="px-8 pt-6 pb-6">
           <div className="max-w-[1100px] mx-auto">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
+                <div className={`w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md`}>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
@@ -302,137 +335,165 @@ const CompraForm = ({
               {initialData && <p className="text-slate-600 text-sm">Compra #{initialData.comp_id}</p>}
             </div>
 
-            {/* Encabezado en una fila */}
-            <div className="w-full mb-4">
-              <div className="grid gap-4 items-end" style={{ gridTemplateColumns: '2fr 1fr 1.5fr 0.8fr 1.2fr' }}>
-                {/* Proveedor */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Proveedor *</label>
-                  {loadingProveedores ? (
-                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                      Cargando proveedores...
-                    </div>
-                  ) : errorProveedores ? (
-                    <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">{errorProveedores}</div>
-                  ) : (
-                    <select
-                      value={formData.comp_idpro}
-                      onChange={(e) => handleProveedorChange(e.target.value)}
-                      disabled={readOnly}
-                      className={`w-full px-3 py-2 border rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 ${
-                        errors.comp_idpro ? "border-red-500" : "border-slate-300"
+                        {/* Una sola tarjeta con campos organizados en grid */}
+            <div className="mb-6">
+              <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+                
+                {/* Primera fila: 5 campos con tamaños personalizados */}
+                <div className="grid gap-4 mb-3" style={{ gridTemplateColumns: '2fr 1fr 1.5fr 0.8fr 1.7fr' }}>
+                  {/* Proveedor */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Proveedor *</label>
+                    {loadingProveedores ? (
+                      <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                        Cargando...
+                      </div>
+                    ) : errorProveedores ? (
+                      <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
+                        {errorProveedores}
+                      </div>
+                    ) : (
+                      <select
+                        value={formData.comp_idpro}
+                        onChange={(e) => handleProveedorChange(e.target.value)}
+                        disabled={readOnly}
+                        className={`w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
+                          errors.comp_idpro ? "border-red-500" : ""
+                        }`}
+                      >
+                        <option value="">Seleccionar proveedor...</option>
+                        {proveedores.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.codigo} - {p.razon}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {errors.comp_idpro && <p className="mt-1 text-xs text-red-600">{errors.comp_idpro}</p>}
+                  </div>
+
+                  {/* CUIT */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">CUIT</label>
+                    <input
+                      name="comp_cuit"
+                      type="text"
+                      value={formData.comp_cuit}
+                      onChange={(e) => handleInputChange("comp_cuit", e.target.value)}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      readOnly={readOnly}
+                      placeholder="CUIT del proveedor"
+                    />
+                  </div>
+
+                  {/* Domicilio */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
+                    <input
+                      name="comp_domicilio"
+                      type="text"
+                      value={formData.comp_domicilio}
+                      onChange={(e) => handleInputChange("comp_domicilio", e.target.value)}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      readOnly={readOnly}
+                      placeholder="Domicilio del proveedor"
+                    />
+                  </div>
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha *</label>
+                    <input
+                      name="comp_fecha"
+                      type="date"
+                      value={formData.comp_fecha}
+                      onChange={(e) => handleInputChange("comp_fecha", e.target.value)}
+                      className={`w-full border rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
+                        errors.comp_fecha ? "border-red-500" : "border-slate-300"
                       }`}
-                    >
-                      <option value="">Seleccionar proveedor...</option>
-                      {proveedores.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.codigo} - {p.razon}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {errors.comp_idpro && <p className="mt-1 text-sm text-red-600">{errors.comp_idpro}</p>}
-                </div>
-
-                {/* CUIT */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT</label>
-                  <input
-                    name="comp_cuit"
-                    type="text"
-                    value={formData.comp_cuit}
-                    onChange={(e) => handleInputChange("comp_cuit", e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    readOnly={readOnly}
-                    placeholder="CUIT del proveedor"
-                  />
-                </div>
-
-                {/* Domicilio */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio</label>
-                  <input
-                    name="comp_domicilio"
-                    type="text"
-                    value={formData.comp_domicilio}
-                    onChange={(e) => handleInputChange("comp_domicilio", e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duración-200 shadow-sm hover:border-slate-400"
-                    readOnly={readOnly}
-                    placeholder="Domicilio del proveedor"
-                  />
-                </div>
-
-                {/* Fecha */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Fecha *</label>
-                  <input
-                    name="comp_fecha"
-                    type="date"
-                    value={formData.comp_fecha}
-                    onChange={(e) => handleInputChange("comp_fecha", e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duración-200 shadow-sm hover:border-slate-400 ${
-                      errors.comp_fecha ? "border-red-500" : "border-slate-300"
-                    }`}
-                    required
-                    readOnly={readOnly}
-                  />
-                  {errors.comp_fecha && <p className="mt-1 text-sm text-red-600">{errors.comp_fecha}</p>}
-                </div>
-
-                {/* Numero de Factura inteligente */}
-                <div className="w-full">
-                  <div className="flex items-center gap-2 mb-2">
-                    <label className="block text-base font-semibold text-slate-700">N° Factura *</label>
-                    <span className="text-xs text-slate-500">{buildNumeroFactura(factura.letra, factura.pv, factura.numero)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={factura.letra}
-                      onChange={(e) => handleFacturaLetra(e.target.value)}
-                      disabled={readOnly}
-                      placeholder="A"
-                      className="px-2 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
-                      style={{ width: 64 }}
-                      title="Letra de comprobante (A-Z)"
+                      required
+                      readOnly={readOnly}
                     />
-                                         <input
-                       type="text"
-                       inputMode="numeric"
-                       value={factura.pv}
-                       onChange={(e) => handleFacturaPv(e.target.value)}
-                       onBlur={padPvOnBlur}
-                       disabled={readOnly}
-                       placeholder="PV"
-                       className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-20 text-center"
-                       ref={pvRef}
-                       title="Punto de venta (4 dígitos)"
-                     />
-                    <span className="text-slate-500">-</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={factura.numero}
-                      onChange={(e) => handleFacturaNumero(e.target.value)}
-                      onBlur={padNumeroOnBlur}
-                      disabled={readOnly}
-                      placeholder="Número"
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-32 text-center"
-                      ref={numeroRef}
-                      title="Número de comprobante (8 dígitos)"
-                    />
+                    {errors.comp_fecha && <p className="mt-1 text-xs text-red-600">{errors.comp_fecha}</p>}
                   </div>
-                  {errors.comp_numero_factura && (
-                    <p className="mt-1 text-sm text-red-600">{errors.comp_numero_factura}</p>
-                  )}
+
+                                     {/* Numero de Factura inteligente */}
+                   <div>
+                     <div className="flex items-center gap-1 mb-1">
+                       <label className="block text-[12px] font-semibold text-slate-700">N° Factura *</label>
+                       <span className="text-[10px] text-slate-500">{buildNumeroFactura(factura.letra, factura.pv, factura.numero)}</span>
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <input
+                         type="text"
+                         value={factura.letra}
+                         onChange={(e) => handleFacturaLetra(e.target.value)}
+                         disabled={readOnly}
+                         placeholder="A"
+                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
+                         style={{ width: 48 }}
+                         title="Letra de comprobante (A-Z)"
+                       />
+                       <input
+                         type="text"
+                         inputMode="numeric"
+                         value={factura.pv}
+                         onChange={(e) => handleFacturaPv(e.target.value)}
+                         onBlur={padPvOnBlur}
+                         disabled={readOnly}
+                         placeholder="PV"
+                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-16 text-center"
+                         ref={pvRef}
+                         title="Punto de venta (4 dígitos)"
+                       />
+                       <span className="text-slate-500 text-xs">-</span>
+                       <input
+                         type="text"
+                         inputMode="numeric"
+                         value={factura.numero}
+                         onChange={(e) => handleFacturaNumero(e.target.value)}
+                         onBlur={padNumeroOnBlur}
+                         disabled={readOnly}
+                         placeholder="Número"
+                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-24 text-center"
+                         ref={numeroRef}
+                         title="Número de comprobante (8 dígitos)"
+                       />
+                     </div>
+                     {errors.comp_numero_factura && (
+                       <p className="mt-1 text-xs text-red-600">{errors.comp_numero_factura}</p>
+                     )}
+                   </div>
                 </div>
+
               </div>
             </div>
+
+            {/* Buscador de productos */}
+            {selectedProveedor && (
+              <div className="mb-4">
+                <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+                  <div className="grid gap-4 mb-3">
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Productos del Proveedor</label>
+                      <BuscadorProductoCompras
+                        selectedProveedor={selectedProveedor}
+                        onSelect={handleAddItemFromBuscador}
+                        disabled={readOnly}
+                        readOnly={readOnly}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Grid de items */}
             <div className="mb-4">
               <ItemsGridCompras
+                ref={itemsGridRef}
                 items={formData.items_data}
                 onItemsChange={handleItemsChange}
                 readOnly={readOnly}
@@ -446,83 +507,87 @@ const CompraForm = ({
 
             {/* Totales en una sola fila */}
             <div className="mb-4">
-              <h3 className="text-lg font-medium text-slate-900 mb-3">Totales</h3>
               <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Importe Neto</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_importe_neto}
-                    onChange={(e) => handleInputChange("comp_importe_neto", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">IVA 21%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_iva_21}
-                    onChange={(e) => handleInputChange("comp_iva_21", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">IVA 10.5%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_iva_10_5}
-                    onChange={(e) => handleInputChange("comp_iva_10_5", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">IVA 27%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_iva_27}
-                    onChange={(e) => handleInputChange("comp_iva_27", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">IVA 0%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_iva_0}
-                    onChange={(e) => handleInputChange("comp_iva_0", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Total Final *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.comp_total_final}
-                    onChange={(e) => handleInputChange("comp_total_final", parseFloat(e.target.value) || 0)}
-                    disabled={readOnly}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-slate-100 font-semibold ${
-                      errors.totales ? "border-red-500" : "border-slate-300"
-                    }`}
-                  />
-                </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">Importe Neto</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_importe_neto}
+                     onChange={(e) => handleInputChange("comp_importe_neto", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
+                   />
+                 </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">IVA 21%</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_iva_21}
+                     onChange={(e) => handleInputChange("comp_iva_21", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
+                   />
+                 </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">IVA 10.5%</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_iva_10_5}
+                     onChange={(e) => handleInputChange("comp_iva_10_5", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
+                   />
+                 </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">IVA 27%</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_iva_27}
+                     onChange={(e) => handleInputChange("comp_iva_27", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
+                   />
+                 </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">IVA 0%</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_iva_0}
+                     onChange={(e) => handleInputChange("comp_iva_0", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-slate-100"
+                   />
+                 </div>
+                                 <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">Total Final *</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     value={formData.comp_total_final}
+                     onChange={(e) => handleInputChange("comp_total_final", parseFloat(e.target.value) || 0)}
+                     onFocus={(e) => e.target.select()}
+                     disabled={readOnly}
+                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-slate-100 font-semibold ${
+                       errors.totales ? "border-red-500" : "border-slate-300"
+                     }`}
+                   />
+                 </div>
               </div>
               {errors.totales && <p className="mt-2 text-sm text-red-600">{errors.totales}</p>}
             </div>
 
             {/* Observaciones */}
             <div className="mt-2">
-              <h3 className="text-lg font-medium text-slate-900 mb-3">Observaciones</h3>
               <textarea
                 value={formData.comp_observacion}
                 onChange={(e) => handleInputChange("comp_observacion", e.target.value)}
@@ -546,7 +611,7 @@ const CompraForm = ({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+                  className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
                 >
                   {isSubmitting ? "Guardando..." : initialData ? "Guardar Cambios" : "Crear Compra"}
                 </button>

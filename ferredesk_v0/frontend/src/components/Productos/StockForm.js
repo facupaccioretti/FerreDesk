@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useStockProveAPI, useStockProveEditAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
-import AsociarCodigoProveedorModal from "./AsociarCodigoProveedorModal"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
@@ -76,6 +75,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const [stockProvePendientes, setStockProvePendientes] = useState(modo === "nuevo" ? [] : [])
   const [codigosPendientes, setCodigosPendientes] = useState(modo === "nuevo" ? [] : [])
 
+  // Nuevo estado para manejar proveedores agregados en modo nuevo
+  const [proveedoresAgregados, setProveedoresAgregados] = useState(modo === "nuevo" ? [] : [])
+
   const [newStockProve, setNewStockProve] = useState({
     stock: stock?.id || "",
     proveedor: "",
@@ -86,23 +88,99 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   const stockProveAPI = useStockProveAPI()
   const stockProveEditAPI = useStockProveEditAPI()
   const isEdicion = !!stock?.id
-  const { stockProve, addStockProve, updateStockProve, fetchStockProve } = isEdicion ? stockProveEditAPI : stockProveAPI
+  const { stockProve, updateStockProve, fetchStockProve } = isEdicion ? stockProveEditAPI : stockProveAPI
 
   const { alicuotas } = useAlicuotasIVAAPI()
 
   const [formError, setFormError] = useState(null)
-  const [permitirCostoManual, setPermitirCostoManual] = useState(false)
-  const [showAsociarModal, setShowAsociarModal] = useState(false)
-  const [cargarPrecioManual, setCargarPrecioManual] = useState(false)
+  const [showAsociarCodigo, setShowAsociarCodigo] = useState(false)
   const [editandoCantidadId, setEditandoCantidadId] = useState(null)
   const [nuevaCantidad, setNuevaCantidad] = useState("")
+  const [editandoCostoId, setEditandoCostoId] = useState(null)
+  const [nuevoCosto, setNuevoCosto] = useState("")
+  // Estados para edición de proveedores agregados en modo nuevo
+  const [editandoCantidadProveedorId, setEditandoCantidadProveedorId] = useState(null)
+  const [nuevaCantidadProveedor, setNuevaCantidadProveedor] = useState("")
+  const [editandoCostoProveedorId, setEditandoCostoProveedorId] = useState(null)
+  const [nuevoCostoProveedor, setNuevoCostoProveedor] = useState("")
   const [mostrarTooltipStock, setMostrarTooltipStock] = useState(false)
+  
+  // Estados para el componente de asociar código integrado
+  const [selectedProveedor, setSelectedProveedor] = useState("")
+  const [codigoProveedor, setCodigoProveedor] = useState("")
+  const [productosConDenominacion, setProductosConDenominacion] = useState([])
+  const [loadingCodigos, setLoadingCodigos] = useState(false)
+  const [messageAsociar, setMessageAsociar] = useState(null)
+  const [errorAsociar, setErrorAsociar] = useState(null)
+  const [costoAsociar, setCostoAsociar] = useState("")
+  const [denominacionAsociar, setDenominacionAsociar] = useState("")
+  const [cargandoCostoAsociar, setCargandoCostoAsociar] = useState(false)
+  const [showSugeridos, setShowSugeridos] = useState(false)
+  const [modoBusqueda, setModoBusqueda] = useState("codigo")
 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
 
   // Hook para detectar denominaciones similares
   const { sugerencias, isLoading: isLoadingSugerencias, error: errorSugerencias, mostrarTooltip, handleDenominacionBlur, limpiarSugerencias, toggleTooltip } = useDetectorDenominaciones()
+
+  // useEffect para cargar códigos del proveedor seleccionado
+  useEffect(() => {
+    if (selectedProveedor) {
+      console.log('[StockForm] Fetching códigos para proveedor', selectedProveedor)
+      setLoadingCodigos(true)
+      fetch(`/api/productos/proveedor/${selectedProveedor}/codigos-lista/`, {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          console.log('[StockForm] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
+          setProductosConDenominacion(data.productos || [])
+          setLoadingCodigos(false)
+        })
+        .catch(() => {
+          setLoadingCodigos(false)
+        })
+    } else {
+      setProductosConDenominacion([])
+    }
+  }, [selectedProveedor])
+
+  // Limpiar input al cambiar modo de búsqueda
+  useEffect(() => {
+    setCodigoProveedor("")
+    setShowSugeridos(false)
+  }, [modoBusqueda])
+
+  // Consultar costo sugerido al cambiar proveedor o código
+  useEffect(() => {
+    if (selectedProveedor && codigoProveedor) {
+      console.log('[StockForm] Consultando costo sugerido', { proveedor: selectedProveedor, codigo: codigoProveedor })
+      setCargandoCostoAsociar(true)
+      fetch(
+        `/api/productos/precio-producto-proveedor/?proveedor_id=${selectedProveedor}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,
+      )
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.precio !== undefined && data.precio !== null) {
+            setCostoAsociar(data.precio)
+            setDenominacionAsociar(data.denominacion || "")
+          } else {
+            setCostoAsociar("")
+            setDenominacionAsociar("")
+          }
+          setCargandoCostoAsociar(false)
+        })
+        .catch(() => {
+          setCostoAsociar("")
+          setDenominacionAsociar("")
+          setCargandoCostoAsociar(false)
+        })
+    } else {
+      setCostoAsociar("")
+      setDenominacionAsociar("")
+    }
+  }, [selectedProveedor, codigoProveedor])
 
   
 
@@ -211,68 +289,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     }
   }, [newStockProve.proveedor, stockProve, codigosPendientes, codigosPendientesEdicion, form.stock_proveedores, isEdicion, stock?.id])
 
-  useEffect(() => {
-    const proveedorId = newStockProve.proveedor
-    let codigoProveedor = ""
-    let costoAsociado = null
-    
-    if (proveedorId) {
-      if (!isEdicion) {
-        const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(proveedorId))
-        if (codigoPendiente) {
-          codigoProveedor = codigoPendiente.codigo_producto_proveedor
-          costoAsociado = codigoPendiente.costo
-        }
-      } else {
-        // En modo edición, buscar primero en códigos pendientes de edición
-        const codigoPendienteEdicion = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
-        if (codigoPendienteEdicion) {
-          codigoProveedor = codigoPendienteEdicion.codigo_producto_proveedor
-          costoAsociado = codigoPendienteEdicion.costo
-        } else if (form && Array.isArray(form.stock_proveedores)) {
-          // Si no está en pendientes, buscar en stock_proveedores existentes
-          const relacion = form.stock_proveedores.find((sp) => String(sp.proveedor_id) === String(proveedorId))
-          if (relacion && relacion.codigo_producto_proveedor) {
-            codigoProveedor = relacion.codigo_producto_proveedor
-            costoAsociado = relacion.costo
-          }
-        }
-      }
-    }
-    
-    // Si hay un costo asociado del código, usarlo directamente
-    if (proveedorId && codigoProveedor && costoAsociado) {
-      setNewStockProve((prev) => ({ ...prev, costo: String(costoAsociado) }))
-      setPermitirCostoManual(true)
-      setCargarPrecioManual(false)
-    } else if (proveedorId && codigoProveedor) {
-      // Si hay código pero no costo, buscar precio en el backend
-      fetch(
-        `/api/productos/precio-producto-proveedor/?proveedor_id=${proveedorId}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,
-      )
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && typeof data.precio === "number" && data.precio > 0) {
-            setNewStockProve((prev) => ({ ...prev, costo: String(data.precio) }))
-            setPermitirCostoManual(true)
-            setCargarPrecioManual(false)
-          } else {
-            setNewStockProve((prev) => ({ ...prev, costo: "" }))
-            setPermitirCostoManual(false)
-            setCargarPrecioManual(false)
-          }
-        })
-        .catch(() => {
-          setNewStockProve((prev) => ({ ...prev, costo: "" }))
-          setPermitirCostoManual(false)
-          setCargarPrecioManual(false)
-        })
-    } else if (proveedorId) {
-      setPermitirCostoManual(false)
-      setCargarPrecioManual(false)
-      setNewStockProve((prev) => ({ ...prev, costo: "" }))
-    }
-  }, [newStockProve.proveedor, form, codigosPendientes, codigosPendientesEdicion, isEdicion])
+
 
   // Handler genérico y corregido para todos los campos del formulario
   const handleChange = (e) => {
@@ -302,90 +319,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     }))
   }
 
-  const addStockProveHandler = async () => {
-    if (!newStockProve.proveedor || !newStockProve.cantidad) {
-      alert("Por favor complete todos los campos del proveedor")
-      return
-    }
-    // Si no hay costo ingresado, impedir la operación (el código de proveedor es opcional)
-    if (!newStockProve.costo) {
-      alert("Debe ingresar el costo.")
-      return
-    }
-    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
-    if (!proveedorExiste) {
-      alert("Debe seleccionar un proveedor válido.")
-      return
-    }
-    const newProveedorId = Number.parseInt(newStockProve.proveedor)
-    const newCantidad = Number.parseFloat(newStockProve.cantidad)
-    const newCosto = Number.parseFloat(newStockProve.costo)
 
-    if (!isEdicion) {
-      setStockProvePendientes((prev) => {
-        const existente = prev.find((sp) => sp.proveedor === newProveedorId)
-        if (existente) {
-          return prev.map((sp) =>
-            sp.proveedor === newProveedorId
-              ? { ...sp, cantidad: Number(sp.cantidad) + newCantidad, costo: newCosto }
-              : sp,
-          )
-        } else {
-          return [
-            ...prev,
-            {
-              proveedor: newProveedorId,
-              cantidad: newCantidad,
-              costo: newCosto,
-            },
-          ]
-        }
-      })
-      setNewStockProve({ stock: "", proveedor: "", cantidad: "", costo: "" })
-      return
-    }
-
-    // EDICIÓN: directo a la API
-    const currentStockId = stock.id
-    const existingEntry = stockProve.find(
-      (sp) => sp.stock === currentStockId && (sp.proveedor?.id || sp.proveedor) === newProveedorId,
-    )
-    // Obtener código de proveedor si existe (puede ser vacío y está bien)
-    let codigoProductoProveedor = ""
-    if (existingEntry && existingEntry.codigo_producto_proveedor) {
-      codigoProductoProveedor = existingEntry.codigo_producto_proveedor
-    } else {
-      // Intentar ver si hay uno pendiente de asociación
-      const pendiente = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(newProveedorId))
-      if (pendiente) codigoProductoProveedor = pendiente.codigo_producto_proveedor || ""
-    }
-    try {
-      if (existingEntry) {
-        await updateStockProve(existingEntry.id, {
-          stockId: currentStockId,
-          proveedorId: newProveedorId,
-          cantidad: Number.parseFloat(existingEntry.cantidad) + newCantidad,
-          costo: newCosto,
-          codigo_producto_proveedor: codigoProductoProveedor,
-        })
-      } else {
-        await addStockProve({
-          stock: currentStockId,
-          proveedor: newProveedorId,
-          cantidad: newCantidad,
-          costo: newCosto,
-          codigo_producto_proveedor: codigoProductoProveedor,
-        })
-      }
-      if (typeof fetchStockProve === "function") fetchStockProve()
-      setNewStockProve({ stock: currentStockId, proveedor: "", cantidad: "", costo: "" })
-    } catch (err) {
-      alert(
-        "Error al procesar stock de proveedor: " +
-          (err.response?.data?.non_field_errors?.[0] || err.message || "Error desconocido"),
-      )
-    }
-  }
 
   // Handler para asociar código de proveedor (ahora solo modifica el estado local en edición)
   const handleAsociarCodigoPendiente = async ({ proveedor_id, codigo_producto_proveedor, costo }) => {
@@ -457,7 +391,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       setCodigosPendientesEdicion((prev) => {
         // Reemplaza si ya existe para ese proveedor
         const otros = prev.filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-        return [...otros, { proveedor_id, codigo_producto_proveedor, costo }]
+        return [...otros, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }]
       })
       // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
       setForm((prevForm) => {
@@ -471,7 +405,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           ...prevForm,
           stock_proveedores: existe
             ? actualizado
-            : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo }],
+            : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }],
         }
       })
       return { ok: true }
@@ -530,6 +464,248 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     return { ok: false, error: "No se pudo asociar el código." }
   }
 
+  // Handler para agregar un nuevo proveedor en modo edición
+  const handleAgregarProveedorEdicion = () => {
+    if (!newStockProve.proveedor) {
+      alert("Por favor seleccione un proveedor")
+      return
+    }
+    
+    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
+    if (!proveedorExiste) {
+      alert("Debe seleccionar un proveedor válido.")
+      return
+    }
+
+    const proveedorId = Number.parseInt(newStockProve.proveedor)
+    
+    // Verificar si el proveedor ya existe en stockProve o en codigosPendientesEdicion
+    const yaExisteEnStock = stockProveForThisStock.some((sp) => 
+      String(sp.proveedor?.id || sp.proveedor) === String(proveedorId)
+    )
+    const yaExisteEnPendientes = codigosPendientesEdicion.some((c) => 
+      String(c.proveedor_id) === String(proveedorId)
+    )
+    
+    if (yaExisteEnStock || yaExisteEnPendientes) {
+      alert("Este proveedor ya fue agregado.")
+      return
+    }
+
+    // Agregar el proveedor a codigosPendientesEdicion sin código asociado
+    setCodigosPendientesEdicion((prev) => [
+      ...prev,
+      {
+        proveedor_id: proveedorId,
+        cantidad: Number(newStockProve.cantidad) || 0,
+        costo: Number(newStockProve.costo) || 0,
+        codigo_producto_proveedor: "", // Sin código asociado
+      }
+    ])
+
+    // Agregar también a form.stock_proveedores
+    setForm((prevForm) => {
+      if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+      return {
+        ...prevForm,
+        stock_proveedores: [
+          ...prevForm.stock_proveedores,
+          {
+            proveedor_id: proveedorId,
+            cantidad: Number(newStockProve.cantidad) || 0,
+            costo: Number(newStockProve.costo) || 0,
+            codigo_producto_proveedor: "",
+          }
+        ]
+      }
+    })
+
+    // Limpiar el formulario
+    setNewStockProve({ stock: stock?.id || "", proveedor: "", cantidad: "", costo: "" })
+  }
+
+  // Handler para agregar un nuevo proveedor en modo nuevo
+  const handleAgregarProveedor = () => {
+    if (!newStockProve.proveedor) {
+      alert("Por favor seleccione un proveedor")
+      return
+    }
+    
+    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
+    if (!proveedorExiste) {
+      alert("Debe seleccionar un proveedor válido.")
+      return
+    }
+
+    const proveedorId = Number.parseInt(newStockProve.proveedor)
+    
+    // Verificar si el proveedor ya fue agregado
+    const yaAgregado = proveedoresAgregados.some((p) => p.proveedor === proveedorId)
+    if (yaAgregado) {
+      alert("Este proveedor ya fue agregado.")
+      return
+    }
+
+    // Agregar el proveedor a la lista de proveedores agregados
+    setProveedoresAgregados((prev) => [
+      ...prev,
+      {
+        proveedor: proveedorId,
+        cantidad: 0, // Cantidad inicial en 0
+        costo: 0, // Costo inicial en 0
+        codigo_producto_proveedor: "",
+        pendiente: true, // Marcar como pendiente para mostrar con fondo amarillo
+      }
+    ])
+
+    // Limpiar el formulario
+    setNewStockProve({ stock: "", proveedor: "", cantidad: "", costo: "" })
+  }
+
+  // Handler para eliminar un proveedor agregado en modo edición
+  const handleEliminarProveedorEdicion = (proveedorId) => {
+    // Remover de codigosPendientesEdicion
+    setCodigosPendientesEdicion((prev) => 
+      prev.filter((c) => String(c.proveedor_id) !== String(proveedorId))
+    )
+    
+    // Remover de form.stock_proveedores
+    setForm((prevForm) => {
+      if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+      return {
+        ...prevForm,
+        stock_proveedores: prevForm.stock_proveedores.filter((sp) => 
+          String(sp.proveedor_id) !== String(proveedorId)
+        )
+      }
+    })
+  }
+
+  // Handler para eliminar un proveedor agregado
+  const handleEliminarProveedor = (proveedorId) => {
+    setProveedoresAgregados((prev) => prev.filter((p) => p.proveedor !== proveedorId))
+  }
+
+  // Handler para editar cantidad de un proveedor agregado (con confirmación)
+  const handleEditarCantidadProveedor = (proveedorId) => {
+    let proveedor
+    if (isEdicion) {
+      // En modo edición, buscar en codigosPendientesEdicion
+      proveedor = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
+    } else {
+      // En modo nuevo, buscar en proveedoresAgregados
+      proveedor = proveedoresAgregados.find((p) => p.proveedor === proveedorId)
+    }
+    
+    if (proveedor) {
+      setEditandoCantidadProveedorId(proveedorId)
+      setNuevaCantidadProveedor(String(proveedor.cantidad || 0))
+    }
+  }
+
+  const handleEditarCantidadProveedorSave = (proveedorId) => {
+    const cantidadNum = Number.parseFloat(String(nuevaCantidadProveedor).replace(",", "."))
+    if (isNaN(cantidadNum)) {
+      setFormError("Ingrese una cantidad válida")
+      return
+    }
+    
+    if (isEdicion) {
+      // En modo edición, actualizar codigosPendientesEdicion
+      setCodigosPendientesEdicion((prev) =>
+        prev.map((c) =>
+          String(c.proveedor_id) === String(proveedorId) ? { ...c, cantidad: cantidadNum } : c
+        )
+      )
+      
+      // Actualizar también form.stock_proveedores
+      setForm((prevForm) => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+        return {
+          ...prevForm,
+          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
+            String(sp.proveedor_id) === String(proveedorId) ? { ...sp, cantidad: cantidadNum } : sp
+          )
+        }
+      })
+    } else {
+      // En modo nuevo, actualizar proveedoresAgregados
+      setProveedoresAgregados((prev) =>
+        prev.map((p) =>
+          p.proveedor === proveedorId ? { ...p, cantidad: cantidadNum } : p
+        )
+      )
+    }
+    
+    setEditandoCantidadProveedorId(null)
+    setNuevaCantidadProveedor("")
+  }
+
+  const handleEditarCantidadProveedorCancel = () => {
+    setEditandoCantidadProveedorId(null)
+    setNuevaCantidadProveedor("")
+  }
+
+  // Handler para editar costo de un proveedor agregado (con confirmación)
+  const handleEditarCostoProveedor = (proveedorId) => {
+    let proveedor
+    if (isEdicion) {
+      // En modo edición, buscar en codigosPendientesEdicion
+      proveedor = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
+    } else {
+      // En modo nuevo, buscar en proveedoresAgregados
+      proveedor = proveedoresAgregados.find((p) => p.proveedor === proveedorId)
+    }
+    
+    if (proveedor) {
+      setEditandoCostoProveedorId(proveedorId)
+      setNuevoCostoProveedor(String(proveedor.costo || 0))
+    }
+  }
+
+  const handleEditarCostoProveedorSave = (proveedorId) => {
+    const costoNum = Number.parseFloat(String(nuevoCostoProveedor).replace(",", "."))
+    if (isNaN(costoNum)) {
+      setFormError("Ingrese un costo válido")
+      return
+    }
+    
+    if (isEdicion) {
+      // En modo edición, actualizar codigosPendientesEdicion
+      setCodigosPendientesEdicion((prev) =>
+        prev.map((c) =>
+          String(c.proveedor_id) === String(proveedorId) ? { ...c, costo: costoNum } : c
+        )
+      )
+      
+      // Actualizar también form.stock_proveedores
+      setForm((prevForm) => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+        return {
+          ...prevForm,
+          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
+            String(sp.proveedor_id) === String(proveedorId) ? { ...sp, costo: costoNum } : sp
+          )
+        }
+      })
+    } else {
+      // En modo nuevo, actualizar proveedoresAgregados
+      setProveedoresAgregados((prev) =>
+        prev.map((p) =>
+          p.proveedor === proveedorId ? { ...p, costo: costoNum } : p
+        )
+      )
+    }
+    
+    setEditandoCostoProveedorId(null)
+    setNuevoCostoProveedor("")
+  }
+
+  const handleEditarCostoProveedorCancel = () => {
+    setEditandoCostoProveedorId(null)
+    setNuevoCostoProveedor("")
+  }
+
   // Al guardar, aplicar los códigos pendientes de edición
   const handleSave = async (e) => {
     e.preventDefault()
@@ -561,7 +737,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       let productoGuardado = null
       if (!isEdicion) {
         // NUEVO FLUJO ATÓMICO: enviar todo junto
-        const stockProveedores = stockProvePendientes.map((sp) => {
+        // Combinar stockProvePendientes (del formulario anterior) con proveedoresAgregados (nuevos)
+        const stockProveedores = [
+          ...stockProvePendientes.map((sp) => {
           const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(sp.proveedor))
           return {
             proveedor_id: sp.proveedor,
@@ -569,7 +747,18 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
             costo: sp.costo,
             codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
           }
+          }),
+          ...proveedoresAgregados.map((pa) => {
+            const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(pa.proveedor))
+            return {
+              proveedor_id: pa.proveedor,
+              cantidad: pa.cantidad,
+              costo: pa.costo,
+            codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
+          }
         })
+        ]
+        
         const res = await fetch("/api/productos/crear-producto-con-relaciones/", {
           method: "POST",
           headers: {
@@ -590,6 +779,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         productoGuardado = { ...formToSave, id: data.producto_id }
         setStockProvePendientes([])
         setCodigosPendientes([])
+        setProveedoresAgregados([])
         if (typeof fetchStockProve === "function") fetchStockProve()
         await onSave(productoGuardado)
       } else {
@@ -651,12 +841,56 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     setNuevaCantidad(sp.cantidad)
   }
 
+  const handleEditCostoStockProve = (sp) => {
+    setEditandoCostoId(sp.id)
+    setNuevoCosto(sp.costo)
+  }
+
   const handleEditStockProveCancel = () => {
     setEditandoCantidadId(null)
     setNuevaCantidad("")
+    setEditandoCostoId(null)
+    setNuevoCosto("")
   }
 
   const handleEditStockProveSave = async (id) => {
+    // Verificar si es un proveedor pendiente (ID temporal)
+    if (typeof id === 'string' && id.startsWith('pendiente-')) {
+      const proveedorId = id.replace('pendiente-', '')
+      const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
+      if (isNaN(cantidadNum)) {
+        setFormError("Ingrese una cantidad válida")
+        return
+      }
+      
+      // Actualizar codigosPendientesEdicion
+      setCodigosPendientesEdicion((prev) => 
+        prev.map((c) => 
+          String(c.proveedor_id) === String(proveedorId)
+            ? { ...c, cantidad: cantidadNum }
+            : c
+        )
+      )
+      
+      // Actualizar form.stock_proveedores
+      setForm((prevForm) => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+        return {
+          ...prevForm,
+          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
+            String(sp.proveedor_id) === String(proveedorId)
+              ? { ...sp, cantidad: cantidadNum }
+              : sp
+          )
+        }
+      })
+      
+      setEditandoCantidadId(null)
+      setNuevaCantidad("")
+      return
+    }
+    
+    // Proveedor existente en stockProve
     const sp = stockProve.find((sp) => sp.id === id)
     if (!sp) return
     // Permitir negativos y decimales
@@ -666,38 +900,221 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       return
     }
     // El costo NO se modifica automáticamente al cambiar la cantidad
-    const nuevoCosto = sp.costo
+    const costoActual = sp.costo
 
     await updateStockProve(id, {
       stockId: sp.stock,
       proveedorId: sp.proveedor?.id || sp.proveedor,
       cantidad: cantidadNum,
-      costo: nuevoCosto,
+      costo: costoActual,
     })
     setEditandoCantidadId(null)
     setNuevaCantidad("")
     if (typeof fetchStockProve === "function") fetchStockProve()
   }
 
-  const handleCloseAsociarModal = () => {
-    setShowAsociarModal(false)
+  const handleEditCostoStockProveSave = async (id) => {
+    // Verificar si es un proveedor pendiente (ID temporal)
+    if (typeof id === 'string' && id.startsWith('pendiente-')) {
+      const proveedorId = id.replace('pendiente-', '')
+      const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
+      if (isNaN(costoNum) || costoNum < 0) {
+        setFormError("Ingrese un costo válido")
+        return
+      }
+      
+      // Actualizar codigosPendientesEdicion
+      setCodigosPendientesEdicion((prev) => 
+        prev.map((c) => 
+          String(c.proveedor_id) === String(proveedorId)
+            ? { ...c, costo: costoNum }
+            : c
+        )
+      )
+      
+      // Actualizar form.stock_proveedores
+      setForm((prevForm) => {
+        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
+        return {
+          ...prevForm,
+          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
+            String(sp.proveedor_id) === String(proveedorId)
+              ? { ...sp, costo: costoNum }
+              : sp
+          )
+        }
+      })
+      
+      setEditandoCostoId(null)
+      setNuevoCosto("")
+      return
+    }
+    
+    // Proveedor existente en stockProve
+    const sp = stockProve.find((sp) => sp.id === id)
+    if (!sp) return
+    // Permitir decimales
+    const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
+    if (isNaN(costoNum) || costoNum < 0) {
+      setFormError("Ingrese un costo válido")
+      return
+    }
+
+    await updateStockProve(id, {
+      stockId: sp.stock,
+      proveedorId: sp.proveedor?.id || sp.proveedor,
+      cantidad: sp.cantidad,
+      costo: costoNum,
+    })
+    setEditandoCostoId(null)
+    setNuevoCosto("")
     if (typeof fetchStockProve === "function") fetchStockProve()
+  }
+
+
+
+  // Función para filtrar productos sugeridos
+  const filteredProductos = useMemo(() => {
+    if (productosConDenominacion.length === 0) return []
+
+    const term = codigoProveedor.trim().toLowerCase()
+    const campo = modoBusqueda === "codigo" ? "codigo" : "denominacion"
+
+    // Calcular puntuación por campo seleccionado
+    const puntuados = productosConDenominacion
+      .map((producto) => {
+        const texto = String(producto[campo] || "").toLowerCase()
+        let score = 0
+        if (term.length === 0) {
+          score = 0
+        } else if (texto === term) {
+          score = 1000
+        } else if (texto.startsWith(term)) {
+          score = 200 + (term.length / (texto.length || 1)) * 10
+        } else if (texto.includes(term)) {
+          score = 50
+        }
+        if (modoBusqueda === "denominacion" && !producto.denominacion) score = 0
+        return { ...producto, score }
+      })
+      .filter((obj) => obj.score > 0 || term.length === 0)
+
+    // Orden natural numérica + desc por score
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+    puntuados.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      return collator.compare(String(a.codigo), String(b.codigo))
+    })
+
+    return puntuados.slice(0, 8)
+  }, [productosConDenominacion, codigoProveedor, modoBusqueda])
+
+  // Función para manejar la asociación de código
+  const handleAsociarCodigoIntegrado = async () => {
+    setErrorAsociar(null)
+    setMessageAsociar(null)
+    if (!selectedProveedor || !codigoProveedor) {
+      setErrorAsociar("Debe seleccionar proveedor y código.")
+      return
+    }
+
+    const resultado = await handleAsociarCodigoPendiente({
+      proveedor_id: selectedProveedor,
+      codigo_producto_proveedor: codigoProveedor,
+      costo: costoAsociar,
+    })
+
+    if (resultado && resultado.ok) {
+      // En modo nuevo, si el proveedor no está en proveedoresAgregados, agregarlo automáticamente
+      if (!isEdicion && !stock?.id) {
+        const proveedorId = Number(selectedProveedor)
+        const yaExiste = proveedoresAgregados.some((pa) => pa.proveedor === proveedorId)
+        
+        if (!yaExiste) {
+          setProveedoresAgregados((prev) => [
+            ...prev,
+            {
+              proveedor: proveedorId,
+              cantidad: 0,
+              costo: Number(costoAsociar) || 0,
+              codigo_producto_proveedor: codigoProveedor,
+              pendiente: true,
+            }
+          ])
+        } else {
+          // Si ya existe, actualizar el costo y código
+          setProveedoresAgregados((prev) =>
+            prev.map((pa) =>
+              pa.proveedor === proveedorId
+                ? { ...pa, costo: Number(costoAsociar) || 0, codigo_producto_proveedor: codigoProveedor }
+                : pa
+            )
+          )
+        }
+      }
+
+      setMessageAsociar("¡Código de proveedor asociado correctamente!")
+      // Limpiar formulario
+      setSelectedProveedor("")
+      setCodigoProveedor("")
+      setCostoAsociar("")
+      setDenominacionAsociar("")
+      setShowAsociarCodigo(false)
+      setTimeout(() => {
+        setMessageAsociar(null)
+      }, 2000)
+    } else {
+      setErrorAsociar(resultado && resultado.error ? resultado.error : "No se pudo asociar el código.")
+      setTimeout(() => {
+        setErrorAsociar(null)
+      }, 3000)
+    }
+  }
+
+  // Función para limpiar el formulario de asociación
+  const handleCancelarAsociarCodigo = () => {
+    setShowAsociarCodigo(false)
+    setSelectedProveedor("")
+    setCodigoProveedor("")
+    setCostoAsociar("")
+    setDenominacionAsociar("")
+    setErrorAsociar(null)
+    setMessageAsociar(null)
   }
 
   console.log("form state:", JSON.stringify(form))
   console.log("select value:", form.proveedor_habitual_id)
 
   // Calcular el stock total sumando las cantidades de todos los proveedores
-  const stockTotal = stockProveForThisStock.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0)
+  const stockTotal = (() => {
+    if (stock?.id) {
+      // En modo edición, usar solo stockProveForThisStock
+      return stockProveForThisStock.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0)
+    } else {
+      // En modo nuevo, sumar stockProvePendientes y proveedoresAgregados
+      const totalPendientes = stockProvePendientes.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0)
+      const totalAgregados = proveedoresAgregados.reduce((sum, pa) => sum + (Number(pa.cantidad) || 0), 0)
+      return totalPendientes + totalAgregados
+    }
+  })()
 
   // Calcular proveedores asociados dinámicamente según el estado actual del formulario
-  const proveedoresAsociados = stock?.id
-    ? stockProveForThisStock
+  const proveedoresAsociados = useMemo(() => {
+    if (stock?.id) {
+      return stockProveForThisStock
         .map((sp) => (typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find((p) => p.id === sp.proveedor)))
         .filter(Boolean)
-    : stockProvePendientes
+    } else {
+      return [
+        ...stockProvePendientes
         .map((sp) => (typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find((p) => p.id === sp.proveedor)))
+          .filter(Boolean),
+        ...proveedoresAgregados
+          .map((pa) => proveedores.find((p) => p.id === pa.proveedor))
         .filter(Boolean)
+      ]
+    }
+  }, [stock?.id, stockProveForThisStock, stockProvePendientes, proveedoresAgregados, proveedores])
   const unProveedor = proveedoresAsociados.length === 1
 
   // Si hay un solo proveedor, autocompletar y deshabilitar
@@ -728,12 +1145,15 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           const pendiente = pendientesPorProveedor[provId]
           const guardado = guardadosPorProveedor[provId]
           if (pendiente) {
-            // Mostrar datos pendientes (pero tomar cantidad/costo del guardado si no se editan en el modal)
+            // Si hay pendiente, construir el objeto
+            const proveedorInfo = proveedores.find((p) => p.id === Number(provId))
             return {
-              ...guardado,
-              ...pendiente,
+              ...guardado, // Info del guardado si existe
+              ...pendiente, // Código y costo pendientes
+              proveedor: guardado?.proveedor || proveedorInfo, // Usar proveedor del guardado o buscarlo
+              id: guardado?.id || `pendiente-${provId}`, // ID del guardado o temporal
+              cantidad: pendiente.cantidad !== undefined ? pendiente.cantidad : (guardado?.cantidad || 0), // Usar cantidad del pendiente si está definida
               pendiente: true,
-              cantidad: guardado?.cantidad,
               costo: pendiente.costo !== undefined ? pendiente.costo : guardado?.costo,
             }
           } else {
@@ -744,7 +1164,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     } else if (stock?.id) {
       return stockProveForThisStock
     } else {
-      // Nuevo producto: mostrar pendientes
+      // Nuevo producto: mostrar pendientes y proveedores agregados
       return [
         ...stockProvePendientes.map((sp, idx) => ({
           ...sp,
@@ -755,6 +1175,13 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
               : proveedores.find((p) => p.id === sp.proveedor) || sp.proveedor,
           codigo_producto_proveedor: "", // No hay código asociado aún
         })),
+        ...proveedoresAgregados.map((pa, idx) => ({
+          ...pa,
+          id: `agregado-${pa.proveedor}`,
+          proveedor: proveedores.find((p) => p.id === pa.proveedor) || pa.proveedor,
+          codigo_producto_proveedor: "", // No hay código asociado aún
+          pendiente: true, // Marcar como pendiente para mostrar con fondo amarillo
+        }))
       ]
     }
   })()
@@ -957,24 +1384,214 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                     </div>
                   </div>
                   {(stock?.id || form.id) && (
-                    <div className="flex items-center justify-between py-2">
+                    <div className="py-2">
+                      <div className="flex items-center justify-between mb-2">
                       <span className="text-[12px] text-slate-700">Asociar Código</span>
                       <div className="min-w-[180px] text-right">
                         <button
                           type="button"
-                          onClick={() => setShowAsociarModal(true)}
+                            onClick={() => setShowAsociarCodigo(!showAsociarCodigo)}
                           className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-white hover:bg-slate-50 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         >
-                          Asociar código
+                            {showAsociarCodigo ? "Ocultar" : "Asociar código"}
                         </button>
                       </div>
+                      </div>
+                      
+                      {/* Componente integrado de asociar código */}
+                      {showAsociarCodigo && (
+                        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-3">
+                          {/* Mensajes */}
+                          {errorAsociar && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs flex items-center gap-2">
+                              <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {errorAsociar}
                     </div>
                   )}
                   
-                  {/* Formulario para agregar stock */}
+                          {messageAsociar && (
+                            <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-xs flex items-center gap-2">
+                              <svg className="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              {messageAsociar}
+                            </div>
+                          )}
+
+                          {/* Proveedor */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              Proveedor
+                            </label>
+                            <select
+                              value={selectedProveedor}
+                              onChange={(e) => setSelectedProveedor(e.target.value)}
+                              className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            >
+                              <option value="">Seleccione un proveedor</option>
+                              {proveedores.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.razon}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Selector de modo de búsqueda */}
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-1 text-xs text-slate-700">
+                              <input
+                                type="radio"
+                                name="modoBusqueda"
+                                value="codigo"
+                                checked={modoBusqueda === "codigo"}
+                                onChange={() => setModoBusqueda("codigo")}
+                                className="accent-orange-600"
+                              />
+                              Por código
+                            </label>
+                            <label className="flex items-center gap-1 text-xs text-slate-700">
+                              <input
+                                type="radio"
+                                name="modoBusqueda"
+                                value="denominacion"
+                                checked={modoBusqueda === "denominacion"}
+                                onChange={() => setModoBusqueda("denominacion")}
+                                className="accent-orange-600"
+                              />
+                              Por denominación
+                            </label>
+                          </div>
+
+                          {/* Input de búsqueda */}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              {modoBusqueda === "codigo" ? "Código del proveedor" : "Denominación del producto"}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={codigoProveedor}
+                                onChange={(e) => {
+                                  setCodigoProveedor(e.target.value)
+                                  setShowSugeridos(e.target.value.length > 0 && productosConDenominacion.length > 0)
+                                }}
+                                onFocus={() => setShowSugeridos(codigoProveedor.length > 0 && productosConDenominacion.length > 0)}
+                                className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 pr-8"
+                                placeholder={modoBusqueda === "codigo" ? "Ingrese el código" : "Ingrese la denominación"}
+                                disabled={loadingCodigos || !selectedProveedor}
+                              />
+                              {productosConDenominacion.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowSugeridos(!showSugeridos)}
+                                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-orange-500 transition-colors"
+                                >
+                                  <svg
+                                    className={`w-3 h-3 transition-transform ${showSugeridos ? "rotate-180" : ""}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Dropdown de sugerencias */}
+                            {showSugeridos && filteredProductos.length > 0 && (
+                              <div className="absolute z-10 w-auto max-w-[600px] mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-20 overflow-y-auto">
+                                {filteredProductos.map((producto, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    onClick={() => {
+                                      setCodigoProveedor(producto.codigo)
+                                      setShowSugeridos(false)
+                                    }}
+                                    className="w-full text-left px-2 py-1 hover:bg-orange-50 hover:text-orange-700 transition-colors text-[12px] border-b border-slate-100 last:border-b-0"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-slate-800">{producto.codigo}</span>
+                                      {producto.denominacion && (
+                                        <span className="text-slate-600 truncate flex-1">
+                                          {producto.denominacion}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {loadingCodigos && (
+                              <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
+                                <div className="w-2 h-2 border border-slate-300 border-t-orange-500 rounded-full animate-spin"></div>
+                                Cargando códigos...
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Información del producto */}
+                          {(codigoProveedor || denominacionAsociar || costoAsociar) && (
+                            <div className="bg-blue-50 rounded p-2 border border-blue-200">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-slate-600 w-12">Código:</span>
+                                  <span className="text-xs font-mono bg-white px-1 py-0.5 rounded border text-slate-800">
+                                    {codigoProveedor || "—"}
+                                  </span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-medium text-slate-600 w-12">Denom.:</span>
+                                  <span className="text-xs bg-white px-1 py-0.5 rounded border text-slate-800 flex-1">
+                                    {denominacionAsociar || "—"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-slate-600 w-12">Costo:</span>
+                                  <span className="text-xs font-mono bg-white px-1 py-0.5 rounded border text-green-700">
+                                    {costoAsociar ? `$${costoAsociar}` : "—"}
+                                  </span>
+                                  {cargandoCostoAsociar && (
+                                    <div className="w-2 h-2 border border-slate-300 border-t-orange-500 rounded-full animate-spin"></div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Botones */}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCancelarAsociarCodigo}
+                              className="flex-1 px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAsociarCodigoIntegrado}
+                              disabled={!selectedProveedor || !codigoProveedor}
+                              className="flex-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Asociar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Formulario para agregar proveedor */}
+                  {(modo === "nuevo" || isEdicion) && (
                   <div className="py-2">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="text-[12px] text-slate-700">Agregar Stock</div>
+                        <div className="text-[12px] text-slate-700">Agregar Proveedor</div>
                       <div
                         className="relative cursor-pointer"
                         onMouseEnter={() => setMostrarTooltipStock(true)}
@@ -994,7 +1611,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                         </div>
                         {mostrarTooltipStock && (
                           <div className="absolute left-6 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl w-[450px]">
-                            Esta función está pensada para correcciones o ediciones menores, para carga correcta de inventario usar la sección Compras
+                              Agregue proveedores para este producto. La cantidad y costo se pueden editar directamente en la sección "Stock por Proveedor"
                             <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
                           </div>
                         )}
@@ -1012,53 +1629,39 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                           onChange={handleNewStockProveChange}
                           className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         >
-                          <option value="">Proveedor...</option>
-                          {proveedores.map((proveedor) => (
+                            <option value="">Seleccionar proveedor...</option>
+                            {proveedores
+                              .filter((proveedor) => {
+                                if (modo === "nuevo") {
+                                  return !proveedoresAgregados.some((pa) => pa.proveedor === proveedor.id)
+                                } else {
+                                  // En modo edición, filtrar por stockProveForThisStock y codigosPendientesEdicion
+                                  const existeEnStock = stockProveForThisStock.some((sp) => 
+                                    String(sp.proveedor?.id || sp.proveedor) === String(proveedor.id)
+                                  )
+                                  const existeEnPendientes = codigosPendientesEdicion.some((c) => 
+                                    String(c.proveedor_id) === String(proveedor.id)
+                                  )
+                                  return !existeEnStock && !existeEnPendientes
+                                }
+                              })
+                              .map((proveedor) => (
                             <option key={proveedor.id} value={String(proveedor.id)}>
                               {proveedor.razon}
                             </option>
                           ))}
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          name="cantidad"
-                          value={newStockProve.cantidad}
-                          onChange={handleNewStockProveChange}
-                          placeholder="Cantidad"
-                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                        />
-                        <input
-                          type="number"
-                          name="costo"
-                          value={newStockProve.costo}
-                          onChange={handleNewStockProveChange}
-                          placeholder="Costo"
-                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                          disabled={permitirCostoManual && !cargarPrecioManual}
-                        />
-                      </div>
                       <button
                         type="button"
-                        onClick={addStockProveHandler}
+                        onClick={isEdicion ? handleAgregarProveedorEdicion : handleAgregarProveedor}
                         className={`w-full px-2 py-1 ${theme.botonPrimario} text-xs`}
                       >
-                        Agregar
+                          Agregar Proveedor
                       </button>
-                      {permitirCostoManual && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={cargarPrecioManual}
-                            onChange={(e) => setCargarPrecioManual(e.target.checked)}
-                            className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <label className="text-slate-700">Precio manual</label>
+                      </div>
                         </div>
                       )}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -1109,16 +1712,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                       />
                     </div>
                   </div>
-                  {form.margen && newStockProve.costo && !isNaN(Number(form.margen)) && !isNaN(Number(newStockProve.costo)) && (
-                    <div className="py-2">
-                      <div className="text-xs text-emerald-700 text-center">
-                        Precio sugerido: ${(Number(newStockProve.costo) * (1 + Number(form.margen) / 100)).toFixed(2)}
-                      </div>
-                    </div>
-                  )}
+
                   
                   {/* Stock Actual por Proveedor */}
-                  {((stock && stock.id) || (!stock?.id && stockProvePendientes.length > 0)) && (
+                  {((stock && stock.id) || (!stock?.id && (stockProvePendientes.length > 0 || proveedoresAgregados.length > 0))) && (
                     <div className="pt-2 border-t border-slate-200">
                       <h6 className="text-[12px] font-semibold text-slate-700 mb-2">Stock por Proveedor</h6>
                       <div className="space-y-2">
@@ -1133,6 +1730,12 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                               codigoProveedor = codigoPendiente.codigo_producto_proveedor
                             }
                           }
+
+                          // Determinar si es un proveedor agregado en modo nuevo
+                          const esProveedorAgregado = modo === "nuevo" && sp.id && sp.id.startsWith("agregado-")
+                          const esProveedorAgregadoEdicion = isEdicion && sp.pendiente && sp.id && sp.id.startsWith("pendiente-") && !sp.codigo_producto_proveedor
+                          const proveedorId = esProveedorAgregado ? (typeof sp.proveedor === 'object' ? sp.proveedor.id : sp.proveedor) : (sp.proveedor?.id || sp.proveedor)
+
                           return (
                             <div
                               key={sp.id || index}
@@ -1145,14 +1748,65 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                                       ? sp.proveedor.razon
                                       : proveedores.find((p) => p.id === sp.proveedor)?.razon || sp.proveedor}
                                   </span>
+                                  {(esProveedorAgregado || esProveedorAgregadoEdicion) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => isEdicion ? handleEliminarProveedorEdicion(proveedorId) : handleEliminarProveedor(proveedorId)}
+                                      className="text-red-600 hover:text-red-800 text-xs"
+                                      title="Eliminar proveedor"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
                                 </div>
                                 <div className="flex items-center justify-between text-[12px] text-slate-700">
                                   <span>
                                     Código: <span className="font-medium text-xs">{codigoProveedor || "N/A"}</span>
                                   </span>
                                   <span>
-                                    Cantidad:{" "}
-                                    {editandoCantidadId === sp.id ? (
+                                    <span className="flex items-center gap-1">
+                                      Cantidad:
+                                      {!esProveedorAgregado && !esProveedorAgregadoEdicion && !editandoCantidadId && (
+                                        <BotonEditar
+                                          onClick={() => handleEditStockProve(sp)}
+                                        />
+                                      )}
+                                      {(esProveedorAgregado || esProveedorAgregadoEdicion) && !editandoCantidadProveedorId && (
+                                        <BotonEditar
+                                          onClick={() => handleEditarCantidadProveedor(proveedorId)}
+                                        />
+                                      )}
+                                    </span>{" "}
+                                    {(esProveedorAgregado || esProveedorAgregadoEdicion) ? (
+                                      editandoCantidadProveedorId === proveedorId ? (
+                                        <div className="inline-flex items-center gap-2">
+                                          <input
+                                            type="number"
+                                            value={nuevaCantidadProveedor}
+                                            onChange={(e) => setNuevaCantidadProveedor(e.target.value)}
+                                            className="w-20 border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            min="0"
+                                            step="0.01"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="px-2 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-xs"
+                                            onClick={() => handleEditarCantidadProveedorSave(proveedorId)}
+                                          >
+                                            ✓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="px-2 py-1 bg-slate-400 text-white rounded-sm hover:bg-slate-500 text-xs"
+                                            onClick={handleEditarCantidadProveedorCancel}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="font-medium text-xs">{sp.cantidad}</span>
+                                      )
+                                    ) : editandoCantidadId === sp.id ? (
                                       <div className="inline-flex items-center gap-2">
                                         <input
                                           type="number"
@@ -1177,16 +1831,80 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="inline-flex items-center gap-2">
                                         <span className="font-medium text-xs">{sp.cantidad}</span>
-                                        <BotonEditar
-                                          onClick={() => handleEditStockProve(sp)}
-                                        />
-                                      </div>
                                     )}
                                   </span>
                                   <span>
-                                    Costo: <span className="font-medium text-xs">${sp.costo}</span>
+                                    <span className="flex items-center gap-1">
+                                      Costo:
+                                      {!esProveedorAgregado && !esProveedorAgregadoEdicion && !editandoCostoId && (
+                                        <BotonEditar
+                                          onClick={() => handleEditCostoStockProve(sp)}
+                                        />
+                                      )}
+                                      {(esProveedorAgregado || esProveedorAgregadoEdicion) && !editandoCostoProveedorId && (
+                                        <BotonEditar
+                                          onClick={() => handleEditarCostoProveedor(proveedorId)}
+                                        />
+                                      )}
+                                    </span>{" "}
+                                    {(esProveedorAgregado || esProveedorAgregadoEdicion) ? (
+                                      editandoCostoProveedorId === proveedorId ? (
+                                        <div className="inline-flex items-center gap-2">
+                                          <input
+                                            type="number"
+                                            value={nuevoCostoProveedor}
+                                            onChange={(e) => setNuevoCostoProveedor(e.target.value)}
+                                            className="w-24 border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            min="0"
+                                            step="0.01"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="px-2 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-xs"
+                                            onClick={() => handleEditarCostoProveedorSave(proveedorId)}
+                                          >
+                                            ✓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="px-2 py-1 bg-slate-400 text-white rounded-sm hover:bg-slate-500 text-xs"
+                                            onClick={handleEditarCostoProveedorCancel}
+                                          >
+                                            ✕
+                                          </button>
+                                      </div>
+                                      ) : (
+                                        <span className="font-medium text-xs">${sp.costo}</span>
+                                      )
+                                    ) : editandoCostoId === sp.id ? (
+                                      <div className="inline-flex items-center gap-2">
+                                        <input
+                                          type="number"
+                                          value={nuevoCosto}
+                                          onChange={(e) => setNuevoCosto(e.target.value)}
+                                          className="w-24 border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                          min="0"
+                                          step="0.01"
+                                        />
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-xs"
+                                          onClick={() => handleEditCostoStockProveSave(sp.id)}
+                                        >
+                                          ✓
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 bg-slate-400 text-white rounded-sm hover:bg-slate-500 text-xs"
+                                          onClick={handleEditStockProveCancel}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="font-medium text-xs">${sp.costo}</span>
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -1313,14 +2031,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
         </form>
       </div>
 
-      <AsociarCodigoProveedorModal
-        open={showAsociarModal}
-        onClose={handleCloseAsociarModal}
-        producto={stock}
-        productoId={stock?.id || form.id}
-        proveedores={proveedores}
-        onAsociarCodigoPendiente={handleAsociarCodigoPendiente}
-      />
+
     </div>
   )
 }

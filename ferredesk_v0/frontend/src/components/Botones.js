@@ -2,6 +2,7 @@ import React from 'react';
 
 export const BotonEditar = ({ onClick, title = 'Editar', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-blue-500 hover:text-blue-700"

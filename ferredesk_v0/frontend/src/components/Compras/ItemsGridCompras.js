@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from "react"
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from "react"
 
 function getEmptyRow() {
   return {
@@ -35,10 +35,11 @@ const ItemsGridCompras = forwardRef(
 
     // No precargamos productos - haremos búsqueda directa como en ItemsGrid original
 
-    const toRow = (it) => {
-      const producto = it.cdi_idsto ? productos.find((p) => String(p.id) === String(it.cdi_idsto)) : null
+    const toRow = useCallback((it) => {
+      // Si el item ya tiene un producto completo (viene del buscador), usarlo directamente
+      const producto = it.producto || (it.cdi_idsto ? productos.find((p) => String(p.id) === String(it.cdi_idsto)) : null)
       return {
-        id: Date.now() + Math.random(),
+        id: it.id || Date.now() + Math.random(),
         codigo_proveedor: it.codigo_proveedor || "",
         producto,
         cdi_idsto: it.cdi_idsto || (producto ? producto.id : null),
@@ -51,7 +52,7 @@ const ItemsGridCompras = forwardRef(
           it.cdi_idaliiva ?? (typeof producto?.idaliiva === "object" ? producto?.idaliiva?.id : producto?.idaliiva) ?? 3,
         unidad: it.cdi_detalle2 || producto?.unidad || "",
       }
-    }
+    }, [productos, selectedProveedor?.id])
 
     const [rows, setRows] = useState(() => {
       if (Array.isArray(items) && items.length > 0) {
@@ -65,13 +66,17 @@ const ItemsGridCompras = forwardRef(
 
     // ELIMINADO: Este useEffect causaba el re-renderizado que quitaba el foco.
     // El componente ahora manejará su estado internamente después de la carga inicial.
+    // Los items del buscador se manejarán a través del estado interno del componente.
 
-    const isRowLleno = (row) => {
+    // ELIMINADO: Este useEffect causaba el re-renderizado que quitaba el foco.
+    // El componente ahora manejará su estado internamente después de la carga inicial.
+
+    const isRowLleno = useCallback((row) => {
       // Un renglón se considera completo si:
       // 1) Tiene un producto seleccionado (ítem de stock)
       // 2) Es un ítem genérico con descripción no vacía
       return !!(row.producto || (row.cdi_detalle1 && row.cdi_detalle1.trim() !== ""))
-    }
+    }, [])
     
     const isRowVacio = (row) => {
       return (
@@ -89,7 +94,7 @@ const ItemsGridCompras = forwardRef(
       }
     }
 
-    const ensureSoloUnEditable = (baseRows) => {
+    const ensureSoloUnEditable = useCallback((baseRows) => {
       const result = baseRows.slice()
       // Eliminar vacíos intermedios
       for (let i = result.length - 2; i >= 0; i--) {
@@ -116,9 +121,9 @@ const ItemsGridCompras = forwardRef(
       // Solo agrego un vacío si todos los renglones tienen producto
       result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
       return result
-    }
+    }, [isRowLleno])
 
-    const emitirCambio = (currentRows) => {
+    const emitirCambio = useCallback((currentRows) => {
       // Asegurar que siempre haya un proveedor seleccionado
       if (!selectedProveedor?.id) {
         console.error("No hay proveedor seleccionado")
@@ -140,7 +145,7 @@ const ItemsGridCompras = forwardRef(
           codigo_proveedor: r.codigo_proveedor || "",
         }))
       onItemsChange?.(itemsCompra)
-    }
+    }, [selectedProveedor?.id, isRowLleno, onItemsChange])
 
     // Refs y navegación con Enter
     const codigoRefs = useRef([])
@@ -345,8 +350,25 @@ const ItemsGridCompras = forwardRef(
                 r.cdi_idaliiva ?? (typeof r.producto?.idaliiva === "object" ? r.producto?.idaliiva?.id : r.producto?.idaliiva) ?? 3,
               codigo_proveedor: r.codigo_proveedor || "",
             })),
+        addItem: (item) => {
+          const newRow = toRow(item)
+          setRows((prevRows) => {
+            const newRows = [...prevRows]
+            // Reemplazar la última fila vacía con el nuevo item
+            const lastEmptyIndex = newRows.findIndex((r) => !isRowLleno(r))
+            if (lastEmptyIndex !== -1) {
+              newRows[lastEmptyIndex] = newRow
+            } else {
+              newRows.push(newRow)
+            }
+            // Agregar una nueva fila vacía si es necesario
+            const ensured = ensureSoloUnEditable(newRows)
+            emitirCambio(ensured)
+            return ensured
+          })
+        },
       }),
-      [rows, selectedProveedor?.id],
+      [rows, selectedProveedor?.id, toRow, isRowLleno, ensureSoloUnEditable, emitirCambio],
     )
 
     return (
@@ -354,14 +376,14 @@ const ItemsGridCompras = forwardRef(
         <div className="w-full">
           <div className="max-h-[14rem] overflow-y-auto overscroll-contain rounded-lg border border-slate-200/50 shadow">
             <table className="min-w-full text-[12px]">
-              <thead className="bg-slate-50 sticky top-0">
-                <tr className="bg-slate-100">
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-8">Nro.</th>
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-28">Código</th>
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-56">Producto</th>
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-16">Unidad</th>
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-20">Cantidad</th>
-                  <th className="px-2 py-1 text-left font-semibold text-slate-700 uppercase tracking-wider w-10">Acciones</th>
+              <thead className="bg-slate-800 sticky top-0">
+                <tr className="bg-slate-800">
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-8">Nro.</th>
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-28">Código</th>
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-56">Producto</th>
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-16">Unidad</th>
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-20">Cantidad</th>
+                  <th className="px-2 py-1 text-left font-semibold text-white uppercase tracking-wider w-10">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100">

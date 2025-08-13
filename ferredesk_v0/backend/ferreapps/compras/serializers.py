@@ -337,3 +337,17 @@ class StockProveedorSerializer(serializers.ModelSerializer):
     
     def get_stock_unidad(self, obj):
         return obj.unidad
+
+
+class BuscadorProductoProveedorSerializer(serializers.Serializer):
+    """Serializer específico para el buscador de productos por proveedor"""
+    id = serializers.IntegerField(source='stock.id')
+    codvta = serializers.CharField(source='stock.codvta')
+    codcom = serializers.CharField(source='stock.codcom')
+    deno = serializers.CharField(source='stock.deno')
+    nombre = serializers.CharField(source='stock.deno')  # Alias para compatibilidad
+    unidad = serializers.CharField(source='stock.unidad')
+    unidadmedida = serializers.CharField(source='stock.unidad')  # Alias para compatibilidad
+    idaliiva = serializers.IntegerField(source='stock.idaliiva_id')
+    acti = serializers.CharField(source='stock.acti')
+    codigo_proveedor = serializers.CharField(source='codigo_producto_proveedor')

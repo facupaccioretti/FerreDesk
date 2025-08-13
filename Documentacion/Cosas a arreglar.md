@@ -25,3 +25,4 @@ No anda buscador productos en ningun form
 
 Datos autocompletados por el padron no se pueden editar cuando deberian (por ej: domicilio, los ineditables se bloquean por ej: razon social)
 
+Agregar buscador de pproducto en compraform y UI

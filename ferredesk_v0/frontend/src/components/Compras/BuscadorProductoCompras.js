@@ -1,29 +1,57 @@
 "use client"
 
-// este buscador es el que se usa en la grilla de presupuestos y ventas
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
-function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = false, className = "" }) {
+function BuscadorProductoCompras({ 
+  selectedProveedor, 
+  onSelect, 
+  disabled = false, 
+  readOnly = false, 
+  className = "" 
+}) {
   const [busqueda, setBusqueda] = useState('')
   const [sugerencias, setSugerencias] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
+  const [loading, setLoading] = useState(false)
 
-  // Filtrar productos a partir de 2 caracteres
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const value = e.target.value
     setBusqueda(value)
-    if (value.length >= 2) {
-      const lower = value.toLowerCase()
-      const sugs = productos.filter(
-        p =>
-          (p.codvta || '').toLowerCase().includes(lower) ||
-          (p.codcom || '').toLowerCase().includes(lower) ||
-          (p.deno || p.nombre || '').toLowerCase().includes(lower)
-      )
-      setSugerencias(sugs)
-      setShowDropdown(true)
-      setHighlighted(0)
+    
+    if (value.length >= 2 && selectedProveedor?.id) {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
+          credentials: "include"
+        })
+        
+        if (response.ok) {
+          const productos = await response.json()
+          const lower = value.toLowerCase()
+          
+          const sugs = productos.filter(
+            p =>
+              (p.codvta || '').toLowerCase().includes(lower) ||
+              (p.codcom || '').toLowerCase().includes(lower) ||
+              (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
+              (p.codigo_proveedor || '').toLowerCase().includes(lower)
+          )
+          
+          setSugerencias(sugs)
+          setShowDropdown(true)
+          setHighlighted(0)
+        } else {
+          setSugerencias([])
+          setShowDropdown(false)
+        }
+      } catch (error) {
+        console.error('Error al buscar productos:', error)
+        setSugerencias([])
+        setShowDropdown(false)
+      } finally {
+        setLoading(false)
+      }
     } else {
       setSugerencias([])
       setShowDropdown(false)
@@ -39,6 +67,15 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
     setHighlighted(0)
   }
 
+  useEffect(() => {
+    setBusqueda('')
+    setSugerencias([])
+    setShowDropdown(false)
+    setHighlighted(0)
+  }, [selectedProveedor?.id])
+
+  const isDisabled = disabled || readOnly || !selectedProveedor?.id
+
   return (
     <div className={`relative w-full ${className}`}>
       <div className="relative">
@@ -46,14 +83,24 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
           type="text"
           value={busqueda}
           onChange={handleChange}
-          onFocus={() => { if (sugerencias.length > 0 && !disabled && !readOnly) setShowDropdown(true) }}
+          onFocus={() => { 
+            if (sugerencias.length > 0 && !isDisabled) setShowDropdown(true) 
+          }}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-          placeholder={disabled || readOnly ? "" : "Buscar productos..."}
-          className={`w-full px-2 py-1 border border-slate-300 rounded-sm bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 text-xs h-8 ${disabled || readOnly ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
+          placeholder={
+            isDisabled 
+              ? selectedProveedor?.id 
+                ? "Seleccione un proveedor primero" 
+                : "Buscar productos..." 
+              : "Buscar productos del proveedor..."
+          }
+          className={`w-full px-2 py-1 border border-slate-300 rounded-sm bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 text-xs h-8 ${
+            isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""
+          }`}
           autoComplete="off"
-          disabled={disabled || readOnly}
+          disabled={isDisabled}
           onKeyDown={e => {
-            if (disabled || readOnly) return;
+            if (isDisabled) return;
             
             if (e.key === 'Enter') {
               if (sugerencias.length > 0 && busqueda) {
@@ -71,6 +118,11 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
             }
           }}
         />
+        {loading && (
+          <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+          </div>
+        )}
       </div>
       
       {showDropdown && sugerencias.length > 0 && (
@@ -97,6 +149,15 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
                         <span className={`font-bold text-xs ${isSelected ? 'text-orange-800' : 'text-slate-800'}`}>
                           {p.codvta || p.codcom}
                         </span>
+                        {p.codigo_proveedor && (
+                          <span className={`text-xs px-1 py-0.5 rounded-sm ${
+                            isSelected 
+                              ? 'bg-blue-200/50 text-blue-700' 
+                              : 'bg-blue-100/50 text-blue-600'
+                          }`}>
+                            {p.codigo_proveedor}
+                          </span>
+                        )}
                       </div>
                       <p className={`text-xs truncate mt-0.5 ${isSelected ? 'text-orange-700' : 'text-slate-600'}`}>
                         {p.deno || p.nombre}
@@ -113,4 +174,4 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
   )
 }
 
-export default BuscadorProducto;
+export default BuscadorProductoCompras
