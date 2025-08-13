@@ -11,6 +11,7 @@ import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 import { normalizarItems } from './herramientasforms/normalizadorItems';
+import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
 const getStockProveedoresMap = (productos) => {
   const map = {};
@@ -135,6 +136,20 @@ const EditarPresupuestoForm = ({
 
   const itemsGridRef = useRef();
   const [gridKey, setGridKey] = useState(Date.now());
+  
+  // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || ''
+  });
+
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo);
+    setFormulario(prev => ({
+      ...prev,
+      cuit: nuevaInfo.valor
+    }));
+  };
 
   // Handler para cambios en la grilla memorizado para evitar renders infinitos
   const handleRowsChange = useCallback((rowsActualizados) => {
@@ -271,10 +286,13 @@ const EditarPresupuestoForm = ({
   if (errorAlicuotas) return <div>Error al cargar alícuotas de IVA: {errorAlicuotas}</div>;
 
   return (
-    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+    <>
+      <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
-      <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+      
+      <div className="px-8 pt-4 pb-6">
+        <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
         <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -292,184 +310,141 @@ const EditarPresupuestoForm = ({
           </div>
         </div>
       )}
-      {/* CABECERA: 2 filas x 4 columnas (alineado con VentaForm) */}
-      <div className="w-full mb-4 grid grid-cols-4 grid-rows-2 gap-4">
-        {/* Fila 1 */}
-        <div className="col-start-1 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-          {loadingClientes ? (
-            <div className="text-gray-500">Cargando clientes...</div>
-          ) : errorClientes ? (
-            <div className="text-red-600">{errorClientes}</div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
-                readOnly
-                disabled
-                className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
-              />
-              {!isReadOnly && (
-                <button
-                  type="button"
-                  onClick={abrirSelector}
-                  className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
-                  title="Buscar en lista completa"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.5"
-                    stroke="currentColor"
-                    className="w-4 h-4 text-slate-600"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" />
-                  </svg>
-                </button>
+      {/* Tarjeta de campos organizada igual a VentaForm */}
+      <div className="mb-6">
+        <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+          {/* Primera fila: 6 campos */}
+          <div className="grid grid-cols-6 gap-4 mb-3">
+            {/* Cliente */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+              {loadingClientes ? (
+                <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                  Cargando...
+                </div>
+              ) : errorClientes ? (
+                <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">{errorClientes}</div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
+                    readOnly
+                    disabled
+                    className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                  {!isReadOnly && (
+                    <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-        <div className="col-start-2 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">CUIT</label>
-          <input
-            name="cuit"
-            type="text"
-            value={formulario.cuit}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            maxLength={11}
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-3 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
-          <input
-            name="fecha"
-            type="date"
-            value={formulario.fecha}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-4 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio</label>
-          <input
-            name="domicilio"
-            type="text"
-            value={formulario.domicilio}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            maxLength={40}
-            readOnly={isReadOnly}
-          />
-        </div>
-        {/* Fila 2 */}
-        <div className="col-start-1 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
-          <select
-            name="sucursalId"
-            value={formulario.sucursalId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            {sucursales.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-2 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
-          <select
-            name="puntoVentaId"
-            value={formulario.puntoVentaId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            {puntosVenta.map((pv) => (
-              <option key={pv.id} value={pv.id}>
-                {pv.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-3 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
-          <select
-            name="plazoId"
-            value={formulario.plazoId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar plazo...</option>
-            {plazos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-4 row-start-2">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
-          <select
-            name="vendedorId"
-            value={formulario.vendedorId}
-            onChange={handleChange}
-            className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar vendedor...</option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.nombre}
-              </option>
-            ))}
-          </select>
+            {/* Documento */}
+            <div>
+              <SelectorDocumento
+                tipoComprobante={"presupuesto"}
+                esObligatorio={false}
+                valorInicial={documentoInfo.valor}
+                tipoInicial={documentoInfo.tipo}
+                onChange={handleDocumentoChange}
+                readOnly={isReadOnly}
+                className="w-full"
+              />
+            </div>
+            {/* Domicilio */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
+              <input
+                name="domicilio"
+                type="text"
+                value={formulario.domicilio}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                readOnly={isReadOnly}
+              />
+            </div>
+            {/* Fecha */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+              <input
+                name="fecha"
+                type="date"
+                value={formulario.fecha}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                readOnly={isReadOnly}
+              />
+            </div>
+            {/* Plazo */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
+              <select
+                name="plazoId"
+                value={formulario.plazoId}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                disabled={isReadOnly}
+              >
+                <option value="">Seleccionar...</option>
+                {plazos.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+              </select>
+            </div>
+            {/* Vendedor */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
+              <select
+                name="vendedorId"
+                value={formulario.vendedorId}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                disabled={isReadOnly}
+              >
+                <option value="">Seleccionar...</option>
+                {vendedores.map((v) => (<option key={v.id} value={v.id}>{v.nombre}</option>))}
+              </select>
+            </div>
+          </div>
+          {/* Segunda fila: 3 campos */}
+          <div className="grid grid-cols-3 gap-4 mb-3">
+            {/* Buscador */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+              <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+            </div>
+
+            {/* Tipo de Comprobante */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+              <ComprobanteDropdown
+                opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
+                value={'presupuesto'}
+                onChange={() => {}}
+                disabled={true}
+                className="w-full"
+              />
+            </div>
+
+            {/* Acción por defecto */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+              <SumarDuplicar
+                autoSumarDuplicados={autoSumarDuplicados}
+                setAutoSumarDuplicados={setAutoSumarDuplicados}
+                disabled={isReadOnly}
+                showLabel={false}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
       <div className="mb-8">
-        <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
-          {/* Buscador reducido */}
-          <div className="min-w-[260px] w-[260px]">
-            <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
-          </div>
-
-          {/* Tipo de comprobante (solo visual) */}
-          <div className="w-40">
-            <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante</label>
-            <ComprobanteDropdown
-              opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
-              value={'presupuesto'}
-              onChange={() => {}}
-              disabled={true}
-              className="w-full max-w-[120px]"
-            />
-          </div>
-
-          {/* Acción duplicar/sumar */}
-          <div className="w-56">
-            <SumarDuplicar
-              autoSumarDuplicados={autoSumarDuplicados}
-              setAutoSumarDuplicados={setAutoSumarDuplicados}
-            />
-          </div>
-        </div>
         {loadingProductos || loadingFamilias || loadingProveedores ? (
           <div className="text-center text-gray-500 py-4">Cargando productos, familias y proveedores...</div>
         ) : errorProductos ? (
@@ -504,34 +479,36 @@ const EditarPresupuestoForm = ({
         )}
       </div>
 
-      <div className="mt-8 flex justify-end space-x-3">
+      <div className="mt-8 flex justify-end space-x-4">
         <button
           type="button"
           onClick={handleCancel}
-          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+          className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
         >
           {isReadOnly ? 'Cerrar' : 'Cancelar'}
         </button>
         {!isReadOnly && (
           <button
             type="submit"
-            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+            className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
           >
             {initialData ? 'Guardar Cambios' : 'Crear Presupuesto'}
           </button>
         )}
       </div>
+    </div>
+  </form>
 
-      {/* Modal selector de clientes */}
-      <ClienteSelectorModal
-        abierto={selectorAbierto}
-        onCerrar={cerrarSelector}
-        clientes={clientesConDefecto}
-        onSeleccionar={handleClienteSelect}
-        cargando={loadingClientes}
-        error={errorClientes}
-      />
-    </form>
+  {/* Modal selector de clientes */}
+  <ClienteSelectorModal
+    abierto={selectorAbierto}
+    onCerrar={cerrarSelector}
+    clientes={clientesConDefecto}
+    onSeleccionar={handleClienteSelect}
+    cargando={loadingClientes}
+    error={errorClientes}
+  />
+  </>
   );
 };
 

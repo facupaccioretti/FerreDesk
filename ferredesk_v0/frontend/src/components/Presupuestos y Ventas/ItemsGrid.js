@@ -308,6 +308,23 @@ const ItemsGridPresupuesto = forwardRef(
       return result
     }
 
+    // Helper para interpretar números decimales con punto o coma como separador
+    const parsearNumeroFlexible = (cadena) => {
+      if (cadena === null || cadena === undefined) return NaN
+      const texto = String(cadena).trim()
+      if (texto === "") return NaN
+      const reemplazado = texto.replace(/,/g, ".")
+      const partes = reemplazado.split(".")
+      if (partes.length === 1) {
+        const entero = partes[0].replace(/[^\d-]/g, "")
+        return entero === "" || entero === "-" ? NaN : Number(entero)
+      }
+      const decimales = partes.pop().replace(/[^\d]/g, "")
+      const enteros = partes.join("").replace(/[^\d-]/g, "")
+      const combinado = enteros + "." + decimales
+      return combinado === "." || combinado === "-." ? NaN : Number(combinado)
+    }
+
     const handleRowChange = (idx, field, value) => {
       setRows((prevRows) => {
         const newRows = [...prevRows]
@@ -338,42 +355,43 @@ const ItemsGridPresupuesto = forwardRef(
           const fila = { ...newRows[idx] }
           const esGenerico = !fila.producto
 
+          const valorNormalizado = parsearNumeroFlexible(userInput)
+          const esVacio = String(userInput).trim() === ""
+          const userInputNum = Number.isNaN(valorNormalizado) ? 0 : valorNormalizado
+
           let aliFinalId = fila.idaliiva ?? 3
           // Autoseleccionar IVA 21% para genéricos si se ingresa un precio
-          if (esGenerico && Number(userInput) > 0 && (aliFinalId === 3 || aliFinalId === 0)) {
+          if (esGenerico && userInputNum > 0 && (aliFinalId === 3 || aliFinalId === 0)) {
             aliFinalId = 5 // ID para 21%
-          } else if (esGenerico && (userInput === "" || Number(userInput) === 0)) {
+          } else if (esGenerico && (esVacio || userInputNum === 0)) {
             aliFinalId = 3 // ID para 0%
           }
 
           const aliFinalPorc = aliMap[aliFinalId] || 0
-          const userInputNum = Number.parseFloat(userInput) || 0
 
-          // ----------------- CORRECCIÓN DE FÓRMULA -----------------
           // Si el usuario ingresa un precio FINAL (con IVA), para obtener
           // el precio base sin IVA debemos DIVIDIR por (1 + IVA/100)
           const divisorIVA = 1 + (aliFinalPorc / 100)
-          const precioBase = divisorIVA !== 0 ? (userInputNum / divisorIVA) : 0
-          // ---------------------------------------------------------
+          const precioBaseCalc = divisorIVA !== 0 ? (userInputNum / divisorIVA) : 0
 
           if (esGenerico) {
             // Ítem genérico: el precio base pasa a ser también el costo.
-            fila.vdi_costo = Number.isFinite(precioBase) ? precioBase : 0
+            fila.vdi_costo = Number.isFinite(precioBaseCalc) ? precioBaseCalc : 0
             fila.margen = 0
           } else {
             // Ítem de stock: el costo permanece fijo; recalculamos margen.
             const costo = Number.parseFloat(fila.vdi_costo ?? fila.producto?.costo ?? 0)
             if (costo > 0) {
-              const margenNuevo = ((precioBase - costo) / costo) * 100
+              const margenNuevo = ((precioBaseCalc - costo) / costo) * 100
               fila.margen = Number.isFinite(margenNuevo) ? Number(margenNuevo.toFixed(2)) : 0
             } else {
               fila.margen = 0
             }
           }
 
-          fila.precioFinal = userInputNum
+          fila.precioFinal = esVacio ? "" : userInputNum
           // Guardar precio base con 4 decimales para evitar errores de redondeo
-          fila.precio = Number.isFinite(precioBase) ? Number(precioBase.toFixed(4)) : ""
+          fila.precio = esVacio ? "" : (Number.isFinite(precioBaseCalc) ? Number(precioBaseCalc.toFixed(4)) : "")
           fila.idaliiva = aliFinalId
 
           newRows[idx] = fila
@@ -971,7 +989,12 @@ const ItemsGridPresupuesto = forwardRef(
                       : (row.precio !== "" && row.precio !== undefined
                           ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
                           : 0)
-                  const precioBonificado = precioConIVA * (1 - (Number.parseFloat(row.bonificacion) || 0) / 100)
+                  const bonifParticular = Number.parseFloat(row.bonificacion)
+                  const bonifGeneral = Number.parseFloat(bonificacionGeneral) || 0
+                  const bonifEfectiva = (Number.isFinite(bonifParticular) && bonifParticular > 0)
+                    ? bonifParticular
+                    : bonifGeneral
+                  const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
 
                   return (
                     <tr
@@ -1009,7 +1032,7 @@ const ItemsGridPresupuesto = forwardRef(
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         {row.producto ? (
-                          <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm">
+                          <div className="w-full px-3 py-2 text-slate-700 min-h-[38px] flex items-center">
                             {row.denominacion || ""}
                           </div>
                         ) : (
@@ -1057,7 +1080,7 @@ const ItemsGridPresupuesto = forwardRef(
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <input
-                          type="number"
+                          type="text"
                           inputMode="decimal"
                           value={
                             row.precioFinal !== "" && row.precioFinal !== undefined
@@ -1108,7 +1131,7 @@ const ItemsGridPresupuesto = forwardRef(
                         />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 text-slate-700 min-h-[38px] flex items-center shadow-sm font-medium">
+                        <div className="w-full px-3 py-2 text-sky-600 min-h-[38px] flex items-center font-semibold">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
                             ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}`
                             : ""}
@@ -1138,7 +1161,7 @@ const ItemsGridPresupuesto = forwardRef(
                         })()}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <div className="px-3 py-2 bg-gradient-to-r from-emerald-50 to-emerald-100/80 rounded-xl border border-emerald-200/50 text-emerald-800 font-bold text-sm shadow-sm">
+                        <div className="px-3 py-2 text-emerald-600 font-semibold text-sm">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
                             ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
                             : ""}

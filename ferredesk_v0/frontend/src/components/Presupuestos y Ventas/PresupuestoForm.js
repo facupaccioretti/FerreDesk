@@ -13,6 +13,7 @@ import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 import { normalizarItems } from './herramientasforms/normalizadorItems'
+import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
 const getStockProveedoresMap = (productos) => {
   const map = {}
@@ -139,6 +140,20 @@ const PresupuestoForm = ({
   const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
 
   const itemsGridRef = useRef()
+
+  // Estado local para documento (CUIT/DNI) sin lógica fiscal
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || ''
+  })
+
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo)
+    setFormulario(prev => ({
+      ...prev,
+      cuit: nuevaInfo.valor
+    }))
+  }
 
   // ----------------- Estado de carga General ------------------
   const [isLoading, setIsLoading] = useState(true)
@@ -345,182 +360,187 @@ const PresupuestoForm = ({
   }
 
   return (
-    <form className="venta-form w-full py-6 px-8 bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnter}>
+    <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnter}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
-      <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
-        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-        </div>
-        {initialData ? (isReadOnly ? "Ver Presupuesto" : "Editar Presupuesto") : "Nuevo Presupuesto"}
-      </h3>
+      <div className="px-8 pt-4 pb-6">
+        <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
+            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </div>
+          {initialData ? (isReadOnly ? "Ver Presupuesto" : "Editar Presupuesto") : "Nuevo Presupuesto"}
+        </h3>
       {isReadOnly && (
-        <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-600 text-yellow-900 rounded">
-          Este presupuesto/venta está cerrado y no puede ser editado. Solo lectura.
+        <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span className="font-medium">Este presupuesto está cerrado y no puede ser editado. Solo lectura.</span>
+          </div>
         </div>
       )}
-      {/* CABECERA: 2 filas x 4 columnas (alineado con VentaForm) */}
-      <div className="w-full mb-4 grid grid-cols-4 grid-rows-2 gap-4">
-        {/* Fila 1 */}
-        <div className="col-start-1 row-start-1">
-          <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-          {loadingClientes ? (
-            <div className="text-gray-500">Cargando clientes...</div>
-          ) : errorClientes ? (
-            <div className="text-red-600">{errorClientes}</div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={(() => {
-                  const cli = clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
-                  return cli ? cli.razon || cli.nombre : ""
-                })()}
-                readOnly
-                disabled
-                className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
-              />
-              {!isReadOnly && (
-                <button type="button" onClick={abrirSelector} className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors" title="Buscar cliente">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" /></svg>
-                </button>
+
+      {/* Una sola tarjeta con campos organizados en grid (igual a VentaForm) */}
+      <div className="mb-6">
+        <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+          {/* Primera fila: 6 campos */}
+          <div className="grid grid-cols-6 gap-4 mb-3">
+            {/* Cliente */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+              {loadingClientes ? (
+                <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                  Cargando...
+                </div>
+              ) : errorClientes ? (
+                <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
+                  {errorClientes}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={(() => {
+                      const cli = clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
+                      return cli ? (cli.razon || cli.nombre) : ""
+                    })()}
+                    readOnly
+                    disabled
+                    className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={abrirSelector}
+                      className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
+                      title="Buscar en lista completa"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-        <div className="col-start-2 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">CUIT</label>
-          <input
-            name="cuit"
-            type="text"
-            value={formulario.cuit}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            maxLength={11}
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-3 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Fecha</label>
-          <input
-            name="fecha"
-            type="date"
-            value={formulario.fecha}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            required
-            readOnly={isReadOnly}
-          />
-        </div>
-        <div className="col-start-4 row-start-1">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Domicilio</label>
-          <input
-            name="domicilio"
-            type="text"
-            value={formulario.domicilio}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            maxLength={40}
-            readOnly={isReadOnly}
-          />
-        </div>
-        {/* Fila 2 */}
-        <div className="col-start-1 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Sucursal *</label>
-          <select
-            name="sucursalId"
-            value={formulario.sucursalId}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            required
-            disabled={isReadOnly}
-          >
-            {sucursales.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-2 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Punto de Venta *</label>
-          <select
-            name="puntoVentaId"
-            value={formulario.puntoVentaId}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            required
-            disabled={isReadOnly}
-          >
-            {puntosVenta.map((pv) => (
-              <option key={pv.id} value={pv.id}>
-                {pv.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-3 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Plazo *</label>
-          <select
-            name="plazoId"
-            value={formulario.plazoId}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar plazo...</option>
-            {plazos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-start-4 row-start-2">
-          <label className="block text-xs font-medium text-gray-500 mb-0.5">Vendedor *</label>
-          <select
-            name="vendedorId"
-            value={formulario.vendedorId}
-            onChange={handleChange}
-            className="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
-            required
-            disabled={isReadOnly}
-          >
-            <option value="">Seleccionar vendedor...</option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
-      <div className="mb-8">
-        <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
-          {/* Buscador */}
-          <div className="min-w-[260px] w-[260px]">
-            <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
+
+            {/* Documento */}
+            <div>
+              <SelectorDocumento
+                tipoComprobante={"presupuesto"}
+                esObligatorio={false}
+                valorInicial={documentoInfo.valor}
+                tipoInicial={documentoInfo.tipo}
+                onChange={handleDocumentoChange}
+                readOnly={isReadOnly}
+                className="w-full"
+              />
+            </div>
+
+            {/* Domicilio */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
+              <input
+                name="domicilio"
+                type="text"
+                value={formulario.domicilio}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                readOnly={isReadOnly}
+              />
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+              <input
+                name="fecha"
+                type="date"
+                value={formulario.fecha}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                readOnly={isReadOnly}
+              />
+            </div>
+
+            {/* Plazo */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
+              <select
+                name="plazoId"
+                value={formulario.plazoId}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                disabled={isReadOnly}
+              >
+                <option value="">Seleccionar...</option>
+                {plazos.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Vendedor */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
+              <select
+                name="vendedorId"
+                value={formulario.vendedorId}
+                onChange={handleChange}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                required
+                disabled={isReadOnly}
+              >
+                <option value="">Seleccionar...</option>
+                {vendedores.map((v) => (
+                  <option key={v.id} value={v.id}>{v.nombre}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Tipo comprobante */}
-          <div className="w-40">
-            <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante</label>
-            <ComprobanteDropdown
-              opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
-              value={'presupuesto'}
-              onChange={() => {}}
-              disabled={true}
-              className="w-full max-w-[120px]"
-            />
-          </div>
+          {/* Segunda fila: 3 campos */}
+          <div className="grid grid-cols-3 gap-4 mb-3">
+            {/* Buscador */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+              <BuscadorProducto 
+                productos={productos} 
+                onSelect={handleAddItemToGrid} 
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
+                className="w-full"
+              />
+            </div>
 
-          {/* Acción duplicar / sumar */}
-          <div className="w-56">
-            <SumarDuplicar autoSumarDuplicados={autoSumarDuplicados} setAutoSumarDuplicados={setAutoSumarDuplicados} />
+            {/* Tipo de Comprobante */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+              <ComprobanteDropdown
+                opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
+                value={'presupuesto'}
+                onChange={() => {}}
+                disabled={true}
+                className="w-full"
+              />
+            </div>
+
+            {/* Acción por defecto */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+              <SumarDuplicar
+                autoSumarDuplicados={autoSumarDuplicados}
+                setAutoSumarDuplicados={setAutoSumarDuplicados}
+                disabled={isReadOnly}
+                showLabel={false}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -583,6 +603,7 @@ const PresupuestoForm = ({
         cargando={loadingClientes}
         error={errorClientes}
       />
+      </div>
     </form>
   )
 }

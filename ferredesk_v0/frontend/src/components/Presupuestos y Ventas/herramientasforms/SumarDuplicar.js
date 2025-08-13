@@ -50,8 +50,10 @@ const OPCIONES = [
  * @param {Object} props
  * @param {string} props.autoSumarDuplicados - Valor actual de la acción por defecto ('sumar' o 'duplicar')
  * @param {Function} props.setAutoSumarDuplicados - Función para actualizar la acción por defecto
+ * @param {boolean} props.disabled - Si el componente está deshabilitado
+ * @param {boolean} props.showLabel - Si mostrar el label interno (por defecto true)
  */
-const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }) => {
+const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled, showLabel = true }) => {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
   const selected = OPCIONES.find((o) => o.value === autoSumarDuplicados) || OPCIONES[0]
@@ -68,28 +70,30 @@ const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }
 
   return (
     <div className="w-full relative" ref={dropdownRef}>
-      <label className="block text-sm font-semibold text-slate-700 mb-2">
-        Acción por defecto al cargar duplicado
-      </label>
+      {showLabel && (
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          Acción por defecto al cargar duplicado
+        </label>
+      )}
       <button
         type="button"
-        className={`relative w-full bg-white border border-slate-300 rounded-lg shadow-sm pl-3 pr-8 py-2 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 hover:border-slate-400 hover:shadow-md text-sm ${disabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
+        className={`relative w-full bg-white border border-slate-300 rounded-sm shadow-sm pl-2 pr-6 py-1 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 hover:border-slate-400 text-xs h-8 ${disabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         disabled={disabled}
       >
         <div className="flex items-center">
-          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 mr-2 shadow-sm ring-1 ring-slate-200/50">
+          <span className="flex items-center justify-center w-4 h-4 rounded-sm bg-gradient-to-br from-slate-100 to-slate-200 mr-1 shadow-sm ring-1 ring-slate-200/50">
             {selected.icon}
           </span>
           <div>
-            <span className="block truncate font-semibold text-slate-800">{selected.label}</span>
+            <span className="block truncate font-semibold text-slate-800 text-xs">{selected.label}</span>
           </div>
         </div>
-        <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
           <svg
-            className={`h-5 w-5 text-slate-500 transition-transform duration-200 ${isOpen ? "transform rotate-180" : ""}`}
+            className={`h-3 w-3 text-slate-500 transition-transform duration-200 ${isOpen ? "transform rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -100,14 +104,14 @@ const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }
       </button>
 
       {isOpen && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white shadow-2xl max-h-60 rounded-lg overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-sm">
-          <ul className="py-1 space-y-1" role="listbox">
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white shadow-2xl max-h-60 rounded-sm overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-xs">
+          <ul className="py-1 space-y-0" role="listbox">
             {OPCIONES.map((option) => {
               const isSelected = autoSumarDuplicados === option.value
               return (
                 <li
                   key={option.value}
-                  className={`relative cursor-pointer select-none py-2 pl-3 pr-8 rounded-lg transition-all duration-200 ${
+                  className={`relative cursor-pointer select-none py-1 pl-2 pr-6 rounded-sm transition-all duration-200 ${
                     isSelected
                       ? "bg-gradient-to-r from-orange-100 to-orange-50 ring-1 ring-orange-200/50"
                       : "hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/80"
@@ -121,7 +125,7 @@ const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }
                 >
                   <div className="flex items-center">
                     <span
-                      className={`flex items-center justify-center w-6 h-6 rounded-lg mr-2 shadow-sm transition-all duration-200 ${
+                      className={`flex items-center justify-center w-4 h-4 rounded-sm mr-1 shadow-sm transition-all duration-200 ${
                         isSelected
                           ? "bg-gradient-to-br from-orange-100 to-orange-200 ring-1 ring-orange-300/50"
                           : "bg-gradient-to-br from-slate-100 to-slate-200 ring-1 ring-slate-200/50"
@@ -131,7 +135,7 @@ const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }
                     </span>
                     <div>
                       <span
-                        className={`block truncate transition-all duration-200 ${
+                        className={`block truncate transition-all duration-200 text-xs ${
                           isSelected ? "font-bold text-orange-800" : "font-medium text-slate-700"
                         }`}
                       >
@@ -140,8 +144,8 @@ const SumarDuplicar = ({ autoSumarDuplicados, setAutoSumarDuplicados, disabled }
                     </div>
                   </div>
                   {isSelected && (
-                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-orange-600">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 text-orange-600">
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                       </svg>
                     </span>

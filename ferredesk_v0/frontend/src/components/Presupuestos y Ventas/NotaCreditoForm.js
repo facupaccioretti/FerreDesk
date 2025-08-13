@@ -14,6 +14,8 @@ import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 import useValidacionCUIT from '../../utils/useValidacionCUIT';
 import CuitStatusBanner from '../Alertas/CuitStatusBanner';
+import SelectorDocumento from './herramientasforms/SelectorDocumento';
+import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
   if (!clienteSeleccionado) return {}; 
@@ -99,6 +101,9 @@ const NotaCreditoForm = ({
     limpiarEstadosARCAStatus
   } = useValidacionCUIT();
   
+  // Hook para el tema de FerreDesk
+  const theme = useFerreDeskTheme();
+  
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
@@ -176,6 +181,20 @@ const NotaCreditoForm = ({
   
   // Estado para controlar visibilidad del banner de estado CUIT
   const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
+  
+  // Documento (CUIT/DNI) con lógica fiscal para notas de crédito
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || ''
+  });
+
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo);
+    setFormulario(prev => ({
+      ...prev,
+      cuit: nuevaInfo.valor
+    }));
+  };
   
   // Función para ocultar el banner de estado CUIT
   const ocultarBannerCuit = () => {
@@ -374,15 +393,13 @@ const NotaCreditoForm = ({
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;
 
   return (
-    <div className="bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 -m-6 p-6">
-      <form
-        className="w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
-        onSubmit={handleSubmit}
-        onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-      >
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600"></div>
-
-        <div className="px-8 pt-4 pb-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50/30 py-6">
+      <div className="px-6">
+        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}>
+          {/* Gradiente decorativo superior */}
+          <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
+          
+          <div className="px-8 pt-4 pb-6">
           {/* Banner de estado CUIT para notas de crédito A */}
           {mostrarBannerCuit && letraNC === 'A' && (
             <CuitStatusBanner
@@ -415,7 +432,7 @@ const NotaCreditoForm = ({
           
           <div className="mb-4">
             <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
                 <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -424,27 +441,119 @@ const NotaCreditoForm = ({
             </h3>
           </div>
 
-          {/* Fila 1: Datos principales */}
-          <div className="grid grid-cols-8 gap-x-6 gap-y-4 mb-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Fecha</label>
-              <input type="date" name="fecha" value={formulario.fecha} onChange={handleChange} className="w-full text-sm rounded-lg border-slate-300 shadow-sm" required />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Punto de Venta</label>
-              <select name="puntoVentaId" value={formulario.puntoVentaId} onChange={handleChange} className="w-full text-sm rounded-lg border-slate-300 shadow-sm" required>
-                {puntosVenta.map(pv => (<option key={pv.id} value={pv.id}>{pv.nombre}</option>))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Vendedor</label>
-              <select name="vendedorId" value={formulario.vendedorId} onChange={handleChange} className="w-full text-sm rounded-lg border-slate-300 shadow-sm" required>
-                {vendedores.map((v) => (<option key={v.id} value={v.id}>{v.nombre}</option>))}
-              </select>
+          {/* Tarjeta de campos organizada igual a VentaForm */}
+          <div className="mb-6">
+            <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+              {/* Grid principal: 6 columnas (4 para campos + 2 para facturas asociadas) */}
+              <div className="grid grid-cols-6 gap-4">
+                {/* Columna 1-4: Campos del formulario */}
+                <div className="col-span-4">
+                  {/* Primera fila: 4 campos */}
+                  <div className="grid grid-cols-4 gap-4 mb-3">
+                    {/* Cliente */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+                      <input
+                        type="text"
+                        value={formulario.clienteNombre || ''}
+                        readOnly
+                        disabled
+                        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Documento */}
+                    <div>
+                      <SelectorDocumento
+                        tipoComprobante={letraNC || 'A'}
+                        esObligatorio={letraNC === 'A'}
+                        valorInicial={documentoInfo.valor}
+                        tipoInicial={documentoInfo.tipo}
+                        onChange={handleDocumentoChange}
+                        readOnly={false}
+                        className="w-full"
+                      />
+                    </div>
+
+                    {/* Domicilio */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
+                      <input
+                        name="domicilio"
+                        type="text"
+                        value={formulario.domicilio}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        readOnly={false}
+                      />
+                    </div>
+
+                    {/* Fecha */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+                      <input
+                        name="fecha"
+                        type="date"
+                        value={formulario.fecha}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Segunda fila: 3 campos */}
+                  <div className="grid grid-cols-3 gap-4 mb-3">
+                    {/* Buscador */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+                      <BuscadorProducto onAdd={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} className="w-full" />
+                    </div>
+
+                    {/* Tipo de Comprobante */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                      <select
+                        value={tipoNotaCredito || ''}
+                        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                        disabled
+                      >
+                        <option value="">Seleccionar...</option>
+                        <option value="nota_credito">Nota de Crédito</option>
+                        <option value="nota_credito_interna">Nota de Crédito Interna</option>
+                      </select>
+                    </div>
+
+                    {/* Acción por defecto */}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+                      <SumarDuplicar
+                        autoSumarDuplicados={autoSumarDuplicados}
+                        setAutoSumarDuplicados={setAutoSumarDuplicados}
+                        disabled={false}
+                        showLabel={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Columna 5-6: Facturas Asociadas (ocupa 2 filas) */}
+                <div className="col-span-2 row-span-2">
+                  <label className="block text-[12px] font-semibold text-slate-700 mb-1">Facturas Asociadas</label>
+                  <div className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-32 bg-slate-50 overflow-y-auto">
+                    {(formulario.facturasAsociadas || []).map(factura => (
+                      <div key={factura.id || factura.ven_id} className="text-xs font-semibold bg-slate-200 rounded px-1 py-0.5 mb-1">
+                        {factura.comprobante?.letra || 'FC'} {String(factura.ven_punto || '1').padStart(4, '0')}-{String(factura.ven_numero || factura.numero || '').padStart(8, '0')}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Fila 2: Datos del cliente y facturas asociadas */}
+          {/* Comentado temporalmente: Facturas Asociadas */}
+          {/* 
           <div className="grid grid-cols-2 gap-x-6 mb-6">
             <div className="space-y-4 p-4 rounded-xl border border-slate-200 bg-slate-50/80">
               <h4 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-2">Datos del Cliente</h4>
@@ -474,21 +583,9 @@ const NotaCreditoForm = ({
               </div>
             </div>
           </div>
+          */}
 
-          {/* Buscador y Grilla */}
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex-grow">
-              <BuscadorProducto onAdd={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} />
-            </div>
-            <div className="ml-4 flex-shrink-0">
-              <SumarDuplicar
-                autoSumarDuplicados={autoSumarDuplicados}
-                setAutoSumarDuplicados={setAutoSumarDuplicados}
-                onSumarDuplicados={handleSumarDuplicados}
-              />
-            </div>
-          </div>
-          <div className="mb-4">
+          <div className="mb-8">
             <ItemsGrid
               ref={itemsGridRef}
               key={formulario.clienteId}
@@ -512,19 +609,24 @@ const NotaCreditoForm = ({
             />
           </div>
           
-          <hr className="my-6 border-slate-200" />
-          
-          {/* Botones de Acción */}
-          <div className="flex justify-end space-x-3">
-            <button type="button" onClick={handleCancel} className="px-5 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-sm border border-slate-200 transition-colors">
+          <div className="mt-8 flex justify-end space-x-4">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+            >
               Cancelar
             </button>
-            <button type="submit" className="px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg shadow-md transition-all">
+            <button
+              type="submit"
+              className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
               Crear Nota de Crédito
             </button>
           </div>
         </div>
       </form>
+    </div>
       
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay 

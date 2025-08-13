@@ -3,7 +3,7 @@
 // este buscador es el que se usa en la grilla de presupuestos y ventas
 import { useState } from "react"
 
-function BuscadorProducto({ productos, onSelect }) {
+function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = false, className = "" }) {
   const [busqueda, setBusqueda] = useState('')
   const [sugerencias, setSugerencias] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
@@ -40,18 +40,21 @@ function BuscadorProducto({ productos, onSelect }) {
   }
 
   return (
-    <div className="relative w-full max-w-md">
+    <div className={`relative w-full max-w-md ${className}`}>
       <div className="relative">
         <input
           type="text"
           value={busqueda}
           onChange={handleChange}
-          onFocus={() => { if (sugerencias.length > 0) setShowDropdown(true) }}
+          onFocus={() => { if (sugerencias.length > 0 && !disabled && !readOnly) setShowDropdown(true) }}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-          placeholder="Buscar productos..."
-          className="w-full px-4 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 hover:shadow-md"
+          placeholder={disabled || readOnly ? "" : "Buscar productos..."}
+          className={`w-full px-4 py-2 border border-slate-300 rounded-none bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 hover:shadow-md ${disabled || readOnly ? "opacity-50 cursor-not-allowed bg-slate-100" : ""}`}
           autoComplete="off"
+          disabled={disabled || readOnly}
           onKeyDown={e => {
+            if (disabled || readOnly) return;
+            
             if (e.key === 'Enter') {
               if (sugerencias.length > 0 && busqueda) {
                 handleSelect(sugerencias[highlighted])
@@ -71,7 +74,7 @@ function BuscadorProducto({ productos, onSelect }) {
       </div>
       
       {showDropdown && sugerencias.length > 0 && (
-        <ul className="absolute z-30 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl mt-2 w-full max-h-40 overflow-auto shadow-2xl ring-1 ring-slate-200/50">
+        <ul className="absolute z-30 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-none mt-2 w-full max-h-40 overflow-auto shadow-2xl ring-1 ring-slate-200/50">
           {sugerencias.map((p, idx) => (
             <li
               key={p.id}
@@ -79,7 +82,7 @@ function BuscadorProducto({ productos, onSelect }) {
                 highlighted === idx 
                   ? 'bg-gradient-to-r from-orange-50 to-orange-100/80 text-orange-800' 
                   : 'hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100/80 text-slate-700'
-              } ${idx === 0 ? 'rounded-t-xl' : ''} ${idx === sugerencias.length - 1 ? 'rounded-b-xl' : ''}`}
+              } ${idx === 0 ? 'rounded-t-none' : ''} ${idx === sugerencias.length - 1 ? 'rounded-b-none' : ''}`}
               onMouseDown={() => handleSelect(p)}
               onMouseEnter={() => setHighlighted(idx)}
             >

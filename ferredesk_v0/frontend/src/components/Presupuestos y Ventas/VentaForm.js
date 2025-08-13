@@ -715,208 +715,166 @@ const VentaForm = ({
               )}
             </div>
 
-            {/* CABECERA organizada en dos filas de 4 columnas */}
-            <div className="w-full mb-4">
-              {/* Fila 1: Cliente | CUIT | Domicilio | Fecha */}
-              <div className="grid grid-cols-4 gap-4 mb-3 items-end">
-                {/* Cliente */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-                  {loadingClientes ? (
-                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                      Cargando clientes...
-                    </div>
-                  ) : errorClientes ? (
-                    <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">
-                      {errorClientes}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ""}
-                        readOnly
-                        disabled
-                        className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
-                      />
-                      {/* Botón para abrir modal selector */}
-                      {!isReadOnly && (
-                        <button
-                          type="button"
-                          onClick={abrirSelector}
-                          className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
-                          title="Buscar en lista completa"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={1.5}
-                            stroke="currentColor"
-                            className="w-4 h-4 text-slate-600"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M18.75 18.75l-3.5-3.5"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Selector de Documento (CUIT/DNI) */}
-                <SelectorDocumento
-                  tipoComprobante={fiscal.letra || 'A'}
-                  esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
-                  valorInicial={documentoInfo.valor}
-                  tipoInicial={documentoInfo.tipo}
-                  onChange={handleDocumentoChange}
-                  readOnly={isReadOnly}
-                  className="w-full"
-                />
-
-                {/* Domicilio */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
-                  <input
-                    name="domicilio"
-                    type="text"
-                    value={formulario.domicilio}
-                    onChange={handleChange}
-                    className="compacto max-w-sm w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required={usarFiscal && fiscal.camposRequeridos.domicilio}
-                    readOnly={isReadOnly}
-                  />
-                </div>
-
-                {/* Fecha */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
-                  <input
-                    name="fecha"
-                    type="date"
-                    value={formulario.fecha}
-                    onChange={handleChange}
-                    className="compacto max-w-[9rem] w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    readOnly={isReadOnly}
-                  />
-                </div>
-              </div>
-
-              {/* Fila 2: Sucursal | Punto de Venta | Plazo | Vendedor */}
-              <div className="grid grid-cols-4 gap-4 items-end">
-                {/* Sucursal */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
-                  <select
-                    name="sucursalId"
-                    value={formulario.sucursalId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    {sucursales.map((s) => (
-                      <option key={s.id} value={s.id}>{s.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Punto Venta */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
-                  <select
-                    name="puntoVentaId"
-                    value={formulario.puntoVentaId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    {puntosVenta.map((pv) => (
-                      <option key={pv.id} value={pv.id}>{pv.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Plazo */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
-                  <select
-                    name="plazoId"
-                    value={formulario.plazoId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    <option value="">Seleccionar plazo...</option>
-                    {plazos.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Vendedor */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
-                  <select
-                    name="vendedorId"
-                    value={formulario.vendedorId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    <option value="">Seleccionar vendedor...</option>
-                    {vendedores.map((v) => (
-                      <option key={v.id} value={v.id}>{v.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
+            {/* Una sola tarjeta con campos organizados en grid */}
             <div className="mb-6">
-              {/* Encabezado eliminado para maximizar espacio */}
+              <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+                
+                {/* Primera fila: 6 campos */}
+                <div className="grid grid-cols-6 gap-4 mb-3">
+                  {/* Cliente */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+                    {loadingClientes ? (
+                      <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                        Cargando...
+                      </div>
+                    ) : errorClientes ? (
+                      <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
+                        {errorClientes}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ""}
+                          readOnly
+                          disabled
+                          className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                        />
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={abrirSelector}
+                            className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
+                            title="Buscar en lista completa"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
-                {/* Buscador de producto */}
-                <div className="min-w-[260px] w-[260px]">
-                  <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
+                  {/* Documento */}
+                  <div>
+                    <SelectorDocumento
+                      tipoComprobante={fiscal.letra || 'A'}
+                      esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
+                      valorInicial={documentoInfo.valor}
+                      tipoInicial={documentoInfo.tipo}
+                      onChange={handleDocumentoChange}
+                      readOnly={isReadOnly}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Domicilio */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                    <input
+                      name="domicilio"
+                      type="text"
+                      value={formulario.domicilio}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+                    <input
+                      name="fecha"
+                      type="date"
+                      value={formulario.fecha}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+
+                  {/* Plazo */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
+                    <select
+                      name="plazoId"
+                      value={formulario.plazoId}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {plazos.map((p) => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Vendedor */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
+                    <select
+                      name="vendedorId"
+                      value={formulario.vendedorId}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {vendedores.map((v) => (
+                        <option key={v.id} value={v.id}>{v.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* Tipo de Comprobante */}
-                <div className="w-40">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
-                  <ComprobanteDropdown
-                    opciones={opcionesComprobante}
-                    value={tipoComprobante}
-                    onChange={setTipoComprobante}
-                    disabled={isReadOnly}
-                    className="w-full max-w-[120px]"
-                  />
+                {/* Segunda fila: 3 campos */}
+                <div className="grid grid-cols-3 gap-4 mb-3">
+                  {/* Buscador */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+                    <BuscadorProducto 
+                      productos={productos} 
+                      onSelect={handleAddItemToGrid} 
+                      disabled={isReadOnly}
+                      readOnly={isReadOnly}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Tipo de Comprobante */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                    <ComprobanteDropdown
+                      opciones={opcionesComprobante}
+                      value={tipoComprobante}
+                      onChange={setTipoComprobante}
+                      disabled={isReadOnly}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Acción por defecto */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+                    <SumarDuplicar
+                      autoSumarDuplicados={autoSumarDuplicados}
+                      setAutoSumarDuplicados={setAutoSumarDuplicados}
+                      disabled={isReadOnly}
+                      showLabel={false}
+                    />
+                  </div>
                 </div>
 
-                {/* Acción por defecto duplicado */}
-                <div className="w-56">
-                  <SumarDuplicar
-                    autoSumarDuplicados={autoSumarDuplicados}
-                    setAutoSumarDuplicados={setAutoSumarDuplicados}
-                    disabled={isReadOnly}
-                  />
-                </div>
+
               </div>
             </div>
 
