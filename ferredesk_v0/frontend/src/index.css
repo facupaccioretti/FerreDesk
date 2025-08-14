@@ -4,6 +4,12 @@
 
 @tailwind utilities;
 
+/* Configuración global para inputs - texto de izquierda a derecha */
+input, textarea, select {
+  text-align: left !important;
+  direction: ltr !important;
+}
+
 @keyframes float {
   0% {
     transform: translateY(0) scale(1);

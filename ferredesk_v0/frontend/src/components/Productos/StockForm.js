@@ -1,12 +1,21 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useStockProveAPI, useStockProveEditAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { BotonEditar } from "../Botones"
+
+// Importar hooks modulares
+import { 
+  useStockForm, 
+  useGestionProveedores, 
+  useAsociacionCodigos,
+  useGuardadoAtomico,
+  useValidaciones 
+} from "./herramientastockform"
 
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
@@ -28,159 +37,134 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
   
-  // Estado principal del formulario
+  // Referencias
   const refContenedorDenominacion = useRef(null)
-  const [form, setForm] = useState(() => {
-    if (modo === "nuevo") {
-      const savedForm = localStorage.getItem("stockFormDraft")
-      if (savedForm && !stock) {
-        return JSON.parse(savedForm)
-      }
-      return (
-        stock || {
-          codvta: "",
-          codcom: "",
-          deno: "",
-          unidad: "",
-          cantmin: 0,
-          proveedor_habitual_id: "",
-          idfam1: null,
-          idfam2: null,
-          idfam3: null,
-          idaliiva: "",
-          id: undefined,
-        }
-      )
-    } else {
-      // Siempre incluir el id del stock en el form
-      return stock
-        ? { ...stock, id: stock.id }
-        : {
-            codvta: "",
-            codcom: "",
-            deno: "",
-            unidad: "",
-            cantmin: 0,
-            proveedor_habitual_id: "",
-            idfam1: null,
-            idfam2: null,
-            idfam3: null,
-            idaliiva: "",
-            id: undefined,
-          }
-    }
-  })
-
-  // Estado para stock y códigos pendientes SOLO en modo nuevo
-  const [stockProvePendientes, setStockProvePendientes] = useState(modo === "nuevo" ? [] : [])
-  const [codigosPendientes, setCodigosPendientes] = useState(modo === "nuevo" ? [] : [])
-
-  // Nuevo estado para manejar proveedores agregados en modo nuevo
-  const [proveedoresAgregados, setProveedoresAgregados] = useState(modo === "nuevo" ? [] : [])
-
-  const [newStockProve, setNewStockProve] = useState({
-    stock: stock?.id || "",
-    proveedor: "",
-    cantidad: "",
-    costo: "",
-  })
-
+  
+  // APIs existentes
   const stockProveAPI = useStockProveAPI()
   const stockProveEditAPI = useStockProveEditAPI()
   const isEdicion = !!stock?.id
   const { stockProve, updateStockProve, fetchStockProve } = isEdicion ? stockProveEditAPI : stockProveAPI
-
   const { alicuotas } = useAlicuotasIVAAPI()
-
-  const [formError, setFormError] = useState(null)
-  const [showAsociarCodigo, setShowAsociarCodigo] = useState(false)
-  const [editandoCantidadId, setEditandoCantidadId] = useState(null)
-  const [nuevaCantidad, setNuevaCantidad] = useState("")
-  const [editandoCostoId, setEditandoCostoId] = useState(null)
-  const [nuevoCosto, setNuevoCosto] = useState("")
-  // Estados para edición de proveedores agregados en modo nuevo
-  const [editandoCantidadProveedorId, setEditandoCantidadProveedorId] = useState(null)
-  const [nuevaCantidadProveedor, setNuevaCantidadProveedor] = useState("")
-  const [editandoCostoProveedorId, setEditandoCostoProveedorId] = useState(null)
-  const [nuevoCostoProveedor, setNuevoCostoProveedor] = useState("")
-  const [mostrarTooltipStock, setMostrarTooltipStock] = useState(false)
-  
-  // Estados para el componente de asociar código integrado
-  const [selectedProveedor, setSelectedProveedor] = useState("")
-  const [codigoProveedor, setCodigoProveedor] = useState("")
-  const [productosConDenominacion, setProductosConDenominacion] = useState([])
-  const [loadingCodigos, setLoadingCodigos] = useState(false)
-  const [messageAsociar, setMessageAsociar] = useState(null)
-  const [errorAsociar, setErrorAsociar] = useState(null)
-  const [costoAsociar, setCostoAsociar] = useState("")
-  const [denominacionAsociar, setDenominacionAsociar] = useState("")
-  const [cargandoCostoAsociar, setCargandoCostoAsociar] = useState(false)
-  const [showSugeridos, setShowSugeridos] = useState(false)
-  const [modoBusqueda, setModoBusqueda] = useState("codigo")
-
-  // Array de códigos pendientes solo para edición
-  const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
 
   // Hook para detectar denominaciones similares
   const { sugerencias, isLoading: isLoadingSugerencias, error: errorSugerencias, mostrarTooltip, handleDenominacionBlur, limpiarSugerencias, toggleTooltip } = useDetectorDenominaciones()
 
-  // useEffect para cargar códigos del proveedor seleccionado
-  useEffect(() => {
-    if (selectedProveedor) {
-      console.log('[StockForm] Fetching códigos para proveedor', selectedProveedor)
-      setLoadingCodigos(true)
-      fetch(`/api/productos/proveedor/${selectedProveedor}/codigos-lista/`, {
-        credentials: "include",
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          console.log('[StockForm] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
-          setProductosConDenominacion(data.productos || [])
-          setLoadingCodigos(false)
-        })
-        .catch(() => {
-          setLoadingCodigos(false)
-        })
-    } else {
-      setProductosConDenominacion([])
-    }
-  }, [selectedProveedor])
-
-  // Limpiar input al cambiar modo de búsqueda
-  useEffect(() => {
-    setCodigoProveedor("")
-    setShowSugeridos(false)
-  }, [modoBusqueda])
-
-  // Consultar costo sugerido al cambiar proveedor o código
-  useEffect(() => {
-    if (selectedProveedor && codigoProveedor) {
-      console.log('[StockForm] Consultando costo sugerido', { proveedor: selectedProveedor, codigo: codigoProveedor })
-      setCargandoCostoAsociar(true)
-      fetch(
-        `/api/productos/precio-producto-proveedor/?proveedor_id=${selectedProveedor}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,
-      )
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.precio !== undefined && data.precio !== null) {
-            setCostoAsociar(data.precio)
-            setDenominacionAsociar(data.denominacion || "")
-          } else {
-            setCostoAsociar("")
-            setDenominacionAsociar("")
-          }
-          setCargandoCostoAsociar(false)
-        })
-        .catch(() => {
-          setCostoAsociar("")
-          setDenominacionAsociar("")
-          setCargandoCostoAsociar(false)
-        })
-    } else {
-      setCostoAsociar("")
-      setDenominacionAsociar("")
-    }
-  }, [selectedProveedor, codigoProveedor])
+  // Hooks modulares
+  const { 
+    form, 
+    setForm, 
+    formError, 
+    setFormError, 
+    handleChange, 
+    updateForm, 
+    handleCancel 
+  } = useStockForm({ stock, modo, onSave, onCancel })
+  
+  const {
+    stockProvePendientes,
+    setStockProvePendientes,
+    codigosPendientes,
+    setCodigosPendientes,
+    proveedoresAgregados,
+    setProveedoresAgregados,
+    codigosPendientesEdicion,
+    setCodigosPendientesEdicion,
+    newStockProve,
+    setNewStockProve,
+    editandoCantidadId,
+    nuevaCantidad,
+    setNuevaCantidad,
+    editandoCostoId,
+    nuevoCosto,
+    setNuevoCosto,
+    editandoCantidadProveedorId,
+    nuevaCantidadProveedor,
+    setNuevaCantidadProveedor,
+    editandoCostoProveedorId,
+    nuevoCostoProveedor,
+    setNuevoCostoProveedor,
+    handleNewStockProveChange,
+    handleAgregarProveedorEdicion,
+    handleAgregarProveedor,
+    handleEliminarProveedorEdicion,
+    handleEliminarProveedor,
+    handleEditarCantidadProveedor,
+    handleEditarCantidadProveedorSave,
+    handleEditarCantidadProveedorCancel,
+    handleEditarCostoProveedor,
+    handleEditarCostoProveedorSave,
+    handleEditarCostoProveedorCancel,
+    handleEditStockProve,
+    handleEditCostoStockProve,
+    handleEditStockProveCancel,
+    handleEditStockProveSave,
+    handleEditCostoStockProveSave,
+    stockTotal,
+    proveedoresAsociados,
+    stockProveParaMostrar,
+    stockProveForThisStock
+  } = useGestionProveedores({ 
+    stock, 
+    modo, 
+    proveedores, 
+    stockProve, 
+    form, 
+    updateForm, 
+    setFormError,
+    updateStockProve,
+    fetchStockProve
+  })
+  
+  const {
+    selectedProveedor,
+    setSelectedProveedor,
+    codigoProveedor,
+    setCodigoProveedor,
+    productosConDenominacion,
+    loadingCodigos,
+    messageAsociar,
+    errorAsociar,
+    costoAsociar,
+    denominacionAsociar,
+    cargandoCostoAsociar,
+    showSugeridos,
+    setShowSugeridos,
+    modoBusqueda,
+    setModoBusqueda,
+    filteredProductos,
+    handleAsociarCodigoIntegrado,
+    handleCancelarAsociarCodigo
+  } = useAsociacionCodigos({
+    stock,
+    modo,
+    form,
+    stockProve,
+    codigosPendientes,
+    setCodigosPendientes,
+    codigosPendientesEdicion,
+    setCodigosPendientesEdicion,
+    stockProvePendientes,
+    setStockProvePendientes,
+    proveedoresAgregados,
+    setProveedoresAgregados,
+    updateForm,
+    setFormError
+  })
+  
+  const { guardarProductoAtomico } = useGuardadoAtomico({ modo, stock, stockProve, onSave })
+  
+  const { esValido } = useValidaciones({
+    form,
+    modo,
+    stockProveParaMostrar,
+    codigosPendientes,
+    codigosPendientesEdicion
+  })
+  
+  // Estados adicionales que no están en los hooks
+  const [showAsociarCodigo, setShowAsociarCodigo] = useState(false)
+  const [mostrarTooltipStock, setMostrarTooltipStock] = useState(false)
 
   
 
@@ -225,7 +209,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
       })
       setNewStockProve((prev) => ({ ...prev, stock: stock.id }))
     }
-  }, [stock, stockProve])
+  }, [stock, stockProve, setForm, setNewStockProve])
 
   useEffect(() => {
     if (modo === "nuevo" && !stock) {
@@ -248,7 +232,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
           }
         })
     }
-  }, [modo, form.id])
+  }, [modo, form.id, setForm, setNewStockProve])
 
   useEffect(() => {
     let detectado = false
@@ -291,830 +275,56 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
 
 
 
-  // Handler genérico y corregido para todos los campos del formulario
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => {
-      let finalValue = value
-      // Campos que deben transformarse a número (o null si vacío)
-      if (["idfam1", "idfam2", "idfam3", "idaliiva"].includes(name)) {
-        finalValue = value === "" ? null : Number(value)
-      } else if (name === "proveedor_habitual_id") {
-        // Este campo se mantiene como string para preservar ceros a la izquierda si los hubiera
-        finalValue = value === "" ? "" : String(value)
-      }
-      return {
-        ...prev,
-        [name]: finalValue,
-      }
-    })
-  }
-
-  const handleNewStockProveChange = (e) => {
-    const { name, value } = e.target
-    console.log("[handleNewStockProveChange] Cambio:", name, value)
-    setNewStockProve((prev) => ({
-      ...prev,
-      [name]: name === "proveedor" ? String(value) : value,
-    }))
-  }
 
 
 
-  // Handler para asociar código de proveedor (ahora solo modifica el estado local en edición)
-  const handleAsociarCodigoPendiente = async ({ proveedor_id, codigo_producto_proveedor, costo }) => {
-    console.log("[handleAsociarCodigoPendiente] INICIO", {
-      proveedor_id,
-      codigo_producto_proveedor,
-      costo,
-      isEdicion,
-      form,
-    })
-    if (!isEdicion) {
-      // Validar duplicados en pendientes
-      const codigoYaUsado = (codigosPendientes || []).some(
-        (c) =>
-          c.codigo_producto_proveedor === codigo_producto_proveedor && String(c.proveedor_id) !== String(proveedor_id),
-      )
-      if (codigoYaUsado) {
-        console.log("[handleAsociarCodigoPendiente] Código ya usado en pendientes")
-        return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
-      }
-      // Si el producto aún no fue guardado (ID temporal), solo guardar en pendientes
-      if (!stock) {
-        setCodigosPendientes((prev) => {
-          const otros = (prev || []).filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-          return [
-            ...otros,
-            {
-              proveedor_id,
-              codigo_producto_proveedor,
-              costo: costo !== "" ? costo : 0,
-            },
-          ]
-        })
-        setStockProvePendientes((prev) =>
-          (prev || []).map((sp) =>
-            String(sp.proveedor) === String(proveedor_id) ? { ...sp, costo: costo !== "" ? costo : 0 } : sp,
-          ),
-        )
-        return { ok: true }
-      }
-    }
 
-    // Log antes del condicional de edición
-    console.log(
-      "[handleAsociarCodigoPendiente] isEdicion:",
-      isEdicion,
-      typeof isEdicion,
-      "form.id:",
-      form.id,
-      typeof form.id,
-    )
-    // Refuerzo el condicional para aceptar cualquier valor no vacío de form.id
-    if (isEdicion && form.id != null && String(form.id).length > 0) {
-      // Validar contra los códigos ya asociados (guardados y pendientes)
-      const codigosActuales = [
-        ...stockProve.map((sp) => sp.codigo_producto_proveedor).filter(Boolean),
-        ...codigosPendientesEdicion.map((c) => c.codigo_producto_proveedor),
-      ]
-      // Si el código ya está en uso para otro proveedor, error
-      const yaUsado = codigosActuales.some(
-        (c, idx, arr) =>
-          c === codigo_producto_proveedor &&
-          // Si ya está en pendientes, que no sea para el mismo proveedor
-          codigosPendientesEdicion[idx]?.proveedor_id !== proveedor_id,
-      )
-      if (yaUsado) {
-        return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
-      }
-      setCodigosPendientesEdicion((prev) => {
-        // Reemplaza si ya existe para ese proveedor
-        const otros = prev.filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-        return [...otros, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }]
-      })
-      // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
-      setForm((prevForm) => {
-        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-        const actualizado = prevForm.stock_proveedores.map((sp) =>
-          String(sp.proveedor_id) === String(proveedor_id) ? { ...sp, codigo_producto_proveedor, costo } : sp,
-        )
-        // Si no existe, agregarlo
-        const existe = actualizado.some((sp) => String(sp.proveedor_id) === String(proveedor_id))
-        return {
-          ...prevForm,
-          stock_proveedores: existe
-            ? actualizado
-            : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }],
-        }
-      })
-      return { ok: true }
-    }
 
-    if (!isEdicion && form.id) {
-      try {
-        const res = await fetch("/api/productos/asociar-codigo-proveedor/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie("csrftoken"),
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            stock_id: form.id,
-            proveedor_id,
-            codigo_producto_proveedor,
-            costo: costo !== "" ? costo : 0,
-          }),
-        })
-        const data = await res.json()
-        console.log("[handleAsociarCodigoPendiente] Respuesta backend (nuevo):", data)
-        if (!res.ok) {
-          // Si el error es producto/proveedor no encontrado, mostrar mensaje claro
-          if (data.detail && data.detail.includes("Producto o proveedor no encontrado")) {
-            return { ok: false, error: "Debes guardar el producto antes de asociar un código de proveedor." }
-          }
-          console.log("[handleAsociarCodigoPendiente] Error backend (nuevo):", data.detail)
-          return { ok: false, error: data.detail || "Error al validar código de proveedor" }
-        }
-        setCodigosPendientes((prev) => {
-          const otros = (prev || []).filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-          return [
-            ...otros,
-            {
-              proveedor_id,
-              codigo_producto_proveedor,
-              costo: costo !== "" ? costo : 0,
-            },
-          ]
-        })
-        setStockProvePendientes((prev) =>
-          (prev || []).map((sp) =>
-            String(sp.proveedor) === String(proveedor_id) ? { ...sp, costo: costo !== "" ? costo : 0 } : sp,
-          ),
-        )
-        console.log("[handleAsociarCodigoPendiente] Asociación exitosa (nuevo)")
-        return { ok: true }
-      } catch (err) {
-        console.log("[handleAsociarCodigoPendiente] Excepción (nuevo):", err)
-        return { ok: false, error: err.message || "Error al validar código de proveedor" }
-      }
-    }
-    console.log("[handleAsociarCodigoPendiente] Fallback error")
-    return { ok: false, error: "No se pudo asociar el código." }
-  }
 
-  // Handler para agregar un nuevo proveedor en modo edición
-  const handleAgregarProveedorEdicion = () => {
-    if (!newStockProve.proveedor) {
-      alert("Por favor seleccione un proveedor")
-      return
-    }
-    
-    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
-    if (!proveedorExiste) {
-      alert("Debe seleccionar un proveedor válido.")
-      return
-    }
 
-    const proveedorId = Number.parseInt(newStockProve.proveedor)
-    
-    // Verificar si el proveedor ya existe en stockProve o en codigosPendientesEdicion
-    const yaExisteEnStock = stockProveForThisStock.some((sp) => 
-      String(sp.proveedor?.id || sp.proveedor) === String(proveedorId)
-    )
-    const yaExisteEnPendientes = codigosPendientesEdicion.some((c) => 
-      String(c.proveedor_id) === String(proveedorId)
-    )
-    
-    if (yaExisteEnStock || yaExisteEnPendientes) {
-      alert("Este proveedor ya fue agregado.")
-      return
-    }
-
-    // Agregar el proveedor a codigosPendientesEdicion sin código asociado
-    setCodigosPendientesEdicion((prev) => [
-      ...prev,
-      {
-        proveedor_id: proveedorId,
-        cantidad: Number(newStockProve.cantidad) || 0,
-        costo: Number(newStockProve.costo) || 0,
-        codigo_producto_proveedor: "", // Sin código asociado
-      }
-    ])
-
-    // Agregar también a form.stock_proveedores
-    setForm((prevForm) => {
-      if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-      return {
-        ...prevForm,
-        stock_proveedores: [
-          ...prevForm.stock_proveedores,
-          {
-            proveedor_id: proveedorId,
-            cantidad: Number(newStockProve.cantidad) || 0,
-            costo: Number(newStockProve.costo) || 0,
-            codigo_producto_proveedor: "",
-          }
-        ]
-      }
-    })
-
-    // Limpiar el formulario
-    setNewStockProve({ stock: stock?.id || "", proveedor: "", cantidad: "", costo: "" })
-  }
-
-  // Handler para agregar un nuevo proveedor en modo nuevo
-  const handleAgregarProveedor = () => {
-    if (!newStockProve.proveedor) {
-      alert("Por favor seleccione un proveedor")
-      return
-    }
-    
-    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
-    if (!proveedorExiste) {
-      alert("Debe seleccionar un proveedor válido.")
-      return
-    }
-
-    const proveedorId = Number.parseInt(newStockProve.proveedor)
-    
-    // Verificar si el proveedor ya fue agregado
-    const yaAgregado = proveedoresAgregados.some((p) => p.proveedor === proveedorId)
-    if (yaAgregado) {
-      alert("Este proveedor ya fue agregado.")
-      return
-    }
-
-    // Agregar el proveedor a la lista de proveedores agregados
-    setProveedoresAgregados((prev) => [
-      ...prev,
-      {
-        proveedor: proveedorId,
-        cantidad: 0, // Cantidad inicial en 0
-        costo: 0, // Costo inicial en 0
-        codigo_producto_proveedor: "",
-        pendiente: true, // Marcar como pendiente para mostrar con fondo amarillo
-      }
-    ])
-
-    // Limpiar el formulario
-    setNewStockProve({ stock: "", proveedor: "", cantidad: "", costo: "" })
-  }
-
-  // Handler para eliminar un proveedor agregado en modo edición
-  const handleEliminarProveedorEdicion = (proveedorId) => {
-    // Remover de codigosPendientesEdicion
-    setCodigosPendientesEdicion((prev) => 
-      prev.filter((c) => String(c.proveedor_id) !== String(proveedorId))
-    )
-    
-    // Remover de form.stock_proveedores
-    setForm((prevForm) => {
-      if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-      return {
-        ...prevForm,
-        stock_proveedores: prevForm.stock_proveedores.filter((sp) => 
-          String(sp.proveedor_id) !== String(proveedorId)
-        )
-      }
-    })
-  }
-
-  // Handler para eliminar un proveedor agregado
-  const handleEliminarProveedor = (proveedorId) => {
-    setProveedoresAgregados((prev) => prev.filter((p) => p.proveedor !== proveedorId))
-  }
-
-  // Handler para editar cantidad de un proveedor agregado (con confirmación)
-  const handleEditarCantidadProveedor = (proveedorId) => {
-    let proveedor
-    if (isEdicion) {
-      // En modo edición, buscar en codigosPendientesEdicion
-      proveedor = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
-    } else {
-      // En modo nuevo, buscar en proveedoresAgregados
-      proveedor = proveedoresAgregados.find((p) => p.proveedor === proveedorId)
-    }
-    
-    if (proveedor) {
-      setEditandoCantidadProveedorId(proveedorId)
-      setNuevaCantidadProveedor(String(proveedor.cantidad || 0))
-    }
-  }
-
-  const handleEditarCantidadProveedorSave = (proveedorId) => {
-    const cantidadNum = Number.parseFloat(String(nuevaCantidadProveedor).replace(",", "."))
-    if (isNaN(cantidadNum)) {
-      setFormError("Ingrese una cantidad válida")
-      return
-    }
-    
-    if (isEdicion) {
-      // En modo edición, actualizar codigosPendientesEdicion
-      setCodigosPendientesEdicion((prev) =>
-        prev.map((c) =>
-          String(c.proveedor_id) === String(proveedorId) ? { ...c, cantidad: cantidadNum } : c
-        )
-      )
-      
-      // Actualizar también form.stock_proveedores
-      setForm((prevForm) => {
-        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-        return {
-          ...prevForm,
-          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
-            String(sp.proveedor_id) === String(proveedorId) ? { ...sp, cantidad: cantidadNum } : sp
-          )
-        }
-      })
-    } else {
-      // En modo nuevo, actualizar proveedoresAgregados
-      setProveedoresAgregados((prev) =>
-        prev.map((p) =>
-          p.proveedor === proveedorId ? { ...p, cantidad: cantidadNum } : p
-        )
-      )
-    }
-    
-    setEditandoCantidadProveedorId(null)
-    setNuevaCantidadProveedor("")
-  }
-
-  const handleEditarCantidadProveedorCancel = () => {
-    setEditandoCantidadProveedorId(null)
-    setNuevaCantidadProveedor("")
-  }
-
-  // Handler para editar costo de un proveedor agregado (con confirmación)
-  const handleEditarCostoProveedor = (proveedorId) => {
-    let proveedor
-    if (isEdicion) {
-      // En modo edición, buscar en codigosPendientesEdicion
-      proveedor = codigosPendientesEdicion.find((c) => String(c.proveedor_id) === String(proveedorId))
-    } else {
-      // En modo nuevo, buscar en proveedoresAgregados
-      proveedor = proveedoresAgregados.find((p) => p.proveedor === proveedorId)
-    }
-    
-    if (proveedor) {
-      setEditandoCostoProveedorId(proveedorId)
-      setNuevoCostoProveedor(String(proveedor.costo || 0))
-    }
-  }
-
-  const handleEditarCostoProveedorSave = (proveedorId) => {
-    const costoNum = Number.parseFloat(String(nuevoCostoProveedor).replace(",", "."))
-    if (isNaN(costoNum)) {
-      setFormError("Ingrese un costo válido")
-      return
-    }
-    
-    if (isEdicion) {
-      // En modo edición, actualizar codigosPendientesEdicion
-      setCodigosPendientesEdicion((prev) =>
-        prev.map((c) =>
-          String(c.proveedor_id) === String(proveedorId) ? { ...c, costo: costoNum } : c
-        )
-      )
-      
-      // Actualizar también form.stock_proveedores
-      setForm((prevForm) => {
-        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-        return {
-          ...prevForm,
-          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
-            String(sp.proveedor_id) === String(proveedorId) ? { ...sp, costo: costoNum } : sp
-          )
-        }
-      })
-    } else {
-      // En modo nuevo, actualizar proveedoresAgregados
-      setProveedoresAgregados((prev) =>
-        prev.map((p) =>
-          p.proveedor === proveedorId ? { ...p, costo: costoNum } : p
-        )
-      )
-    }
-    
-    setEditandoCostoProveedorId(null)
-    setNuevoCostoProveedor("")
-  }
-
-  const handleEditarCostoProveedorCancel = () => {
-    setEditandoCostoProveedorId(null)
-    setNuevoCostoProveedor("")
-  }
-
-  // Al guardar, aplicar los códigos pendientes de edición
+  // Función de guardado usando el hook modular
   const handleSave = async (e) => {
     e.preventDefault()
-    localStorage.removeItem("stockFormDraft")
-    setFormError(null)
-    const formToSave = { ...form }
-
-    // Asegurar que los IDs de familia se envíen correctamente
-    if (formToSave.idfam1 !== null) formToSave.idfam1_id = formToSave.idfam1
-    if (formToSave.idfam2 !== null) formToSave.idfam2_id = formToSave.idfam2
-    if (formToSave.idfam3 !== null) formToSave.idfam3_id = formToSave.idfam3
-
-    // Limpiar los campos originales para evitar duplicación
-    delete formToSave.idfam1
-    delete formToSave.idfam2
-    delete formToSave.idfam3
-
-    // Asegurar que el ID de alícuota IVA se envíe correctamente
-    if (formToSave.idaliiva !== null && formToSave.idaliiva !== undefined) formToSave.idaliiva_id = formToSave.idaliiva
-    delete formToSave.idaliiva
-
-    if (!isEdicion && form.id) {
-      formToSave.id = form.id
-    }
-    if (isEdicion && stock?.id) {
-      formToSave.id = stock.id
-    }
-    try {
-      let productoGuardado = null
-      if (!isEdicion) {
-        // NUEVO FLUJO ATÓMICO: enviar todo junto
-        // Combinar stockProvePendientes (del formulario anterior) con proveedoresAgregados (nuevos)
-        const stockProveedores = [
-          ...stockProvePendientes.map((sp) => {
-          const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(sp.proveedor))
-          return {
-            proveedor_id: sp.proveedor,
-            cantidad: sp.cantidad,
-            costo: sp.costo,
-            codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
-          }
-          }),
-          ...proveedoresAgregados.map((pa) => {
-            const codigoPendiente = codigosPendientes.find((c) => String(c.proveedor_id) === String(pa.proveedor))
-            return {
-              proveedor_id: pa.proveedor,
-              cantidad: pa.cantidad,
-              costo: pa.costo,
-            codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
-          }
-        })
-        ]
-        
-        const res = await fetch("/api/productos/crear-producto-con-relaciones/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            producto: formToSave,
-            stock_proveedores: stockProveedores,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          setFormError(data.detail || "Error al guardar el producto.")
-          return
-        }
-        productoGuardado = { ...formToSave, id: data.producto_id }
-        setStockProvePendientes([])
-        setCodigosPendientes([])
-        setProveedoresAgregados([])
-        if (typeof fetchStockProve === "function") fetchStockProve()
-        await onSave(productoGuardado)
-      } else {
-        // EDICIÓN ATÓMICA: enviar todo junto
-        // Construir stock_proveedores a partir de stockProve (los reales) y codigosPendientesEdicion (los editados)
-        const stockProveedores = stockProve
-          .filter((sp) => sp.stock === stock.id)
-          .map((sp) => {
-            // Si hay un pendiente de edición para este proveedor, usar su código/costo
-            const pendiente = codigosPendientesEdicion.find(
-              (c) => String(c.proveedor_id) === String(sp.proveedor?.id || sp.proveedor),
-            )
-            return {
-              proveedor_id: sp.proveedor?.id || sp.proveedor,
-              cantidad: sp.cantidad,
-              costo: pendiente && pendiente.costo !== undefined ? pendiente.costo : sp.costo,
-              codigo_producto_proveedor: pendiente
-                ? pendiente.codigo_producto_proveedor
-                : sp.codigo_producto_proveedor || "",
-            }
-          })
-        const res = await fetch("/api/productos/editar-producto-con-relaciones/", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            producto: formToSave,
-            stock_proveedores: stockProveedores,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          setFormError(data.detail || "Error al actualizar el producto.")
-          return
-        }
-        productoGuardado = { ...formToSave, id: data.producto_id || stock.id }
-        setCodigosPendientesEdicion([])
-        if (typeof fetchStockProve === "function") fetchStockProve()
-        await onSave(productoGuardado)
-      }
-    } catch (err) {
-      setFormError("Error al guardar el producto o sus relaciones.")
-      return
-    }
-  }
-
-  const handleCancel = () => {
-    localStorage.removeItem("stockFormDraft")
-    onCancel()
-  }
-
-  const stockProveForThisStock = stockProve.filter((sp) => sp.stock === stock?.id)
-
-  const handleEditStockProve = (sp) => {
-    setEditandoCantidadId(sp.id)
-    setNuevaCantidad(sp.cantidad)
-  }
-
-  const handleEditCostoStockProve = (sp) => {
-    setEditandoCostoId(sp.id)
-    setNuevoCosto(sp.costo)
-  }
-
-  const handleEditStockProveCancel = () => {
-    setEditandoCantidadId(null)
-    setNuevaCantidad("")
-    setEditandoCostoId(null)
-    setNuevoCosto("")
-  }
-
-  const handleEditStockProveSave = async (id) => {
-    // Verificar si es un proveedor pendiente (ID temporal)
-    if (typeof id === 'string' && id.startsWith('pendiente-')) {
-      const proveedorId = id.replace('pendiente-', '')
-      const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
-      if (isNaN(cantidadNum)) {
-        setFormError("Ingrese una cantidad válida")
-        return
-      }
-      
-      // Actualizar codigosPendientesEdicion
-      setCodigosPendientesEdicion((prev) => 
-        prev.map((c) => 
-          String(c.proveedor_id) === String(proveedorId)
-            ? { ...c, cantidad: cantidadNum }
-            : c
-        )
-      )
-      
-      // Actualizar form.stock_proveedores
-      setForm((prevForm) => {
-        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-        return {
-          ...prevForm,
-          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
-            String(sp.proveedor_id) === String(proveedorId)
-              ? { ...sp, cantidad: cantidadNum }
-              : sp
-          )
-        }
-      })
-      
-      setEditandoCantidadId(null)
-      setNuevaCantidad("")
+    
+    // Validar el formulario antes de guardar
+    if (!esValido) {
+      setFormError("Por favor corrija los errores en el formulario antes de guardar.")
       return
     }
     
-    // Proveedor existente en stockProve
-    const sp = stockProve.find((sp) => sp.id === id)
-    if (!sp) return
-    // Permitir negativos y decimales
-    const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
-    if (isNaN(cantidadNum)) {
-      setFormError("Ingrese una cantidad válida")
-      return
-    }
-    // El costo NO se modifica automáticamente al cambiar la cantidad
-    const costoActual = sp.costo
-
-    await updateStockProve(id, {
-      stockId: sp.stock,
-      proveedorId: sp.proveedor?.id || sp.proveedor,
-      cantidad: cantidadNum,
-      costo: costoActual,
-    })
-    setEditandoCantidadId(null)
-    setNuevaCantidad("")
-    if (typeof fetchStockProve === "function") fetchStockProve()
-  }
-
-  const handleEditCostoStockProveSave = async (id) => {
-    // Verificar si es un proveedor pendiente (ID temporal)
-    if (typeof id === 'string' && id.startsWith('pendiente-')) {
-      const proveedorId = id.replace('pendiente-', '')
-      const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
-      if (isNaN(costoNum) || costoNum < 0) {
-        setFormError("Ingrese un costo válido")
-        return
-      }
-      
-      // Actualizar codigosPendientesEdicion
-      setCodigosPendientesEdicion((prev) => 
-        prev.map((c) => 
-          String(c.proveedor_id) === String(proveedorId)
-            ? { ...c, costo: costoNum }
-            : c
-        )
-      )
-      
-      // Actualizar form.stock_proveedores
-      setForm((prevForm) => {
-        if (!Array.isArray(prevForm.stock_proveedores)) return prevForm
-        return {
-          ...prevForm,
-          stock_proveedores: prevForm.stock_proveedores.map((sp) =>
-            String(sp.proveedor_id) === String(proveedorId)
-              ? { ...sp, costo: costoNum }
-              : sp
-          )
-        }
-      })
-      
-      setEditandoCostoId(null)
-      setNuevoCosto("")
-      return
-    }
+    // Usar el hook de guardado atómico (maneja todo internamente)
+    const resultado = await guardarProductoAtomico(
+      form,
+      stockProvePendientes,
+      codigosPendientes,
+      proveedoresAgregados,
+      codigosPendientesEdicion,
+      setFormError,
+      setStockProvePendientes,
+      setCodigosPendientes,
+      setProveedoresAgregados,
+      setCodigosPendientesEdicion,
+      fetchStockProve
+    )
     
-    // Proveedor existente en stockProve
-    const sp = stockProve.find((sp) => sp.id === id)
-    if (!sp) return
-    // Permitir decimales
-    const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
-    if (isNaN(costoNum) || costoNum < 0) {
-      setFormError("Ingrese un costo válido")
-      return
-    }
-
-    await updateStockProve(id, {
-      stockId: sp.stock,
-      proveedorId: sp.proveedor?.id || sp.proveedor,
-      cantidad: sp.cantidad,
-      costo: costoNum,
-    })
-    setEditandoCostoId(null)
-    setNuevoCosto("")
-    if (typeof fetchStockProve === "function") fetchStockProve()
-  }
-
-
-
-  // Función para filtrar productos sugeridos
-  const filteredProductos = useMemo(() => {
-    if (productosConDenominacion.length === 0) return []
-
-    const term = codigoProveedor.trim().toLowerCase()
-    const campo = modoBusqueda === "codigo" ? "codigo" : "denominacion"
-
-    // Calcular puntuación por campo seleccionado
-    const puntuados = productosConDenominacion
-      .map((producto) => {
-        const texto = String(producto[campo] || "").toLowerCase()
-        let score = 0
-        if (term.length === 0) {
-          score = 0
-        } else if (texto === term) {
-          score = 1000
-        } else if (texto.startsWith(term)) {
-          score = 200 + (term.length / (texto.length || 1)) * 10
-        } else if (texto.includes(term)) {
-          score = 50
-        }
-        if (modoBusqueda === "denominacion" && !producto.denominacion) score = 0
-        return { ...producto, score }
-      })
-      .filter((obj) => obj.score > 0 || term.length === 0)
-
-    // Orden natural numérica + desc por score
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-    puntuados.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      return collator.compare(String(a.codigo), String(b.codigo))
-    })
-
-    return puntuados.slice(0, 8)
-  }, [productosConDenominacion, codigoProveedor, modoBusqueda])
-
-  // Función para manejar la asociación de código
-  const handleAsociarCodigoIntegrado = async () => {
-    setErrorAsociar(null)
-    setMessageAsociar(null)
-    if (!selectedProveedor || !codigoProveedor) {
-      setErrorAsociar("Debe seleccionar proveedor y código.")
-      return
-    }
-
-    const resultado = await handleAsociarCodigoPendiente({
-      proveedor_id: selectedProveedor,
-      codigo_producto_proveedor: codigoProveedor,
-      costo: costoAsociar,
-    })
-
-    if (resultado && resultado.ok) {
-      // En modo nuevo, si el proveedor no está en proveedoresAgregados, agregarlo automáticamente
-      if (!isEdicion && !stock?.id) {
-        const proveedorId = Number(selectedProveedor)
-        const yaExiste = proveedoresAgregados.some((pa) => pa.proveedor === proveedorId)
-        
-        if (!yaExiste) {
-          setProveedoresAgregados((prev) => [
-            ...prev,
-            {
-              proveedor: proveedorId,
-              cantidad: 0,
-              costo: Number(costoAsociar) || 0,
-              codigo_producto_proveedor: codigoProveedor,
-              pendiente: true,
-            }
-          ])
-        } else {
-          // Si ya existe, actualizar el costo y código
-          setProveedoresAgregados((prev) =>
-            prev.map((pa) =>
-              pa.proveedor === proveedorId
-                ? { ...pa, costo: Number(costoAsociar) || 0, codigo_producto_proveedor: codigoProveedor }
-                : pa
-            )
-          )
-        }
-      }
-
-      setMessageAsociar("¡Código de proveedor asociado correctamente!")
-      // Limpiar formulario
-      setSelectedProveedor("")
-      setCodigoProveedor("")
-      setCostoAsociar("")
-      setDenominacionAsociar("")
-      setShowAsociarCodigo(false)
-      setTimeout(() => {
-        setMessageAsociar(null)
-      }, 2000)
-    } else {
-      setErrorAsociar(resultado && resultado.error ? resultado.error : "No se pudo asociar el código.")
-      setTimeout(() => {
-        setErrorAsociar(null)
-      }, 3000)
+    if (resultado.success) {
+      // Limpiar localStorage
+      localStorage.removeItem("stockFormDraft")
     }
   }
 
-  // Función para limpiar el formulario de asociación
-  const handleCancelarAsociarCodigo = () => {
-    setShowAsociarCodigo(false)
-    setSelectedProveedor("")
-    setCodigoProveedor("")
-    setCostoAsociar("")
-    setDenominacionAsociar("")
-    setErrorAsociar(null)
-    setMessageAsociar(null)
-  }
+
+
+
+
+
+
+
 
   console.log("form state:", JSON.stringify(form))
   console.log("select value:", form.proveedor_habitual_id)
 
-  // Calcular el stock total sumando las cantidades de todos los proveedores
-  const stockTotal = (() => {
-    if (stock?.id) {
-      // En modo edición, usar solo stockProveForThisStock
-      return stockProveForThisStock.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0)
-    } else {
-      // En modo nuevo, sumar stockProvePendientes y proveedoresAgregados
-      const totalPendientes = stockProvePendientes.reduce((sum, sp) => sum + (Number(sp.cantidad) || 0), 0)
-      const totalAgregados = proveedoresAgregados.reduce((sum, pa) => sum + (Number(pa.cantidad) || 0), 0)
-      return totalPendientes + totalAgregados
-    }
-  })()
-
-  // Calcular proveedores asociados dinámicamente según el estado actual del formulario
-  const proveedoresAsociados = useMemo(() => {
-    if (stock?.id) {
-      return stockProveForThisStock
-        .map((sp) => (typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find((p) => p.id === sp.proveedor)))
-        .filter(Boolean)
-    } else {
-      return [
-        ...stockProvePendientes
-        .map((sp) => (typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find((p) => p.id === sp.proveedor)))
-          .filter(Boolean),
-        ...proveedoresAgregados
-          .map((pa) => proveedores.find((p) => p.id === pa.proveedor))
-        .filter(Boolean)
-      ]
-    }
-  }, [stock?.id, stockProveForThisStock, stockProvePendientes, proveedoresAgregados, proveedores])
+  // Calcular si hay un solo proveedor
   const unProveedor = proveedoresAsociados.length === 1
 
   // Si hay un solo proveedor, autocompletar y deshabilitar
@@ -1122,76 +332,16 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     if (unProveedor && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
       setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
     }
-  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id])
+  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id, setForm])
 
-  // Mezclar stock de proveedor real y pendientes de edición para mostrar en la tabla
-  const stockProveParaMostrar = (() => {
-    if (isEdicion) {
-      // Mapear por proveedor los datos guardados
-      const guardadosPorProveedor = Object.fromEntries(
-        stockProveForThisStock.map((sp) => [String(sp.proveedor?.id || sp.proveedor), sp]),
-      )
-      // Mapear por proveedor los pendientes
-      const pendientesPorProveedor = Object.fromEntries(
-        codigosPendientesEdicion.map((c) => [String(c.proveedor_id), c]),
-      )
-      // Unir claves
-      const proveedoresUnicos = Array.from(
-        new Set([...Object.keys(guardadosPorProveedor), ...Object.keys(pendientesPorProveedor)]),
-      )
-      // Construir array final
-      return proveedoresUnicos
-        .map((provId) => {
-          const pendiente = pendientesPorProveedor[provId]
-          const guardado = guardadosPorProveedor[provId]
-          if (pendiente) {
-            // Si hay pendiente, construir el objeto
-            const proveedorInfo = proveedores.find((p) => p.id === Number(provId))
-            return {
-              ...guardado, // Info del guardado si existe
-              ...pendiente, // Código y costo pendientes
-              proveedor: guardado?.proveedor || proveedorInfo, // Usar proveedor del guardado o buscarlo
-              id: guardado?.id || `pendiente-${provId}`, // ID del guardado o temporal
-              cantidad: pendiente.cantidad !== undefined ? pendiente.cantidad : (guardado?.cantidad || 0), // Usar cantidad del pendiente si está definida
-              pendiente: true,
-              costo: pendiente.costo !== undefined ? pendiente.costo : guardado?.costo,
-            }
-          } else {
-            return guardado
-          }
-        })
-        .filter(Boolean)
-    } else if (stock?.id) {
-      return stockProveForThisStock
-    } else {
-      // Nuevo producto: mostrar pendientes y proveedores agregados
-      return [
-        ...stockProvePendientes.map((sp, idx) => ({
-          ...sp,
-          id: `pendiente-${sp.proveedor}`,
-          proveedor:
-            typeof sp.proveedor === "object"
-              ? sp.proveedor
-              : proveedores.find((p) => p.id === sp.proveedor) || sp.proveedor,
-          codigo_producto_proveedor: "", // No hay código asociado aún
-        })),
-        ...proveedoresAgregados.map((pa, idx) => ({
-          ...pa,
-          id: `agregado-${pa.proveedor}`,
-          proveedor: proveedores.find((p) => p.id === pa.proveedor) || pa.proveedor,
-          codigo_producto_proveedor: "", // No hay código asociado aún
-          pendiente: true, // Marcar como pendiente para mostrar con fondo amarillo
-        }))
-      ]
-    }
-  })()
+
 
   // Al asociar stock, autocompletar proveedor habitual si hay uno solo
   useEffect(() => {
     if (proveedoresAsociados.length === 1 && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
       setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
     }
-  }, [proveedoresAsociados, form.proveedor_habitual_id])
+  }, [proveedoresAsociados, form.proveedor_habitual_id, setForm])
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
@@ -1732,8 +882,12 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                           }
 
                           // Determinar si es un proveedor agregado en modo nuevo
-                          const esProveedorAgregado = modo === "nuevo" && sp.id && sp.id.startsWith("agregado-")
-                          const esProveedorAgregadoEdicion = isEdicion && sp.pendiente && sp.id && sp.id.startsWith("pendiente-") && !sp.codigo_producto_proveedor
+                          const esProveedorAgregado = modo === "nuevo" && sp.id && String(sp.id).startsWith("agregado-")
+                          // En edición: proveedores agregados (pendiente-*) o proveedores existentes con cambios pendientes
+                          const esProveedorAgregadoEdicion = isEdicion && sp.pendiente && (
+                            (sp.id && String(sp.id).startsWith("pendiente-") && !sp.codigo_producto_proveedor) || // Proveedores agregados
+                            (sp.id && !String(sp.id).startsWith("pendiente-") && sp.id && !String(sp.id).startsWith("agregado-")) // Proveedores existentes con cambios
+                          )
                           const proveedorId = esProveedorAgregado ? (typeof sp.proveedor === 'object' ? sp.proveedor.id : sp.proveedor) : (sp.proveedor?.id || sp.proveedor)
 
                           return (
