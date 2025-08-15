@@ -255,18 +255,45 @@ class VentaSerializer(serializers.ModelSerializer):
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
 
-        # --- NUEVA VALIDACIÓN Y ASIGNACIÓN PARA ÍTEMS GENÉRICOS -------------------
+        # --- NORMALIZACIÓN DE ÍTEMS GENÉRICOS Y COMPLETADO DE ALÍCUOTA ------------
+        # Objetivo: que ítems de comentario (genéricos sin cantidad/precio) no rompan los cálculos
+        # y que ítems de producto real siempre tengan alícuota definida.
+        from ferreapps.productos.models import Stock  # Import local para evitar dependencias globales
         for idx, it in enumerate(items_data, start=1):
-            if not it.get('vdi_idsto'):
+            es_generico = not it.get('vdi_idsto')
+            if es_generico:
+                # Validaciones mínimas para genéricos
                 if not it.get('vdi_detalle1'):
                     raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
                 precio = Decimal(str(it.get('vdi_costo', 0)))
                 cantidad = Decimal(str(it.get('vdi_cantidad', 0)))
                 if precio > 0 and cantidad == 0:
                     raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
+                # Fallback de alícuota 0% (ID 3) cuando no se provee
                 if it.get('vdi_idaliiva') is None:
-                    it['vdi_idaliiva'] = 3  # 0% por defecto
-        # --------------------------------------------------------------------------
+                    it['vdi_idaliiva'] = 3
+                # Normalización de numéricos en comentarios (para evitar NULL en vistas)
+                def _a_decimal_seguro(valor, defecto='0'):
+                    try:
+                        return Decimal(str(valor))
+                    except Exception:
+                        return Decimal(defecto)
+                it['vdi_cantidad'] = _a_decimal_seguro(it.get('vdi_cantidad', 0))
+                it['vdi_costo'] = _a_decimal_seguro(it.get('vdi_costo', 0))
+                # vdi_margen y vdi_precio_unitario_final pueden faltar en comentarios
+                if it.get('vdi_margen') is None:
+                    it['vdi_margen'] = Decimal('0')
+                if it.get('vdi_precio_unitario_final') is None:
+                    it['vdi_precio_unitario_final'] = Decimal('0')
+            else:
+                # Ítem de producto real: completar alícuota desde Stock si falta
+                if it.get('vdi_idaliiva') is None:
+                    try:
+                        stock_obj = Stock.objects.filter(id=it.get('vdi_idsto')).only('idaliiva_id').first()
+                        it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
+                    except Exception:
+                        it['vdi_idaliiva'] = 3
+        # ----------------------------------------------------------------------------
 
         # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
@@ -343,10 +370,12 @@ class VentaSerializer(serializers.ModelSerializer):
                     item_data.pop(campo_calculado, None)
                 VentaDetalleItem.objects.create(**item_data)
 
-        # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS ---------------------------------
+        # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS + COMPLETADO DE ALÍCUOTA -------
         if items_data is not None:
+            from ferreapps.productos.models import Stock  # Import local
             for idx, it in enumerate(items_data, start=1):
-                if not it.get('vdi_idsto'):
+                es_generico = not it.get('vdi_idsto')
+                if es_generico:
                     if not it.get('vdi_detalle1'):
                         raise serializers.ValidationError({'items': [f'Ítem {idx}: "vdi_detalle1" (detalle) es obligatorio para ítems genéricos']})
                     precio = Decimal(str(it.get('vdi_costo', 0)))
@@ -355,7 +384,27 @@ class VentaSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError({'items': [f'Ítem {idx}: si hay precio, la cantidad debe ser mayor que cero']})
                     if it.get('vdi_idaliiva') is None:
                         it['vdi_idaliiva'] = 3  # 0% por defecto
-        # --------------------------------------------------------------------------
+                    # Normalización para evitar NULL en vistas/calculos
+                    def _a_decimal_seguro(valor, defecto='0'):
+                        try:
+                            return Decimal(str(valor))
+                        except Exception:
+                            return Decimal(defecto)
+                    it['vdi_cantidad'] = _a_decimal_seguro(it.get('vdi_cantidad', 0))
+                    it['vdi_costo'] = _a_decimal_seguro(it.get('vdi_costo', 0))
+                    if it.get('vdi_margen') is None:
+                        it['vdi_margen'] = Decimal('0')
+                    if it.get('vdi_precio_unitario_final') is None:
+                        it['vdi_precio_unitario_final'] = Decimal('0')
+                else:
+                    # Completar alícuota desde Stock si falta
+                    if it.get('vdi_idaliiva') is None:
+                        try:
+                            stock_obj = Stock.objects.filter(id=it.get('vdi_idsto')).only('idaliiva_id').first()
+                            it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
+                        except Exception:
+                            it['vdi_idaliiva'] = 3
+        # ----------------------------------------------------------------------------
 
         return instance
 
