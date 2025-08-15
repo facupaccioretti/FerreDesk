@@ -324,6 +324,17 @@ class VentaSerializer(serializers.ModelSerializer):
             instance.ven_vence = fecha_base + timedelta(days=dias_validez)
             instance.save(update_fields=['ven_vence'])
         if items_data:
+            # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
+            bonif_general = self.initial_data.get('bonificacionGeneral', 0)
+            try:
+                bonif_general = float(bonif_general)
+            except Exception:
+                bonif_general = 0
+            for item in items_data:
+                bonif = item.get('vdi_bonifica')
+                if not bonif or float(bonif) == 0:
+                    item['vdi_bonifica'] = bonif_general
+            # -------------------------------------------------------------------------------
             instance.items.all().delete()
             for item_data in items_data:
                 item_data['vdi_idve'] = instance

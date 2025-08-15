@@ -167,15 +167,15 @@ const PlantillaFacturaB = ({ data, ferreteriaConfig, onClose }) => {
                         { id: "importe", titulo: "Importe", align: "right", ancho: "100px" }
                       ]}
                       datos={items.map((item, idx) => ({
-                        id: idx,
-                        codigo: item.codigo ?? "-",
-                        descripcion: item.vdi_detalle1 ?? "-",
-                        cantidad: item.vdi_cantidad ?? 0,
-                        precio: `$${formatearMoneda(item.vdi_precio_unitario_final || 0)}`,
-                        descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
-                        precioBonificado: `$${formatearMoneda(item.precio_unitario_bonificado_con_iva || 0)}`,
-                        importe: `$${formatearMoneda(item.total_item || 0)}`
-                      }))}
+                        id: item.VDI_ORDEN || idx,
+                          codigo: item.codigo ?? "-",
+                          descripcion: item.vdi_detalle1 ?? "-",
+                          cantidad: item.vdi_cantidad ?? 0,
+                          precio: `$${formatearMoneda(item.vdi_precio_unitario_final || 0)}`,
+                          descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
+                          precioBonificado: `$${formatearMoneda(item.precio_unitario_bonificado_con_iva || 0)}`,
+                          importe: `$${formatearMoneda(item.total_item || 0)}`
+                        }))}
                       paginadorVisible={false}
                       mostrarBuscador={false}
                       mostrarOrdenamiento={false}

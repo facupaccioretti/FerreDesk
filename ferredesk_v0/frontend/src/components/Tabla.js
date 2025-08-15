@@ -46,12 +46,18 @@ const Tabla = ({
       datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
     }
 
-    return datosProcesados.sort((a, b) => {
-      const idA = a.id || 0
-      const idB = b.id || 0
-      return ordenAscendente ? idA - idB : idB - idA
-    })
-  }, [datos, valorBusqueda, ordenAscendente])
+    // Solo aplicar ordenamiento si mostrarOrdenamiento es true
+    if (mostrarOrdenamiento) {
+      return datosProcesados.sort((a, b) => {
+        const idA = a.id || 0
+        const idB = b.id || 0
+        return ordenAscendente ? idA - idB : idB - idA
+      })
+    }
+
+    // Si mostrarOrdenamiento es false, devolver los datos sin ordenar
+    return datosProcesados
+  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento])
 
   const indiceInicio = (paginaActual - 1) * filasPorPagina
   const datosVisibles = paginadorVisible

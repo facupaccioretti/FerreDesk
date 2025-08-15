@@ -8,7 +8,8 @@ import {
   calcularTraspasos,
   generarFilaTraspaso,
   generarTablaTotales,
-  mapearTipoComprobante
+  mapearTipoComprobante,
+  convertirBytesABase64
 } from "../helpers"
 import { Image } from "@react-pdf/renderer";
 
@@ -672,8 +673,8 @@ const configFacturaC = {
   // Ajuste de la tabla de totales: solo Subtotal y Total (finales)
   generarTotales: (data, styles, formatearMoneda) => {
     const configTotalesC = [
-      { label: "Subtotal", tipo: "ven_total" },
-      { label: "Total", tipo: "ven_total" }
+      { label: "Subtotal", tipo: "total" },
+      { label: "Total", tipo: "total" }
     ];
     return generarTablaTotales(data, styles, formatearMoneda, configTotalesC);
   },
@@ -690,8 +691,54 @@ const configFacturaC = {
         </Text>
       </View>
     </View>
-  )
-  // No sobrescribir generarPieFiscal para usar la función común que ya maneja el QR
+  ),
+  // Sobrescribir pie fiscal solo para Factura C: ocultar "Comprobante Autorizado"
+  generarPieFiscal: (data, styles, numeroPagina = 1, totalPaginas = 1) => {
+    const qrBase64 = data.ven_qr ? convertirBytesABase64(data.ven_qr) : null;
+    return (
+      <View style={styles.pieFiscal}>
+        <View style={styles.pieFilaHorizontal}>
+          {qrBase64 ? (
+            <Image 
+              src={`data:image/png;base64,${qrBase64}`}
+              style={styles.qrPlaceholder}
+            />
+          ) : (
+            <View style={styles.qrPlaceholder}>
+              <Text style={styles.qrTexto}>[QR CODE]</Text>
+            </View>
+          )}
+          {/* Logo ARCA */}
+          <View style={styles.arcaPlaceholder}>
+            <Image 
+              src="/api/productos/servir-logo-arca/"
+              style={{ width: 60, height: 50, objectFit: "contain", resizeMode: "contain" }}
+            />
+          </View>
+          {/* Disclaimer AFIP (sin el label Comprobante Autorizado) */}
+          <View style={styles.textosAfipContainer}>
+            <Text style={styles.leyendaAfip}>
+              Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
+            </Text>
+          </View>
+          {/* CAE y CAE Vencimiento + páginas */}
+          <View style={styles.pieDerecha}>
+            <View style={styles.campoAfip}>
+              <Text style={styles.labelAfip}>CAE:</Text>
+              <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+            </View>
+            <View style={styles.campoAfip}>
+              <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
+              <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+            </View>
+            <View style={{ marginTop: 4 }}>
+              <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 };
 
 const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {

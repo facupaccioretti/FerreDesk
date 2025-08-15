@@ -135,7 +135,6 @@ const EditarPresupuestoForm = ({
   });
 
   const itemsGridRef = useRef();
-  const [gridKey, setGridKey] = useState(Date.now());
   
   // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
   const [documentoInfo, setDocumentoInfo] = useState({
@@ -161,17 +160,7 @@ const EditarPresupuestoForm = ({
 
 
 
-  // Efecto: cuando llegan los productos (o cambian) volver a normalizar ítems sin producto
-  useEffect(() => {
-    if (!Array.isArray(productos) || productos.length === 0) return;
-    if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
-    const faltanProductos = formulario.items?.some(it => !it.producto);
-    if (faltanProductos) {
-      const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap });
-      actualizarItems(itemsNormalizados);
-      setGridKey(Date.now()); // Forzar remount de la grilla
-    }
-  }, [productos, alicuotasMap, actualizarItems, formulario.items]);
+
 
   // Agregar producto desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -455,7 +444,6 @@ const EditarPresupuestoForm = ({
           <div className="text-center text-red-600 py-4">{errorProveedores}</div>
         ) : (
           <ItemsGrid
-            key={gridKey}
             ref={itemsGridRef}
             productosDisponibles={productos}
             proveedores={proveedores}

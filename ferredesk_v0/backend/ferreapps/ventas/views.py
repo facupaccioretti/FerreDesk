@@ -369,6 +369,17 @@ class VentaViewSet(viewsets.ModelViewSet):
             try:
                 # ATENCIÓN: No calcular totales ni campos calculados aquí.
                 # Solo actualizar los ítems base.
+                # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
+                bonif_general = request.data.get('bonificacionGeneral', 0)
+                try:
+                    bonif_general = float(bonif_general)
+                except Exception:
+                    bonif_general = 0
+                for item in items_data:
+                    bonif = item.get('vdi_bonifica')
+                    if not bonif or float(bonif) == 0:
+                        item['vdi_bonifica'] = bonif_general
+                # -------------------------------------------------------------------------------
                 instance.items.all().delete()
                 for item_data in items_data:
                     item_data['vdi_idve'] = instance

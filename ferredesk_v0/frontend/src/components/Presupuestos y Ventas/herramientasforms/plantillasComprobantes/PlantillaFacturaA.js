@@ -167,17 +167,17 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                         { id: "importe", titulo: "Importe", align: "right", ancho: "100px" }
                       ]}
                       datos={items.map((item, idx) => ({
-                        id: idx,
-                        codigo: item.codigo ?? "-",
-                        descripcion: item.vdi_detalle1 ?? "-",
-                        cantidad: item.vdi_cantidad ?? 0,
-                        precio: `$${formatearMoneda(item.precio_unitario_sin_iva || 0)}`,
-                        descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
-                        precioBonificado: `$${formatearMoneda(item.precio_unitario_bonif_desc_sin_iva || 0)}`,
-                        alicuota: item.ali_porce ? `${item.ali_porce}%` : "0%",
-                        iva: `$${formatearMoneda(item.iva_monto || 0)}`,
-                        importe: `$${formatearMoneda(item.total_item || 0)}`
-                      }))}
+                        id: item.VDI_ORDEN || idx,
+                          codigo: item.codigo ?? "-",
+                          descripcion: item.vdi_detalle1 ?? "-",
+                          cantidad: item.vdi_cantidad ?? 0,
+                          precio: `$${formatearMoneda(item.precio_unitario_sin_iva || 0)}`,
+                          descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
+                          precioBonificado: `$${formatearMoneda(item.precio_unitario_bonif_desc_sin_iva || 0)}`,
+                          alicuota: item.ali_porce ? `${item.ali_porce}%` : "0%",
+                          iva: `$${formatearMoneda(item.iva_monto || 0)}`,
+                          importe: `$${formatearMoneda(item.total_item || 0)}`
+                        }))}
                       paginadorVisible={false}
                       mostrarBuscador={false}
                       mostrarOrdenamiento={false}
