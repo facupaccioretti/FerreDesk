@@ -153,6 +153,49 @@ export const crearComponenteMostrarSiempre = (valor, label, styles) => {
 };
 
 /**
+ * Detecta si una denominación de condición IVA corresponde a algún régimen de Monotributo
+ * Considera las variantes: "Responsable Monotributo", "Monotributo Social", "Monotributo Trabajador".
+ * No modifica el comportamiento existente: es una utilidad adicional.
+ * @param {string} denominacion
+ * @returns {boolean}
+ */
+export const esMonotributistaPorDenominacion = (denominacion = "") => {
+  if (!denominacion) return false;
+  const texto = String(denominacion).toLowerCase();
+  return (
+    texto.includes("monotributo") ||
+    texto.includes("monotributista")
+  );
+};
+
+/**
+ * Divide y formatea observaciones provenientes de ARCA separadas por ';'
+ * - Elimina espacios extra
+ * - Quita segmentos vacíos
+ * - Devuelve una lista visual con viñetas, una por línea
+ * @param {string} textoObservaciones - Texto con observaciones separadas por ';'
+ * @param {string} separador - Separador a utilizar (por defecto ';')
+ * @returns {JSX.Element} Lista de observaciones lista para renderizar
+ */
+export const renderizarObservacionesComoLista = (textoObservaciones, separador = ';') => {
+  const partes = typeof textoObservaciones === 'string'
+    ? textoObservaciones.split(separador).map(p => p.trim()).filter(Boolean)
+    : [];
+
+  if (partes.length === 0) {
+    return <span className="whitespace-pre-wrap break-words"></span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      {partes.map((parte, indice) => (
+        <div key={indice} className="whitespace-pre-wrap break-words">• {parte}</div>
+      ))}
+    </div>
+  );
+};
+
+/**
  * Divide un array de items en páginas según la cantidad máxima permitida
  * @param {Array} items - Array de items a dividir
  * @param {number} itemsPorPagina - Cantidad máxima de items por página

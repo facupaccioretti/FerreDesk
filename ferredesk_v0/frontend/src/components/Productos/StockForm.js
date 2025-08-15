@@ -742,30 +742,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                   <div className="py-2">
                     <div className="flex items-center gap-2 mb-2">
                         <div className="text-[12px] text-slate-700">Agregar Proveedor</div>
-                      <div
-                        className="relative cursor-pointer"
-                        onMouseEnter={() => setMostrarTooltipStock(true)}
-                        onMouseLeave={() => setMostrarTooltipStock(false)}
-                      >
-                        <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth="1.5"
-                            stroke="currentColor"
-                            className="w-2.5 h-2.5 text-slate-600"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-                          </svg>
-                        </div>
-                        {mostrarTooltipStock && (
-                          <div className="absolute left-6 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl w-[450px]">
-                              Agregue proveedores para este producto. La cantidad y costo se pueden editar directamente en la sección "Stock por Proveedor"
-                            <div className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
-                          </div>
-                        )}
-                      </div>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -867,7 +843,33 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
                   {/* Stock Actual por Proveedor */}
                   {((stock && stock.id) || (!stock?.id && (stockProvePendientes.length > 0 || proveedoresAgregados.length > 0))) && (
                     <div className="pt-2 border-t border-slate-200">
-                      <h6 className="text-[12px] font-semibold text-slate-700 mb-2">Stock por Proveedor</h6>
+                      <h6 className="text-[12px] font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                        <span>Stock por Proveedor</span>
+                        <span
+                          className="relative cursor-pointer"
+                          onMouseEnter={() => setMostrarTooltipStock(true)}
+                          onMouseLeave={() => setMostrarTooltipStock(false)}
+                        >
+                          <span className="w-4 h-4 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition-colors duration-200">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth="1.5"
+                              stroke="currentColor"
+                              className="w-2.5 h-2.5 text-slate-600"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                            </svg>
+                          </span>
+                          {mostrarTooltipStock && (
+                            <span className="absolute left-6 top-0 z-20 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl w-[450px]">
+                              La edición de cantidad se realiza en "Compras", esta sección esta pensada para poder hacer correcciones.
+                              <span className="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></span>
+                            </span>
+                          )}
+                        </span>
+                      </h6>
                       <div className="space-y-2">
                         {stockProveParaMostrar.map((sp, index) => {
                           // Buscar código pendiente si corresponde

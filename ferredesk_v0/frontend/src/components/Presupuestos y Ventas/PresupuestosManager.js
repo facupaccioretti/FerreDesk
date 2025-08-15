@@ -195,6 +195,13 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 
     
+    // Mostrar errores como mensajes del navegador y no en la página
+    useEffect(() => {
+      if (ventasError) {
+        window.alert(ventasError)
+      }
+    }, [ventasError])
+
     // Tipos de comprobante con validación para evitar errores de inicialización
     const tiposComprobante = useMemo(() => {
       return (comprobantes || []).map((c) => ({
@@ -286,27 +293,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
               </div>
-              {ventasError && (
-                <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-sm">
-                  <div className="flex items-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    {ventasError}
-                  </div>
-                </div>
-              )}
+              {/* Errores no se muestran en página; se alertan vía useEffect(ventasError) */}
               <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
                 {/* Tabs tipo browser - Encabezado azul oscuro */}
                 <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
@@ -566,7 +553,6 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                             // Devolver la respuesta del backend para que NotaCreditoForm pueda procesar los datos de ARCA
                             return data
                           } catch (err) {
-                            alert(err.message)
                             throw err
                           }
                         }}

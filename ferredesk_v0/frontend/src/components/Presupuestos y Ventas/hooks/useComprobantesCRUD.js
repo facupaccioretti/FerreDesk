@@ -295,7 +295,6 @@ const useComprobantesCRUD = ({
       // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
       return data
     } catch (err) {
-      alert("Error al convertir: " + (err.message || ""))
       throw err
     }
   }
@@ -342,7 +341,6 @@ const useComprobantesCRUD = ({
       // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
       return data
     } catch (err) {
-      alert("Error al convertir factura interna: " + (err.message || ""))
       throw err
     }
   }

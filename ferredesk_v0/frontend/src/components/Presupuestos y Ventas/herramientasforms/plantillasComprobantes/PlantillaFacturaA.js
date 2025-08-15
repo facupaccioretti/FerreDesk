@@ -1,4 +1,4 @@
-import { formatearDescuentosVisual, formatearMoneda, mapearTipoComprobante } from "./helpers"
+import { formatearDescuentosVisual, formatearMoneda, mapearTipoComprobante, renderizarObservacionesComoLista } from "./helpers"
 import Tabla from "../../../Tabla"
 import { useFerreDeskTheme } from "../../../../hooks/useFerreDeskTheme"
 import { Dialog, Transition } from "@headlessui/react"
@@ -256,13 +256,17 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                 {/* Información AFIP simplificada */}
                 <div className="bg-white rounded-lg border border-slate-200 p-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                    <div className="flex justify-between">
+                    <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-600">CAE:</span>
                       <span className="font-mono text-slate-900">{data.ven_cae || "-"}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-600">Vencimiento CAE:</span>
                       <span className="font-mono text-slate-900">{data.ven_caevencimiento || "-"}</span>
+                    </div>
+                    <div className="md:col-span-2 flex gap-2 text-xs mt-1">
+                      <span className="font-medium text-slate-600">Observaciones:</span>
+                      <div className="text-slate-900">{renderizarObservacionesComoLista(data.ven_observacion)}</div>
                     </div>
                   </div>
                 </div>

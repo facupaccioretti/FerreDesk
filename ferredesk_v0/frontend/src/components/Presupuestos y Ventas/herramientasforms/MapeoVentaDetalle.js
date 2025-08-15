@@ -69,7 +69,7 @@ export function mapearVentaDetalle({
     localidad: clienteCompleto?.localidad || '',
     provincia: clienteCompleto?.provincia || '',
     cuit: clienteCompleto?.cuit || ventaCalculada.ven_cuit || '',
-    condicion_iva_cliente: clienteCompleto?.condicion_iva || '',
+    condicion_iva_cliente: clienteCompleto?.condicion_iva || ventaCalculada.cliente_condicion_iva || '',
     telefono_cliente: clienteCompleto?.telefono || '',
     items: itemsCalculados || [],    
     iva_discriminado: ivaDiscriminado || [],

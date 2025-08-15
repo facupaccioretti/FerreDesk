@@ -127,6 +127,7 @@ class AlicuotaIVAViewSet(viewsets.ModelViewSet):
 class UploadListaPreciosProveedor(APIView):
     permission_classes = [permissions.IsAuthenticated]  # O ajusta según tu seguridad
 
+    @transaction.atomic
     def post(self, request, proveedor_id):
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
@@ -302,6 +303,7 @@ class HistorialListasProveedorAPIView(APIView):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
 def asociar_codigo_proveedor(request):
     stock_id = request.data.get('stock_id')
     proveedor_id = request.data.get('proveedor_id')
@@ -383,6 +385,7 @@ def codigos_lista_proveedor(request, proveedor_id):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
 def obtener_nuevo_id_temporal(request):
     ultimo = ProductoTempID.objects.order_by('-id').first()
     nuevo_id = 1 if not ultimo else ultimo.id + 5
