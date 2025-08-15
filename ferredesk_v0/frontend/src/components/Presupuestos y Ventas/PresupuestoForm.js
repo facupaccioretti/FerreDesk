@@ -211,7 +211,6 @@ const PresupuestoForm = ({
       // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
 
       const items = itemsGridRef.current.getItems()
-      limpiarBorrador() // Usar limpiarBorrador en lugar de localStorage.removeItem
 
       // Si es edición, asegurar tipos y mapeo correcto
       let payload
@@ -278,6 +277,7 @@ const PresupuestoForm = ({
       }
 
       await onSave(payload)
+      limpiarBorrador()
       onCancel()
     } catch (error) {
       console.error("Error al guardar presupuesto:", error)

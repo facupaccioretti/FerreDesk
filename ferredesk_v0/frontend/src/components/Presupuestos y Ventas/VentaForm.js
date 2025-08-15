@@ -142,9 +142,9 @@ const VentaForm = ({
 
   // Función personalizada para aceptar resultado de ARCA (modularizada)
   const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
-    aceptarResultadoArca, 
-    onCancel, 
-    () => respuestaArca, 
+    aceptarResultadoArca,
+    () => { limpiarBorrador(); onCancel(); },
+    () => respuestaArca,
     () => errorArca
   )
 
@@ -483,7 +483,6 @@ const VentaForm = ({
       // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
 
       const items = itemsGridRef.current.getItems()
-      limpiarBorrador()
 
       // Determinar el tipo de comprobante como string fijo
       // Si el comprobante seleccionado tiene tipo "factura", usar "factura", si no, usar "factura_interna"

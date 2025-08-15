@@ -133,9 +133,9 @@ const NotaCreditoForm = ({
 
   // Función personalizada para aceptar resultado de ARCA (modularizada)
   const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
-    aceptarResultadoArca, 
-    onCancel, 
-    () => respuestaArca, 
+    aceptarResultadoArca,
+    () => { limpiarBorrador(); onCancel(); },
+    () => respuestaArca,
     () => errorArca
   )
   

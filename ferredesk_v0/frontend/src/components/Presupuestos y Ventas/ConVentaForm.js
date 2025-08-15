@@ -102,9 +102,9 @@ const ConVentaForm = ({
 
   // Función personalizada para aceptar resultado de ARCA (modularizada)
   const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
-    aceptarResultadoArca, 
-    onCancel, 
-    () => respuestaArca, 
+    aceptarResultadoArca,
+    () => { limpiarBorrador(); onCancel(); },
+    () => respuestaArca,
     () => errorArca
   )
 
@@ -402,7 +402,6 @@ const ConVentaForm = ({
       // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
 
       const items = itemsGridRef.current.getItems();
-      limpiarBorrador();
 
       // Verificar si requiere emisión ARCA y iniciar estado de espera
       if (requiereEmisionArca(tipoComprobante)) {
