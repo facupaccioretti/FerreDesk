@@ -27,18 +27,6 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-<<<<<<< HEAD
-=======
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&#7bxgw8grl4)^q)@po2m3u*1gu7!1w+^f6nzgf7ps71nx30bh'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-
-
->>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
 # Application definition
 
 INSTALLED_APPS = [
@@ -114,11 +102,12 @@ WSGI_APPLICATION = 'ferredesk_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Configuración de base de datos
-# Si estamos en Docker, usar PostgreSQL desde DATABASE_URL
-# Si no, usar SQLite para desarrollo local
+# Usar PostgreSQL tanto en Docker como en desarrollo local
+import dj_database_url
+
+# Si estamos en Docker, usar DATABASE_URL, sino usar configuración local de PostgreSQL
 if BASE_DIR.name == 'app':
-    # Estamos en Docker - usar PostgreSQL
-    import dj_database_url
+    # Estamos en Docker - usar PostgreSQL desde DATABASE_URL
     DATABASES = {
         'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
@@ -127,22 +116,16 @@ if BASE_DIR.name == 'app':
         )
     }
 else:
-    # Estamos en desarrollo local - usar SQLite
-DATABASES = {
-<<<<<<< HEAD
-    'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': 'db.sqlite3'
+    # Estamos en desarrollo local - usar PostgreSQL local
+    DATABASES = {
+        'default': {        
+            'ENGINE': 'django.db.backends.postgresql',  
+            'NAME': 'FerreDesk',         
+            'USER': 'postgres',
+            'PASSWORD': 'fercien',
+            'HOST': 'localhost',
+            'PORT': '5432',
         }
-=======
-    'default': {        
-        'ENGINE': 'django.db.backends.postgresql',  
-        'NAME': 'FerreDesk',         
-        'USER': 'postgres',
-        'PASSWORD': 'fercien',
-        'HOST': 'localhost',
-        'PORT': '5432',
->>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
     }
 
 # Logging Configuration
@@ -287,32 +270,25 @@ REST_FRAMEWORK = {
 }
 
 # Configuración de CORS
-<<<<<<< HEAD
 # Usar variables de entorno si están disponibles (Docker), sino usar valores por defecto
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', ','.join([
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
+])).split(',')
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Configuración de CSRF
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', ','.join([
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000", 
+    "http://127.0.0.1:8000"
+])).split(',')
+
 CSRF_COOKIE_SAMESITE = 'Lax'
-=======
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
-CORS_ALLOW_CREDENTIALS = True
-
-# Configuración de CSRF
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
-CSRF_COOKIE_SAMESITE = 'Lax' 
->>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False  # Debe ser False para que JavaScript pueda leer la cookie
 SESSION_COOKIE_HTTPONLY = True
