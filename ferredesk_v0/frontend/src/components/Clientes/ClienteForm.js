@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, memo } from "react"
+import { useState, useCallback, useEffect, memo, useMemo, useRef } from "react"
 import { getCookie } from "../../utils/csrf"
 import FilterableSelect from "./FilterableSelect"
 import useValidacionCUIT from "../../utils/useValidacionCUIT"
@@ -79,6 +79,7 @@ const ClienteForm = ({
   onSave,
   onCancel,
   initialData,
+  tabKey,
   barrios,
   localidades,
   provincias,
@@ -96,38 +97,74 @@ const ClienteForm = ({
   tiposIVA,
   apiError,
 }) => {
-  const [form, setForm] = useState({
-    codigo: initialData?.codigo || "",
-    razon: initialData?.razon || "",
-    domicilio: initialData?.domicilio || "",
-    lineacred: initialData?.lineacred || "",
-    impsalcta: initialData?.impsalcta || "",
-    fecsalcta: initialData?.fecsalcta || "",
-    zona: initialData?.zona || "",
-    fantasia: initialData?.fantasia || "",
-    cuit: initialData?.cuit || "",
-    ib: initialData?.ib || "",
-    cpostal: initialData?.cpostal || "",
-    tel1: initialData?.tel1 || "",
-    tel2: initialData?.tel2 || "",
-    tel3: initialData?.tel3 || "",
-    email: initialData?.email || "",
-    contacto: initialData?.contacto || "",
-    comentario: initialData?.comentario || "",
-    barrio: initialData?.barrio || "",
-    localidad: initialData?.localidad || "",
-    provincia: initialData?.provincia || "",
-    iva: initialData?.iva || "",
-    transporte: initialData?.transporte || "",
-    vendedor: initialData?.vendedor || "",
-    plazo: initialData?.plazo || "",
-    categoria: initialData?.categoria || "",
-    activo: initialData?.activo || "A",
-    cancela: initialData?.cancela || "",
-    descu1: initialData?.descu1 || "",
-    descu2: initialData?.descu2 || "",
-    descu3: initialData?.descu3 || "",
+  const claveBorradorCliente = useMemo(() => {
+    if (tabKey) return `clienteFormDraft_${tabKey}`
+    return initialData?.id ? `clienteFormDraft_${initialData.id}` : 'clienteFormDraft_nuevo'
+  }, [initialData?.id, tabKey])
+  const claveAnteriorRef = useRef(claveBorradorCliente)
+  const estaRecargandoRef = useRef(false)
+
+  // Detectar recarga/navegación para no limpiar el borrador en ese caso
+  useEffect(() => {
+    const handleBeforeUnload = () => { estaRecargandoRef.current = true }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
+
+  const [form, setForm] = useState(() => {
+    try {
+      const saved = localStorage.getItem(claveBorradorCliente)
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (_) {}
+    return {
+      codigo: initialData?.codigo || "",
+      razon: initialData?.razon || "",
+      domicilio: initialData?.domicilio || "",
+      lineacred: initialData?.lineacred || "",
+      impsalcta: initialData?.impsalcta || "",
+      fecsalcta: initialData?.fecsalcta || "",
+      zona: initialData?.zona || "",
+      fantasia: initialData?.fantasia || "",
+      cuit: initialData?.cuit || "",
+      ib: initialData?.ib || "",
+      cpostal: initialData?.cpostal || "",
+      tel1: initialData?.tel1 || "",
+      tel2: initialData?.tel2 || "",
+      tel3: initialData?.tel3 || "",
+      email: initialData?.email || "",
+      contacto: initialData?.contacto || "",
+      comentario: initialData?.comentario || "",
+      barrio: initialData?.barrio || "",
+      localidad: initialData?.localidad || "",
+      provincia: initialData?.provincia || "",
+      iva: initialData?.iva || "",
+      transporte: initialData?.transporte || "",
+      vendedor: initialData?.vendedor || "",
+      plazo: initialData?.plazo || "",
+      categoria: initialData?.categoria || "",
+      activo: initialData?.activo || "A",
+      cancela: initialData?.cancela || "",
+      descu1: initialData?.descu1 || "",
+      descu2: initialData?.descu2 || "",
+      descu3: initialData?.descu3 || "",
+    }
   })
+
+  useEffect(() => {
+    try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) {}
+  }, [form, claveBorradorCliente])
+
+  // Si cambia la clave (p.ej., de nuevo a edición con id), borrar la anterior para no dejar borrador huérfano
+  useEffect(() => {
+    if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
+      try { localStorage.removeItem(claveAnteriorRef.current) } catch (_) {}
+    }
+    claveAnteriorRef.current = claveBorradorCliente
+  }, [claveBorradorCliente])
 
   // Estado para trackear campos autocompletados por ARCA
   const [camposAutocompletados, setCamposAutocompletados] = useState({
@@ -367,6 +404,9 @@ const ClienteForm = ({
       setModalLoading(false)
     }
   }
+
+  // Importante: NO limpiar borrador al desmontar (cambio de pestañas)
+  // La limpieza se hace en Cancelar o al cerrar pestaña desde el manager
 
   const renderModalForm = () => {
     switch (modal?.type) {
@@ -761,7 +801,15 @@ const ClienteForm = ({
               <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={onCancel}
+                  onClick={() => { 
+                    try { 
+                      localStorage.removeItem(claveBorradorCliente)
+                      if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
+                        localStorage.removeItem(claveAnteriorRef.current)
+                      }
+                    } catch (_) {}
+                    onCancel()
+                  }}
                   className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium shadow-sm hover:shadow-md"
                 >
                   Cancelar

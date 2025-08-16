@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
@@ -16,57 +16,52 @@ function getCookie(name) {
   return cookieValue
 }
 
-const useStockForm = ({ stock, modo, onSave, onCancel }) => {
-  // Estado principal del formulario
+const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
+// Claves para almacenar borradores de stock
+  const claveBorrador = useMemo(() => {
+    if (tabKey) return `stockFormDraft_${tabKey}`
+    return stock?.id ? `stockFormDraft_${stock.id}` : `stockFormDraft_nuevo`
+  }, [stock?.id, tabKey])
+
+  // Estado principal del formulario con carga desde borrador si existe
   const [form, setForm] = useState(() => {
-    if (modo === "nuevo") {
-      const savedForm = localStorage.getItem("stockFormDraft")
-      if (savedForm && !stock) {
-        return JSON.parse(savedForm)
+    try {
+      const saved = localStorage.getItem(claveBorrador)
+      if (saved) {
+        return JSON.parse(saved)
       }
-      return (
-        stock || {
-          codvta: "",
-          codcom: "",
-          deno: "",
-          unidad: "",
-          cantmin: 0,
-          proveedor_habitual_id: "",
-          idfam1: null,
-          idfam2: null,
-          idfam3: null,
-          idaliiva: "",
-          id: undefined,
-        }
-      )
-    } else {
-      // Siempre incluir el id del stock en el form
-      return stock
-        ? { ...stock, id: stock.id }
-        : {
-            codvta: "",
-            codcom: "",
-            deno: "",
-            unidad: "",
-            cantmin: 0,
-            proveedor_habitual_id: "",
-            idfam1: null,
-            idfam2: null,
-            idfam3: null,
-            idaliiva: "",
-            id: undefined,
-          }
+    } catch (e) {
+      // Ignorar errores de parseo
+    }
+    // Fallback a datos iniciales
+    if (stock) {
+      return { ...stock, id: stock.id }
+    }
+    return {
+      codvta: "",
+      codcom: "",
+      deno: "",
+      unidad: "",
+      cantmin: 0,
+      proveedor_habitual_id: "",
+      idfam1: null,
+      idfam2: null,
+      idfam3: null,
+      idaliiva: "",
+      id: undefined,
     }
   })
 
   const [formError, setFormError] = useState(null)
 
-  // useEffect para guardar draft en localStorage
+  // Guardar el borrador en cualquier modo
   useEffect(() => {
-    if (modo === "nuevo" && !stock) {
-      localStorage.setItem("stockFormDraft", JSON.stringify(form))
+    try {
+      localStorage.setItem(claveBorrador, JSON.stringify(form))
+    } catch (_) {
+      // Ignorar errores de almacenamiento
     }
-  }, [form, stock, modo])
+  }, [form, claveBorrador])
 
   // useEffect para obtener ID temporal en modo nuevo
   useEffect(() => {
@@ -121,7 +116,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel }) => {
 
   // Función para cancelar
   const handleCancel = () => {
-    localStorage.removeItem("stockFormDraft")
+    try { localStorage.removeItem(claveBorrador) } catch (_) {}
     onCancel()
   }
 
@@ -135,6 +130,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel }) => {
     clearError,
     setError,
     handleCancel,
+    claveBorrador,
   }
 }
 

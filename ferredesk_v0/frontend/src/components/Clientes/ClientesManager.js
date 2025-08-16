@@ -106,11 +106,11 @@ const ClientesManager = () => {
 
   // -------- Navegación de sub-pestañas --------
   const openTab = (key, label, cliente = null) => {
-    if (key === "nuevo") clearError()
+    if (key.startsWith("nuevo")) clearError()
     setEditCliente(cliente)
     setTabs((prev) => {
       if (prev.find((t) => t.key === key)) return prev
-      return [...prev, { key, label, closable: true }]
+      return [...prev, { key, label, closable: true, cliente }]
     })
     setActiveTab(key)
   }
@@ -119,7 +119,7 @@ const ClientesManager = () => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
     if (activeTab === key) setActiveTab("lista")
     setEditCliente(null)
-    if (key === "nuevo") clearError()
+    if (String(key).startsWith("nuevo")) clearError()
   }
 
   // Guardar cliente (alta / edición)
@@ -142,7 +142,9 @@ const ClientesManager = () => {
 
   // Editar cliente
   const handleEditCliente = (cliente) => {
-    openTab("nuevo", "Nuevo Cliente", cliente)
+    const razon = cliente?.razon || cliente?.fantasia || cliente?.nombre || "Cliente"
+    const key = `cliente-${cliente?.id || "sinid"}-${Date.now()}`
+    openTab(key, `Editar: ${razon}`, cliente)
   }
 
   // Filtrado de clientes activos e inactivos con useMemo para optimización
@@ -228,7 +230,7 @@ const ClientesManager = () => {
               {activeTab === "lista" && (
                 <div className="mb-4 flex gap-2">
                   <button
-                    onClick={() => openTab("nuevo", "Nuevo Cliente")}
+                    onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Cliente")}
                     className={theme.botonPrimario}
                   >
                     <span className="text-lg">+</span> Nuevo Cliente
@@ -277,29 +279,37 @@ const ClientesManager = () => {
                 />
               )}
 
-              {activeTab === "nuevo" && (
+              {activeTab !== "lista" && activeTab !== "inactivos" && (
                 <div className="flex justify-center items-center min-h-[60vh]">
-                  <ClienteForm
-                    onSave={handleSaveCliente}
-                    onCancel={() => closeTab("nuevo")}
-                    initialData={editCliente}
-                    barrios={barrios}
-                    localidades={localidades}
-                    provincias={provincias}
-                    transportes={transportes}
-                    vendedores={vendedores}
-                    plazos={plazos}
-                    categorias={categorias}
-                    setBarrios={setBarrios}
-                    setLocalidades={setLocalidades}
-                    setProvincias={setProvincias}
-                    setTransportes={setTransportes}
-                    setVendedores={setVendedores}
-                    setPlazos={setPlazos}
-                    setCategorias={setCategorias}
-                    tiposIVA={tiposIVA}
-                    apiError={error}
-                  />
+                  {(() => {
+                    const tabActual = tabs.find((t) => t.key === activeTab)
+                    const initialData = tabActual?.cliente || null
+                    return (
+                      <ClienteForm
+                        key={activeTab}
+                        onSave={handleSaveCliente}
+                        onCancel={() => closeTab(activeTab)}
+                        initialData={initialData}
+                        tabKey={activeTab}
+                        barrios={barrios}
+                        localidades={localidades}
+                        provincias={provincias}
+                        transportes={transportes}
+                        vendedores={vendedores}
+                        plazos={plazos}
+                        categorias={categorias}
+                        setBarrios={setBarrios}
+                        setLocalidades={setLocalidades}
+                        setProvincias={setProvincias}
+                        setTransportes={setTransportes}
+                        setVendedores={setVendedores}
+                        setPlazos={setPlazos}
+                        setCategorias={setCategorias}
+                        tiposIVA={tiposIVA}
+                        apiError={error}
+                      />
+                    )
+                  })()}
                 </div>
               )}
             </div>

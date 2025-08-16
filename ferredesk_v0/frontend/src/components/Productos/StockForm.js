@@ -33,7 +33,7 @@ function getCookie(name) {
   return cookieValue
 }
 
-const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => {
+const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKey }) => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
   
@@ -58,8 +58,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     setFormError, 
     handleChange, 
     updateForm, 
-    handleCancel 
-  } = useStockForm({ stock, modo, onSave, onCancel })
+    handleCancel,
+    claveBorrador
+  } = useStockForm({ stock, modo, onSave, onCancel, tabKey })
   
   const {
     stockProvePendientes,
@@ -211,11 +212,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     }
   }, [stock, stockProve, setForm, setNewStockProve])
 
-  useEffect(() => {
-    if (modo === "nuevo" && !stock) {
-      localStorage.setItem("stockFormDraft", JSON.stringify(form))
-    }
-  }, [form, stock, modo])
+  // Persistencia automática del borrador la maneja useStockForm (clave dinámica)
 
   useEffect(() => {
     if (modo === "nuevo" && !form.id) {
@@ -308,8 +305,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo }) => 
     )
     
     if (resultado.success) {
-      // Limpiar localStorage
-      localStorage.removeItem("stockFormDraft")
+      try { localStorage.removeItem(claveBorrador) } catch (_) {}
     }
   }
 

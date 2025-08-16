@@ -79,87 +79,16 @@ const ProductosManager = () => {
     localStorage.setItem("productosActiveTab", activeTab)
   }, [tabs, activeTab])
 
-  // Efecto para manejar la carga inicial y recargas
-  useEffect(() => {
-    const savedActiveTab = localStorage.getItem("productosActiveTab")
-    const stockFormDraft = localStorage.getItem("stockFormDraft")
-
-    if (savedActiveTab === "nuevo") {
-      if (stockFormDraft) {
-        try {
-          const draftData = JSON.parse(stockFormDraft)
-          // Asegurarse de que el draft no sea un producto existente (sin ID)
-          if (!draftData.id) {
-            setEditStates({ nuevo: draftData }) // Cargar el draft para un nuevo producto
-          } else {
-            // Si el draft tiene ID, es de un producto que se estaba editando.
-            // Podríamos intentar buscarlo en `productos` o simplemente limpiar.
-            // Por ahora, limpiamos para evitar inconsistencias si el producto ya no existe.
-            localStorage.removeItem("stockFormDraft")
-            setEditStates({ nuevo: null })
-            setActiveTab("lista") // Volver a la lista si el draft es inválido para "nuevo"
-          }
-        } catch (error) {
-          console.error("Error al parsear stockFormDraft:", error)
-          localStorage.removeItem("stockFormDraft")
-          setEditStates({ nuevo: null })
-          setActiveTab("lista") // Volver a la lista en caso de error
-        }
-      } else {
-        // No hay draft, y la tab activa era "nuevo", lo cual no tiene sentido sin un producto a editar o un draft.
-        // Forzar a la pestaña de lista y limpiar editProducto.
-        setActiveTab("lista")
-        setEditStates({ nuevo: null }) // Asegurar que no haya un producto para editar si no hay draft
-      }
-    } else if (savedActiveTab && savedActiveTab.startsWith("editar-")) {
-      // Lógica para restaurar un producto en edición si es necesario (más complejo)
-      // Por ahora, si se recarga en una pestaña de edición, podría perderse el contexto.
-      // Considerar guardar el ID del producto en edición en localStorage también.
-      // O simplemente forzar a la lista para simplificar.
-      // setActiveTab('lista');
-      // setEditProducto(null);
-    }
-    // Si la activeTab no es 'nuevo', editProducto debería ser null o el producto que se está editando
-    // (que se setea al hacer click en editar).
-    if (savedActiveTab !== "nuevo" && !savedActiveTab?.startsWith("editar-")) {
-      setEditStates({ ...editStates, [savedActiveTab]: null }) // Limpiar si no estamos en nuevo/editar explícitamente
-    }
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Se ejecuta solo al montar
+  // Eliminado manejo antiguo de draft global; cada pestaña tendrá su propia clave de borrador
 
   // Tabs y edición
   const openTab = (key, label, producto = null) => {
     setTabs((prev) => {
       if (prev.find((t) => t.key === key)) return prev
-      return [...prev, { key, label, closable: true }]
+      return [...prev, { key, label, closable: true, producto }]
     })
     setActiveTab(key)
-    setEditStates((prev) => {
-      if (key === "nuevo") {
-        // Draft de nuevo producto
-        const stockFormDraft = localStorage.getItem("stockFormDraft")
-        if (stockFormDraft) {
-          try {
-            const draftData = JSON.parse(stockFormDraft)
-            if (!draftData.id) {
-              return { ...prev, [key]: draftData }
-            } else {
-              localStorage.removeItem("stockFormDraft")
-              return { ...prev, [key]: null }
-            }
-          } catch {
-            localStorage.removeItem("stockFormDraft")
-            return { ...prev, [key]: null }
-          }
-        } else {
-          return { ...prev, [key]: null }
-        }
-      } else {
-        // Edición
-        return { ...prev, [key]: producto }
-      }
-    })
+    setEditStates((prev) => ({ ...prev, [key]: producto }))
   }
   const closeTab = (key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
@@ -169,9 +98,6 @@ const ProductosManager = () => {
       delete newStates[key]
       return newStates
     })
-    if (key === "nuevo") {
-      localStorage.removeItem("stockFormDraft")
-    }
   }
 
   // Guardar producto (alta o edición)
@@ -191,7 +117,7 @@ const ProductosManager = () => {
 
   // Editar producto
   const handleEditProducto = (producto) => {
-    const editKey = `editar-${producto.id}`
+    const editKey = `editar-${producto.id}-${Date.now()}`
     openTab(editKey, `Editar Producto: ${producto.deno.substring(0, 15)}...`, producto)
   }
 
@@ -347,7 +273,7 @@ const ProductosManager = () => {
               {activeTab === "lista" && (
                 <div className="mb-4 flex gap-2">
                   <button
-                    onClick={() => openTab("nuevo", "Nuevo Producto")}
+                    onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Producto")}
                     className={theme.botonPrimario}
                   >
                     <span className="text-lg">+</span> Nuevo Producto
@@ -415,11 +341,12 @@ const ProductosManager = () => {
                   setSearchProductos={setSearchProductos}
                 />
               )}
-              {(activeTab === "nuevo" || activeTab.startsWith("editar-")) && (
+              {activeTab !== "lista" && activeTab !== "inactivos" && (
                 <StockForm
                   key={activeTab}
                   stock={editStates[activeTab]}
-                  modo={activeTab === "nuevo" ? "nuevo" : "editar"}
+                  modo={activeTab.startsWith("nuevo") ? "nuevo" : "editar"}
+                  tabKey={activeTab}
                   onSave={(data) => handleSaveProducto(data, activeTab)}
                   onCancel={() => closeTab(activeTab)}
                   proveedores={proveedores.filter((p) => !!p.id)}
