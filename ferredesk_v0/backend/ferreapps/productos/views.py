@@ -547,6 +547,15 @@ class FerreteriaAPIView(APIView):
         if 'clave_privada_arca' in request.FILES:
             data['clave_privada_arca'] = request.FILES['clave_privada_arca']
         
+        # Remover claves no soportadas por el modelo (legacy UI)
+        for legacy_key in [
+            'margen_ganancia_por_defecto', 'comprobante_por_defecto',
+            'notificaciones_email', 'notificaciones_stock_bajo',
+            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes',
+            'permitir_stock_negativo'
+        ]:
+            data.pop(legacy_key, None)
+
         serializer = FerreteriaSerializer(ferreteria, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()

@@ -94,9 +94,13 @@ WSGI_APPLICATION = 'ferredesk_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',  # Motor de base de datos SQLite
-        'NAME': 'db.sqlite3'  # Ruta y nombre del archivo de la base de datos
+    'default': {        
+        'ENGINE': 'django.db.backends.postgresql',  
+        'NAME': 'FerreDesk',         
+        'USER': 'postgres',
+        'PASSWORD': 'fercien',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

@@ -17,13 +17,6 @@ class Command(BaseCommand):
             telefono="011-1234-5678",
             email="ejemplo@gmferreteria.com",
             situacion_iva="RI",
-    
-            margen_ganancia_por_defecto=30.00,
-            comprobante_por_defecto="FA",
-            notificaciones_email=True,
-            notificaciones_stock_bajo=True,
-            notificaciones_vencimientos=True,
-            notificaciones_pagos_pendientes=True
         )
 
         self.stdout.write(

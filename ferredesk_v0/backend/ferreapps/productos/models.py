@@ -68,54 +68,6 @@ class Ferreteria(models.Model):
         help_text='Logo de la empresa para comprobantes'
     )
     
-    # Configuración de Notificaciones
-    notificaciones_email = models.BooleanField(
-        default=True,
-        help_text='Activar notificaciones por email'
-    )
-    notificaciones_stock_bajo = models.BooleanField(
-        default=True,
-        help_text='Notificar cuando el stock esté bajo'
-    )
-    notificaciones_vencimientos = models.BooleanField(
-        default=True,
-        help_text='Notificar vencimientos próximos'
-    )
-    notificaciones_pagos_pendientes = models.BooleanField(
-        default=True,
-        help_text='Notificar pagos pendientes'
-    )
-    
-    # Configuración de Sistema
-    permitir_stock_negativo = models.BooleanField(
-        default=False,
-        help_text='Permitir que el stock de productos sea negativo'
-    )
-    
-    # Configuración de Comprobantes
-    comprobante_por_defecto = models.CharField(
-        max_length=2,
-        choices=[
-            ('FA', 'Factura A'),
-            ('FB', 'Factura B'),
-            ('FC', 'Factura C'),
-            ('BA', 'Boleta A'),
-            ('BB', 'Boleta B'),
-            ('BC', 'Boleta C'),
-        ],
-        default='FA',
-        help_text='Tipo de comprobante por defecto'
-    )
-    
-    # Configuración de Precios
-    margen_ganancia_por_defecto = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        default=30.00,
-        help_text='Margen de ganancia por defecto en porcentaje'
-    )
-
-    # Configuración de Impresión
     
     # Configuración ARCA - Integración con servicios web de AFIP
     certificado_arca = models.FileField(
@@ -143,19 +95,7 @@ class Ferreteria(models.Model):
         help_text='Modo de operación ARCA (Homologación para pruebas, Producción para uso real)'
     )
     
-    url_wsaa_arca = models.URLField(
-        max_length=255,
-        blank=True,
-        null=True,
-        help_text='URL del servicio WSAA de ARCA (se configura automáticamente según modo)'
-    )
     
-    url_wsfev1_arca = models.URLField(
-        max_length=255,
-        blank=True,
-        null=True,
-        help_text='URL del servicio WSFEv1 de ARCA (se configura automáticamente según modo)'
-    )
     
     arca_habilitado = models.BooleanField(
         default=False,
@@ -185,20 +125,7 @@ class Ferreteria(models.Model):
     def __str__(self):
         return self.nombre
     
-    def get_configuracion_arca_urls(self):
-        """
-        Retorna las URLs de configuración ARCA según el modo seleccionado.
-        """
-        if self.modo_arca == 'PROD':
-            return {
-                'wsaa': 'https://wsaa.afip.gov.ar/ws/services/LoginCms?WSDL',
-                'wsfev1': 'https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL'
-            }
-        else:  # HOM (Homologación)
-            return {
-                'wsaa': 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms?WSDL',
-                'wsfev1': 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL'
-            }
+    
     
     def validar_configuracion_arca(self):
         """
@@ -238,31 +165,7 @@ class Ferreteria(models.Model):
         self.arca_error_configuracion = ""
         return True, "Configuración ARCA válida"
     
-    def get_ruta_tokens_arca(self):
-        """
-        Retorna la ruta donde se almacenarán los tokens ARCA para esta ferretería.
-        """
-        import os
-        from django.conf import settings
-        
-        # Crear directorio si no existe
-        ruta_base = os.path.join(settings.MEDIA_ROOT, 'arca', 'tokens', f'ferreteria_{self.id}')
-        os.makedirs(ruta_base, exist_ok=True)
-        
-        return ruta_base
     
-    def get_ruta_certificados_arca(self):
-        """
-        Retorna la ruta donde se almacenan los certificados ARCA para esta ferretería.
-        """
-        import os
-        from django.conf import settings
-        
-        # Crear directorio si no existe
-        ruta_base = os.path.join(settings.MEDIA_ROOT, 'arca', 'certificados', f'ferreteria_{self.id}')
-        os.makedirs(ruta_base, exist_ok=True)
-        
-        return ruta_base
     
     def save(self, *args, **kwargs):
         """
@@ -428,7 +331,7 @@ class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
     codcom = models.CharField(max_length=15, unique=True, db_column='STO_CODCOM')
-    deno = models.CharField(max_length=55, db_column='STO_DENO')
+    deno = models.CharField(max_length=50, db_column='STO_DENO')
     orden = models.SmallIntegerField(null=True, blank=True, db_column='STO_ORDEN')
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
     margen = models.DecimalField(max_digits=5, decimal_places=2, null=False, blank=False, db_column='STO_MARGEN')

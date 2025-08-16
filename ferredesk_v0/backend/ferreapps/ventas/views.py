@@ -733,9 +733,8 @@ def convertir_factura_interna_a_fiscal(request):
                 item['vdi_bonifica'] = bonif_general
 
         # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
-        # CORREGIDO: Consultar configuración de la ferretería para stock negativo
-        ferreteria = Ferreteria.objects.first()
-        permitir_stock_negativo = getattr(ferreteria, 'permitir_stock_negativo', False)
+        # CORREGIDO: Configuración de stock negativo se controla por payload de la operación
+        permitir_stock_negativo = venta_data.get('permitir_stock_negativo', False)
         
         tipo_comprobante = venta_data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')
