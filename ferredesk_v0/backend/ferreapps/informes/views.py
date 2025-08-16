@@ -63,7 +63,10 @@ class StockBajoPDFView(APIView):
             
            
             buffer = BytesIO() #reserva un espacio en memoria pal pdf
-            doc = SimpleDocTemplate(buffer, pagesize=A4) #aca lo crea
+            # Configurar documento con márgenes optimizados
+            doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                  topMargin=0.5*inch, bottomMargin=0.5*inch,
+                                  leftMargin=0.5*inch, rightMargin=0.5*inch) #aca lo crea
             elements = [] #aca va agregando el contenido.
             
             # Estilos
@@ -93,8 +96,8 @@ class StockBajoPDFView(APIView):
             elements.append(Spacer(1, 20))
             
             if productos_stock_bajo:
-                # Configuración de paginación
-                PRODUCTOS_POR_PAGINA = 1  
+               
+                PRODUCTOS_POR_PAGINA = 30  
                 productos_lista = list(productos_stock_bajo)
                 
                 # Dividir productos en páginas
@@ -122,24 +125,24 @@ class StockBajoPDFView(APIView):
                     # Crear tabla con columnas reactivas (sin ancho fijo)
                     table = Table(table_data)
                     table.setStyle(TableStyle([
-                        # Estilos simples en blanco y negro
+                        # Estilos optimizados - tabla 30% más pequeña
                         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                        ('FONTSIZE', (0, 0), (-1, 0), 11),
-                        ('FONTSIZE', (0, 1), (-1, -1), 10),
-                        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-                        ('TOPPADDING', (0, 0), (-1, 0), 8),
-                        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-                        ('TOPPADDING', (0, 1), (-1, -1), 6),
+                        ('FONTSIZE', (0, 0), (-1, 0), 8),  # Reducido de 11 a 8
+                        ('FONTSIZE', (0, 1), (-1, -1), 7),  # Reducido de 10 a 7
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),  # Reducido de 8 a 4
+                        ('TOPPADDING', (0, 0), (-1, 0), 4),     # Reducido de 8 a 4
+                        ('BOTTOMPADDING', (0, 1), (-1, -1), 3), # Reducido de 6 a 3
+                        ('TOPPADDING', (0, 1), (-1, -1), 3),    # Reducido de 6 a 3
                         # Grid simple en negro
                         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
                         # Header con fondo gris claro
                         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
                         # Denominación alineada a la izquierda para mejor legibilidad
                         ('ALIGN', (1, 1), (1, -1), 'LEFT'),
-                        # Padding horizontal para evitar que el texto toque los bordes
-                        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                        # Padding horizontal optimizado
+                        ('LEFTPADDING', (0, 0), (-1, -1), 4),   # Reducido de 6 a 4
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 4),  # Reducido de 6 a 4
                     ]))
                     
                     elements.append(table)

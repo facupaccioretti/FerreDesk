@@ -179,9 +179,9 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
     # Factura A, Nota de Crédito A y Nota de Débito A (1, 3, 2) - Con IVA discriminado
     if tipo_cbte in [1, 3, 2]:
         datos_comprobante.update({
-            'ImpNeto': float(venta_calculada.ven_impneto),
-            'ImpIVA': float(venta_calculada.iva_global),
-            'ImpTotal': float(venta_calculada.ven_total)
+            'ImpNeto': float(venta_calculada.ven_impneto or 0.0),
+            'ImpIVA': float(venta_calculada.iva_global or 0.0),
+            'ImpTotal': float(venta_calculada.ven_total or 0.0)
         })
         
         # Incluir alícuotas de IVA si existen
@@ -194,9 +194,9 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
         # Lógica específica para Factura C (tipo 11) - Monotributista
         if tipo_cbte == 11:  # Factura C
             datos_comprobante.update({
-                'ImpNeto': float(venta_calculada.ven_total),  # Para Factura C, el total es el neto
+                'ImpNeto': float(venta_calculada.ven_total or 0.0),  # Para Factura C, el total es el neto
                 'ImpIVA': 0.0,  # CORREGIDO: Factura C no discrimina IVA
-                'ImpTotal': float(venta_calculada.ven_total)  # CORREGIDO: Total igual al neto
+                'ImpTotal': float(venta_calculada.ven_total or 0.0)  # CORREGIDO: Total igual al neto
             })
             logger.info(f"LÓGICA FACTURA C APLICADA:")
             logger.info(f"   • ImpNeto: {venta_calculada.ven_total} (total de la venta)")
@@ -205,13 +205,13 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
             logger.info(f"   • NO se incluye objeto IVA")
         else:  # Factura B y otros
             datos_comprobante.update({
-                'ImpNeto': float(venta_calculada.ven_impneto),  # CORREGIDO: Usar ven_impneto como Factura A
-                'ImpIVA': float(venta_calculada.iva_global),    # CORREGIDO: Usar iva_global de la vista
-                'ImpTotal': float(venta_calculada.ven_impneto + venta_calculada.iva_global)  # CORREGIDO: Neto + IVA
+                'ImpNeto': float(venta_calculada.ven_impneto or 0.0),  # CORREGIDO: Usar ven_impneto como Factura A
+                'ImpIVA': float(venta_calculada.iva_global or 0.0),    # CORREGIDO: Usar iva_global de la vista
+                'ImpTotal': float((venta_calculada.ven_impneto or 0.0) + (venta_calculada.iva_global or 0.0))  # CORREGIDO: Neto + IVA
             })
             
             # Incluir alícuotas de IVA si existen y si ImpNeto > 0 (solo para Factura B, no C)
-            if alicuotas_venta and alicuotas_venta.exists() and float(venta_calculada.ven_total) > 0:
+            if alicuotas_venta and alicuotas_venta.exists() and float(venta_calculada.ven_total or 0.0) > 0:
                 alicuotas_afip = _construir_alicuotas_afip(alicuotas_venta)
                 datos_comprobante['Iva'] = {'AlicIva': alicuotas_afip}
                 logger.info(f"Objeto IVA agregado para Factura B con ImpNeto > 0")
@@ -244,11 +244,18 @@ def _construir_alicuotas_afip(alicuotas_venta):
     for alicuota in alicuotas_venta:
         # Usar el porcentaje para obtener el ID correcto de AFIP
         id_afip = obtener_id_afip_por_porcentaje(alicuota.ali_porce)
-        
+
+        # Regla: ARCA no acepta alícuotas con base imponible igual a 0 (Obs 10020)
+        base = float(alicuota.neto_gravado or 0.0)
+        importe = float(alicuota.iva_total or 0.0)
+        if base <= 0:
+            # Omitir alícuotas sin base. Esto filtra comentarios genéricos sin importe.
+            continue
+
         alicuotas_afip.append({
             'Id': id_afip,
-            'BaseImp': float(alicuota.neto_gravado),
-            'Importe': float(alicuota.iva_total)
+            'BaseImp': base,
+            'Importe': importe
         })
         
         logger.info(f"Alícuota agregada: ID {id_afip} ({alicuota.ali_porce}%) - Base: {alicuota.neto_gravado}, Importe: {alicuota.iva_total}")

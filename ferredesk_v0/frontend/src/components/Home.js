@@ -6,13 +6,13 @@ import VentasPorDiaSimple from "./Dashboards/VentasPorDiaSimple"
 import ClientesMasVentasSimple from "./Dashboards/ClientesMasVentasSimple"
 
 const MetricCard = ({ title, value, icon, color }) => (
-  <div className="bg-white rounded-lg shadow-md border border-slate-200 p-2 flex items-center space-x-2">
+  <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-md border border-slate-800 ring-1 ring-orange-500/20 p-2 flex items-center space-x-2">
     <div className={`p-1 rounded-md ${color} bg-opacity-20`}>
       {React.cloneElement(icon, { className: icon.props.className.replace('w-4 h-4', 'w-3 h-3') })}
     </div>
     <div>
-      <p className="text-xs font-medium text-slate-600">{title}</p>
-      <p className="text-sm font-bold text-slate-800">{value}</p>
+      <p className="text-xs font-medium text-slate-400">{title}</p>
+      <p className="text-sm font-bold text-slate-300">{value}</p>
     </div>
   </div>
 );
@@ -137,15 +137,15 @@ const Home = () => {
           </div>
           {/* Segunda fila: dos gráficos lado a lado */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <div className="bg-white rounded-lg shadow-md border border-slate-200 p-3">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-lg border border-slate-800 ring-1 ring-orange-500/20 p-3">
               <ProductosMasVendidosSimple tipoMetrica={metricaProductos} onMetricaChange={setMetricaProductos} />
             </div>
-            <div className="bg-white rounded-lg shadow-md border border-slate-200 p-3">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-lg border border-slate-800 ring-1 ring-orange-500/20 p-3">
               <ClientesMasVentasSimple tipoMetrica={metricaClientes} onMetricaChange={setMetricaClientes} />
             </div>
           </div>
           {/* Tercera fila: gráfico de evolución de ventas */}
-          <div className="bg-white rounded-lg shadow-md border border-slate-200 p-3">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-lg border border-slate-800 ring-1 ring-orange-500/20 p-3">
             <VentasPorDiaSimple periodo={periodoVentas} onPeriodoChange={setPeriodoVentas} />
           </div>
         </div>

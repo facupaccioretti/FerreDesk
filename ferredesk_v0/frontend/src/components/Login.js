@@ -38,7 +38,7 @@ function Login() {
     const password = formData.get('password');
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/login/', {
+      const response = await fetch('/api/login/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ function Login() {
       if (response.ok) {
         console.log('Login exitoso:', data);
         // Redirigir al dashboard después del login exitoso
-        window.location.href = 'http://127.0.0.1:8000/home/';
+        window.location.href = '/home/';
       } else {
         setError(data.message || 'Error al iniciar sesión');
       }

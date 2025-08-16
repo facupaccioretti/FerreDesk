@@ -22,8 +22,8 @@ export default function Navbar({ user, onLogout }) {
 
   return (
     <nav
-      className="w-full flex items-center justify-between px-6 py-3 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl relative"
-      style={{ minHeight: 60 }}
+      className="sticky top-0 z-50 w-full flex items-center justify-between px-6 py-1.5 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600/60 shadow-2xl"
+      style={{ minHeight: 50 }}
     >
       <div className="flex items-center gap-8">
         <div className="flex items-center gap-3">
@@ -95,50 +95,17 @@ export default function Navbar({ user, onLogout }) {
             </span>
           </a>
 
-          {/* Presupuestos y Ventas */}
-          <a
-            href="/home/presupuestos"
-            onClick={(e) => handleLinkClick(e, "/home/presupuestos")}
-            className="p-3 rounded-xl hover:bg-emerald-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5 text-emerald-400"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-              />
-            </svg>
-            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
-              Presupuestos y Ventas
-            </span>
-          </a>
-
           {/* Productos */}
           <a
             href="/home/productos"
             onClick={(e) => handleLinkClick(e, "/home/productos")}
             className="p-3 rounded-xl hover:bg-purple-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5 text-purple-400"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="w-5 h-5 text-purple-400">
+                <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" color="currentColor">
+                    <path d="M21 7v5M3 7v10.161c0 1.383 1.946 2.205 5.837 3.848C10.4 21.67 11.182 22 12 22V11.355M15 19s.875 0 1.75 2c0 0 2.78-5 5.25-6"/>
+                    <path d="M8.326 9.691L5.405 8.278C3.802 7.502 3 7.114 3 6.5s.802-1.002 2.405-1.778l2.92-1.413C10.13 2.436 11.03 2 12 2s1.871.436 3.674 1.309l2.921 1.413C20.198 5.498 21 5.886 21 6.5s-.802 1.002-2.405 1.778l-2.92 1.413C13.87 10.564 12.97 11 12 11s-1.871-.436-3.674-1.309M6 12l2 1m9-9L7 9"/>
+                </g>
             </svg>
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Productos
@@ -167,6 +134,56 @@ export default function Navbar({ user, onLogout }) {
             </svg>
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
               Proveedores
+            </span>
+          </a>
+
+          {/* Presupuestos y Ventas */}
+          <a
+            href="/home/presupuestos"
+            onClick={(e) => handleLinkClick(e, "/home/presupuestos")}
+            className="p-3 rounded-xl hover:bg-emerald-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-5 h-5 text-emerald-400"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              />
+            </svg>
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
+              Presupuestos y Ventas
+            </span>
+          </a>
+
+          {/* Compras */}
+          <a
+            href="/home/compras"
+            onClick={(e) => handleLinkClick(e, "/home/compras")}
+            className="p-3 rounded-xl hover:bg-orange-500/20 transition-all duration-300 relative group shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-5 h-5 text-orange-400"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
+              />
+            </svg>
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50">
+              Compras
             </span>
           </a>
 

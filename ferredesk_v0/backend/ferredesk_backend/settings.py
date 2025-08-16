@@ -27,6 +27,18 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+<<<<<<< HEAD
+=======
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = 'django-insecure-&#7bxgw8grl4)^q)@po2m3u*1gu7!1w+^f6nzgf7ps71nx30bh'
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
+
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+
+
+>>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
 # Application definition
 
 INSTALLED_APPS = [
@@ -46,6 +58,7 @@ INSTALLED_APPS = [
     'ferreapps.notas',
     'ferreapps.alertas',
     'ferreapps.informes',
+    'ferreapps.compras',
     'rest_framework',
     'django_filters',
     'django_extensions',
@@ -57,7 +70,8 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # Debe ir antes de CommonMiddleware
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware', # Reemplazado por el nuestro
+    'ferreapps.clientes.middleware.CsrfExemptMiddleware', # Middleware personalizado
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -115,10 +129,20 @@ if BASE_DIR.name == 'app':
 else:
     # Estamos en desarrollo local - usar SQLite
 DATABASES = {
+<<<<<<< HEAD
     'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': 'db.sqlite3'
         }
+=======
+    'default': {        
+        'ENGINE': 'django.db.backends.postgresql',  
+        'NAME': 'FerreDesk',         
+        'USER': 'postgres',
+        'PASSWORD': 'fercien',
+        'HOST': 'localhost',
+        'PORT': '5432',
+>>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
     }
 
 # Logging Configuration
@@ -258,10 +282,12 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
-    )
+    ),
+    'EXCEPTION_HANDLER': 'ferreapps.ventas.utils.ferre_exception_handler',
 }
 
 # Configuración de CORS
+<<<<<<< HEAD
 # Usar variables de entorno si están disponibles (Docker), sino usar valores por defecto
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
 CORS_ALLOW_CREDENTIALS = True
@@ -269,6 +295,24 @@ CORS_ALLOW_CREDENTIALS = True
 # Configuración de CSRF
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
 CSRF_COOKIE_SAMESITE = 'Lax'
+=======
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+CORS_ALLOW_CREDENTIALS = True
+
+# Configuración de CSRF
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+CSRF_COOKIE_SAMESITE = 'Lax' 
+>>>>>>> 2a7694caf03a3be7bf45a03515a6a34170b18c92
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False  # Debe ser False para que JavaScript pueda leer la cookie
 SESSION_COOKIE_HTTPONLY = True

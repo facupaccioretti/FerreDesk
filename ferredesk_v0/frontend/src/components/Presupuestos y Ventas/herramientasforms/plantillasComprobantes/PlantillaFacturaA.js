@@ -1,231 +1,283 @@
-// PlantillaFacturaA.js
-// Componente visual para mostrar el detalle de una Factura A
-import React from 'react';
-import { formatearDescuentosVisual, formatearMoneda } from './helpers';
+import { formatearDescuentosVisual, formatearMoneda, mapearTipoComprobante, renderizarObservacionesComoLista } from "./helpers"
+import Tabla from "../../../Tabla"
+import { useFerreDeskTheme } from "../../../../hooks/useFerreDeskTheme"
+import { Dialog, Transition } from "@headlessui/react"
+import { Fragment } from "react"
 
-const PlantillaFacturaA = ({ data }) => {
-  // data: objeto con todos los datos mapeados de la venta/comprobante
-  // Se espera: data.items, data.bonificacionGeneral, data.ven_descu1, data.ven_descu2, etc.
+// Constante para controlar cuándo la tabla empieza a scrollear
+const CANTIDAD_ITEMS_PARA_SCROLL_TABLA = 7
+
+// Icono de cliente (usado en navbar)
+const IconCliente = ({ className = "w-5 h-5 text-white" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className={className}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+    />
+  </svg>
+)
+
+const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
+  const tema = useFerreDeskTheme()
+  
+  // Determinar si la tabla debe tener scroll específico
+  const items = data.items || []
+  const debeTenerScrollTabla = items.length > CANTIDAD_ITEMS_PARA_SCROLL_TABLA
 
   return (
-    <div className="plantilla-comprobante bg-white p-8 max-w-7xl mx-auto">
-      {/* Encabezado principal: tres bloques */}
-      <div className="encabezado-comprobante grid grid-cols-3 gap-8 mb-8 p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border">
-        {/* Cliente (izquierda) */}
-        <div className="cliente text-sm space-y-1">
-          <div className="font-bold text-lg text-gray-800 mb-2">{data.cliente || "Cliente"}</div>
-          <div className="text-gray-600">{data.domicilio || ""}</div>
-          <div className="text-gray-600">{data.localidad || ""}</div>
-          <div className="text-gray-600">{data.provincia || ""}</div>
-          <div className="text-gray-700">
-            <span className="font-medium">CUIT/DNI:</span> {data.cuit || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Condición IVA:</span> {data.condicion_iva_cliente || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Teléfono:</span> {data.telefono_cliente || ""}
-          </div>
-        </div>
-        {/* Centro: letra, código, tipo, número, fecha */}
-        <div className="centro text-center flex flex-col items-center justify-center bg-white rounded-lg p-4 shadow-sm border-2 border-blue-200">
-          <div className="letra-comprobante text-5xl font-black font-serif text-blue-600 leading-none mb-1">
-            {data.comprobante?.letra || "A"}
-          </div>
-          <div className="codigo-comprobante text-xs font-semibold text-gray-500 mb-2">
-            Cód. {data.comprobante?.codigo_afip || "01"}
-          </div>
-          <div className="tipo-comprobante text-xl font-bold uppercase text-gray-800 mb-1">
-            {(data.comprobante?.tipo || "FACTURA").replace(/_/g, ' ')}
-          </div>
-          <div className="numero-comprobante text-lg font-bold tracking-wider text-blue-700 mb-2">
-            {data.numero_formateado || "0000-00000001"}
-          </div>
-          <div className="fecha-emision text-sm text-gray-600 bg-gray-50 px-3 py-1 rounded">
-            Fecha de emisión: {data.fecha || ""}
-          </div>
-        </div>
-        {/* Emisor (derecha) */}
-        <div className="emisor text-sm text-right space-y-1">
-          <div className="font-bold text-lg text-gray-800 mb-2">
-            {data.emisor_razon_social || "Nombre de la Empresa"}
-          </div>
-          <div className="text-gray-600">{data.emisor_direccion || ""}</div>
-          <div className="text-gray-700">
-            <span className="font-medium">CUIT:</span> {data.emisor_cuit || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Ing. Brutos:</span> {data.emisor_ingresos_brutos || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Inicio Actividad:</span> {data.emisor_inicio_actividad || ""}
-          </div>
-          <div className="text-gray-700">
-            <span className="font-medium">Condición IVA:</span> {data.emisor_condicion_iva || ""}
-          </div>
-        </div>
-      </div>
+    <Transition show={true} as={Fragment}>
+      <Dialog
+        onClose={onClose}
+        className="relative z-50"
+      >
+        {/* Overlay con animación */}
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black/60" aria-hidden="true" />
+        </Transition.Child>
 
-      {/* Tabla de ítems */}
-      <div className="overflow-x-auto rounded-xl border border-gray-300 shadow-lg mb-8">
-        <table className="min-w-full divide-y divide-gray-300 bg-white">
-          <thead className="bg-gradient-to-r from-blue-600 to-blue-700">
-            <tr>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[120px]">
-                Código
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[220px]">
-                Descripción
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[100px]">
-                Cantidad
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[140px]">
-                Precio Unitario
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[100px]">
-                Desc. %
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[180px]">
-                Precio Unit. Bonificado
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[100px]">
-                Alicuota
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[100px]">
-                IVA
-              </th>
-              <th className="px-4 py-4 text-center text-sm font-bold text-white uppercase tracking-wider min-w-[140px]">
-                Importe
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {data.items?.map((item, idx) => (
-              <tr
-                key={idx}
-                className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors duration-150`}
-              >
-                <td className="px-4 py-3 text-center text-sm font-medium text-gray-900">{item.codigo ?? "-"}</td>
-                <td className="px-4 py-3 text-left text-sm text-gray-900">{item.vdi_detalle1 ?? "-"}</td>
-                <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">{item.vdi_cantidad ?? 0}</td>
-                <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                  ${formatearMoneda(item.precio_unitario_sin_iva || 0)}
-                </td>
-                <td className="px-4 py-3 text-center text-sm font-medium text-orange-600">
-                  {formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3)}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
-                  ${formatearMoneda(item.precio_unitario_bonificado || 0)}
-                </td>
-                <td className="px-4 py-3 text-center text-sm font-medium text-gray-700">
-                  {item.ali_porce ? `${item.ali_porce}%` : "-"}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
-                  ${formatearMoneda(item.iva_monto || 0)}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                  ${formatearMoneda(item.subtotal_neto || 0)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {/* Contenedor del modal con animación */}
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0 scale-95"
+            enterTo="opacity-100 scale-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100 scale-100"
+            leaveTo="opacity-0 scale-95"
+          >
+            <Dialog.Panel className="w-full max-w-6xl bg-white rounded-lg shadow-lg border border-slate-200 relative overflow-hidden max-h-[95vh] flex flex-col">
+              {/* Header */}
+              <div className="bg-slate-800 px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">A</span>
+                  </div>
+                  <div>
+                                         <h3 className={`text-lg font-semibold ${tema.fuente}`}>
+                       {mapearTipoComprobante(data.comprobante)} {data.comprobante?.letra || "A"}
+                     </h3>
+                    <div className={`text-sm ${tema.fuenteSecundaria}`}>
+                      {data.numero_formateado || "0000-00000001"} • {data.fecha || ""}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={onClose}
+                  className={`${tema.botonSecundario} text-sm font-medium`}
+                >
+                  Cerrar
+                </button>
+              </div>
 
-      {/* Bloque de totales y desglose */}
-      <div className="w-full mt-8 mb-8">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 w-full">
-          <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-            <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Importe Neto Gravado
-            </span>
-            <span className="block text-xl font-bold text-gray-900">${formatearMoneda(data.ven_impneto)}</span>
-          </div>
-          <div className="bg-gradient-to-br from-white to-orange-50 p-6 rounded-xl shadow-md border border-orange-200 hover:shadow-lg transition-shadow">
-            <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bonif. Gral.</span>
-            <span className="block text-xl font-bold text-orange-600">{data.bonificacionGeneral || 0}%</span>
-          </div>
-          <div className="bg-gradient-to-br from-white to-red-50 p-6 rounded-xl shadow-md border border-red-200 hover:shadow-lg transition-shadow">
-            <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Descuento 1</span>
-            <span className="block text-xl font-bold text-red-600">{data.ven_descu1 || 0}%</span>
-          </div>
-          <div className="bg-gradient-to-br from-white to-red-50 p-6 rounded-xl shadow-md border border-red-200 hover:shadow-lg transition-shadow">
-            <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Descuento 2</span>
-            <span className="block text-xl font-bold text-red-600">{data.ven_descu2 || 0}%</span>
-          </div>
-          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 rounded-xl shadow-lg border-2 border-emerald-300 md:col-span-1 col-span-2">
-            <span className="block text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
-              Importe Total
-            </span>
-            <span className="block text-2xl font-black text-emerald-700">
-              ${formatearMoneda(data.ven_total) || formatearMoneda(data.total)}
-            </span>
-          </div>
+              {/* Contenido de la página - con scroll general del modal */}
+              <div className="flex-1 overflow-auto p-6">
+                {/* Tarjetas informativas */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                  {/* Cliente */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center">
+                        <IconCliente className="w-3.5 h-3.5 text-blue-600" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">Cliente</h4>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-slate-800">
+                        {data.cliente || "Cliente"}
+                      </div>
+                      <div className="text-xs text-slate-600">{data.domicilio || ""}</div>
+                      <div className="text-xs text-slate-600">{data.localidad || ""}</div>
+                      <div className="text-xs text-slate-600">{data.provincia || ""}</div>
+                      <div className="text-xs text-slate-600">CUIT: {data.cuit || "-"}</div>
+                      <div className="text-xs text-slate-600">Cond. IVA: {data.condicion_iva_cliente || "-"}</div>
+                      <div className="text-xs text-slate-600">Teléfono: {data.telefono_cliente || "-"}</div>
+                      <div className="text-xs text-slate-600">Cond. Venta: Contado</div>
+                    </div>
+                  </div>
+
+                  {/* Comprobante */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded bg-orange-100 flex items-center justify-center">
+                        <span className="text-orange-600 font-semibold text-sm">A</span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">Comprobante</h4>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-slate-800">{data.numero_formateado || "0000-00000001"}</div>
+                      <div className="text-xs text-slate-600">Fecha: {data.fecha || ""}</div>
+                      <div className="text-xs text-slate-600">Hora: {data.hora_creacion ? data.hora_creacion.split('.')[0] : "No disponible"}</div>
+                      <div className="text-xs text-slate-600">Cód. AFIP: {data.comprobante?.codigo_afip || "01"}</div>
+                                             <div className="text-xs text-slate-600">Tipo: {mapearTipoComprobante(data.comprobante)}</div>
+                    </div>
+                  </div>
+
+                  {/* Emisor */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center">
+                        <span className="text-slate-600 font-semibold text-sm">E</span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">Emisor</h4>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-slate-800">
+                        {ferreteriaConfig?.nombre || "Nombre de la Empresa"}
+                      </div>
+                      <div className="text-xs text-slate-600">{ferreteriaConfig?.direccion || ""}</div>
+                      <div className="text-xs text-slate-600">CUIT: {ferreteriaConfig?.cuit_cuil || "-"}</div>
+                      <div className="text-xs text-slate-600">Cond. IVA: {ferreteriaConfig?.situacion_iva || "-"}</div>
+                      <div className="text-xs text-slate-600">Teléfono: {ferreteriaConfig?.telefono || "-"}</div>
+                      <div className="text-xs text-slate-600">Ing. Brutos: {ferreteriaConfig?.ingresos_brutos || "-"}</div>
+                      <div className="text-xs text-slate-600">Inicio Act.: {ferreteriaConfig?.inicio_actividad || "-"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabla de ítems - con scroll específico cuando es necesario */}
+                <div className="mb-4">
+                  <div className={debeTenerScrollTabla ? "max-h-72 overflow-auto border border-slate-200 rounded-lg" : ""}>
+                    <Tabla
+                      columnas={[
+                        { id: "codigo", titulo: "Código", align: "left", ancho: "60px" },
+                        { id: "descripcion", titulo: "Descripción", align: "left", ancho: "150px" },
+                        { id: "cantidad", titulo: "Cant.", align: "right", ancho: "50px" },
+                        { id: "precio", titulo: "P. Unitario", align: "right", ancho: "80px" },
+                        { id: "descuento", titulo: "Desc. %", align: "center", ancho: "60px" },
+                        { id: "precioBonificado", titulo: "P. Unit. Bonif.", align: "right", ancho: "80px" },
+                        { id: "alicuota", titulo: "Alicuota", align: "center", ancho: "60px" },
+                        { id: "iva", titulo: "IVA", align: "right", ancho: "80px" },
+                        { id: "importe", titulo: "Importe", align: "right", ancho: "100px" }
+                      ]}
+                      datos={items.map((item, idx) => ({
+                        id: item.VDI_ORDEN || idx,
+                          codigo: item.codigo ?? "-",
+                          descripcion: item.vdi_detalle1 ?? "-",
+                          cantidad: item.vdi_cantidad ?? 0,
+                          precio: `$${formatearMoneda(item.precio_unitario_sin_iva || 0)}`,
+                          descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
+                          precioBonificado: `$${formatearMoneda(item.precio_unitario_bonif_desc_sin_iva || 0)}`,
+                          alicuota: item.ali_porce ? `${item.ali_porce}%` : "0%",
+                          iva: `$${formatearMoneda(item.iva_monto || 0)}`,
+                          importe: `$${formatearMoneda(item.total_item || 0)}`
+                        }))}
+                      paginadorVisible={false}
+                      mostrarBuscador={false}
+                      mostrarOrdenamiento={false}
+                      sinEstilos={true}
+                      tamañoEncabezado="pequeño"
+                      renderFila={(fila, idx) => (
+                        <tr key={fila.id} className="hover:bg-slate-50">
+                          <td className="px-2 py-1 text-slate-800 font-mono text-xs">{fila.codigo}</td>
+                          <td className="px-2 py-1 text-slate-800 text-xs">{fila.descripcion}</td>
+                          <td className="px-2 py-1 text-right text-slate-800 font-medium text-xs">{fila.cantidad}</td>
+                          <td className="px-2 py-1 text-right text-slate-800 font-medium text-xs">{fila.precio}</td>
+                          <td className="px-2 py-1 text-center text-orange-600 font-medium text-xs">{fila.descuento}</td>
+                          <td className="px-2 py-1 text-right text-slate-800 font-medium text-xs">{fila.precioBonificado}</td>
+                          <td className="px-2 py-1 text-center text-slate-800 font-medium text-xs">{fila.alicuota}</td>
+                          <td className="px-2 py-1 text-right text-blue-600 font-medium text-xs">{fila.iva}</td>
+                          <td className="px-2 py-1 text-right text-slate-900 font-bold text-xs">{fila.importe}</td>
+                        </tr>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Totales simplificados */}
+                <div className="bg-white rounded-lg border border-slate-200 p-3 mb-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center">
+                      <div className="text-xs text-slate-600 mb-1">Neto Gravado</div>
+                      <div className="text-xs font-bold text-slate-900">${formatearMoneda(data.ven_impneto)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-600 mb-1">IVA Contenido</div>
+                      <div className="text-xs font-bold text-blue-600">${formatearMoneda(data.iva_global)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-600 mb-1">Total</div>
+                      <div className="text-sm font-black text-emerald-700">
+                        ${formatearMoneda(data.ven_total) || formatearMoneda(data.total)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desglose de IVA simplificado */}
+                {data.iva_desglose && Object.keys(data.iva_desglose).length > 0 && (
+                  <div className="mb-4">
+                    <div className="max-h-60 overflow-auto border border-slate-200 rounded-lg">
+                      <Tabla
+                        columnas={[
+                          { id: "alicuota", titulo: "Alícuota", align: "center", ancho: "100px" },
+                          { id: "neto", titulo: "Neto gravado", align: "right", ancho: "150px" },
+                          { id: "iva", titulo: "IVA", align: "right", ancho: "150px" }
+                        ]}
+                        datos={Object.entries(data.iva_desglose).map(([ali, val], idx) => ({
+                          id: idx,
+                          alicuota: `${ali}%`,
+                          neto: `$${formatearMoneda(val.neto)}`,
+                          iva: `$${formatearMoneda(val.iva)}`
+                        }))}
+                        paginadorVisible={false}
+                        mostrarBuscador={false}
+                        mostrarOrdenamiento={false}
+                        sinEstilos={true}
+                        tamañoEncabezado="pequeño"
+                        renderFila={(fila, idx) => (
+                          <tr key={fila.id} className="hover:bg-slate-50">
+                            <td className="px-2 py-1 text-center text-slate-900 font-medium text-xs">{fila.alicuota}</td>
+                            <td className="px-2 py-1 text-right text-slate-900 font-medium text-xs">{fila.neto}</td>
+                            <td className="px-2 py-1 text-right text-blue-600 font-medium text-xs">{fila.iva}</td>
+                          </tr>
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Información AFIP simplificada */}
+                <div className="bg-white rounded-lg border border-slate-200 p-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-600">CAE:</span>
+                      <span className="font-mono text-slate-900">{data.ven_cae || "-"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-600">Vencimiento CAE:</span>
+                      <span className="font-mono text-slate-900">{data.ven_caevencimiento || "-"}</span>
+                    </div>
+                    <div className="md:col-span-2 flex gap-2 text-xs mt-1">
+                      <span className="font-medium text-slate-600">Observaciones:</span>
+                      <div className="text-slate-900">{renderizarObservacionesComoLista(data.ven_observacion)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Dialog.Panel>
+          </Transition.Child>
         </div>
-      </div>
+      </Dialog>
+    </Transition>
+  )
+}
 
-      {/* Desglose de IVA */}
-      {data.iva_desglose && Object.keys(data.iva_desglose).length > 0 && (
-        <div className="mt-8 mb-8 bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Desglose de IVA</h3>
-          <div className="overflow-x-auto rounded-lg border border-gray-300 shadow-md">
-            <table className="min-w-full divide-y divide-gray-300 bg-white">
-              <thead className="bg-gradient-to-r from-gray-600 to-gray-700">
-                <tr>
-                  <th className="px-6 py-4 text-center text-sm font-bold text-white uppercase tracking-wider">
-                    Alícuota
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-bold text-white uppercase tracking-wider">
-                    Neto gravado
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-bold text-white uppercase tracking-wider">IVA</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {Object.entries(data.iva_desglose).map(([ali, val], idx) => (
-                  <tr
-                    key={ali}
-                    className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors duration-150`}
-                  >
-                    <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900">{ali}%</td>
-                    <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
-                      ${formatearMoneda(val.neto)}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-semibold text-blue-600">
-                      ${formatearMoneda(val.iva)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Pie de comprobante */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-        <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
-          <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Información AFIP</h4>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="font-semibold text-gray-600">CAE:</span>{" "}
-              <span className="font-mono text-gray-900">{data.cae || ""}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold text-gray-600">Vencimiento CAE:</span>{" "}
-              <span className="font-mono text-gray-900">{data.cae_vencimiento || ""}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold text-gray-600">QR:</span>{" "}
-              <span className="text-gray-500">{/* Aquí podría ir un componente QR o imagen si hay dato */}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default PlantillaFacturaA;
-export { PlantillaFacturaA }; 
+export default PlantillaFacturaA
+export { PlantillaFacturaA }

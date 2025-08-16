@@ -369,6 +369,17 @@ class VentaViewSet(viewsets.ModelViewSet):
             try:
                 # ATENCIÓN: No calcular totales ni campos calculados aquí.
                 # Solo actualizar los ítems base.
+                # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
+                bonif_general = request.data.get('bonificacionGeneral', 0)
+                try:
+                    bonif_general = float(bonif_general)
+                except Exception:
+                    bonif_general = 0
+                for item in items_data:
+                    bonif = item.get('vdi_bonifica')
+                    if not bonif or float(bonif) == 0:
+                        item['vdi_bonifica'] = bonif_general
+                # -------------------------------------------------------------------------------
                 instance.items.all().delete()
                 for item_data in items_data:
                     item_data['vdi_idve'] = instance
@@ -508,6 +519,15 @@ def convertir_presupuesto_a_venta(request):
             comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
             venta_data['comprobante_id'] = comprobante['codigo_afip']
 
+            # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
+            # Igual que en el alta: ARCA decide el número final. Para evitar colisiones de la
+            # clave única al renumerar, si es fiscal, usar el PV fiscal configurado.
+            if debe_emitir_arca(tipo_comprobante):
+                pv_arca = getattr(ferreteria, 'punto_venta_arca', None)
+                if pv_arca:
+                    venta_data['ven_punto'] = pv_arca
+                    punto_venta = pv_arca
+
             # --- Asignar bonificación general a los ítems sin bonificación particular ---
             bonif_general = venta_data.get('bonificacionGeneral', 0)
             try:
@@ -530,11 +550,20 @@ def convertir_presupuesto_a_venta(request):
                 ).order_by('-ven_numero').first()
                 nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
                 venta_data['ven_numero'] = nuevo_numero
-                venta_serializer = VentaSerializer(data=venta_data)
+                
+                # === USAR EL MISMO PATRÓN QUE CREATE(): USAR SERIALIZER COMO VENTAFORM ===
+                # Esto permite que Django maneje automáticamente los ForeignKey como ven_idcli
                 try:
-                    venta_serializer.is_valid(raise_exception=True)
-                    venta = venta_serializer.save()
-                    print(f"LOG: Venta creada con ID {venta.pk}")
+                    # === REPLICAR PATRÓN DE VENTAFORM.CREATE() ===
+                    # 1. Crear venta usando serializer
+                    serializer = VentaSerializer(data=venta_data)
+                    serializer.is_valid(raise_exception=True)
+                    venta = serializer.save()
+                    
+                    # 2. Obtener venta recién creada (igual que VentaForm.create())
+                    venta_creada = Venta.objects.get(ven_id=venta.ven_id)
+                    
+                    print(f"LOG: Venta creada con ID {venta_creada.ven_id}")
                     break
                 except IntegrityError as e:
                     if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
@@ -572,8 +601,8 @@ def convertir_presupuesto_a_venta(request):
                     presupuesto.delete()
                     presupuesto_result = None
                 else:
-                    # Recalcular totales y guardar
-                    recalcular_totales_presupuesto(presupuesto)
+                    # Los totales se calculan automáticamente en las vistas SQL
+                    # No es necesario recalcular campos que no existen en el modelo Venta
                     presupuesto.save()
                     presupuesto_result = VentaSerializer(presupuesto).data
 
@@ -604,7 +633,7 @@ def convertir_presupuesto_a_venta(request):
             # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
             if debe_emitir_arca(tipo_comprobante):
                 try:
-                    logger.info(f"Emisión automática ARCA para conversión presupuesto {presupuesto.id} a venta {venta.ven_id} - tipo: {tipo_comprobante}")
+                    logger.info(f"Emisión automática ARCA para conversión presupuesto {presupuesto.ven_id} a venta {venta.ven_id} - tipo: {tipo_comprobante}")
                     resultado_arca = emitir_arca_automatico(venta)
                     
                     # Agregar información ARCA a la respuesta
@@ -622,11 +651,11 @@ def convertir_presupuesto_a_venta(request):
                         'observaciones': resultado_arca.get('resultado', {}).get('observaciones', [])
                     }
                     
-                    logger.info(f"Emisión ARCA exitosa para conversión presupuesto {presupuesto.id} a venta {venta.ven_id}: CAE {resultado_arca.get('resultado', {}).get('cae')}")
+                    logger.info(f"Emisión ARCA exitosa para conversión presupuesto {presupuesto.ven_id} a venta {venta.ven_id}: CAE {resultado_arca.get('resultado', {}).get('cae')}")
                     
                 except Exception as e:
                     # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
-                    logger.error(f"Error en emisión automática ARCA para conversión presupuesto {presupuesto.id} a venta {venta.ven_id}: {e}")
+                    logger.error(f"Error en emisión automática ARCA para conversión presupuesto {presupuesto.ven_id} a venta {venta.ven_id}: {e}")
                     raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
             else:
                 # Comprobante interno - no requiere emisión ARCA
@@ -647,56 +676,7 @@ def convertir_presupuesto_a_venta(request):
         print("DEBUG - Error en convertir_presupuesto_a_venta:", str(e))
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-def recalcular_totales_presupuesto(presupuesto):
-    """Recalcula `ven_impneto` y `ven_total` tomando los ítems reales del presupuesto.
 
-    IMPORTANTE:
-    • Los campos **vdi_importe** o **vdi_importe_total** no existen en el modelo *VentaDetalleItem*;
-      sólo están presentes en la vista SQL de items calculados.  Por eso se reproduce aquí la
-      misma fórmula empleando los campos persistentes (`vdi_costo`, `vdi_margen`, `vdi_bonifica`, `vdi_cantidad`).
-    • En los presupuestos el IVA no se discrimina.  Por lo tanto **ven_total = ven_impneto**.
-    """
-
-    items_restantes = list(presupuesto.items.all())
-    if not items_restantes:
-        presupuesto.ven_impneto = Decimal('0.00')
-        presupuesto.ven_total = Decimal('0.00')
-        return
-
-    subtotal_bruto = Decimal('0')
-
-    for item in items_restantes:
-        # 1) Precio de lista = costo + margen
-        precio_lista = Decimal(item.vdi_costo or 0) * (Decimal('1') + Decimal(item.vdi_margen or 0) / Decimal('100'))
-
-        # 2) Aplicar bonificación particular del ítem
-        precio_bonificado = precio_lista * (Decimal('1') - Decimal(item.vdi_bonifica or 0) / Decimal('100'))
-
-        # 3) Importe total del ítem = precio bonificado por cantidad
-        importe_item = precio_bonificado * Decimal(item.vdi_cantidad or 0)
-
-        subtotal_bruto += importe_item
-
-    # ---- Aplicar bonificación/desc. generales del presupuesto ----
-    bonif_general = Decimal(presupuesto.ven_bonificacion_general or 0)
-    desc1 = Decimal(presupuesto.ven_descu1 or 0)
-    desc2 = Decimal(presupuesto.ven_descu2 or 0)
-    desc3 = Decimal(presupuesto.ven_descu3 or 0)
-
-    neto = subtotal_bruto
-
-    if bonif_general:
-        neto *= (Decimal('1') - bonif_general / Decimal('100'))
-    if desc1:
-        neto *= (Decimal('1') - desc1 / Decimal('100'))
-    if desc2:
-        neto *= (Decimal('1') - desc2 / Decimal('100'))
-    if desc3:
-        neto *= (Decimal('1') - desc3 / Decimal('100'))
-
-    # En la etapa de presupuesto no se agrega IVA
-    presupuesto.ven_impneto = neto.quantize(Decimal('0.01'))
-    presupuesto.ven_total = neto.quantize(Decimal('0.01'))
 
 
 @api_view(['POST'])
@@ -753,9 +733,8 @@ def convertir_factura_interna_a_fiscal(request):
                 item['vdi_bonifica'] = bonif_general
 
         # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
-        # CORREGIDO: Consultar configuración de la ferretería para stock negativo
-        ferreteria = Ferreteria.objects.first()
-        permitir_stock_negativo = getattr(ferreteria, 'permitir_stock_negativo', False)
+        # CORREGIDO: Configuración de stock negativo se controla por payload de la operación
+        permitir_stock_negativo = venta_data.get('permitir_stock_negativo', False)
         
         tipo_comprobante = venta_data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')
@@ -838,6 +817,17 @@ def convertir_factura_interna_a_fiscal(request):
         
         venta_data['comprobante_id'] = comprobante["codigo_afip"]
 
+        # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
+        # Mismo criterio que en create: ARCA define el número final. Para evitar colisiones
+        # de la clave única (ven_punto, ven_numero, comprobante), si el comprobante requiere
+        # emisión ARCA, forzamos a usar el punto de venta fiscal configurado en ferretería
+        # antes de asignar numeración provisional.
+        tipo_comprobante = venta_data.get('tipo_comprobante')
+        if debe_emitir_arca(tipo_comprobante):
+            pv_arca = getattr(ferreteria, 'punto_venta_arca', None)
+            if pv_arca:
+                venta_data['ven_punto'] = pv_arca
+
         # === LÓGICA DE NUMERACIÓN (IDÉNTICA AL MÉTODO CREATE) ===
         punto_venta = venta_data.get('ven_punto')
         if not punto_venta:
@@ -855,21 +845,19 @@ def convertir_factura_interna_a_fiscal(request):
             nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
             venta_data['ven_numero'] = nuevo_numero
             
-            # === USAR VENTASERIALIZER EXACTAMENTE COMO EN CREATE() ===
-            venta_serializer = VentaSerializer(data=venta_data)
+            # === USAR EL MISMO PATRÓN QUE CREATE(): USAR SERIALIZER COMO VENTAFORM ===
+            # Esto permite que Django maneje automáticamente los ForeignKey como ven_idcli
             try:
-                venta_serializer.is_valid(raise_exception=True)
+                # === REPLICAR PATRÓN DE VENTAFORM.CREATE() ===
+                # 1. Crear venta usando serializer
+                serializer = VentaSerializer(data=venta_data)
+                serializer.is_valid(raise_exception=True)
+                nueva_factura = serializer.save()
                 
-                # DEBUGGING: Log detallado de los items antes de guardar
-                items_debug = venta_data.get('items', [])
-                print(f"DEBUG - Total items a procesar: {len(items_debug)}")
-                for i, item in enumerate(items_debug):
-                    print(f"DEBUG - Item {i}: vdi_precio_unitario_final = {item.get('vdi_precio_unitario_final')}")
-                    print(f"DEBUG - Item {i}: precioFinal = {item.get('precioFinal')}")
-                    print(f"DEBUG - Item {i}: idOriginal = {item.get('idOriginal')}")
+                # 2. Obtener venta recién creada (igual que VentaForm.create())
+                nueva_factura = Venta.objects.get(ven_id=nueva_factura.ven_id)
                 
-                nueva_factura = venta_serializer.save()
-                print(f"LOG: Factura fiscal creada con ID {nueva_factura.pk}")
+                print(f"LOG: Factura fiscal creada con ID {nueva_factura.ven_id}")
                 break
             except IntegrityError as e:
                 if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
@@ -922,8 +910,8 @@ def convertir_factura_interna_a_fiscal(request):
                 factura_interna.delete()
                 factura_interna_result = None
             else:
-                # Recalcular totales y guardar (usando la misma función que presupuestos)
-                recalcular_totales_presupuesto(factura_interna)  # Funciona igual para facturas internas
+                # Los totales se calculan automáticamente en las vistas SQL
+                # No es necesario recalcular campos que no existen en el modelo Venta
                 factura_interna.save()
                 factura_interna_result = VentaSerializer(factura_interna).data
         
@@ -966,8 +954,11 @@ def convertir_factura_interna_a_fiscal(request):
         return Response(response_data, status=status.HTTP_201_CREATED)
         
     except Exception as e:
+        # Replicar comportamiento de create: dejar propagar la excepción para que
+        # @transaction.atomic realice el rollback completo y el handler global
+        # formatee el mensaje hacia el frontend.
         print("DEBUG - Error en convertir_factura_interna_a_fiscal:", str(e))
-        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        raise
 
 
 
@@ -990,7 +981,7 @@ def productos_mas_vendidos(request):
                 SELECT 
                     COALESCE(vdi.vdi_detalle1, 'Producto sin nombre') as producto,
                     SUM(vdi.vdi_cantidad) as total_cantidad
-                FROM VENTADETALLEITEM_CALCULADO vdi
+                FROM "VENTADETALLEITEM_CALCULADO" vdi
                 WHERE vdi.vdi_cantidad > 0
                 GROUP BY vdi.vdi_detalle1
                 ORDER BY total_cantidad DESC
@@ -1002,7 +993,7 @@ def productos_mas_vendidos(request):
                 SELECT 
                     COALESCE(vdi.vdi_detalle1, 'Producto sin nombre') as producto,
                     SUM(vdi.total_item) as total_facturado
-                FROM VENTADETALLEITEM_CALCULADO vdi
+                FROM "VENTADETALLEITEM_CALCULADO" vdi
                 WHERE vdi.total_item > 0
                 GROUP BY vdi.vdi_detalle1
                 ORDER BY total_facturado DESC
@@ -1066,7 +1057,7 @@ def ventas_por_dia(request):
             SELECT 
                 DATE(vc.ven_fecha) as fecha,
                 SUM(vc.ven_total) as total_ventas
-            FROM VENTA_CALCULADO vc
+            FROM "VENTA_CALCULADO" vc
             WHERE vc.ven_fecha >= %s AND vc.ven_fecha <= %s
             GROUP BY DATE(vc.ven_fecha)
             ORDER BY fecha
@@ -1137,7 +1128,7 @@ def clientes_mas_ventas(request):
                 SELECT 
                     COALESCE(vc.cliente_razon, 'Cliente sin nombre') as cliente,
                     SUM(vc.ven_total) as total_facturado
-                FROM VENTA_CALCULADO vc
+                FROM "VENTA_CALCULADO" vc
                 WHERE vc.ven_total > 0
                 GROUP BY vc.cliente_razon
                 ORDER BY total_facturado DESC
@@ -1149,8 +1140,8 @@ def clientes_mas_ventas(request):
                 SELECT 
                     COALESCE(vc.cliente_razon, 'Cliente sin nombre') as cliente,
                     SUM(vdi.vdi_cantidad) as total_productos
-                FROM VENTADETALLEITEM_CALCULADO vdi
-                JOIN VENTA_CALCULADO vc ON vdi.vdi_idve = vc.ven_id
+                FROM "VENTADETALLEITEM_CALCULADO" vdi
+                JOIN "VENTA_CALCULADO" vc ON vdi.vdi_idve = vc.ven_id
                 WHERE vdi.vdi_cantidad > 0
                 GROUP BY vc.cliente_razon
                 ORDER BY total_productos DESC
@@ -1162,7 +1153,7 @@ def clientes_mas_ventas(request):
                 SELECT 
                     COALESCE(vc.cliente_razon, 'Cliente sin nombre') as cliente,
                     COUNT(DISTINCT vc.ven_id) as frecuencia_compras
-                FROM VENTA_CALCULADO vc
+                FROM "VENTA_CALCULADO" vc
                 WHERE vc.ven_total > 0
                 GROUP BY vc.cliente_razon
                 ORDER BY frecuencia_compras DESC

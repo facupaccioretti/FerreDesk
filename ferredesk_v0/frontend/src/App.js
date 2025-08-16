@@ -1,5 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Importar estilos del sistema de diseño FerreDesk
+import './styles/design-tokens.css';
+import './styles/utilities.css';
+
 import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
@@ -15,6 +20,7 @@ import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones'
 import ConfiguracionManager from './components/ConfiguracionManager';
 import InformesManager from './components/Informes/InformesManager';
 import DashboardsManager from './components/DashboardsManager';
+import ComprasManager from './components/Compras/ComprasManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -59,6 +65,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ProveedoresManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/home/compras"
+          element={
+            <PrivateRoute>
+              <ComprasManager />
             </PrivateRoute>
           }
         />

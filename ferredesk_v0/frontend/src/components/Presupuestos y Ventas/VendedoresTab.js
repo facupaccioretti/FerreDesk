@@ -43,7 +43,7 @@ const VendedoresTab = ({
       {/* Vendedores: lista */}
       {activeTab === "vendedores" && (
         <>
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-start mb-4">
             <button
               onClick={handleNuevoVendedor}
               className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"

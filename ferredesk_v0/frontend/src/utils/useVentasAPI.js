@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getCookie } from '../utils/csrf';
+import { getCookie } from './csrf';
 import { mapearCamposItem } from '../components/Presupuestos y Ventas/herramientasforms/mapeoItems';
 
 export function useVentasAPI() {
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const csrftoken = getCookie('csrftoken');
 
   const fetchVentas = async (filtros = {}) => {
     setLoading(true);
@@ -46,6 +45,7 @@ export function useVentasAPI() {
       } else {
         console.log('[useVentasAPI] Primer ítem del array items:', ventaMapped.items[0]);
       }
+      const csrftoken = getCookie('csrftoken');
       const res = await fetch('/api/ventas/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
@@ -84,8 +84,9 @@ export function useVentasAPI() {
   const updateVenta = async (id, updated) => {
     setError(null);
     try {
+      const csrftoken = getCookie('csrftoken');
       const res = await fetch(`/api/ventas/${id}/`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
         credentials: 'include',
         body: JSON.stringify(updated)
@@ -108,6 +109,7 @@ export function useVentasAPI() {
   const deleteVenta = async (id) => {
     setError(null);
     try {
+      const csrftoken = getCookie('csrftoken');
       const res = await fetch(`/api/ventas/${id}/`, {
         method: 'DELETE',
         headers: { 'X-CSRFToken': csrftoken },

@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer"
+import { Document, Page, Text, View, StyleSheet, Font, Image } from "@react-pdf/renderer"
 
 import { 
   CANTIDAD_MAXIMA_ITEMS, 
@@ -7,7 +7,9 @@ import {
   calcularNetoPagina,
   calcularTraspasos,
   generarFilaTraspaso,
-  generarTablaTotales
+  generarTablaTotales,
+  convertirBytesABase64,
+  esMonotributistaPorDenominacion
 } from "../helpers"
 
 // Registrar fuentes
@@ -297,65 +299,65 @@ const styles = StyleSheet.create({
     // Sin separación visual entre filas
   },
   colCodigo: {
-    flex: 1,
+    flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
-    flex: 2,
+    flex: 2.4, // Aumentado de 2 a 2.4 (20% más espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "left",
     justifyContent: "center", // Centrar verticalmente
   },
   colCantidad: {
-    flex: 1,
+    flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colPrecio: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescuento: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colPrecioBonificado: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colAlicuota: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colIVA: {
     flex: 1,
     padding: 1, // Reducido de 2 a 1
-    fontSize: 8, // Aumentado 35% de 6 a 8
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colImporte: {
     flex: 1,
     padding: 1, 
-    fontSize: 8, 
+    fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
@@ -521,6 +523,57 @@ const styles = StyleSheet.create({
   },
 })
 
+// Pie fiscal específico para Factura A con leyenda adicional para monotributistas
+const generarPieFiscalA = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
+  const qrBase64 = data.ven_qr ? convertirBytesABase64(data.ven_qr) : null;
+  return (
+    <View style={styles.pieFiscal}>
+      <View style={styles.pieFilaHorizontal}>
+        {qrBase64 ? (
+          <Image 
+            src={`data:image/png;base64,${qrBase64}`}
+            style={styles.qrPlaceholder}
+          />
+        ) : (
+          <View style={styles.qrPlaceholder}>
+            <Text style={styles.qrTexto}>[QR CODE]</Text>
+          </View>
+        )}
+        <View style={styles.arcaPlaceholder}>
+          <Image 
+            src="/api/productos/servir-logo-arca/"
+            style={{ width: 60, height: 50, objectFit: "contain", resizeMode: "contain" }}
+          />
+        </View>
+        <View style={styles.textosAfipContainer}>
+          <Text style={styles.arcaAutorizado}>Comprobante Autorizado</Text>
+          <Text style={styles.leyendaAfip}>
+            Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
+          </Text>
+          {esMonotributistaPorDenominacion(data.condicion_iva_cliente) && (
+            <Text style={styles.leyendaAfip}>
+              El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618
+            </Text>
+          )}
+        </View>
+        <View style={styles.pieDerecha}>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE:</Text>
+            <Text style={styles.valorAfip}>{data.ven_cae || ''}</Text>
+          </View>
+          <View style={styles.campoAfip}>
+            <Text style={styles.labelAfip}>CAE Vencimiento:</Text>
+            <Text style={styles.valorAfip}>{data.ven_caevencimiento || ''}</Text>
+          </View>
+          <View style={{ marginTop: 4 }}>
+            <Text style={{ fontSize: 6, textAlign: 'right' }}>Página {numeroPagina} de {totalPaginas}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 // Configuración específica para Factura A
 const configFacturaA = {
   generarTablaItems: (
@@ -582,7 +635,8 @@ const configFacturaA = {
     ];
     
     return generarTablaTotales(data, styles, formatearMoneda, configTotalesA);
-  }
+  },
+  generarPieFiscal: generarPieFiscalA
 };
 
 const PlantillaFacturaAPDF = ({ data, ferreteriaConfig }) => {
