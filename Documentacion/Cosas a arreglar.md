@@ -1,6 +1,3 @@
-Cliente no puede facturar antes de ultima factura (comparar fecha de ultima factura, no se puede facturar a una fecha anterior)
-
-Cargar codigos en excel no funciona????????
 
 Borrar presupuestos de cierta fecha.
 
@@ -12,7 +9,7 @@ Verificar ;El enter en ningun formulario deberia completar el formulario (es mol
  
 Revision General
 
-arreglar draft para nueva grid y datos en venta
+arreglar draft para nueva grid compras
 
 Revisar todas funcionalidades de forms <- re importante
 
