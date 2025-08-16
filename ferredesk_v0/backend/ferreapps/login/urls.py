@@ -5,7 +5,14 @@ urlpatterns = [
     path('api/login/', views.login_view, name='login'),
     path('api/logout/', views.logout_view, name='logout'),
     path('api/user/', views.user_view, name='user'),
-    # Capturar todas las demás rutas y enviarlas a la vista index
-    # Esta ruta debe ir al final para no interferir con las rutas de la API
-    re_path(r'^(?!api/).*$', views.index, name='index'),
+    # Capturar solo las rutas del frontend (páginas principales)
+    # No capturar rutas estáticas, media, admin, etc.
+    path('', views.index, name='index'),  # Solo la ruta raíz
+    path('dashboard/', views.index, name='dashboard'),
+    path('dashboards/', views.index, name='dashboards'),
+    path('productos/', views.index, name='productos'),
+    path('clientes/', views.index, name='clientes'),
+    path('ventas/', views.index, name='ventas'),
+    path('login/', views.index, name='login_page'),
+    path('register/', views.index, name='register'),
 ]

@@ -15,18 +15,17 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Configuración de DEBUG
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+
+# Configuración de SECRET_KEY
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-&#7bxgw8grl4)^q)@po2m3u*1gu7!1w+^f6nzgf7ps71nx30bh')
+
+# Configuración de hosts permitidos
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&#7bxgw8grl4)^q)@po2m3u*1gu7!1w+^f6nzgf7ps71nx30bh'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -66,17 +65,26 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'ferredesk_backend.urls'
 
+# Configuración de rutas del frontend
+# Detectar si estamos en Docker (BASE_DIR será /app) o en desarrollo local
+if BASE_DIR.name == 'app':
+    # Estamos en Docker
+    FRONTEND_BUILD_DIR = os.path.join(BASE_DIR, 'frontend', 'build')
+else:
+    # Estamos en desarrollo local
+    FRONTEND_BUILD_DIR = os.path.join(BASE_DIR.parent, 'frontend', 'build')
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            os.path.join(BASE_DIR.parent, 'frontend', 'build'),
+            FRONTEND_BUILD_DIR,
             os.path.join(BASE_DIR, 'templates'),
         ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.template.context_processors.request',
+                'django.core.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -91,12 +99,27 @@ WSGI_APPLICATION = 'ferredesk_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Configuración de base de datos
+# Si estamos en Docker, usar PostgreSQL desde DATABASE_URL
+# Si no, usar SQLite para desarrollo local
+if BASE_DIR.name == 'app':
+    # Estamos en Docker - usar PostgreSQL
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+else:
+    # Estamos en desarrollo local - usar SQLite
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',  # Motor de base de datos SQLite
-        'NAME': 'db.sqlite3'  # Ruta y nombre del archivo de la base de datos
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': 'db.sqlite3'
+        }
     }
-}
 
 # Logging Configuration
 LOGGING = {
@@ -177,18 +200,36 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Configuración de archivos estáticos
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR.parent, 'frontend', 'build'),
-    os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
+    FRONTEND_BUILD_DIR,
+    os.path.join(FRONTEND_BUILD_DIR, 'static'),
 ]
 
 # Configuración para servir el index.html de React
-REACT_APP_DIR = os.path.join(BASE_DIR.parent, 'frontend', 'build')
+REACT_APP_DIR = FRONTEND_BUILD_DIR
+
+# Configuración explícita de finders para archivos estáticos
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
+# Logging específico para archivos estáticos (debug)
+LOGGING['loggers']['django.request'] = {
+    'handlers': ['console'],
+    'level': 'DEBUG',
+    'propagate': False,
+}
+LOGGING['loggers']['django.server'] = {
+    'handlers': ['console'],
+    'level': 'DEBUG',
+    'propagate': False,
+}
 
 # Configuración de archivos estáticos en desarrollo
 if DEBUG:
     STATICFILES_DIRS = [
-        os.path.join(BASE_DIR.parent, 'frontend', 'build'),
-        os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
+        FRONTEND_BUILD_DIR,
+        os.path.join(FRONTEND_BUILD_DIR, 'static'),
     ]
 
 # Configuración de archivos media (subidos por usuarios)
@@ -221,17 +262,12 @@ REST_FRAMEWORK = {
 }
 
 # Configuración de CORS
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Usar variables de entorno si están disponibles (Docker), sino usar valores por defecto
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 # Configuración de CSRF
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:8000').split(',')
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False  # Debe ser False para que JavaScript pueda leer la cookie

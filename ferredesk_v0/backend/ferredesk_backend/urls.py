@@ -39,9 +39,17 @@ urlpatterns = [
     path('api/', include('ferreapps.notas.urls')),
     path('api/informes/', include('ferreapps.informes.urls')),
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
-    path('', include('ferreapps.login.urls')),
 ]
 
-# Configuración para servir archivos media en desarrollo
-if settings.DEBUG:
+# Configuración para servir archivos media y estáticos
+# Siempre servir archivos estáticos, independientemente de DEBUG
+# IMPORTANTE: Esto debe ir ANTES de incluir el login para que Django maneje las rutas estáticas
+if settings.STATIC_URL and settings.STATIC_ROOT:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+if settings.MEDIA_URL and settings.MEDIA_ROOT:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Incluir el login AL FINAL para capturar solo las rutas del frontend
+urlpatterns += [
+    path('', include('ferreapps.login.urls')),
+]
