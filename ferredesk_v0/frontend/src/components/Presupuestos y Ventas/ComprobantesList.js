@@ -96,7 +96,7 @@ const ComprobanteAcciones = ({
     handleEdit,
     handleConvertir,
     handleDelete,
-
+    handleConvertirFacturaI,
     handleNotaCredito,
   } = acciones
 
@@ -133,6 +133,10 @@ const ComprobanteAcciones = ({
 
   // Facturas cerradas que pueden tener NC (incluye facturas internas cerradas)
   if (puedeTenerNotaCredito(comprobante)) {
+    // Detectar si es factura interna convertible
+    const esFacturaInternaConvertibleActual = comprobante.comprobante?.tipo === 'factura_interna' && 
+      esFacturaInternaConvertible(comprobante);
+
     return (
       <>
         <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
@@ -141,6 +145,18 @@ const ComprobanteAcciones = ({
           onClick={() => handleNotaCredito(comprobante)}
           title="Crear Nota de Crédito"
         />
+        {/* Botón de conversión para facturas internas */}
+        {esFacturaInternaConvertibleActual && (
+          <BotonConvertir
+            onClick={() => handleConvertirFacturaI(comprobante)}
+            disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
+            title={
+              isFetchingForConversion && fetchingPresupuestoId === comprobante.id
+                ? "Cargando..."
+                : "Convertir a Factura"
+            }
+          />
+        )}
         <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
       </>
     )
@@ -256,7 +272,7 @@ const ComprobantesList = ({
               const tieneFacturasAnuladas = facturasAnuladas.length > 0
 
               return (
-                <tr key={p.id} className="hover:bg-slate-100">
+                <tr key={p.id} className="hover:bg-slate-200">
                   {/* Comprobante */}
                   <td className="px-3 py-1 whitespace-nowrap">
                     <div className="flex items-center">

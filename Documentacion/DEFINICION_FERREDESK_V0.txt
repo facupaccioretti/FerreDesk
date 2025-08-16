@@ -28,6 +28,117 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 
 ## MÓDULOS PRINCIPALES Y SUS PROPÓSITOS
 
+### SISTEMA ARCA DE FACTURACIÓN ELECTRÓNICA
+**Directorio Principal**: `ferredesk_v0/backend/ferreapps/ventas/ARCA/`
+
+**Propósito Central**: Integrar completamente FerreDesk con los servicios oficiales de AFIP para emisión automática de comprobantes fiscales electrónicos, cumpliendo con las normativas argentinas de facturación digital.
+
+**Objetivos Específicos**:
+- **Emisión Automática de Comprobantes**: Generar automáticamente CAE (Código de Autorización Electrónico) para todas las facturas y notas de crédito del sistema.
+- **Consulta al Padrón AFIP**: Validar automáticamente datos fiscales de clientes consultando directamente al padrón oficial de AFIP.
+- **Autenticación Robusta**: Manejar tokens de autenticación con AFIP de forma segura y automática, incluyendo renovación automática.
+- **Generación de Códigos QR**: Crear códigos QR oficiales según especificaciones AFIP para cada comprobante emitido.
+- **Configuración Flexible**: Soportar ambientes de homologación y producción con configuración dinámica por ferretería.
+- **Manejo de Errores Transparente**: Procesar y comunicar errores de AFIP de manera comprensible para el usuario final.
+
+**Componentes Clave**:
+- `FerreDeskARCA.py`: Orquestador principal que coordina todo el proceso de emisión fiscal
+- `WSFEv1Service.py`: Cliente especializado para el servicio de facturación electrónica wsfev1 de AFIP
+- `WSConstanciaInscripcionService.py`: Cliente para consultas al padrón tributario de AFIP
+- `FerreDeskAuth.py`: Sistema de autenticación con manejo automático de tokens
+- `TokenManager.py`: Gestión inteligente de tokens con renovación automática
+- `ConfigManager.py`: Configuración centralizada para diferentes ambientes (HOM/PROD)
+- `QRGenerator.py`: Generación de códigos QR según especificaciones oficiales AFIP
+- `armador_arca.py`: Preparación y validación de datos para envío a AFIP
+
+### SISTEMA DE LIBRO IVA FISCAL
+**Archivos Principales**: `ferredesk_v0/backend/ferreapps/ventas/servicies/libro_iva_service.py` y `libro_iva_export_service.py`
+**Frontend**: `ferredesk_v0/frontend/src/components/Presupuestos y Ventas/LibroIvaVentas/`
+
+**Propósito Central**: Generar automáticamente libros IVA ventas conforme a las exigencias fiscales argentinas, consolidando datos de las vistas calculadas del sistema y exportando en múltiples formatos oficiales.
+
+**Objetivos Específicos**:
+- **Generación Automática de Libro IVA**: Crear libros IVA ventas por período con cálculos precisos de alícuotas y totales.
+- **Múltiples Tipos de Libro**: Soportar libro convencional (solo fiscales), informal (incluye internos) e informal con presupuestos.
+- **Exportación Múltiple**: Generar archivos en PDF (oficial AFIP), Excel (editable) y JSON (integración).
+- **Validación Fiscal**: Verificar integridad de datos y consistencia con normativas argentinas.
+- **Consolidación Inteligente**: Usar vistas calculadas existentes para garantizar precisión sin recálculos.
+
+**Componentes Clave**:
+- `LibroIvaExport.js`: Interfaz moderna para selección de formato y período de exportación
+- `LibroIvaTable.js`: Visualización tabular de datos del libro con filtros dinámicos
+- `LibroIvaPeriodoSelector.js`: Selector intuitivo de período fiscal con validaciones
+
+### SISTEMA DE ALERTAS Y NOTIFICACIONES
+**Backend**: `ferredesk_v0/backend/ferreapps/alertas/`
+**Frontend**: `ferredesk_v0/frontend/src/components/AlertasManager.js`
+
+**Propósito Central**: Proporcionar un sistema integral de alertas operativas que permita monitorear aspectos críticos del negocio como stock bajo, vencimientos, pagos pendientes y eventos del sistema.
+
+**Objetivos Específicos**:
+- **Monitoreo Proactivo**: Detectar automáticamente situaciones que requieren atención inmediata.
+- **Categorización Inteligente**: Clasificar alertas por tipo (stock, ventas, proveedores, sistema) y prioridad.
+- **Gestión Centralizada**: Proporcionar una interfaz única para revisar, gestionar y resolver alertas.
+- **Personalización por Usuario**: Permitir configuración específica de alertas por usuario del sistema.
+- **Seguimiento de Estado**: Controlar el ciclo de vida completo de cada alerta desde creación hasta resolución.
+
+**Componentes Clave**:
+- `Alerta` (Modelo): Estructura de datos para alertas con tipos, prioridades y estados
+- `Notificacion` (Modelo): Sistema de notificaciones por usuario con control de lectura
+- `AlertasManager.js`: Interfaz completa de gestión con filtros por tipo y estado
+
+### SISTEMA DE CONSULTA AL PADRÓN AFIP
+**Backend**: `ferredesk_v0/backend/ferreapps/clientes/views.py` (ProcesarCuitArcaAPIView)
+**Frontend**: `ferredesk_v0/frontend/src/utils/useValidacionCUIT.js`
+
+**Propósito Central**: Automatizar la validación y autocompletado de datos fiscales de clientes mediante consulta directa al padrón oficial de AFIP, garantizando precisión y cumplimiento normativo.
+
+**Objetivos Específicos**:
+- **Validación Automática de CUIT**: Verificar formato y dígito verificador antes de consultar AFIP.
+- **Autocompletado Inteligente**: Completar automáticamente razón social, domicilio fiscal y condición IVA.
+- **Detección de Condición IVA**: Determinar automáticamente si el contribuyente es Responsable Inscripto, Monotributista, etc.
+- **Mapeo Inteligente**: Convertir datos de AFIP al formato interno del sistema de manera transparente.
+- **Manejo de Errores**: Procesar respuestas de AFIP y comunicar errores de manera comprensible.
+
+**Componentes Clave**:
+- `ProcesarCuitArcaAPIView`: Endpoint que orquesta la consulta a AFIP y procesamiento de datos
+- `useValidacionCUIT.js`: Hook personalizado que maneja validación y consulta ARCA desde el frontend
+- Integración con `ClienteForm.js`: Autocompletado automático en formularios de clientes
+
+### DASHBOARDS ANALÍTICOS INTERACTIVOS
+**Directorio**: `ferredesk_v0/frontend/src/components/Dashboards/`
+
+**Propósito Central**: Proporcionar inteligencia de negocio visual mediante dashboards interactivos que permiten analizar tendencias de ventas, performance de productos y comportamiento de clientes.
+
+**Objetivos Específicos**:
+- **Análisis de Clientes**: Identificar clientes más valiosos por total facturado, cantidad de productos o frecuencia de compras.
+- **Performance de Productos**: Visualizar productos más vendidos por cantidad o ingresos generados.
+- **Visualización Dinámica**: Gráficos interactivos con Chart.js que se adaptan a diferentes métricas.
+- **Responsive Design**: Dashboards que se adaptan a diferentes tamaños de pantalla usando container queries.
+- **Métricas Cambiantes**: Permitir cambio dinámico entre diferentes tipos de análisis sin recargar página.
+
+**Componentes Clave**:
+- `ClientesMasVentas.js`: Dashboard de análisis de clientes con métricas configurables
+- `ProductosMasVendidos.js`: Análisis visual de productos con mejor performance
+- `ClientesMasVentasSimple.js`: Versión simplificada para vistas compactas
+
+### SISTEMA DE INFORMES DE STOCK BAJO
+**Backend**: Integrado en models y APIs existentes
+**Frontend**: `ferredesk_v0/frontend/src/components/Informes/StockBajoList.js`
+
+**Propósito Central**: Generar informes automatizados de productos que requieren reposición de stock, facilitando la gestión proactiva de inventario y previniendo quiebres de stock.
+
+**Objetivos Específicos**:
+- **Detección Automática**: Identificar productos cuyo stock actual está por debajo del mínimo configurado.
+- **Priorización Inteligente**: Mostrar diferencia entre stock actual y mínimo para priorizar reposiciones.
+- **Información de Proveedores**: Incluir datos del proveedor principal para facilitar órdenes de compra.
+- **Exportación a PDF**: Generar reportes imprimibles para uso offline o envío a proveedores.
+- **Actualización en Tiempo Real**: Refrescar datos automáticamente para mantener información actualizada.
+
+**Componentes Clave**:
+- `StockBajoList.js`: Interfaz completa con tabla, filtros y exportación
+- `useStockBajoAPI.js`: Hook personalizado para gestión de datos y exportación PDF
+
 ### MÓDULO DE GESTIÓN DE PRODUCTOS
 **Archivo Principal**: `ferredesk_v0/frontend/src/components/Productos/ProductosManager.js`
 
@@ -230,12 +341,31 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 
 ## FLUJOS DE TRABAJO PRINCIPALES
 
-### FLUJO DE VENTA COMPLETO
+### FLUJO DE VENTA COMPLETO CON INTEGRACIÓN ARCA
 1. **Creación de Presupuesto**: Cliente solicita cotización → se genera presupuesto con vigencia
-2. **Ajuste y Negociación**: Modificación de cantidades, precios o descuentos según negociación
-3. **Conversión a Venta**: Confirmación del cliente → conversión automática a factura
-4. **Facturación Fiscal**: Generación de comprobante según tipo de cliente y operación
-5. **Gestión Post-Venta**: Emisión de notas de crédito si corresponde, seguimiento de cobros
+2. **Validación Automática de Cliente**: Sistema consulta AFIP para validar y autocompletar datos fiscales
+3. **Ajuste y Negociación**: Modificación de cantidades, precios o descuentos según negociación
+4. **Conversión a Venta**: Confirmación del cliente → conversión automática a factura
+5. **Emisión ARCA Automática**: Sistema obtiene CAE de AFIP y genera QR oficial automáticamente
+6. **Facturación Fiscal Digital**: Generación de comprobante electrónico según normativa AFIP
+7. **Gestión Post-Venta**: Emisión de notas de crédito con ARCA, seguimiento de cobros, alertas automáticas
+
+### FLUJO DE EMISIÓN FISCAL AUTOMÁTICA
+1. **Preparación de Datos**: Sistema arma payload con datos de venta, cliente y productos
+2. **Autenticación AFIP**: Obtención automática de token de acceso con renovación si es necesario
+3. **Consulta Último Número**: Obtiene próximo número de comprobante autorizado por AFIP
+4. **Emisión de Comprobante**: Envía datos a WSFEv1 y obtiene CAE (Código de Autorización Electrónico)
+5. **Generación de QR**: Crea código QR oficial según especificaciones AFIP
+6. **Actualización de Venta**: Guarda CAE, fecha de vencimiento y QR en la base de datos
+7. **Manejo de Errores**: Procesa y comunica errores de AFIP de manera comprensible
+
+### FLUJO DE CONSULTA AL PADRÓN AFIP
+1. **Validación Local**: Verifica formato de CUIT y dígito verificador
+2. **Consulta a AFIP**: Utiliza servicio ws_sr_constancia_inscripcion para obtener datos oficiales
+3. **Procesamiento de Respuesta**: Mapea datos de AFIP al formato interno del sistema
+4. **Detección de Condición IVA**: Analiza impuestos activos para determinar situación fiscal
+5. **Autocompletado Inteligente**: Completa automáticamente formulario de cliente
+6. **Validación Cruzada**: Verifica consistencia entre datos ingresados y oficiales
 
 ### FLUJO DE ACTUALIZACIÓN DE PRECIOS
 1. **Recepción de Lista**: Proveedor envía nueva lista de precios (Excel/CSV)
@@ -244,35 +374,68 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 4. **Aplicación Selectiva**: Actualización de precios por categoría o proveedor específico
 5. **Impacto en Márgenes**: Recálculo automático de márgenes y precios de venta
 
+### FLUJO DE GENERACIÓN DE LIBRO IVA
+1. **Selección de Período**: Usuario especifica mes, año y tipo de libro (convencional/informal)
+2. **Consolidación de Datos**: Sistema consulta vistas calculadas para obtener ventas del período
+3. **Filtrado por Tipo**: Aplica filtros según libro convencional (solo fiscales) o informal (incluye internos)
+4. **Cálculo de Alícuotas**: Agrupa importes por alícuota de IVA (21%, 10.5%, 27%, exento)
+5. **Validación Fiscal**: Verifica integridad de datos y consistencia con normativas
+6. **Generación de Archivos**: Exporta en formato PDF (oficial), Excel (editable) o JSON (integración)
+7. **Verificación Final**: Compara totales calculados con registros individuales
+
+### FLUJO DE GESTIÓN DE ALERTAS
+1. **Detección Automática**: Sistema monitorea continuamente condiciones configuradas
+2. **Generación de Alerta**: Crea alertas según tipo (stock, vencimientos, pagos, sistema)
+3. **Categorización**: Asigna prioridad (alta, media, baja) y tipo según configuración
+4. **Notificación a Usuario**: Envía notificaciones personalizadas por usuario
+5. **Gestión Centralizada**: Usuario revisa, prioriza y gestiona alertas desde panel único
+6. **Seguimiento**: Controla estado de cada alerta hasta su resolución
+7. **Análisis de Tendencias**: Genera reportes de patrones de alertas para mejora continua
+
 ### FLUJO DE CONTROL DE STOCK
 1. **Monitoreo Continuo**: Alertas automáticas por stock bajo o productos faltantes
-2. **Proyección de Demanda**: Análisis de histórico para anticipar necesidades
-3. **Gestión de Compras**: Generación automática de órdenes según puntos de reposición
-4. **Recepción**: Actualización de stock al recibir mercadería
-5. **Auditoría**: Conciliación periódica entre stock físico y sistematizado
+2. **Generación de Informes**: Crea reportes automáticos de productos bajo mínimo
+3. **Priorización Inteligente**: Ordena por diferencia entre stock actual y mínimo
+4. **Información de Proveedores**: Incluye datos para facilitar órdenes de compra
+5. **Exportación para Compras**: Genera PDF para envío a proveedores
+6. **Proyección de Demanda**: Análisis de histórico para anticipar necesidades
+7. **Gestión de Compras**: Generación automática de órdenes según puntos de reposición
+8. **Recepción**: Actualización de stock al recibir mercadería
+9. **Auditoría**: Conciliación periódica entre stock físico y sistematizado
 
 ## BENEFICIOS OPERATIVOS ESPERADOS
 
 ### PARA EL NEGOCIO
 - **Reducción de Errores**: Automatización elimina errores manuales en facturación y cálculos
+- **Cumplimiento Fiscal Automático**: Integración directa con AFIP garantiza cumplimiento normativo sin intervención manual
 - **Mejora de Márgenes**: Control granular de precios optimiza rentabilidad
-- **Cumplimiento Fiscal**: Eliminación de riesgos por incorrecta emisión de comprobantes
 - **Eficiencia Operativa**: Reducción de tiempos en procesos comerciales y administrativos
-- **Toma de Decisiones**: Información estratégica disponible en tiempo real
+- **Toma de Decisiones**: Información estratégica disponible en tiempo real mediante dashboards interactivos
+- **Gestión Proactiva**: Sistema de alertas previene problemas antes de que impacten el negocio
+- **Reportes Fiscales Automáticos**: Generación de libro IVA y otros reportes sin intervención contable
+- **Validación Automática de Clientes**: Consulta directa a AFIP reduce errores en datos fiscales
 
 ### PARA LOS USUARIOS
 - **Interface Intuitiva**: Curva de aprendizaje mínima por diseño familiar tipo navegador
 - **Trabajo Multitarea**: Gestión simultánea de múltiples presupuestos/ventas
-- **Automatización**: Reducción de tareas repetitivas y cálculos manuales
+- **Automatización Inteligente**: Reducción de tareas repetitivas y cálculos manuales
+- **Autocompletado de Datos**: Sistema completa automáticamente información de clientes desde AFIP
 - **Información Consolidada**: Vista única de toda la información del cliente/producto
+- **Dashboards Interactivos**: Visualización de datos de negocio mediante gráficos dinámicos
+- **Alertas Proactivas**: Notificaciones automáticas de situaciones que requieren atención
+- **Exportación Flexible**: Reportes en múltiples formatos según necesidad específica
 - **Movilidad**: Acceso desde cualquier dispositivo con navegador web
 
 ### PARA LA GESTIÓN
-- **Visibilidad Total**: Dashboard con indicadores clave de performance
-- **Control de Inventario**: Información precisa de stock y rotación
-- **Análisis de Rentabilidad**: Reportes automáticos por producto, proveedor, período
-- **Gestión de Clientes**: Segmentación automática y análisis de comportamiento
-- **Escalabilidad**: Sistema preparado para crecimiento del negocio
+- **Visibilidad Total**: Dashboards con indicadores clave de performance y métricas de negocio
+- **Control de Inventario**: Información precisa de stock, rotación y alertas de reposición automática
+- **Análisis de Rentabilidad**: Reportes automáticos por producto, proveedor, período con visualización gráfica
+- **Gestión de Clientes**: Segmentación automática, análisis de comportamiento y ranking de valor
+- **Cumplimiento Fiscal Garantizado**: Integración directa con AFIP elimina riesgos normativos
+- **Inteligencia de Negocio**: Dashboards analíticos para identificar tendencias y oportunidades
+- **Gestión de Alertas Centralizada**: Monitoreo proactivo de aspectos críticos del negocio
+- **Reportes Oficiales Automáticos**: Libro IVA y otros reportes fiscales sin intervención manual
+- **Escalabilidad**: Sistema preparado para crecimiento del negocio con arquitectura robusta
 
 ## TECNOLOGÍAS Y ESTÁNDARES
 
@@ -280,6 +443,9 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 - **React 18**: Framework principal para interfaz de usuario
 - **TailwindCSS**: Sistema de diseño utilitario para UI consistente
 - **React Hooks**: Gestión de estado moderna y eficiente
+- **Chart.js**: Biblioteca para visualización de datos y dashboards interactivos
+- **Material-UI**: Componentes de interfaz para alertas y notificaciones
+- **Container Queries**: Diseño responsive avanzado para componentes adaptables
 - **Responsive Design**: Adaptación automática a diferentes dispositivos
 
 ### BACKEND
@@ -287,6 +453,15 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 - **Django REST Framework**: API REST para comunicación frontend-backend
 - **SQLite/PostgreSQL**: Base de datos con soporte para transacciones ACID
 - **Python 3.x**: Lenguaje principal con amplio ecosistema
+- **Zeep**: Cliente SOAP para integración con servicios web AFIP
+- **OpenPyXL**: Generación de archivos Excel para reportes fiscales
+- **ReportLab**: Generación de archivos PDF para documentación oficial
+
+### INTEGRACIÓN FISCAL
+- **ARCA (AFIP)**: Integración nativa con servicios oficiales argentinos
+- **WSFEv1**: Servicio de facturación electrónica AFIP
+- **WS Constancia de Inscripción**: Consulta automática al padrón tributario
+- **QR AFIP**: Generación automática de códigos QR para comprobantes fiscales
 
 ### ESTÁNDARES DE CALIDAD
 - **Código en Español**: Nombres descriptivos y documentación en idioma local
@@ -294,4 +469,32 @@ FerreDesk v0 es un sistema integral de gestión empresarial específicamente dis
 - **Validación Multicapa**: Seguridad y consistencia en todos los niveles
 - **Testing Automatizado**: Pruebas unitarias e integración para calidad continua
 
-FerreDesk v0 representa una solución integral que combina las mejores prácticas de desarrollo de software con un profundo conocimiento del negocio ferretero argentino, resultando en una herramienta que no solo automatiza procesos sino que potencia el crecimiento y la eficiencia operativa del negocio. 
+## NUEVAS FUNCIONALIDADES IMPLEMENTADAS
+
+### INTEGRACIÓN FISCAL COMPLETA
+- **Sistema ARCA**: Integración nativa con servicios AFIP para emisión automática de comprobantes fiscales electrónicos
+- **Consulta Padrón AFIP**: Validación y autocompletado automático de datos de clientes desde fuentes oficiales
+- **Generación de QR**: Códigos QR oficiales según especificaciones AFIP para todos los comprobantes
+- **Libro IVA Automático**: Generación de libros IVA ventas con exportación en múltiples formatos
+
+### INTELIGENCIA DE NEGOCIO VISUAL
+- **Dashboards Analíticos**: Visualización interactiva de clientes más valiosos y productos más vendidos
+- **Métricas Dinámicas**: Análisis configurable por total facturado, cantidad o frecuencia de compras
+- **Responsive Analytics**: Dashboards que se adaptan a diferentes dispositivos usando container queries
+
+### GESTIÓN PROACTIVA OPERATIVA
+- **Sistema de Alertas**: Monitoreo automático de stock bajo, vencimientos y eventos críticos
+- **Informes de Stock**: Reportes automáticos de productos que requieren reposición con exportación PDF
+- **Notificaciones Personalizadas**: Sistema de alertas por usuario con gestión centralizada
+
+### AUTOMATIZACIÓN AVANZADA
+- **Autocompletado Inteligente**: Formularios que se completan automáticamente con datos oficiales de AFIP
+- **Validación Fiscal Automática**: Verificación de CUITs y condiciones IVA sin intervención manual
+- **Exportación Flexible**: Múltiples formatos (PDF, Excel, JSON) según necesidades específicas
+
+### MEJORAS EN EXPERIENCIA DE USUARIO
+- **Componentes Modernos**: Interfaces actualizadas con Material-UI y TailwindCSS
+- **Hooks Personalizados**: Gestión de estado optimizada para mejor rendimiento
+- **Diseño Responsivo Avanzado**: Adaptación inteligente usando las últimas tecnologías CSS
+
+FerreDesk v0 representa una solución integral que combina las mejores prácticas de desarrollo de software con un profundo conocimiento del negocio ferretero argentino, resultando en una herramienta que no solo automatiza procesos sino que potencia el crecimiento y la eficiencia operativa del negocio. Las nuevas funcionalidades implementadas elevan significativamente el nivel de automatización, cumplimiento fiscal y inteligencia de negocio, consolidando a FerreDesk como una plataforma tecnológica líder para el sector ferretero. 

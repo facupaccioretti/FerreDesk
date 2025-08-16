@@ -18,8 +18,14 @@ import { useClientesAPI } from "../../utils/useClientesAPI"
 import ClientesTable from "./ClientesTable"
 import ClienteForm from "./ClienteForm"
 
+// Hook del tema de FerreDesk
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+
 // Contenedor principal de gestión de clientes
 const ClientesManager = () => {
+  // Hook del tema de FerreDesk
+  const theme = useFerreDeskTheme()
+  
   // ------ Cambiar título página ------
   useEffect(() => {
     document.title = "Clientes FerreDesk"
@@ -171,133 +177,136 @@ const ClientesManager = () => {
 
   // ---------- Render ----------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 flex flex-col">
-      <Navbar user={user} onLogout={handleLogout} />
+    <div className={theme.fondo}>
+      <div className={theme.patron}></div>
+      <div className={theme.overlay}></div>
+      
+      <div className="relative z-10">
+        <Navbar user={user} onLogout={handleLogout} />
 
-      {/* Contenedor central con ancho máximo fijo al estilo de PresupuestosManager */}
-      <div className="py-8 px-4 flex-1 flex flex-col">
-        <div className="max-w-[1400px] w-full mx-auto flex flex-col flex-1">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-slate-800">Gestión de Clientes</h2>
-          </div>
+        {/* Contenedor central con ancho máximo fijo al estilo de PresupuestosManager */}
+        <div className="py-8 px-4">
+          <div className="max-w-[1400px] w-full mx-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Gestión de Clientes</h2>
+            </div>
 
           {/* Área principal: pestañas y contenido */}
-          <div className="flex flex-1 gap-4 min-h-0">
-            <div className="flex-1 flex flex-col">
-              {/* Barra de pestañas */}
-              <div className="flex items-center border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
-                {tabs.map((tab) => (
-                  <div
-                    key={tab.key}
-                    className={`flex items-center px-5 py-2 mr-2 rounded-t-xl cursor-pointer transition-colors ${
-                      activeTab === tab.key
-                        ? "bg-white border border-b-0 border-slate-200 font-semibold text-slate-800 shadow-sm"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                    onClick={() => setActiveTab(tab.key)}
-                    style={{ position: "relative" }}
-                  >
-                    {tab.label}
-                    {tab.closable && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          closeTab(tab.key)
-                        }}
-                        className="ml-2 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                        title="Cerrar"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                {/* Botón Nuevo Cliente solo en la tab de lista */}
-                {activeTab === "lista" && (
-                  <div className="flex-1 flex justify-end mb-2">
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
+            {/* Tabs tipo browser - Encabezado azul oscuro */}
+            <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.key}
+                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
+                    activeTab === tab.key
+                      ? theme.tabActiva
+                      : theme.tabInactiva
+                  }`}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{ position: "relative", zIndex: 1 }}
+                >
+                  {tab.label}
+                  {tab.closable && (
                     <button
-                      onClick={() => openTab("nuevo", "Nuevo Cliente")}
-                      className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 text-sm shadow-lg hover:shadow-xl"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        closeTab(tab.key)
+                      }}
+                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                      title="Cerrar"
                     >
-                      <span className="text-lg">+</span> Nuevo Cliente
+                      ×
                     </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex-1 p-6">
+              {/* Botón Nuevo Cliente solo en la tab de lista */}
+              {activeTab === "lista" && (
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={() => openTab("nuevo", "Nuevo Cliente")}
+                    className={theme.botonPrimario}
+                  >
+                    <span className="text-lg">+</span> Nuevo Cliente
+                  </button>
+                </div>
+              )}
 
               {/* Contenido de pestañas */}
-              <div className="flex-1 bg-white rounded-b-xl shadow-md min-h-0 p-6 border border-slate-200">
-                {activeTab === "lista" && (
-                  <ClientesTable
-                    clientes={clientesActivos}
-                    onEdit={handleEditCliente}
-                    onDelete={handleDeleteCliente}
-                    search={search}
-                    setSearch={setSearch}
-                    expandedClientId={expandedClientId}
-                    setExpandedClientId={setExpandedClientId}
+              {activeTab === "lista" && (
+                <ClientesTable
+                  clientes={clientesActivos}
+                  onEdit={handleEditCliente}
+                  onDelete={handleDeleteCliente}
+                  search={search}
+                  setSearch={setSearch}
+                  expandedClientId={expandedClientId}
+                  setExpandedClientId={setExpandedClientId}
+                  barrios={barrios}
+                  localidades={localidades}
+                  provincias={provincias}
+                  tiposIVA={tiposIVA}
+                  transportes={transportes}
+                  vendedores={vendedores}
+                  plazos={plazos}
+                  categorias={categorias}
+                />
+              )}
+
+              {activeTab === "inactivos" && (
+                <ClientesTable
+                  clientes={clientesInactivos}
+                  onEdit={handleEditCliente}
+                  onDelete={handleDeleteCliente}
+                  search={searchInactivos}
+                  setSearch={setSearchInactivos}
+                  expandedClientId={expandedClientId}
+                  setExpandedClientId={setExpandedClientId}
+                  barrios={barrios}
+                  localidades={localidades}
+                  provincias={provincias}
+                  tiposIVA={tiposIVA}
+                  transportes={transportes}
+                  vendedores={vendedores}
+                  plazos={plazos}
+                  categorias={categorias}
+                />
+              )}
+
+              {activeTab === "nuevo" && (
+                <div className="flex justify-center items-center min-h-[60vh]">
+                  <ClienteForm
+                    onSave={handleSaveCliente}
+                    onCancel={() => closeTab("nuevo")}
+                    initialData={editCliente}
                     barrios={barrios}
                     localidades={localidades}
                     provincias={provincias}
-                    tiposIVA={tiposIVA}
                     transportes={transportes}
                     vendedores={vendedores}
                     plazos={plazos}
                     categorias={categorias}
-                  />
-                )}
-
-                {activeTab === "inactivos" && (
-                  <ClientesTable
-                    clientes={clientesInactivos}
-                    onEdit={handleEditCliente}
-                    onDelete={handleDeleteCliente}
-                    search={searchInactivos}
-                    setSearch={setSearchInactivos}
-                    expandedClientId={expandedClientId}
-                    setExpandedClientId={setExpandedClientId}
-                    barrios={barrios}
-                    localidades={localidades}
-                    provincias={provincias}
+                    setBarrios={setBarrios}
+                    setLocalidades={setLocalidades}
+                    setProvincias={setProvincias}
+                    setTransportes={setTransportes}
+                    setVendedores={setVendedores}
+                    setPlazos={setPlazos}
+                    setCategorias={setCategorias}
                     tiposIVA={tiposIVA}
-                    transportes={transportes}
-                    vendedores={vendedores}
-                    plazos={plazos}
-                    categorias={categorias}
+                    apiError={error}
                   />
-                )}
-
-                {activeTab === "nuevo" && (
-                  <div className="flex justify-center items-center min-h-[60vh]">
-                    <ClienteForm
-                      onSave={handleSaveCliente}
-                      onCancel={() => closeTab("nuevo")}
-                      initialData={editCliente}
-                      barrios={barrios}
-                      localidades={localidades}
-                      provincias={provincias}
-                      transportes={transportes}
-                      vendedores={vendedores}
-                      plazos={plazos}
-                      categorias={categorias}
-                      setBarrios={setBarrios}
-                      setLocalidades={setLocalidades}
-                      setProvincias={setProvincias}
-                      setTransportes={setTransportes}
-                      setVendedores={setVendedores}
-                      setPlazos={setPlazos}
-                      setCategorias={setCategorias}
-                      tiposIVA={tiposIVA}
-                      apiError={error}
-                    />
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+    </div>
 
       {loading && <div className="p-4 text-center text-slate-600">Cargando clientes...</div>}
       {error && (

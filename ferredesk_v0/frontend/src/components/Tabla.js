@@ -9,6 +9,7 @@ import Paginador from "./Paginador"
 // -----------------------------------------------------------------------------
 const ESPACIO_HORIZONTAL_CELDA = "px-3"
 const ESPACIO_VERTICAL_CELDA = "py-2"
+const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 
 const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
 
@@ -25,6 +26,9 @@ const Tabla = ({
   paginadorVisible = true,
   renderFila = null,
   mostrarBuscador = true,
+  mostrarOrdenamiento = true,
+  sinEstilos = false,
+  tamañoEncabezado = "normal", // "normal" | "pequeño"
 }) => {
   const [paginaActual, setPaginaActual] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
@@ -42,12 +46,18 @@ const Tabla = ({
       datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
     }
 
-    return datosProcesados.sort((a, b) => {
-      const idA = a.id || 0
-      const idB = b.id || 0
-      return ordenAscendente ? idA - idB : idB - idA
-    })
-  }, [datos, valorBusqueda, ordenAscendente])
+    // Solo aplicar ordenamiento si mostrarOrdenamiento es true
+    if (mostrarOrdenamiento) {
+      return datosProcesados.sort((a, b) => {
+        const idA = a.id || 0
+        const idB = b.id || 0
+        return ordenAscendente ? idA - idB : idB - idA
+      })
+    }
+
+    // Si mostrarOrdenamiento es false, devolver los datos sin ordenar
+    return datosProcesados
+  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento])
 
   const indiceInicio = (paginaActual - 1) * filasPorPagina
   const datosVisibles = paginadorVisible
@@ -55,9 +65,10 @@ const Tabla = ({
     : datosFiltrados
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
+    <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
       {/* Header con buscador y controles */}
-      <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
+      {!sinEstilos && (
+        <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
         <div className="flex items-center justify-between gap-4">
           {/* Buscador */}
           {mostrarBuscador && (
@@ -74,20 +85,23 @@ const Tabla = ({
           )}
 
           {/* Control de ordenamiento */}
-          <button
-            onClick={() => setOrdenAscendente(!ordenAscendente)}
-            className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
-            title={
-              ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
-            }
-          >
-            <ArrowUpDown
-              className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
-            />
-            <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
-          </button>
+          {mostrarOrdenamiento && (
+            <button
+              onClick={() => setOrdenAscendente(!ordenAscendente)}
+              className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
+              title={
+                ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
+              }
+            >
+              <ArrowUpDown
+                className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
+              />
+              <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
+            </button>
+          )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Contenedor de tabla */}
       <div className="flex-1 overflow-auto">
@@ -100,7 +114,7 @@ const Tabla = ({
                   key={col.id}
                   className={`${
                     { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                  } ${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} font-semibold text-sm text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
+                  } ${ESPACIO_HORIZONTAL_CELDA} ${tamañoEncabezado === "pequeño" ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA} font-semibold ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
                   {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
@@ -121,13 +135,13 @@ const Tabla = ({
 
               // Renderizado por defecto por columnas
               return (
-                <tr key={fila.id || indiceGlobal}>
+                <tr key={fila.id || indiceGlobal} className="hover:bg-slate-200 transition-colors duration-150">
                   {columnas.map((col) => {
                     const contenido = col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]
                     return (
                       <td
                         key={col.id}
-                        className={`${CLASES_CELDA_BASE} bg-white hover:bg-slate-700 hover:text-white transition-colors duration-100 ${
+                        className={`${CLASES_CELDA_BASE} bg-white ${
                           { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
                         }`}
                         style={col.ancho ? { width: col.ancho } : undefined}
@@ -162,7 +176,7 @@ const Tabla = ({
       </div>
 
       {/* Paginador */}
-      {paginadorVisible && (
+      {paginadorVisible && !sinEstilos && (
         <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
           <Paginador
             totalItems={datosFiltrados.length}

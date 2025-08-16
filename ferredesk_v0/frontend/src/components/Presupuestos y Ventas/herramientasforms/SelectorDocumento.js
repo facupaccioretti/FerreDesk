@@ -84,27 +84,27 @@ const SelectorDocumento = ({
   return (
     <div className={`w-full ${className}`}>
       {/* Radio buttons como título del campo */}
-      <div className="flex items-center gap-4 mb-2">
-        <label className="flex items-center gap-2 text-base font-semibold text-slate-700 cursor-pointer">
+      <div className="flex items-center gap-3 mb-0.5">
+        <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
           <input
             type="radio"
             name="tipoDocumento"
             checked={esCUIT}
             onChange={() => handleTipoChange(TIPOS_DOCUMENTO.CUIT)}
             disabled={readOnly}
-            className="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500"
+            className="w-2 h-2 text-orange-600 border-slate-300 focus:ring-orange-500"
           />
           CUIT {esObligatorioHook && <span className="text-orange-600">*</span>}
         </label>
         
-        <label className="flex items-center gap-2 text-base font-semibold text-slate-700 cursor-pointer">
+        <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
           <input
             type="radio"
             name="tipoDocumento"
             checked={esDNI}
             onChange={() => handleTipoChange(TIPOS_DOCUMENTO.DNI)}
             disabled={readOnly}
-            className="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500"
+            className="w-2 h-2 text-orange-600 border-slate-300 focus:ring-orange-500"
           />
           DNI {esObligatorioHook && <span className="text-orange-600">*</span>}
         </label>
@@ -117,7 +117,7 @@ const SelectorDocumento = ({
         onChange={handleValorChange}
         onKeyDown={handleKeyDown}
         placeholder={esCUIT ? 'XX-XXXXXXXX-X' : 'XX.XXX.XXX'}
-        className="compacto w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
         required={esObligatorioHook}
         readOnly={readOnly}
         aria-label={`Campo de ${esCUIT ? 'CUIT' : 'DNI'}`}

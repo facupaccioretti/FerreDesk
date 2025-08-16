@@ -35,6 +35,7 @@ urlpatterns = router.urls + [
     path('libro-iva-ventas/export/pdf/', libro_iva_export_views.exportar_libro_iva_pdf, name='exportar_libro_iva_pdf'),
     path('libro-iva-ventas/export/excel/', libro_iva_export_views.exportar_libro_iva_excel, name='exportar_libro_iva_excel'),
     path('libro-iva-ventas/export/json/', libro_iva_export_views.exportar_libro_iva_json, name='exportar_libro_iva_json'),
+    path('libro-iva-ventas/export/txt/', libro_iva_export_views.exportar_libro_iva_txt, name='exportar_libro_iva_txt'),
     
     # Endpoints de Dashboard
     path('home/productos-mas-vendidos/', views.productos_mas_vendidos, name='productos_mas_vendidos'),

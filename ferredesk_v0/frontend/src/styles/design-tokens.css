@@ -1,0 +1,21 @@
+:root {
+  /* Paleta de colores FerreDesk */
+  --ferredesk-primario: #1e293b;      /* Azul oscuro de las tarjetas */
+  --ferredesk-primario-claro: #334155; /* Azul más claro para gradientes */
+  --ferredesk-secundario: #FF8C00;     /* Naranja ferretero */
+  --ferredesk-secundario-600: #ea580c;
+  --ferredesk-secundario-700: #c2410c;
+  
+  /* Textos sobre fondos oscuros */
+  --ferredesk-fuente: #e2e8f0;        /* Texto principal */
+  --ferredesk-fuente-secundaria: #cbd5e1; /* Texto secundario */
+  --ferredesk-fuente-muted: #94a3b8;  /* Texto atenuado */
+  
+  /* Fondos */
+  --ferredesk-bg-tarjeta: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  --ferredesk-bg-pagina: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #fef3c7 100%);
+  
+  /* Bordes y acentos */
+  --ferredesk-borde: #1e293b;
+  --ferredesk-accento: rgba(255, 140, 0, 0.2);
+}

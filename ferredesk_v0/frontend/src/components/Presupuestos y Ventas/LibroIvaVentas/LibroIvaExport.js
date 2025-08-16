@@ -25,13 +25,14 @@ const LibroIvaExport = ({ libroIva, onExportar, loading }) => {
         </svg>
       ),
     },
+
     {
-      id: 'json',
-      nombre: 'JSON',
-      descripcion: 'Datos estructurados para integración',
+      id: 'txt',
+      nombre: 'TXT',
+      descripcion: 'Formato TXT compatible ARCA/AFIP',
       icono: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7H8m0 4h8m-8 4h5M5 3a2 2 0 00-2 2v14a2 2 0 002 2h9l5-5V5a2 2 0 00-2-2H5z" />
         </svg>
       ),
     },
@@ -118,22 +119,7 @@ const LibroIvaExport = ({ libroIva, onExportar, loading }) => {
         ))}
       </div>
 
-      {/* Información adicional */}
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h4 className="font-medium text-blue-900 mb-1">Información de Exportación</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• <strong>PDF:</strong> Formato oficial para presentación a AFIP</li>
-              <li>• <strong>Excel:</strong> Incluye fórmulas y formato para análisis</li>
-              <li>• <strong>JSON:</strong> Datos estructurados para integración con otros sistemas</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+
     </div>
   );
 };

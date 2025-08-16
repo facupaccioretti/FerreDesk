@@ -1,12 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import Tabla from '../../Tabla';
 
 const LibroIvaTable = ({ libroIva, loading }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50);
-  const [sortField, setSortField] = useState('fecha');
-  const [sortDirection, setSortDirection] = useState('asc');
   const [filterTipo, setFilterTipo] = useState('');
   const [filterCondicion, setFilterCondicion] = useState('');
+  const [valorBusqueda, setValorBusqueda] = useState('');
 
   // Función para formatear moneda
   const formatearMoneda = (valor) => {
@@ -24,81 +22,140 @@ const LibroIvaTable = ({ libroIva, loading }) => {
     return new Date(fecha).toLocaleDateString('es-AR');
   };
 
-  // Función para ordenar
-  const ordenarDatos = useCallback((datos) => {
-    return [...datos].sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
-
-      // Convertir fechas para comparación
-      if (sortField === 'fecha') {
-        aValue = new Date(aValue);
-        bValue = new Date(bValue);
-      }
-
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [sortField, sortDirection]);
-
-  // Función para filtrar
-  const filtrarDatos = useCallback((datos) => {
-    return datos.filter(linea => {
+  // Función para filtrar datos específicos del libro IVA
+  const datosLibroIvaFiltrados = useMemo(() => {
+    if (!libroIva?.lineas) return [];
+    
+    return libroIva.lineas.filter(linea => {
       // Extraer letra del comprobante (último carácter)
       const letra = (linea.comprobante || '').trim().slice(-1);
       const cumpleTipo = !filterTipo || letra === filterTipo;
       const cumpleCondicion = !filterCondicion || linea.condicion_iva === filterCondicion;
       return cumpleTipo && cumpleCondicion;
     });
-  }, [filterTipo, filterCondicion]);
+  }, [libroIva?.lineas, filterTipo, filterCondicion]);
 
-  // Procesar datos
-  const datosProcesados = useMemo(() => {
-    if (!libroIva?.lineas) return [];
-    
-    let datos = ordenarDatos(libroIva.lineas);
-    datos = filtrarDatos(datos);
-    return datos;
-  }, [libroIva?.lineas, ordenarDatos, filtrarDatos]);
+  // Definición de columnas para el componente Tabla genérico
+  const columnas = [
+    {
+      id: 'fecha',
+      titulo: 'Fecha',
+      render: (linea) => formatearFecha(linea.fecha),
+    },
+    {
+      id: 'comprobante',
+      titulo: 'Comprobante',
+      render: (linea) => linea.comprobante,
+    },
+    {
+      id: 'numero',
+      titulo: 'Número',
+      render: (linea) => linea.numero,
+    },
+    {
+      id: 'cuit_cliente',
+      titulo: 'CUIT',
+      render: (linea) => linea.cuit_cliente,
+    },
+    {
+      id: 'razon_social',
+      titulo: 'Comprador',
+      render: (linea) => (
+        <span className="max-w-xs truncate" title={linea.razon_social}>
+          {linea.razon_social}
+        </span>
+      ),
+    },
+    {
+      id: 'condicion_iva',
+      titulo: 'Cond.IVA',
+      render: (linea) => linea.condicion_iva,
+    },
+    {
+      id: 'neto_sin_iva',
+      titulo: 'Neto (sin IVA)',
+      align: 'right',
+      render: (linea) => formatearMoneda(linea.neto_sin_iva),
+    },
+    {
+      id: 'iva_21',
+      titulo: 'IVA 21%',
+      align: 'right',
+      render: (linea) => formatearMoneda(linea.iva_21),
+    },
+    {
+      id: 'iva_105',
+      titulo: 'IVA 10.5%',
+      align: 'right',
+      render: (linea) => formatearMoneda(linea.iva_105),
+    },
+    {
+      id: 'iva_27',
+      titulo: 'IVA 27%',
+      align: 'right',
+      render: (linea) => formatearMoneda(linea.iva_27),
+    },
+    {
+      id: 'importe_exento',
+      titulo: 'Exentos',
+      align: 'right',
+      render: (linea) => formatearMoneda(linea.importe_exento),
+    },
+    {
+      id: 'total',
+      titulo: 'Total',
+      align: 'right',
+      render: (linea) => (
+        <span className="font-medium">
+          {formatearMoneda(linea.total)}
+        </span>
+      ),
+    },
+  ];
 
-  // Calcular paginación
-  const totalPages = Math.ceil(datosProcesados.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const datosPaginados = datosProcesados.slice(startIndex, endIndex);
-
-  // Función para cambiar ordenamiento
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
+  // Función para renderizar cada fila personalizada
+  const renderFila = (linea, indice) => {
+    return (
+      <tr key={linea.id} className="hover:bg-slate-100 transition-colors">
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {formatearFecha(linea.fecha)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {linea.comprobante}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {linea.numero}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {linea.cuit}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {linea.razon_social}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200">
+          {linea.condicion_iva}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right">
+          {formatearMoneda(linea.neto_sin_iva)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right">
+          {formatearMoneda(linea.iva_21)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right">
+          {formatearMoneda(linea.iva_105)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right">
+          {formatearMoneda(linea.iva_27)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right">
+          {formatearMoneda(linea.importe_exento)}
+        </td>
+        <td className="px-4 py-3 text-sm border-b border-gray-200 text-right font-medium">
+          {formatearMoneda(linea.total)}
+        </td>
+      </tr>
+    );
   };
-
-  // Función para renderizar header de columna ordenable
-  const renderSortableHeader = (field, label) => (
-    <th
-      onClick={() => handleSort(field)}
-      className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-    >
-      <div className="flex items-center gap-1">
-        {label}
-        {sortField === field && (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d={sortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
-            />
-          </svg>
-        )}
-      </div>
-    </th>
-  );
 
   if (loading) {
     return (
@@ -131,16 +188,16 @@ const LibroIvaTable = ({ libroIva, loading }) => {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-      {/* Header con información */}
-      <div className="px-6 py-4 border-b border-gray-200">
+    <div className="space-y-4">
+      {/* Header con información del libro IVA */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
               Libro IVA Ventas - {libroIva.periodo?.mes?.toString().padStart(2, '0')}/{libroIva.periodo?.anio}
             </h3>
             <p className="text-sm text-gray-600">
-              {datosProcesados.length} comprobantes • Generado el {new Date(libroIva.periodo?.fecha_generacion).toLocaleString('es-AR')}
+              {datosLibroIvaFiltrados.length} comprobantes • Generado el {new Date(libroIva.periodo?.fecha_generacion).toLocaleString('es-AR')}
             </p>
           </div>
           <div className="text-right">
@@ -154,8 +211,8 @@ const LibroIvaTable = ({ libroIva, loading }) => {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
+      {/* Filtros específicos del libro IVA */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 px-6 py-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Tipo:</label>
@@ -188,117 +245,19 @@ const LibroIvaTable = ({ libroIva, loading }) => {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              {renderSortableHeader('fecha', 'Fecha')}
-              {renderSortableHeader('comprobante', 'Comprobante')}
-              {renderSortableHeader('numero', 'Número')}
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                CUIT
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Comprador
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Cond.IVA
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Neto (sin IVA)
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                IVA 21%
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                IVA 10.5%
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                IVA 27%
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Exentos
-              </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Total
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {datosPaginados.map((linea, index) => (
-              <tr key={index} className="hover:bg-gray-50">
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                  {formatearFecha(linea.fecha)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                  {linea.comprobante}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                  {linea.numero}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                  {linea.cuit_cliente}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">
-                  {linea.razon_social}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                  {linea.condicion_iva}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                  {formatearMoneda(linea.neto_sin_iva)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                  {formatearMoneda(linea.iva_21)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                  {formatearMoneda(linea.iva_105)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                  {formatearMoneda(linea.iva_27)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                  {formatearMoneda(linea.importe_exento)}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
-                  {formatearMoneda(linea.total)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Mostrando {startIndex + 1} a {Math.min(endIndex, datosProcesados.length)} de {datosProcesados.length} resultados
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Anterior
-              </button>
-              <span className="px-3 py-1 text-sm text-gray-700">
-                Página {currentPage} de {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tabla usando componente genérico */}
+      <Tabla
+        columnas={columnas}
+        datos={datosLibroIvaFiltrados}
+        valorBusqueda={valorBusqueda}
+        onCambioBusqueda={setValorBusqueda}
+        filasPorPaginaInicial={20}
+        opcionesFilasPorPagina={[10, 20, 35, 50]}
+        paginadorVisible={true}
+        mostrarBuscador={true}
+        mostrarOrdenamiento={false}
+        renderFila={renderFila}
+      />
     </div>
   );
 };

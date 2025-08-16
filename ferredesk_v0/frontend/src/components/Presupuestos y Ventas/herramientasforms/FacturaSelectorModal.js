@@ -3,6 +3,8 @@
 import { Fragment, useState, useMemo, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import Buscador from "../../Buscador"
+import Tabla from "../../Tabla"
+import { useFerreDeskTheme } from "../../../hooks/useFerreDeskTheme"
 
 // --- Configuración ---
 export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del modal
@@ -23,6 +25,9 @@ export const LETRA_FACTURA_INTERNA = 'I';
  *  - onSeleccionar: function(arr)  -> callback con array de facturas elegidas
  */
 export default function FacturaSelectorModal({ abierto = false, cliente = null, onCerrar = () => {}, onSeleccionar = () => {} }) {
+  // Hook para el tema de FerreDesk
+  const theme = useFerreDeskTheme()
+  
   // --- Estado interno ---
   const [termino, setTermino] = useState("")
   const [facturas, setFacturas] = useState([])
@@ -102,7 +107,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     if (termino.length < MIN_CARACTERES_BUSQUEDA) return facturas
     const lower = termino.toLowerCase()
     return facturas.filter((f) => {
-      const campos = [f.numero_formateado, f.numero, f.fecha, f.total, f.estado]
+      const campos = [f.numero_formateado, f.numero, f.ven_fecha, f.ven_total, f.ven_estado]
       return campos.some((c) => String(c || "").toLowerCase().includes(lower))
     })
   }, [facturas, termino])
@@ -158,6 +163,68 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     onSeleccionar(elegidas)
   }
 
+  // Configuración de columnas para Tabla.js
+  const columnas = [
+    {
+      id: "seleccion",
+      titulo: "Sel.",
+      align: "center",
+      ancho: "60px",
+      render: (fila) => (
+        estaSeleccionada(fila) ? (
+          <div className="w-4 h-4 bg-orange-600 rounded flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </div>
+        ) : (
+          <div className="w-4 h-4 border-2 border-slate-300 rounded"></div>
+        )
+      )
+    },
+    {
+      id: "numero",
+      titulo: "Número",
+      align: "left",
+      render: (fila) => (
+        <span className="font-mono">{fila.numero_formateado || fila.numero}</span>
+      )
+    },
+    {
+      id: "fecha",
+      titulo: "Fecha",
+      align: "left",
+      render: (fila) => fila.ven_fecha
+    },
+    {
+      id: "total",
+      titulo: "Total",
+      align: "right",
+      render: (fila) => `$${fila.ven_total}`
+    }
+  ]
+
+  // Renderizado personalizado de fila para manejar el click en toda la fila
+  const renderFila = (fila, idxVisible, indiceInicio) => (
+    <tr 
+      key={getId(fila)} 
+      className={`hover:bg-orange-50 cursor-pointer transition-colors duration-150 ${estaSeleccionada(fila) ? "bg-orange-100/60" : ""}`}
+      onClick={() => toggleSeleccion(fila)}
+    >
+      {columnas.map((col) => (
+        <td
+          key={col.id}
+          className={`px-3 py-2 whitespace-nowrap text-sm text-slate-700 bg-white ${
+            { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
+          }`}
+          style={col.ancho ? { width: col.ancho } : undefined}
+        >
+          {col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]}
+        </td>
+      ))}
+    </tr>
+  )
+
   return (
     <Transition show={abierto} as={Fragment} appear>
       <Dialog as="div" className="relative z-40" onClose={onCerrar}>
@@ -185,16 +252,16 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
           leaveTo="opacity-0 scale-95"
         >
           <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <Dialog.Panel className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
               {/* Encabezado */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                <Dialog.Title className="text-lg font-bold text-slate-800">
+              <div className={`flex items-center justify-between px-6 py-4 bg-gradient-to-r ${theme.primario} text-white`}>
+                <Dialog.Title className="text-lg font-bold">
                   Seleccionar Facturas de {cliente?.razon || cliente?.nombre || "cliente"}
                 </Dialog.Title>
                 <button
                   onClick={onCerrar}
                   aria-label="Cerrar"
-                  className="text-slate-600 hover:text-slate-800 transition-colors"
+                  className="text-white hover:text-slate-200 transition-colors"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -204,7 +271,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                     stroke="currentColor"
                     className="w-6 h-6"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
@@ -229,41 +296,18 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
               ) : facturasFiltradas.length === 0 ? (
                 <div className="p-8 text-center text-slate-500">Sin resultados</div>
               ) : (
-                <div className="px-6 pb-6 overflow-y-auto" style={{ maxHeight: ALTURA_MAX_TABLA }}>
-                  <table className="min-w-full table-auto text-sm">
-                    <thead className="bg-slate-100 sticky top-0">
-                      <tr className="text-left text-slate-700">
-                        <th className="px-3 py-2 text-center">Sel.</th>
-                        <th className="px-3 py-2">Número</th>
-                        <th className="px-3 py-2">Fecha</th>
-                        <th className="px-3 py-2">Total</th>
-                        <th className="px-3 py-2">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {facturasFiltradas.map((fac) => (
-                        <tr
-                          key={getId(fac)}
-                          className={`hover:bg-orange-50 cursor-pointer ${estaSeleccionada(fac) ? "bg-orange-100/60" : ""}`}
-                          onClick={() => toggleSeleccion(fac)}
-                        >
-                          <td className="px-3 py-1 text-center">
-                            <input
-                              type="checkbox"
-                              tabIndex={0}
-                              aria-label="Seleccionar factura"
-                              checked={estaSeleccionada(fac)}
-                              onChange={() => toggleSeleccion(fac)}
-                            />
-                          </td>
-                          <td className="px-3 py-1 whitespace-nowrap font-mono">{fac.numero_formateado || fac.numero}</td>
-                          <td className="px-3 py-1 whitespace-nowrap">{fac.fecha}</td>
-                          <td className="px-3 py-1 whitespace-nowrap">${fac.total}</td>
-                          <td className="px-3 py-1 whitespace-nowrap">{fac.estado}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="px-6 pb-6" style={{ height: ALTURA_MAX_TABLA }}>
+                  <Tabla
+                    columnas={columnas}
+                    datos={facturasFiltradas}
+                    valorBusqueda=""
+                    onCambioBusqueda={() => {}}
+                    mostrarBuscador={false}
+                    mostrarOrdenamiento={false}
+                    paginadorVisible={false}
+                    renderFila={renderFila}
+                    sinEstilos={true}
+                  />
                 </div>
               )}
 
@@ -282,9 +326,9 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                   <button
                     onClick={handleConfirmar}
                     disabled={seleccionadas.length === 0}
-                    className="px-4 py-1.5 rounded-lg text-white transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 shadow-md"
+                    className={`px-4 py-1.5 rounded-lg text-white transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed ${theme.botonPrimario}`}
                   >
-                    Confirmar
+                    Seleccionar
                   </button>
                 </div>
               </div>

@@ -1,0 +1,141 @@
+import { useState, useEffect } from "react"
+
+// Función para obtener el token CSRF de la cookie
+function getCookie(name) {
+  let cookieValue = null
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";")
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim()
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
+        break
+      }
+    }
+  }
+  return cookieValue
+}
+
+const useStockForm = ({ stock, modo, onSave, onCancel }) => {
+  // Estado principal del formulario
+  const [form, setForm] = useState(() => {
+    if (modo === "nuevo") {
+      const savedForm = localStorage.getItem("stockFormDraft")
+      if (savedForm && !stock) {
+        return JSON.parse(savedForm)
+      }
+      return (
+        stock || {
+          codvta: "",
+          codcom: "",
+          deno: "",
+          unidad: "",
+          cantmin: 0,
+          proveedor_habitual_id: "",
+          idfam1: null,
+          idfam2: null,
+          idfam3: null,
+          idaliiva: "",
+          id: undefined,
+        }
+      )
+    } else {
+      // Siempre incluir el id del stock en el form
+      return stock
+        ? { ...stock, id: stock.id }
+        : {
+            codvta: "",
+            codcom: "",
+            deno: "",
+            unidad: "",
+            cantmin: 0,
+            proveedor_habitual_id: "",
+            idfam1: null,
+            idfam2: null,
+            idfam3: null,
+            idaliiva: "",
+            id: undefined,
+          }
+    }
+  })
+
+  const [formError, setFormError] = useState(null)
+
+  // useEffect para guardar draft en localStorage
+  useEffect(() => {
+    if (modo === "nuevo" && !stock) {
+      localStorage.setItem("stockFormDraft", JSON.stringify(form))
+    }
+  }, [form, stock, modo])
+
+  // useEffect para obtener ID temporal en modo nuevo
+  useEffect(() => {
+    if (modo === "nuevo" && !form.id) {
+      fetch("/api/productos/obtener-nuevo-id-temporal/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.id) {
+            setForm((prev) => ({ ...prev, id: data.id }))
+          }
+        })
+    }
+  }, [modo, form.id])
+
+  // Handler genérico para todos los campos del formulario
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setForm((prev) => {
+      let finalValue = value
+      // Campos que deben transformarse a número (o null si vacío)
+      if (["idfam1", "idfam2", "idfam3", "idaliiva"].includes(name)) {
+        finalValue = value === "" ? null : Number(value)
+      } else if (name === "proveedor_habitual_id") {
+        // Este campo se mantiene como string para preservar ceros a la izquierda si los hubiera
+        finalValue = value === "" ? "" : String(value)
+      }
+      return {
+        ...prev,
+        [name]: finalValue,
+      }
+    })
+  }
+
+  // Función para actualizar el formulario desde componentes externos
+  const updateForm = (updates) => {
+    setForm((prev) => ({ ...prev, ...updates }))
+  }
+
+  // Función para limpiar errores
+  const clearError = () => {
+    setFormError(null)
+  }
+
+  // Función para establecer errores
+  const setError = (error) => {
+    setFormError(error)
+  }
+
+  // Función para cancelar
+  const handleCancel = () => {
+    localStorage.removeItem("stockFormDraft")
+    onCancel()
+  }
+
+  return {
+    form,
+    setForm,
+    formError,
+    setFormError,
+    handleChange,
+    updateForm,
+    clearError,
+    setError,
+    handleCancel,
+  }
+}
+
+export default useStockForm

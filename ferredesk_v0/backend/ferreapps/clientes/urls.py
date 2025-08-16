@@ -4,7 +4,7 @@ from .views import (
     LocalidadViewSet, ProvinciaViewSet, BarrioViewSet, TipoIVAViewSet, TransporteViewSet,
     VendedorViewSet, PlazoViewSet, CategoriaClienteViewSet, ClienteViewSet,
     BarrioList, LocalidadList, ProvinciaList, TipoIVAList, TransporteList, VendedorList, PlazoList, CategoriaClienteList,
-    ValidarCUITAPIView
+    ValidarCUITAPIView, ProcesarCuitArcaAPIView
 )
 
 router = DefaultRouter()
@@ -20,4 +20,5 @@ router.register(r'clientes', ClienteViewSet, basename='cliente')
 
 urlpatterns = [
     path('validar-cuit/', ValidarCUITAPIView.as_view(), name='validar-cuit'),
+    path('procesar-cuit-arca/', ProcesarCuitArcaAPIView.as_view(), name='procesar-cuit-arca'),
 ] + router.urls 

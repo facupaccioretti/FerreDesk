@@ -21,13 +21,13 @@ from reportlab.lib import colors
 # Constantes de formato para exportación PDF Libro IVA
 # =====================
 # Cantidad máxima de comprobantes por página (cada comprobante ocupa 2 filas)
-MAX_COMPROBANTES_POR_PAGINA = 4  # Para pruebas, 4 comprobantes por página
+MAX_COMPROBANTES_POR_PAGINA = 14  # Aumentado para aprovechar mejor el espacio
 # Altura de página y márgenes (en puntos)
 ALTO_PAGINA = A4[1]
-MARGEN_SUPERIOR = inch
-MARGEN_INFERIOR = inch
-ALTO_TITULO = 32  # Altura aproximada del título
-ALTO_INFO_PERIODO = 24  # Altura aproximada de la info de período
+MARGEN_SUPERIOR = 0.55 * inch  # Reducido de 1 inch a 0.5 inch
+MARGEN_INFERIOR = 0.5 * inch  # Reducido de 1 inch a 0.5 inch
+ALTO_TITULO = 16  # Reducido de 20 a 16
+ALTO_INFO_PERIODO = 16  # Reducido de 24 a 16
 ALTO_ENCABEZADO = 32  # Altura de los encabezados (2 filas)
 ALTO_FILA = 18  # Altura de cada fila de comprobante
 ALTO_SUBTOTAL = 18  # Altura de la fila de subtotal
@@ -55,6 +55,8 @@ def exportar_libro_iva(formato: str, datos_libro: Dict[str, Any]) -> BinaryIO:
         return _generar_excel_libro_iva(datos_libro)
     elif formato.lower() == 'json':
         return _generar_json_libro_iva(datos_libro)
+    elif formato.lower() == 'txt':
+        return _generar_txt_libro_iva(datos_libro)
     else:
         raise ValueError(f"Formato no soportado: {formato}")
 
@@ -159,9 +161,9 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
         # Título y periodo solo en la primera página
         if idx == 0:
             story.append(Paragraph(titulo, title_style))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 10))  # Reducido de 20 a 10
             story.append(Paragraph(info_periodo, styles['Normal']))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 10))  # Reducido de 20 a 10
         else:
             story.append(PageBreak())
             # Al inicio de la página, encabezado de traslado y luego importes
@@ -283,7 +285,7 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
             acumulado_anterior[k] += subtotal_pagina[k]
 
     # Al final, total general
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))  # Reducido de 20 a 10
     total_general_data = [
         ['Total Gral.', 'Neto Sin IVA', 'IVA 21%', 'IVA 10.5%', 'IVA 27%', 'Exento'],
         [
@@ -458,6 +460,178 @@ def _generar_json_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
     return buffer
 
 
+# =====================
+# Exportación TXT (ARCA/AFIP)
+# =====================
+
+# Constantes configurables para TXT
+# Código de moneda por defecto para pesos argentinos
+MONEDA_POR_DEFECTO = 'PES'
+# Cotización para pesos (6 decimales)
+COTIZACION_PESOS = '1.000000'
+# Código de operación habitual
+CODIGO_OPERACION_DEF = '0'
+# Codificación del archivo TXT. ARCA/portales suelen requerir ANSI (Windows-1252)
+CODIFICACION_TXT = 'windows-1252'
+
+
+def _generar_txt_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
+    """
+    Genera el archivo TXT del libro IVA Ventas con separador '|',
+    cumpliendo el layout típico AFIP/ARCA (comprobantes + columnas principales).
+    """
+    buffer = io.BytesIO()
+
+    def formatear_fecha_yyyymmdd(fecha_iso: str) -> str:
+        # Espera 'YYYY-MM-DD' y retorna 'YYYYMMDD'
+        if not fecha_iso or len(fecha_iso) < 10:
+            return ''
+        try:
+            return fecha_iso.replace('-', '')[:8]
+        except Exception:
+            return ''
+
+    def pad_izquierda(valor: int | str | None, ancho: int) -> str:
+        try:
+            n = int(valor) if valor is not None else 0
+        except Exception:
+            n = 0
+        return str(n).zfill(ancho)
+
+    def limpiar_numeros(cadena: str | None) -> str:
+        if not cadena:
+            return ''
+        return ''.join(ch for ch in str(cadena) if ch.isdigit())
+
+    def determinar_doc_tipo_y_nro(cuit: str | None) -> tuple[str, str]:
+        cuit_limpio = limpiar_numeros(cuit)
+        if len(cuit_limpio) == 11:
+            return '80', cuit_limpio  # CUIT
+        # Si no hay CUIT, consumidor final sin identificación
+        return '99', '0'
+
+    def dec2(valor) -> str:
+        # Convierte Decimal/float/str a string con 2 decimales y punto
+        if valor is None:
+            valor = Decimal('0.00')
+        if isinstance(valor, (int, float)):
+            valor = Decimal(str(valor))
+        if isinstance(valor, str):
+            try:
+                valor = Decimal(valor)
+            except Exception:
+                valor = Decimal('0.00')
+        return format(valor.quantize(Decimal('0.01')), 'f')
+
+    # Detectar si es Nota de Crédito por código AFIP
+    def es_nota_credito(codigo_afip: str | None) -> bool:
+        return str(codigo_afip) in {'003', '008', '012'}
+
+    lineas_salida: list[str] = []
+
+    for linea in datos_libro.get('lineas', []):
+        # Campos básicos
+        tipo_cbte = str(linea.get('comprobante_codigo_afip') or '')
+        pto_vta = pad_izquierda(linea.get('ven_punto'), 4)
+        nro = pad_izquierda(linea.get('ven_numero'), 8)
+        fecha = formatear_fecha_yyyymmdd(linea.get('fecha'))
+
+        doc_tipo, doc_nro = determinar_doc_tipo_y_nro(linea.get('cuit_cliente'))
+
+        razon_social = (linea.get('razon_social') or '').strip()
+        moneda = MONEDA_POR_DEFECTO
+        cotiz = COTIZACION_PESOS
+        codigo_operacion = CODIGO_OPERACION_DEF
+
+        # Importes base tomados de la línea (ya consolidados)
+        neto_21 = linea.get('neto_21') or Decimal('0.00')
+        iva_21 = linea.get('iva_21') or Decimal('0.00')
+        neto_105 = linea.get('neto_105') or Decimal('0.00')
+        iva_105 = linea.get('iva_105') or Decimal('0.00')
+        neto_27 = linea.get('neto_27') or Decimal('0.00')
+        iva_27 = linea.get('iva_27') or Decimal('0.00')
+        exento = linea.get('importe_exento') or Decimal('0.00')
+        no_gravado = linea.get('no_gravado') or Decimal('0.00')
+        total = linea.get('total') or Decimal('0.00')
+
+        # Reglas por letra y tipo de comprobante
+        letra = (linea.get('comprobante_letra') or '').strip().upper()
+        codigo = tipo_cbte
+
+        # Factura C: total íntegro en No Gravado, netos/IVA a 0
+        if letra == 'C':
+            no_gravado = total
+            neto_21 = Decimal('0.00')
+            iva_21 = Decimal('0.00')
+            neto_105 = Decimal('0.00')
+            iva_105 = Decimal('0.00')
+            neto_27 = Decimal('0.00')
+            iva_27 = Decimal('0.00')
+            exento = Decimal('0.00')
+
+        # Notas de crédito: importes en negativo
+        if es_nota_credito(codigo):
+            neto_21 = -abs(Decimal(neto_21))
+            iva_21 = -abs(Decimal(iva_21))
+            neto_105 = -abs(Decimal(neto_105))
+            iva_105 = -abs(Decimal(iva_105))
+            neto_27 = -abs(Decimal(neto_27))
+            iva_27 = -abs(Decimal(iva_27))
+            exento = -abs(Decimal(exento))
+            no_gravado = -abs(Decimal(no_gravado))
+            total = -abs(Decimal(total))
+
+        # Percepciones e impuestos internos (0 por defecto si no se tienen fuentes)
+        percepcion_iva = Decimal('0.00')
+        percepcion_iibb = Decimal('0.00')
+        impuestos_internos = Decimal('0.00')
+
+        cae = linea.get('ven_cae') or ''
+        f_vto_cae = linea.get('ven_caevencimiento')
+        if f_vto_cae:
+            try:
+                f_vto_cae = str(f_vto_cae)
+                fecha_vto_cae = f_vto_cae.replace('-', '')[:8]
+            except Exception:
+                fecha_vto_cae = ''
+        else:
+            fecha_vto_cae = ''
+
+        campos = [
+            tipo_cbte,
+            pto_vta,
+            nro,
+            fecha,
+            doc_tipo,
+            doc_nro,
+            razon_social,
+            moneda,
+            cotiz,
+            codigo_operacion,
+            dec2(neto_21),
+            dec2(iva_21),
+            dec2(neto_105),
+            dec2(iva_105),
+            dec2(neto_27),
+            dec2(iva_27),
+            dec2(exento),
+            dec2(no_gravado),
+            dec2(percepcion_iva),
+            dec2(percepcion_iibb),
+            dec2(impuestos_internos),
+            dec2(total),
+            str(cae),
+            fecha_vto_cae,
+        ]
+
+        linea_txt = '|'.join(str(c) for c in campos)
+        lineas_salida.append(linea_txt)
+
+    contenido = ('\r\n'.join(lineas_salida) + '\r\n') if lineas_salida else ''
+    buffer.write(contenido.encode(CODIFICACION_TXT, errors='replace'))
+    buffer.seek(0)
+    return buffer
+
 def obtener_nombre_archivo(formato: str, mes: int, anio: int, tipo_libro: str = 'convencional', incluir_presupuestos: bool = False) -> str:
     """
     Genera el nombre del archivo de exportación.
@@ -492,5 +666,7 @@ def obtener_nombre_archivo(formato: str, mes: int, anio: int, tipo_libro: str = 
         return f"{nombre_base}.xlsx"
     elif formato.lower() == 'json':
         return f"{nombre_base}.json"
+    elif formato.lower() == 'txt':
+        return f"{nombre_base}.txt"
     else:
         return f"{nombre_base}.{formato}" 

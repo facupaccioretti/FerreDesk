@@ -9,12 +9,12 @@ ARCA_URLS = {
     'HOM': {
         'wsaa': 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms?WSDL',
         'wsfev1': 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL',
-        'ws_sr_padron_a5': 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5?wsdl'
+        'ws_sr_constancia_inscripcion': 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5?wsdl'
     },
     'PROD': {
         'wsaa': 'https://wsaa.afip.gov.ar/ws/services/LoginCms?WSDL',
         'wsfev1': 'https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL',
-        'ws_sr_padron_a5': 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5?wsdl'
+        'ws_sr_constancia_inscripcion': 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5?wsdl'
     }
 }
 

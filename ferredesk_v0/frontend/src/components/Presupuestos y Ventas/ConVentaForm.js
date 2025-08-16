@@ -15,6 +15,9 @@ import { normalizarItems } from './herramientasforms/normalizadorItems';
 import { useArcaEstado } from '../../utils/useArcaEstado';
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
+import useValidacionCUIT from '../../utils/useValidacionCUIT';
+import CuitStatusBanner from '../Alertas/CuitStatusBanner';
+import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
 const ConVentaForm = ({
   onSave,
@@ -52,11 +55,23 @@ const ConVentaForm = ({
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
+  // Hook para consulta de estado CUIT en ARCA
+  const { 
+    estadoARCAStatus,
+    mensajesARCAStatus,
+    isLoadingARCAStatus,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  } = useValidacionCUIT();
+
   // Estados de carga centralizados
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState(null);
 
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
+  
+  // Estado para controlar visibilidad del banner de estado CUIT
+  const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
 
   // Hook para manejar estado de ARCA
   const {
@@ -87,9 +102,9 @@ const ConVentaForm = ({
 
   // Función personalizada para aceptar resultado de ARCA (modularizada)
   const handleAceptarResultadoArca = crearHandleAceptarResultadoArca(
-    aceptarResultadoArca, 
-    onCancel, 
-    () => respuestaArca, 
+    aceptarResultadoArca,
+    () => { limpiarBorrador(); onCancel(); },
+    () => respuestaArca,
     () => errorArca
   )
 
@@ -106,6 +121,10 @@ const ConVentaForm = ({
   const [inicializado, setInicializado] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState("");
   const [comprobanteId, setComprobanteId] = useState("");
+  // Estado para evitar disparos en carga inicial (similar a VentaForm)
+  const [esCargaInicial, setEsCargaInicial] = useState(true);
+  // Estado para evitar validación ARCA durante proceso de submit
+  const [procesandoSubmit, setProcesandoSubmit] = useState(false);
 
   // Efecto de inicialización sincronizada (igual que VentaForm)
   useEffect(() => {
@@ -197,6 +216,20 @@ const ConVentaForm = ({
     validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
   });
 
+  // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
+  const [documentoInfo, setDocumentoInfo] = useState({
+    tipo: 'cuit',
+    valor: formulario.cuit || ''
+  });
+
+  const handleDocumentoChange = (nuevaInfo) => {
+    setDocumentoInfo(nuevaInfo);
+    setFormulario(prev => ({
+      ...prev,
+      cuit: nuevaInfo.valor
+    }));
+  };
+
   const { totales } = useCalculosFormulario(formulario.items, {
     bonificacionGeneral: formulario.bonificacionGeneral,
     descu1: formulario.descu1,
@@ -213,9 +246,20 @@ const ConVentaForm = ({
   const [selectorAbierto, setSelectorAbierto] = useState(false);
   const abrirSelector = () => setSelectorAbierto(true);
   const cerrarSelector = () => setSelectorAbierto(false);
+  
+  // Función para ocultar el banner de estado CUIT
+  const ocultarBannerCuit = () => {
+    setMostrarBannerCuit(false);
+    limpiarEstadosARCAStatus();
+  };
 
-  // Callback reutilizable para aplicar datos del cliente al formulario
-  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+  // Callback base para aplicar datos del cliente al formulario
+  const aplicarSeleccionCliente = manejarSeleccionClienteObjeto(setFormulario);
+  // Wrapper para marcar fin de carga inicial al cambiar cliente
+  const handleClienteSelect = (cliente) => {
+    aplicarSeleccionCliente(cliente);
+    setEsCargaInicial(false);
+  };
 
   // Bloqueo de envío accidental con tecla Enter
   const bloquearEnterSubmit = (e) => {
@@ -329,12 +373,25 @@ const ConVentaForm = ({
     }
   }, [autoSumarDuplicados, setAutoSumarDuplicados]);
 
-  const handleChange = manejarCambioFormulario(setFormulario);
+  // (El efecto que consulta ARCA se declara más abajo, luego de definir 'usarFiscal' y 'fiscal')
+
+  // Envoltorio de handleChange para marcar fin de carga inicial en campos clave
+  const handleChangeBase = manejarCambioFormulario(setFormulario);
+  const handleChange = (e) => {
+    handleChangeBase(e);
+    const nombreCampo = e?.target?.name;
+    if (nombreCampo === 'cuit' || nombreCampo === 'domicilio' || nombreCampo === 'clienteId') {
+      setEsCargaInicial(false);
+    }
+  };
 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!window.confirm("¿Está seguro de guardar los cambios?")) return;
+    
+    // Activar flag para evitar validación ARCA durante el proceso
+    setProcesandoSubmit(true);
     if (!itemsGridRef.current) return;
 
     try {
@@ -345,7 +402,6 @@ const ConVentaForm = ({
       // El backend rechazará cualquier campo calculado y solo aceptará los campos base.
 
       const items = itemsGridRef.current.getItems();
-      limpiarBorrador();
 
       // Verificar si requiere emisión ARCA y iniciar estado de espera
       if (requiereEmisionArca(tipoComprobante)) {
@@ -411,6 +467,9 @@ const ConVentaForm = ({
     } catch (error) {
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la conversión")
+    } finally {
+      // Desactivar flag independientemente del resultado
+      setProcesandoSubmit(false);
     }
   };
 
@@ -488,6 +547,59 @@ const ConVentaForm = ({
     }
   }
 
+  // UseEffect para consultar estado CUIT en ARCA cuando aplique (solo letra fiscal A real)
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    // Evitar en carga inicial, si aún no se inicializó el formulario, o durante submit
+    if (!inicializado || esCargaInicial || procesandoSubmit) return;
+
+    // Solo consultar si es comprobante de tipo factura (fiscal)
+    if (tipoComprobante !== 'factura') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Esperar a que la lógica fiscal resuelva el comprobante (como en VentaForm)
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null;
+    if (letraFiscal !== 'A') {
+      setMostrarBannerCuit(false);
+      limpiarEstadosARCAStatus();
+      return;
+    }
+
+    // Validar que hay CUIT con formato válido
+    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+      setMostrarBannerCuit(true);
+      return;
+    }
+
+    // Debounce de la consulta a ARCA para evitar llamadas al tipear
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      consultarARCAStatus(cuitLimpio);
+      setMostrarBannerCuit(true);
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+
+  }, [
+    tipoComprobante,
+    usarFiscal,
+    fiscal?.letra,
+    fiscal?.comprobanteFiscal,
+    formulario.cuit,
+    formulario.clienteId,
+    inicializado,
+    esCargaInicial,
+    procesandoSubmit,
+    consultarARCAStatus,
+    limpiarEstadosARCAStatus
+  ]);
+
   // Renderizado condicional centralizado
   if (isLoading) {
     return (
@@ -499,6 +611,8 @@ const ConVentaForm = ({
       </div>
     );
   }
+
+  // (bloque movido arriba para respetar reglas de hooks)
 
   if (loadingError) {
     return (
@@ -518,8 +632,33 @@ const ConVentaForm = ({
           {/* Gradiente decorativo superior */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
 
-          {/* Contenedor interior con padding igual a VentaForm */}
           <div className="px-8 pt-4 pb-6">
+
+            {/* Banner de estado CUIT para conversiones a factura fiscal A */}
+            {mostrarBannerCuit && !procesandoSubmit && tipoComprobante === 'factura' && (() => {
+              const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
+              return comprobanteSeleccionado?.letra === 'A';
+            })() && (
+              <CuitStatusBanner
+                cuit={formulario.cuit}
+                estado={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return 'error';
+                  }
+                  return estadoARCAStatus || 'ok';
+                })()}
+                mensajes={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return ['CUIT faltante o inválido. Verificar datos del cliente.'];
+                  }
+                  return mensajesARCAStatus || [];
+                })()}
+                onDismiss={ocultarBannerCuit}
+                isLoading={isLoadingARCAStatus}
+              />
+            )}
 
             {/* Badge de letra del comprobante */}
             {letraComprobanteMostrar && (
@@ -565,181 +704,143 @@ const ConVentaForm = ({
               )}
             </div>
 
-            {/* CABECERA organizada en dos filas de 4 columnas */}
-            <div className="w-full mb-4">
-              {/* Fila 1: Cliente | CUIT | Domicilio | Fecha */}
-              <div className="grid grid-cols-4 gap-4 mb-3 items-end">
-                {/* Cliente */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Cliente *</label>
-                  {loadingClientes ? (
-                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                      Cargando clientes...
-                    </div>
-                  ) : errorClientes ? (
-                    <div className="text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-200">
-                      {errorClientes}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
-                        readOnly
-                        disabled
-                        className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-slate-100 text-slate-600 cursor-not-allowed"
-                      />
-                      {!isReadOnly && (
-                        <button
-                          type="button"
-                          onClick={abrirSelector}
-                          className="p-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 transition-colors"
-                          title="Buscar en lista completa"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75l-3.5-3.5" /></svg>
-                        </button>
-                      )}
-                    </div>
-                  )}
+            {/* Tarjeta de campos organizada igual a VentaForm */}
+            <div className="mb-6">
+              <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+                {/* Primera fila: 6 campos */}
+                <div className="grid grid-cols-6 gap-4 mb-3">
+                  {/* Cliente */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+                    {loadingClientes ? (
+                      <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                        Cargando...
+                      </div>
+                    ) : errorClientes ? (
+                      <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">{errorClientes}</div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={clienteSeleccionado ? (clienteSeleccionado.razon || clienteSeleccionado.nombre) : ''}
+                          readOnly
+                          disabled
+                          className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                        />
+                        {!isReadOnly && (
+                          <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Documento */}
+                  <div>
+                    <SelectorDocumento
+                      tipoComprobante={fiscal.letra || 'A'}
+                      esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
+                      valorInicial={documentoInfo.valor}
+                      tipoInicial={documentoInfo.tipo}
+                      onChange={handleDocumentoChange}
+                      readOnly={isReadOnly}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Domicilio */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                    <input
+                      name="domicilio"
+                      type="text"
+                      value={formulario.domicilio}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+                    <input
+                      name="fecha"
+                      type="date"
+                      value={formulario.fecha}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+
+                  {/* Plazo */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
+                    <select
+                      name="plazoId"
+                      value={formulario.plazoId}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {plazos.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+                    </select>
+                  </div>
+
+                  {/* Vendedor */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
+                    <select
+                      name="vendedorId"
+                      value={formulario.vendedorId}
+                      onChange={handleChange}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {vendedores.map((v) => (<option key={v.id} value={v.id}>{v.nombre}</option>))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* CUIT */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">CUIT {usarFiscal && fiscal.camposRequeridos.cuit && <span className="text-orange-600">*</span>}</label>
-                  <input
-                    name="cuit"
-                    type="text"
-                    value={formulario.cuit}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required={usarFiscal && fiscal.camposRequeridos.cuit}
-                    readOnly={isReadOnly}
-                  />
-                </div>
+                {/* Segunda fila: 3 campos */}
+                <div className="grid grid-cols-3 gap-4 mb-3">
+                  {/* Buscador */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+                    <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+                  </div>
 
-                {/* Domicilio */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
-                  <input
-                    name="domicilio"
-                    type="text"
-                    value={formulario.domicilio}
-                    onChange={handleChange}
-                    className="compacto max-w-sm w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required={usarFiscal && fiscal.camposRequeridos.domicilio}
-                    readOnly={isReadOnly}
-                  />
-                </div>
+                  {/* Tipo de Comprobante */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                    <ComprobanteDropdown
+                      opciones={opcionesComprobante}
+                      value={tipoComprobante}
+                      onChange={setTipoComprobante}
+                      disabled={isReadOnly || esConversionFacturaI}
+                      className="w-full"
+                    />
+                  </div>
 
-                {/* Fecha */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Fecha</label>
-                  <input
-                    name="fecha"
-                    type="date"
-                    value={formulario.fecha}
-                    onChange={handleChange}
-                    className="compacto max-w-[9rem] w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    readOnly={isReadOnly}
-                  />
-                </div>
-              </div>
-
-              {/* Fila 2: Sucursal | Punto de Venta | Plazo | Vendedor */}
-              <div className="grid grid-cols-4 gap-4 items-end">
-                {/* Sucursal */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Sucursal *</label>
-                  <select
-                    name="sucursalId"
-                    value={formulario.sucursalId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    {sucursales.map(s => (<option key={s.id} value={s.id}>{s.nombre}</option>))}
-                  </select>
-                </div>
-
-                {/* Punto de Venta */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Punto de Venta *</label>
-                  <select
-                    name="puntoVentaId"
-                    value={formulario.puntoVentaId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    {puntosVenta.map(pv => (<option key={pv.id} value={pv.id}>{pv.nombre}</option>))}
-                  </select>
-                </div>
-
-                {/* Plazo */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Plazo *</label>
-                  <select
-                    name="plazoId"
-                    value={formulario.plazoId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    <option value="">Seleccionar plazo...</option>
-                    {plazos.map(p => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
-                  </select>
-                </div>
-
-                {/* Vendedor */}
-                <div className="w-full">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Vendedor *</label>
-                  <select
-                    name="vendedorId"
-                    value={formulario.vendedorId}
-                    onChange={handleChange}
-                    className="compacto max-w-xs w-full px-3 py-2 border border-slate-300 rounded-lg text-base bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
-                    required
-                    disabled={isReadOnly}
-                  >
-                    <option value="">Seleccionar vendedor...</option>
-                    {vendedores.map(v => (<option key={v.id} value={v.id}>{v.nombre}</option>))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* ÍTEMS: Título, luego buscador y descuentos alineados horizontalmente */}
-            <div className="mb-8">
-              {/* Encabezado eliminado para alinear con VentaForm */}
-              <div className="flex flex-row items-center gap-4 w-full mb-4 p-3 bg-gradient-to-r from-slate-50 to-slate-100/80 rounded-xl border border-slate-200/50 flex-wrap">
-                {/* Buscador reducido */}
-                <div className="min-w-[260px] w-[260px]">
-                  <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} />
-                </div>
-
-                {/* Tipo de comprobante */}
-                <div className="w-40">
-                  <label className="block text-base font-semibold text-slate-700 mb-2">Tipo de Comprobante *</label>
-                  <ComprobanteDropdown
-                    opciones={opcionesComprobante}
-                    value={tipoComprobante}
-                    onChange={setTipoComprobante}
-                    disabled={isReadOnly || esConversionFacturaI}
-                    className="w-full max-w-[120px]"
-                  />
-                </div>
-
-                {/* Acción duplicar / sumar */}
-                <div className="w-56">
-                  <SumarDuplicar
-                    autoSumarDuplicados={autoSumarDuplicados}
-                    setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  />
+                  {/* Acción por defecto */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+                    <SumarDuplicar
+                      autoSumarDuplicados={autoSumarDuplicados}
+                      setAutoSumarDuplicados={setAutoSumarDuplicados}
+                      disabled={isReadOnly}
+                      showLabel={false}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -781,46 +882,46 @@ const ConVentaForm = ({
               )}
             </div>
 
-            <div className="mt-8 flex justify-end space-x-3">
+            <div className="mt-8 flex justify-end space-x-4">
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
               >
                 {isReadOnly ? "Cerrar" : "Cancelar"}
               </button>
               {!isReadOnly && (
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   Crear Venta
                 </button>
               )}
             </div>
           </div>
-
-          {/* Modal selector de clientes */}
-          <ClienteSelectorModal
-            abierto={selectorAbierto}
-            onCerrar={cerrarSelector}
-            clientes={clientesConDefecto}
-            onSeleccionar={handleClienteSelect}
-            cargando={loadingClientes}
-            error={errorClientes}
-          />
-          
-          {/* Overlay de espera de ARCA */}
-          <ArcaEsperaOverlay 
-            estaEsperando={esperandoArca}
-            mensajePersonalizado={obtenerMensajePersonalizado(tipoComprobante)}
-            mostrarDetalles={true}
-            respuestaArca={respuestaArca}
-            errorArca={errorArca}
-            onAceptar={handleAceptarResultadoArca}
-          />
         </form>
       </div>
+
+      {/* Modal selector de clientes */}
+      <ClienteSelectorModal
+        abierto={selectorAbierto}
+        onCerrar={cerrarSelector}
+        clientes={clientesConDefecto}
+        onSeleccionar={handleClienteSelect}
+        cargando={loadingClientes}
+        error={errorClientes}
+      />
+      
+      {/* Overlay de espera de ARCA */}
+      <ArcaEsperaOverlay 
+        estaEsperando={esperandoArca}
+        mensajePersonalizado={obtenerMensajePersonalizado(tipoComprobante)}
+        mostrarDetalles={true}
+        respuestaArca={respuestaArca}
+        errorArca={errorArca}
+        onAceptar={handleAceptarResultadoArca}
+      />
     </div>
   );
 };

@@ -85,9 +85,6 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   const [error, setError] = useState(null);
   const [opcionDropdown, setOpcionDropdown] = useState(null);
   const [erroresValidacion, setErroresValidacion] = useState([]);
-  const csrftoken = getCookie('csrftoken');
-
-
 
   // Función para validar requisitos
   const validarRequisitos = useCallback((letraComprobante, clienteActual) => {
@@ -161,6 +158,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
 
     console.log('[useComprobanteFiscal] Enviando payload al backend:', payload);
     try {
+      const csrftoken = getCookie('csrftoken');
       const res = await fetch('/api/comprobantes/asignar/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
@@ -204,7 +202,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
     } finally {
       setLoading(false);
     }
-  }, [tipoComprobante, cliente, csrftoken, validarRequisitos]);
+  }, [tipoComprobante, cliente, validarRequisitos]);
 
   // Efecto para obtener comprobante fiscal
   useEffect(() => {

@@ -204,8 +204,15 @@ class ConfigManager:
         Returns:
             Configuración del servicio
         """
+        # Mapeo específico para servicios conocidos
+        service_urls = {
+            'ws_sr_constancia_inscripcion': self.urls.get('ws_sr_constancia_inscripcion'),
+            'wsfev1': self.urls.get('wsfev1'),
+            'wsaa': self.urls.get('wsaa')
+        }
+        
         return {
-            'url': self.urls.get(service),
+            'url': service_urls.get(service, self.urls.get(service)),
             'timeout': self.timeouts.get('conexion', 30),
             'service_name': service
         } 

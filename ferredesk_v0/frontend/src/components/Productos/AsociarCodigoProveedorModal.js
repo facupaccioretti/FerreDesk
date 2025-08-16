@@ -29,7 +29,6 @@ const AsociarCodigoProveedorModal = ({
 }) => {
   const [selectedProveedor, setSelectedProveedor] = useState("")
   const [codigoProveedor, setCodigoProveedor] = useState("")
-  const [codigosSugeridos, setCodigosSugeridos] = useState([])
   const [productosConDenominacion, setProductosConDenominacion] = useState([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -44,7 +43,6 @@ const AsociarCodigoProveedorModal = ({
     if (open) {
       setSelectedProveedor("")
       setCodigoProveedor("")
-      setCodigosSugeridos([])
       setProductosConDenominacion([])
       setMessage(null)
       setError(null)
@@ -65,16 +63,14 @@ const AsociarCodigoProveedorModal = ({
         .then((res) => res.json())
         .then((data) => {
           console.log('[Modal] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
-          setCodigosSugeridos(data.codigos || [])
           setProductosConDenominacion(data.productos || [])
           setLoading(false)
         })
         .catch(() => {
-          setCodigosSugeridos([])
           setLoading(false)
         })
     } else {
-      setCodigosSugeridos([])
+      setProductosConDenominacion([])
     }
   }, [selectedProveedor])
 
