@@ -480,9 +480,14 @@ const PresupuestoForm = ({
                 disabled={isReadOnly}
               >
                 <option value="">Seleccionar...</option>
-                {plazos.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
+                {(() => {
+                  const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
+                  const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                  const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
+                  return visibles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))
+                })()}
               </select>
             </div>
 

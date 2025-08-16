@@ -6,6 +6,7 @@ import FilterableSelect from "./FilterableSelect"
 import useValidacionCUIT from "../../utils/useValidacionCUIT"
 import CUITValidacionTooltip from "./CUITValidacionTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import MaestroModal from "./MaestrosModales"
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
 
@@ -184,6 +185,25 @@ const ClienteForm = ({
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
 
+  // Helper: lista solo activos pero conservando la opción seleccionada aunque esté inactiva
+  const filtrarActivosConSeleccion = useCallback((lista, seleccionadoId) => {
+    const coleccion = Array.isArray(lista) ? lista : []
+    const activos = coleccion.filter((x) => x && x.activo === "S")
+    const seleccionado = coleccion.find((x) => String(x?.id) === String(seleccionadoId))
+    if (seleccionado && seleccionado.activo !== "S") {
+      return [...activos, seleccionado]
+    }
+    return activos
+  }, [])
+
+  // Opciones visibles filtradas por activos en selects de catálogos
+  const opcionesLocalidades = useMemo(() => filtrarActivosConSeleccion(localidades, form.localidad), [localidades, form.localidad, filtrarActivosConSeleccion])
+  const opcionesBarrios = useMemo(() => filtrarActivosConSeleccion(barrios, form.barrio), [barrios, form.barrio, filtrarActivosConSeleccion])
+  const opcionesProvincias = useMemo(() => filtrarActivosConSeleccion(provincias, form.provincia), [provincias, form.provincia, filtrarActivosConSeleccion])
+  const opcionesTransportes = useMemo(() => filtrarActivosConSeleccion(transportes, form.transporte), [transportes, form.transporte, filtrarActivosConSeleccion])
+  const opcionesPlazos = useMemo(() => filtrarActivosConSeleccion(plazos, form.plazo), [plazos, form.plazo, filtrarActivosConSeleccion])
+  const opcionesCategorias = useMemo(() => filtrarActivosConSeleccion(categorias, form.categoria), [categorias, form.categoria, filtrarActivosConSeleccion])
+
   // Hook para validación de CUIT
   const { 
     resultado, 
@@ -332,55 +352,66 @@ const ClienteForm = ({
     setError("")
   }
 
-  const handleAddModalSave = async () => {
+  const handleAddModalSave = async (values) => {
     setModalLoading(true)
     try {
       let url = ""
       let body = {}
       let setList = null
+      const currentForm = values || modalForm
       switch (modal.type) {
         case "barrio":
           url = "/api/clientes/barrios/"
-          body = { nombre: modalForm.nombre, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
           setList = setBarrios
           break
         case "localidad":
           url = "/api/clientes/localidades/"
-          body = { nombre: modalForm.nombre, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
           setList = setLocalidades
           break
         case "provincia":
           url = "/api/clientes/provincias/"
-          body = { nombre: modalForm.nombre, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
           setList = setProvincias
           break
         case "transporte":
           url = "/api/clientes/transportes/"
-          body = { nombre: modalForm.nombre, localidad: modalForm.localidad, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, localidad: currentForm.localidad, activo: currentForm.activo || "S" }
           setList = setTransportes
           break
         case "vendedor":
           url = "/api/clientes/vendedores/"
           body = {
-            nombre: modalForm.nombre,
-            dni: modalForm.dni,
-            comivta: modalForm.comivta,
-            liquivta: modalForm.liquivta,
-            comicob: modalForm.comicob,
-            liquicob: modalForm.liquicob,
-            localidad: modalForm.localidad,
-            activo: modalForm.activo || "S",
+            nombre: currentForm.nombre,
+            dni: currentForm.dni,
+            comivta: currentForm.comivta,
+            liquivta: currentForm.liquivta,
+            comicob: currentForm.comicob,
+            liquicob: currentForm.liquicob,
+            localidad: currentForm.localidad,
+            activo: currentForm.activo || "S",
           }
           setList = setVendedores
           break
         case "plazo":
           url = "/api/clientes/plazos/"
-          body = { nombre: modalForm.nombre, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
+          for (let i = 1; i <= 12; i += 1) {
+            const keyPlazo = `pla_pla${i}`
+            const keyPorcentaje = `pla_por${i}`
+            if (Object.prototype.hasOwnProperty.call(currentForm, keyPlazo)) {
+              body[keyPlazo] = currentForm[keyPlazo]
+            }
+            if (Object.prototype.hasOwnProperty.call(currentForm, keyPorcentaje)) {
+              body[keyPorcentaje] = currentForm[keyPorcentaje]
+            }
+          }
           setList = setPlazos
           break
         case "categoria":
           url = "/api/clientes/categorias/"
-          body = { nombre: modalForm.nombre, activo: modalForm.activo || "S" }
+          body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
           setList = setCategorias
           break
         default:
@@ -408,6 +439,7 @@ const ClienteForm = ({
   // Importante: NO limpiar borrador al desmontar (cambio de pestañas)
   // La limpieza se hace en Cancelar o al cerrar pestaña desde el manager
 
+  // eslint-disable-next-line no-unused-vars
   const renderModalForm = () => {
     switch (modal?.type) {
       case "barrio":
@@ -749,21 +781,21 @@ const ClienteForm = ({
                   <FilaEditable etiqueta="Dirección" inputProps={{ name: "domicilio", required: true }} value={form.domicilio} onChange={handleChange} />
                   <FilaEditable etiqueta="Zona *" inputProps={{ name: "zona", maxLength: 10, required: true }} value={form.zona} onChange={handleChange} />
                   <FilaEditable etiqueta="Localidad" onAdd={() => openAddModal('localidad')}>
-                    <FilterableSelect compact={true} label={null} name="localidad" options={localidades} value={form.localidad} onChange={handleChange} placeholder="Buscar localidad..." />
+                    <FilterableSelect compact={true} label={null} name="localidad" options={opcionesLocalidades} value={form.localidad} onChange={handleChange} placeholder="Buscar localidad..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="C.P." inputProps={{ name: "cpostal" }} value={form.cpostal} onChange={handleChange} />
                   {/* Relaciones integradas */}
                   <FilaEditable etiqueta="Barrio" onAdd={() => openAddModal('barrio')}>
-                    <FilterableSelect compact={true} label={null} name="barrio" options={barrios} value={form.barrio} onChange={handleChange} placeholder="Buscar barrio..." />
+                    <FilterableSelect compact={true} label={null} name="barrio" options={opcionesBarrios} value={form.barrio} onChange={handleChange} placeholder="Buscar barrio..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Provincia" onAdd={() => openAddModal('provincia')}>
-                    <FilterableSelect compact={true} label={null} name="provincia" options={provincias} value={form.provincia} onChange={handleChange} placeholder="Buscar provincia..." />
+                    <FilterableSelect compact={true} label={null} name="provincia" options={opcionesProvincias} value={form.provincia} onChange={handleChange} placeholder="Buscar provincia..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Transporte" onAdd={() => openAddModal('transporte')}>
-                    <FilterableSelect compact={true} label={null} name="transporte" options={transportes} value={form.transporte} onChange={handleChange} placeholder="Buscar transporte..." />
+                    <FilterableSelect compact={true} label={null} name="transporte" options={opcionesTransportes} value={form.transporte} onChange={handleChange} placeholder="Buscar transporte..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Plazo" onAdd={() => openAddModal('plazo')}>
-                    <FilterableSelect compact={true} label={null} name="plazo" options={plazos} value={form.plazo} onChange={handleChange} placeholder="Buscar plazo..." />
+                    <FilterableSelect compact={true} label={null} name="plazo" options={opcionesPlazos} value={form.plazo} onChange={handleChange} placeholder="Buscar plazo..." />
                   </FilaEditable>
                 </SeccionLista>
 
@@ -776,7 +808,7 @@ const ClienteForm = ({
                     <FilterableSelect compact={true} label={null} name="vendedor" options={vendedores} value={form.vendedor} onChange={handleChange} placeholder="Buscar vendedor..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Categoría" onAdd={() => openAddModal('categoria')}>
-                    <FilterableSelect compact={true} label={null} name="categoria" options={categorias} value={form.categoria} onChange={handleChange} placeholder="Buscar categoría..." />
+                    <FilterableSelect compact={true} label={null} name="categoria" options={opcionesCategorias} value={form.categoria} onChange={handleChange} placeholder="Buscar categoría..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Línea Crédito" inputProps={{ name: "lineacred", type: "number", min: 0 }} value={form.lineacred} onChange={handleChange} />
                   <FilaEditable etiqueta="Descuentos">
@@ -826,57 +858,19 @@ const ClienteForm = ({
         </div>
       </div>
 
-      {/* Modal para alta de entidades relacionales */}
+      {/* Modal para alta de entidades relacionales (modularizado) */}
       {modal?.open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-lg w-full max-w-md relative border border-slate-200/50 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h4 className="text-lg font-bold text-slate-800">
-                  Agregar {modal.type.charAt(0).toUpperCase() + modal.type.slice(1)}
-                </h4>
-                <button onClick={closeModal} className="p-2 rounded-lg hover:bg-slate-100">
-                  <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="p-6">
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    {error}
-                  </div>
-                </div>
-              )}
-              {renderModalForm()}
-            </div>
-            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={closeModal}
-                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-xl hover:bg-slate-50 font-medium"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddModalSave}
-                disabled={modalLoading}
-                className="px-4 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {modalLoading ? "Guardando..." : "Guardar"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <MaestroModal
+          open={modal.open}
+          tipo={modal.type}
+          modo="nuevo"
+          initialValues={modalForm}
+          localidades={localidades}
+          loading={modalLoading}
+          error={error}
+          onCancel={closeModal}
+          onSubmit={(values) => handleAddModalSave(values)}
+        />
       )}
     </>
   )
