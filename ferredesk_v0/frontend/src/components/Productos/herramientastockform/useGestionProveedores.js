@@ -240,7 +240,8 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
         proveedor_id: proveedorId,
         cantidad: cantidadNum,
         costo: sp.costo, // Mantener el costo actual
-        codigo_producto_proveedor: sp.codigo_producto_proveedor || ""
+        // No forzar código vacío; si existe, preservarlo para el payload final
+        ...(sp.codigo_producto_proveedor ? { codigo_producto_proveedor: sp.codigo_producto_proveedor } : {})
       }]
     })
     
@@ -308,7 +309,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
         proveedor_id: proveedorId,
         cantidad: sp.cantidad, // Mantener la cantidad actual
         costo: costoNum,
-        codigo_producto_proveedor: sp.codigo_producto_proveedor || ""
+        ...(sp.codigo_producto_proveedor ? { codigo_producto_proveedor: sp.codigo_producto_proveedor } : {})
       }]
     })
     

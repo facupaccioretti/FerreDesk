@@ -162,8 +162,12 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
           fileName: file.name,
           status: 'success',
           message: result.message || 'Lista importada correctamente.',
-          registrosProcesados: result.registros_procesados || 0
+          registrosProcesados: result.registros_procesados || 0,
+          registrosActualizados: result.registros_actualizados || 0,
         });
+        if ((result.registros_actualizados || 0) === 0) {
+          alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
+        }
         onClose(); // Close modal on success
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Error desconocido al importar.' }));

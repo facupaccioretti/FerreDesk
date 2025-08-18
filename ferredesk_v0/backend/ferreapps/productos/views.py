@@ -191,15 +191,21 @@ class UploadListaPreciosProveedor(APIView):
             # Actualizar costo y fecha_actualizacion en StockProve para los productos/proveedor de la lista
             # que ya tienen un codigo_producto_proveedor asociado.
             now = timezone.now()
+            registros_actualizados = 0
             for item_excel in to_create:
-                StockProve.objects.filter(
+                actualizados = StockProve.objects.filter(
                     proveedor=proveedor,
                     codigo_producto_proveedor=str(item_excel.codigo_producto_excel).strip()
                 ).update(costo=item_excel.precio, fecha_actualizacion=now)
+                registros_actualizados += int(actualizados)
 
             return Response({
-                'message': f'Lista importada correctamente. {precios_cargados} precios cargados.',
-                'registros_procesados': precios_cargados
+                'message': (
+                    f'Lista importada correctamente. {precios_cargados} precios cargados.' +
+                    (" Advertencia: no se actualizó ningún costo para este proveedor. Verifique que el archivo corresponda." if registros_actualizados == 0 else "")
+                ),
+                'registros_procesados': precios_cargados,
+                'registros_actualizados': registros_actualizados
             }, status=201)
         except Exception as e:
             return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
@@ -308,6 +314,7 @@ def asociar_codigo_proveedor(request):
     stock_id = request.data.get('stock_id')
     proveedor_id = request.data.get('proveedor_id')
     codigo_producto_proveedor = request.data.get('codigo_producto_proveedor')
+    costo_value = request.data.get('costo', None)
     if not (stock_id and proveedor_id and codigo_producto_proveedor):
         return Response({'detail': 'Faltan datos requeridos.'}, status=400)
     try:
@@ -332,15 +339,26 @@ def asociar_codigo_proveedor(request):
     obj = StockProve.objects.filter(stock=stock, proveedor=proveedor).first()
     if obj:
         obj.codigo_producto_proveedor = codigo_producto_proveedor
+        # Actualizar costo si fue provisto
+        if costo_value is not None:
+            try:
+                obj.costo = float(costo_value)
+            except Exception:
+                pass
+        obj.fecha_actualizacion = timezone.now()
         obj.save()
         return Response({'detail': 'Código de proveedor actualizado.'}, status=200)
     else:
+        try:
+            costo_num = float(costo_value) if costo_value is not None else 0
+        except Exception:
+            costo_num = 0
         StockProve.objects.create(
             stock=stock,
             proveedor=proveedor,
             codigo_producto_proveedor=codigo_producto_proveedor,
             cantidad=0,
-            costo=0
+            costo=costo_num
         )
         return Response({'detail': 'Código de proveedor asociado (relación creada con cantidad y costo en 0).'}, status=201)
 
@@ -502,15 +520,60 @@ def editar_producto_con_relaciones(request):
             if not stock_serializer.is_valid():
                 raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
             stock = stock_serializer.save()
-            # Eliminar relaciones actuales
-            StockProve.objects.filter(stock=stock).delete()
-            # Crear nuevas relaciones
+            # Actualización incremental de relaciones (preservar códigos si no se envían)
+            existentes = {sp.proveedor_id: sp for sp in StockProve.objects.filter(stock=stock)}
+            proveedores_enviados = set()
             for rel in stock_proveedores_data:
-                rel_data = rel.copy()
-                rel_data['stock'] = stock.id
-                sp_serializer = StockProveSerializer(data=rel_data)
-                sp_serializer.is_valid(raise_exception=True)
-                sp_serializer.save()
+                proveedor_id = rel.get('proveedor_id')
+                if not proveedor_id:
+                    continue
+                proveedores_enviados.add(int(proveedor_id))
+                cantidad = rel.get('cantidad')
+                costo = rel.get('costo')
+                codigo_rel = rel.get('codigo_producto_proveedor')
+
+                sp_existente = existentes.get(int(proveedor_id))
+                if sp_existente:
+                    # Actualizar cantidad y costo
+                    if cantidad is not None:
+                        sp_existente.cantidad = cantidad
+                    if costo is not None:
+                        sp_existente.costo = costo
+                    # Actualizar código solo si viene presente y no vacío
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad del código dentro del proveedor, excluyendo este producto
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        sp_existente.codigo_producto_proveedor = codigo_rel
+                    sp_existente.save()
+                else:
+                    # Crear nueva relación. Solo setear código si viene y no es vacío
+                    create_kwargs = {
+                        'stock': stock,
+                        'proveedor_id': proveedor_id,
+                        'cantidad': cantidad if cantidad is not None else 0,
+                        'costo': costo if costo is not None else 0,
+                    }
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad antes de crear
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        create_kwargs['codigo_producto_proveedor'] = codigo_rel
+                    StockProve.objects.create(**create_kwargs)
+
+            # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
         return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
     except serializers.ValidationError as ve:
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)

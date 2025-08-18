@@ -60,7 +60,10 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
               proveedor_id: sp.proveedor,
               cantidad: sp.cantidad,
               costo: sp.costo,
-              codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
+              // Solo enviar código si existe uno pendiente; de lo contrario, omitir para preservar en backend
+              ...(codigoPendiente && codigoPendiente.codigo_producto_proveedor
+                ? { codigo_producto_proveedor: codigoPendiente.codigo_producto_proveedor }
+                : {}),
             }
           }),
           ...proveedoresAgregados.map((pa) => {
@@ -69,7 +72,9 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
               proveedor_id: pa.proveedor,
               cantidad: pa.cantidad,
               costo: pa.costo,
-              codigo_producto_proveedor: codigoPendiente ? codigoPendiente.codigo_producto_proveedor : "",
+              ...(codigoPendiente && codigoPendiente.codigo_producto_proveedor
+                ? { codigo_producto_proveedor: codigoPendiente.codigo_producto_proveedor }
+                : {}),
             }
           })
         ]
@@ -117,9 +122,11 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
                 proveedor_id: sp.proveedor?.id || sp.proveedor,
                 cantidad: pendiente && pendiente.cantidad !== undefined ? pendiente.cantidad : sp.cantidad,
                 costo: pendiente && pendiente.costo !== undefined ? pendiente.costo : sp.costo,
-                codigo_producto_proveedor: pendiente
-                  ? pendiente.codigo_producto_proveedor
-                  : sp.codigo_producto_proveedor || "",
+                ...(pendiente && pendiente.codigo_producto_proveedor
+                  ? { codigo_producto_proveedor: pendiente.codigo_producto_proveedor }
+                  : sp.codigo_producto_proveedor
+                  ? { codigo_producto_proveedor: sp.codigo_producto_proveedor }
+                  : {}),
               }
             }),
           // Proveedores agregados durante la edición (están en codigosPendientesEdicion pero no en stockProve)
@@ -135,7 +142,9 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
               proveedor_id: pendiente.proveedor_id,
               cantidad: pendiente.cantidad || 0,
               costo: pendiente.costo || 0,
-              codigo_producto_proveedor: pendiente.codigo_producto_proveedor || "",
+              ...(pendiente.codigo_producto_proveedor
+                ? { codigo_producto_proveedor: pendiente.codigo_producto_proveedor }
+                : {}),
             }))
         ]
         

@@ -106,7 +106,7 @@ const ProveedoresManager = () => {
   }
   const handleImportLista = (info) => {
     alert(
-      `Lista importada para ${info.proveedor.razon}\n${info.message || ""}\nRegistros procesados: ${info.registrosProcesados ?? "N/D"}`,
+      `Lista importada para ${info.proveedor.razon}\n${info.message || ""}\nRegistros procesados: ${info.registrosProcesados ?? "N/D"}\nRegistros actualizados: ${info.registrosActualizados ?? "N/D"}`,
     )
   }
   const handleOpenHistorialModal = (proveedor) => {
@@ -299,21 +299,7 @@ const ProveedoresManager = () => {
                           {/* Acciones */}
                           <td className="px-2 py-1 whitespace-nowrap text-center">
                             <div className="flex gap-3 items-center justify-center">
-                              {/* Botones reutilizados */}
-                              <BotonEditar
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleEditProveedor(p)
-                                }}
-                                title="Editar proveedor"
-                              />
-                              <BotonEliminar
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDelete(p.id)
-                                }}
-                                title="Eliminar proveedor"
-                              />
+                              {/* Orden deseado: Cargar lista, Historial, Editar, Borrar */}
                               <BotonCargarLista
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -328,6 +314,20 @@ const ProveedoresManager = () => {
                                 }}
                                 title="Ver historial de listas"
                               />
+                              <BotonEditar
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditProveedor(p)
+                                }}
+                                title="Editar proveedor"
+                              />
+                              <BotonEliminar
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDelete(p.id)
+                                }}
+                                title="Eliminar proveedor"
+                              />
                             </div>
                           </td>
                         </tr>
@@ -338,44 +338,100 @@ const ProveedoresManager = () => {
                       const filaDetalle = (
                         <tr key={`det-${p.id}`} className="bg-slate-50/50">
                           <td colSpan={8} className="px-6 py-5">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">Razón Social</span>
-                                <span className="block text-slate-700 font-medium">{p.razon}</span>
-                              </div>
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">Nombre de Fantasía</span>
-                                <span className="block text-slate-700 font-medium">{p.fantasia}</span>
-                              </div>
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">Domicilio</span>
-                                <span className="block text-slate-700 font-medium">{p.domicilio}</span>
-                              </div>
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">Teléfono</span>
-                                <span className="block text-slate-700 font-medium">{p.tel1}</span>
-                              </div>
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">CUIT</span>
-                                <span className="block text-slate-700 font-medium">{p.cuit}</span>
-                              </div>
-                              <div>
-                                <span className="block text-slate-500 font-medium mb-1">Sigla</span>
-                                <span className="block text-slate-700 font-medium">{p.sigla}</span>
-                              </div>
-                              <div className="col-span-2 mt-4 flex gap-3">
-                                <button
-                                  onClick={() => handleOpenListaModal(p)}
-                                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-2 rounded-lg transition-all duration-200 shadow-lg font-semibold"
-                                >
-                                  Cargar Lista de Precios
-                                </button>
-                                <button
-                                  onClick={() => handleOpenHistorialModal(p)}
-                                  className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg transition-all duration-200 shadow-lg font-semibold"
-                                >
-                                  Ver Historial
-                                </button>
+                            <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-l-4 border-orange-500 mx-0 mb-2 rounded-lg shadow-sm">
+                              <div className="p-4">
+                                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 text-sm">
+                                  {/* Información Básica */}
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      Información Básica
+                                    </h5>
+                                    <div className="space-y-1 text-xs">
+                                      {(() => {
+                                        const estado = p.acti === "S" ? "Activo" : "Inactivo"
+                                        return (
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-slate-500">Estado:</span>
+                                            <span className={`font-medium px-2 py-0.5 rounded-full text-xs ${estado === "Activo" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                                              {estado}
+                                            </span>
+                                          </div>
+                                        )
+                                      })()}
+                                      <div className="flex justify-between"><span className="text-slate-500">Razón Social:</span><span className="font-medium text-slate-700 truncate" title={p.razon}>{p.razon || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Sigla:</span><span className="font-medium text-slate-700">{p.sigla || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">CUIT:</span><span className="font-medium text-slate-700">{p.cuit || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">IIBB:</span><span className="font-medium text-slate-700">{p.ib || "N/A"}</span></div>
+                                    </div>
+                                  </div>
+
+                                  {/* Contacto */}
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-purple-600">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
+                                      </svg>
+                                      Contacto
+                                    </h5>
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex justify-between"><span className="text-slate-500">Teléfono 1:</span><span className="font-medium text-slate-700">{p.tel1 || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Teléfono 2:</span><span className="font-medium text-slate-700">{p.tel2 || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Teléfono 3:</span><span className="font-medium text-slate-700">{p.tel3 || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Contacto:</span><span className="font-medium text-slate-700 truncate" title={p.contacto}>{p.contacto || "N/A"}</span></div>
+                                    </div>
+                                  </div>
+
+                                  {/* Ubicación */}
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      </svg>
+                                      Ubicación
+                                    </h5>
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex justify-between"><span className="text-slate-500">Dirección:</span><span className="font-medium text-slate-700 truncate" title={p.domicilio}>{p.domicilio || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">C.P.:</span><span className="font-medium text-slate-700">{p.cpostal || "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Barrio (ID):</span><span className="font-medium text-slate-700">{p.idbar ?? "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Localidad (ID):</span><span className="font-medium text-slate-700">{p.idloc ?? "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Provincia (ID):</span><span className="font-medium text-slate-700">{p.idprv ?? "N/A"}</span></div>
+                                    </div>
+                                  </div>
+
+                                  {/* Situación Fiscal */}
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <h5 className="font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                      </svg>
+                                      Fiscal
+                                    </h5>
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex justify-between"><span className="text-slate-500">IVA (ID):</span><span className="font-medium text-slate-700">{p.iva ?? "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Imp. Saldo Cta.:</span><span className="font-medium text-slate-700">{p.impsalcta ?? "N/A"}</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Fecha Saldo Cta.:</span><span className="font-medium text-slate-700">{p.fecsalcta ?? "N/A"}</span></div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 flex gap-3">
+                                  <button
+                                    onClick={() => handleOpenListaModal(p)}
+                                    className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-2 rounded-lg transition-all duration-200 shadow-lg font-semibold"
+                                  >
+                                    Cargar Lista de Precios
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenHistorialModal(p)}
+                                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg transition-all duration-200 shadow-lg font-semibold"
+                                  >
+                                    Ver Historial
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </td>
