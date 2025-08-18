@@ -27,6 +27,7 @@ import os
 import pyexcel as pe
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from ferreapps.proveedores.models import HistorialImportacionProveedor
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.conf import settings
@@ -198,6 +199,14 @@ class UploadListaPreciosProveedor(APIView):
                     codigo_producto_proveedor=str(item_excel.codigo_producto_excel).strip()
                 ).update(costo=item_excel.precio, fecha_actualizacion=now)
                 registros_actualizados += int(actualizados)
+
+            # Registrar historial de importación en la app proveedores
+            HistorialImportacionProveedor.objects.create(
+                proveedor=proveedor,
+                nombre_archivo=excel_file.name,
+                registros_procesados=precios_cargados,
+                registros_actualizados=registros_actualizados,
+            )
 
             return Response({
                 'message': (

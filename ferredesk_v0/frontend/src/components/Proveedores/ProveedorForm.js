@@ -52,7 +52,8 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
     fecsalcta: '',
     sigla: '',
     tel1: '',
-    cuit: ''
+    cuit: '',
+    acti: 'S',
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -61,7 +62,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   const theme = useFerreDeskTheme()
 
   useEffect(() => {
-    if (initialData) setForm(initialData);
+    if (initialData) setForm({ ...initialData, acti: initialData.acti ?? 'S' });
   }, [initialData]);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
@@ -146,6 +147,17 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
                 <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true }} value={form.razon} onChange={handleChange} />
                 <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true }} value={form.fantasia} onChange={handleChange} />
+                <FilaEditable etiqueta="Estado">
+                  <select
+                    name="acti"
+                    value={form.acti ?? 'S'}
+                    onChange={handleChange}
+                    className={`${getInputClasses(theme)} h-8`}
+                  >
+                    <option value="S">Activo</option>
+                    <option value="N">Inactivo</option>
+                  </select>
+                </FilaEditable>
               </SeccionLista>
 
               {/* Tarjeta Información de Contacto */}

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
         # Apps propias
     'ferreapps.usuarios',
     'ferreapps.productos',
+    'ferreapps.proveedores',
     'ferreapps.login',
     'ferreapps.clientes',
     'ferreapps.ventas',

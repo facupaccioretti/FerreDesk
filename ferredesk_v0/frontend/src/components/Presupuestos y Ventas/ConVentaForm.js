@@ -268,8 +268,10 @@ const ConVentaForm = ({
     }
   };
 
-  // Efecto para re-normalizar items cuando los productos llegan tarde
+  // Efecto para re-normalizar items SOLO una vez cuando los productos llegan tarde (evita remounts durante la edición)
+  const normalizacionInicialHechaRef = useRef(false);
   useEffect(() => {
+    if (normalizacionInicialHechaRef.current) return;
     if (!Array.isArray(productos) || productos.length === 0) return;
     if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
 
@@ -279,6 +281,7 @@ const ConVentaForm = ({
       actualizarItems(itemsNormalizados);
       setGridKey(Date.now());
     }
+    normalizacionInicialHechaRef.current = true;
   }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
   const stockProveedores = useMemo(() => {
