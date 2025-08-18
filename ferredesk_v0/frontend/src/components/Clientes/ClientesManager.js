@@ -138,14 +138,17 @@ const ClientesManager = () => {
   }
 
   // Guardar cliente (alta / edición)
-  const handleSaveCliente = async (data) => {
+  const handleSaveCliente = async (data, tabKeyParam) => {
     let exito = false
     if (editCliente) {
       exito = await updateCliente(editCliente.id, data)
     } else {
       exito = await addCliente(data)
     }
-    if (exito) closeTab("nuevo")
+    if (exito) {
+      const keyToClose = tabKeyParam || activeTab || "nuevo"
+      closeTab(keyToClose)
+    }
   }
 
   // Eliminar cliente
@@ -485,7 +488,7 @@ const ClientesManager = () => {
                     return (
                       <ClienteForm
                         key={activeTab}
-                        onSave={handleSaveCliente}
+                        onSave={(data) => handleSaveCliente(data, activeTab)}
                         onCancel={() => closeTab(activeTab)}
                         initialData={initialData}
                         tabKey={activeTab}
