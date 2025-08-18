@@ -72,7 +72,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = [
-        'codigo',      # Código numérico interno
         'razon',       # Razón social
         'fantasia',    # Nombre comercial
         'cuit',        # CUIT
@@ -101,7 +100,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
         if termino_busqueda:
             # Búsqueda en múltiples campos usando Q objects
             queryset = queryset.filter(
-                Q(codigo__icontains=termino_busqueda) |
                 Q(razon__icontains=termino_busqueda) |
                 Q(fantasia__icontains=termino_busqueda) |
                 Q(cuit__icontains=termino_busqueda) |

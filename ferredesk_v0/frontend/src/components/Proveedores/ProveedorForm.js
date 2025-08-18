@@ -45,7 +45,6 @@ const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange }) 
 
 export default function ProveedorForm({ onSave, onCancel, initialData, formError }) {
   const [form, setForm] = useState(initialData || {
-    codigo: '',
     razon: '',
     fantasia: '',
     domicilio: '',
@@ -69,7 +68,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!form.codigo || !form.razon.trim() || !form.fantasia.trim() || !form.domicilio.trim() || !form.impsalcta || !form.fecsalcta || !form.sigla.trim()) {
+    if (!form.razon.trim() || !form.fantasia.trim() || !form.domicilio.trim() || !form.impsalcta || !form.fecsalcta || !form.sigla.trim()) {
       setError("Todos los campos obligatorios deben estar completos");
       return;
     }
@@ -134,11 +133,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
               <div className="text-sm font-semibold text-slate-800 truncate" title={form.razon}>
                 {form.razon || "Nuevo Proveedor"}
               </div>
-              {form.codigo && (
-                <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
-                  Código: {form.codigo}
-                </span>
-              )}
+              
             </div>
 
             {/* Tarjetas horizontales al estilo del detalle */}
@@ -148,7 +143,6 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 titulo="Información Básica"
                 icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>}
               >
-                <FilaEditable etiqueta="Código *" inputProps={{ name: "codigo", type: "number", required: true }} value={form.codigo} onChange={handleChange} />
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
                 <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true }} value={form.razon} onChange={handleChange} />
                 <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true }} value={form.fantasia} onChange={handleChange} />

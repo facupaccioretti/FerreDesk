@@ -313,7 +313,7 @@ class ProveedorSerializer(serializers.ModelSerializer):
     """Serializer para proveedores en el contexto de compras"""
     class Meta:
         model = Proveedor
-        fields = ['id', 'codigo', 'razon', 'fantasia', 'cuit', 'domicilio', 'acti']
+        fields = ['id', 'razon', 'fantasia', 'cuit', 'domicilio', 'acti', 'sigla']
 
 
 class StockProveedorSerializer(serializers.ModelSerializer):

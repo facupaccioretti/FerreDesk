@@ -165,10 +165,7 @@ const ClientesTable = ({
                         Información Básica
                       </h5>
                       <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Código:</span>
-                          <span className="font-medium text-slate-700">{cli.codigo || "N/A"}</span>
-                        </div>
+                        
                         {(() => {
                           const estado = cli.activo === "A" ? "Activo" : "Inactivo"
                           return (

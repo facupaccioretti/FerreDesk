@@ -45,7 +45,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['codigo', 'razon', 'fantasia', 'acti']
+    filterset_fields = ['razon', 'fantasia', 'acti']
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')

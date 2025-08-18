@@ -303,7 +303,6 @@ class Producto(models.Model):
 
 class Proveedor(models.Model):
     id = models.AutoField(primary_key=True, db_column='PRO_ID')
-    codigo = models.IntegerField(unique=True, db_column='PRO_CODIGO')
     razon = models.CharField(max_length=50, db_column='PRO_RAZON')
     fantasia = models.CharField(max_length=50, db_column='PRO_FANTASIA')
     domicilio = models.CharField(max_length=50, db_column='PRO_DOMI')

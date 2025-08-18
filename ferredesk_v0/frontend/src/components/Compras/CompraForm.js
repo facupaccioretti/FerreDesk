@@ -365,7 +365,7 @@ const CompraForm = ({
                         <option value="">Seleccionar proveedor...</option>
                         {proveedores.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.codigo} - {p.razon}
+                            {p.razon}
                           </option>
                         ))}
                       </select>

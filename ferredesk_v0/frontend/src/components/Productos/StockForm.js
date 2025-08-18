@@ -71,8 +71,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     setProveedoresAgregados,
     codigosPendientesEdicion,
     setCodigosPendientesEdicion,
-    newStockProve,
-    setNewStockProve,
     editandoCantidadId,
     nuevaCantidad,
     setNuevaCantidad,
@@ -85,9 +83,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     editandoCostoProveedorId,
     nuevoCostoProveedor,
     setNuevoCostoProveedor,
-    handleNewStockProveChange,
-    handleAgregarProveedorEdicion,
-    handleAgregarProveedor,
     handleEliminarProveedorEdicion,
     handleEliminarProveedor,
     handleEditarCantidadProveedor,
@@ -104,7 +99,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     stockTotal,
     proveedoresAsociados,
     stockProveParaMostrar,
-    stockProveForThisStock
+    
   } = useGestionProveedores({ 
     stock, 
     modo, 
@@ -208,9 +203,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         id: stock.id,
         stock_proveedores: stockProveedores,
       })
-      setNewStockProve((prev) => ({ ...prev, stock: stock.id }))
     }
-  }, [stock, stockProve, setForm, setNewStockProve])
+  }, [stock, stockProve, setForm])
 
   // Persistencia automática del borrador la maneja useStockForm (clave dinámica)
 
@@ -225,50 +219,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         .then((data) => {
           if (data && data.id) {
             setForm((prev) => ({ ...prev, id: data.id }))
-            setNewStockProve((prev) => ({ ...prev, stock: data.id }))
           }
         })
     }
-  }, [modo, form.id, setForm, setNewStockProve])
-
-  useEffect(() => {
-    let detectado = false
-    const proveedorId = newStockProve.proveedor
-    if (!proveedorId) {
-      return
-    }
-
-    if (isEdicion) {
-      // 1) Verificar en los registros guardados
-      const relacion = stockProve.find(
-        (sp) =>
-          String(sp.stock?.id || sp.stock) === String(stock?.id) &&
-          String(sp.proveedor?.id || sp.proveedor) === String(proveedorId) &&
-          sp.codigo_producto_proveedor,
-      )
-      if (relacion) detectado = true
-
-      // 2) Verificar en los códigos pendientes de la sesión de edición
-      const pendiente = codigosPendientesEdicion.find(
-        (c) => String(c.proveedor_id) === String(proveedorId) && c.codigo_producto_proveedor,
-      )
-      if (pendiente) detectado = true
-
-      // 3) Verificar en el estado local del formulario (puede haberse actualizado)
-      if (!detectado && Array.isArray(form.stock_proveedores)) {
-        const spLocal = form.stock_proveedores.find(
-          (sp) => String(sp.proveedor_id) === String(proveedorId) && sp.codigo_producto_proveedor,
-        )
-        if (spLocal) detectado = true
-      }
-    } else {
-      // Modo nuevo: verificar en los códigos pendientes
-      const codigoPendiente = codigosPendientes.find(
-        (c) => String(c.proveedor_id) === String(proveedorId) && c.codigo_producto_proveedor,
-      )
-      if (codigoPendiente) detectado = true
-    }
-  }, [newStockProve.proveedor, stockProve, codigosPendientes, codigosPendientesEdicion, form.stock_proveedores, isEdicion, stock?.id])
+  }, [modo, form.id, setForm])
+  
 
 
 
@@ -509,26 +464,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                   Códigos y Proveedores
                 </h5>
                 <div className="divide-y divide-slate-200">
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-[12px] text-slate-700">Proveedor Habitual</span>
-                    <div className="min-w-[180px] text-right">
-                      <select
-                        name="proveedor_habitual_id"
-                        value={form.proveedor_habitual_id ?? ""}
-                        onChange={handleChange}
-                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                        disabled={proveedoresAsociados.length === 1}
-                        required={proveedoresAsociados.length > 1}
-                      >
-                        <option value="">Seleccionar...</option>
-                        {proveedoresAsociados.map((prov) => (
-                          <option key={prov.id} value={String(prov.id)}>
-                            {prov.razon}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
                   {(stock?.id || form.id) && (
                     <div className="py-2">
                       <div className="flex items-center justify-between mb-2">
@@ -732,58 +667,28 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       )}
                     </div>
                   )}
-                  
-                  {/* Formulario para agregar proveedor */}
-                  {(modo === "nuevo" || isEdicion) && (
-                  <div className="py-2">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="text-[12px] text-slate-700">Agregar Proveedor</div>
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <select
-                          name="proveedor"
-                          value={
-                            typeof newStockProve.proveedor === "string" || typeof newStockProve.proveedor === "number"
-                              ? newStockProve.proveedor
-                              : ""
-                          }
-                          onChange={handleNewStockProveChange}
-                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                        >
-                            <option value="">Seleccionar proveedor...</option>
-                            {proveedores
-                              .filter((proveedor) => {
-                                if (modo === "nuevo") {
-                                  return !proveedoresAgregados.some((pa) => pa.proveedor === proveedor.id)
-                                } else {
-                                  // En modo edición, filtrar por stockProveForThisStock y codigosPendientesEdicion
-                                  const existeEnStock = stockProveForThisStock.some((sp) => 
-                                    String(sp.proveedor?.id || sp.proveedor) === String(proveedor.id)
-                                  )
-                                  const existeEnPendientes = codigosPendientesEdicion.some((c) => 
-                                    String(c.proveedor_id) === String(proveedor.id)
-                                  )
-                                  return !existeEnStock && !existeEnPendientes
-                                }
-                              })
-                              .map((proveedor) => (
-                            <option key={proveedor.id} value={String(proveedor.id)}>
-                              {proveedor.razon}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={isEdicion ? handleAgregarProveedorEdicion : handleAgregarProveedor}
-                        className={`w-full px-2 py-1 ${theme.botonPrimario} text-xs`}
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Proveedor Habitual</span>
+                    <div className="min-w-[180px] text-right">
+                      <select
+                        name="proveedor_habitual_id"
+                        value={form.proveedor_habitual_id ?? ""}
+                        onChange={handleChange}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        disabled={proveedoresAsociados.length === 1}
+                        required={proveedoresAsociados.length > 1}
                       >
-                          Agregar Proveedor
-                      </button>
-                      </div>
-                        </div>
-                      )}
+                        <option value="">Seleccionar...</option>
+                        {proveedoresAsociados.map((prov) => (
+                          <option key={prov.id} value={String(prov.id)}>
+                            {prov.razon}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  
                 </div>
               </div>
 

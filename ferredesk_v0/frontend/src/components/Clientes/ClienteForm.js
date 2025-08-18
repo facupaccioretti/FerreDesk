@@ -17,6 +17,12 @@ const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-x
 const CLASES_SECCION_TITULO = "mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700"
 const CLASES_SECCION_WRAPPER = "p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]"
 
+// Cantidad de dígitos requerida para considerar un CUIT completo
+const LONGITUD_CUIT_COMPLETO = 11
+// Nombre exacto de la condición de IVA para Consumidor Final
+const NOMBRE_CONSUMIDOR_FINAL = "Consumidor Final"
+
+
 // Chip de estado (memoizado)
 const ChipEstado = memo(({ activo }) => (
   <span className={`px-2 py-0.5 rounded-full text-[11px] ${activo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
@@ -104,6 +110,8 @@ const ClienteForm = ({
   }, [initialData?.id, tabKey])
   const claveAnteriorRef = useRef(claveBorradorCliente)
   const estaRecargandoRef = useRef(false)
+  const formRef = useRef(null)
+  const cuitInputRef = useRef(null)
 
   // Detectar recarga/navegación para no limpiar el borrador en ese caso
   useEffect(() => {
@@ -122,7 +130,6 @@ const ClienteForm = ({
       }
     } catch (_) {}
     return {
-      codigo: initialData?.codigo || "",
       razon: initialData?.razon || "",
       domicilio: initialData?.domicilio || "",
       lineacred: initialData?.lineacred || "",
@@ -185,6 +192,10 @@ const ClienteForm = ({
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
 
+  // Ref para conocer el CUIT actual dentro de efectos sin agregar dependencias
+  const cuitActualRef = useRef(form.cuit)
+  useEffect(() => { cuitActualRef.current = form.cuit }, [form.cuit])
+
   // Helper: lista solo activos pero conservando la opción seleccionada aunque esté inactiva
   const filtrarActivosConSeleccion = useCallback((lista, seleccionadoId) => {
     const coleccion = Array.isArray(lista) ? lista : []
@@ -203,6 +214,24 @@ const ClienteForm = ({
   const opcionesTransportes = useMemo(() => filtrarActivosConSeleccion(transportes, form.transporte), [transportes, form.transporte, filtrarActivosConSeleccion])
   const opcionesPlazos = useMemo(() => filtrarActivosConSeleccion(plazos, form.plazo), [plazos, form.plazo, filtrarActivosConSeleccion])
   const opcionesCategorias = useMemo(() => filtrarActivosConSeleccion(categorias, form.categoria), [categorias, form.categoria, filtrarActivosConSeleccion])
+
+  // Opción de IVA: Consumidor Final
+  const opcionConsumidorFinal = useMemo(() => {
+    const lista = Array.isArray(tiposIVA) ? tiposIVA : []
+    return lista.find((x) => x?.nombre?.toLowerCase() === NOMBRE_CONSUMIDOR_FINAL.toLowerCase()) || null
+  }, [tiposIVA])
+
+  // Opciones visibles para IVA según longitud de CUIT
+  const opcionesIVAVisibles = useMemo(() => {
+    const cuitLen = String(form.cuit || '').length
+    const lista = Array.isArray(tiposIVA) ? tiposIVA : []
+    if (cuitLen === LONGITUD_CUIT_COMPLETO) {
+      // Excluir Consumidor Final cuando el CUIT es completo
+      return lista.filter((x) => String(x?.id) !== String(opcionConsumidorFinal?.id))
+    }
+    // Antes de 11 dígitos, solo Consumidor Final (si existe)
+    return opcionConsumidorFinal ? [opcionConsumidorFinal] : []
+  }, [form.cuit, tiposIVA, opcionConsumidorFinal])
 
   // Hook para validación de CUIT
   const { 
@@ -226,9 +255,61 @@ const ClienteForm = ({
       return
     }
     
-    // Si se está cambiando el CUIT, solo limpiar campos autocompletados
-    // Los estados de ARCA se manejan en el hook useValidacionCUIT
+    // Manejo de Tipo IVA con lógica de bloqueo/obligatoriedad
+    if (name === "iva") {
+      setForm((prev) => {
+        const cuitLen = String(prev.cuit || '').length
+        if (cuitLen !== LONGITUD_CUIT_COMPLETO) {
+          // Bloqueado: forzar Consumidor Final si existe
+          if (opcionConsumidorFinal) {
+            return { ...prev, iva: opcionConsumidorFinal.id }
+          }
+          return prev
+        }
+        // Con 11 dígitos permitir el cambio normalmente
+        return { ...prev, iva: value }
+      })
+      return
+    }
+
+    // Manejo de Tipo IVA con lógica de bloqueo/obligatoriedad
+    if (name === "iva") {
+      setForm((prev) => {
+        const cuitLen = String(prev.cuit || '').length
+        if (cuitLen !== LONGITUD_CUIT_COMPLETO) {
+          // Bloqueado: forzar Consumidor Final si existe
+          if (opcionConsumidorFinal) {
+            return { ...prev, iva: opcionConsumidorFinal.id }
+          }
+          return prev
+        }
+        // Con 11 dígitos permitir el cambio normalmente
+        return { ...prev, iva: value }
+      })
+      return
+    }
+    
     if (name === "cuit") {
+      // Si el CUIT tenía longitud completa y el usuario modifica/borra un dígito,
+      // limpiar Razón Social, Dirección y C.P. SIEMPRE (hayan sido autocompletados o no).
+      setForm((prev) => {
+        const cuitPrevio = prev.cuit || ""
+        const teniaCuitCompleto = cuitPrevio.length === LONGITUD_CUIT_COMPLETO
+        const seModificoElCuit = value !== cuitPrevio
+        const nuevoEstado = { ...prev, cuit: value }
+        if (teniaCuitCompleto && seModificoElCuit) {
+          nuevoEstado.razon = ""
+          nuevoEstado.domicilio = ""
+          nuevoEstado.cpostal = ""
+          nuevoEstado.fantasia = ""
+          // Al salir de 11 dígitos, bloquear IVA y forzar Consumidor Final
+          if (opcionConsumidorFinal) {
+            nuevoEstado.iva = opcionConsumidorFinal.id
+          }
+        }
+        return nuevoEstado
+      })
+      // Reiniciar flags de autocompletado tras el cambio de CUIT
       setCamposAutocompletados({
         razon: false,
         fantasia: false,
@@ -237,11 +318,33 @@ const ClienteForm = ({
         localidad: false,
         iva: false
       })
+      // Limpiar estados/datos de ARCA para que no vuelvan a autocompletar inmediatamente
+      limpiarEstadosARCA()
+      // Limpiar resultado de validación del CUIT para evitar usar un estado viejo
+      limpiarResultado()
+      // Quitar mensaje nativo si lo había
+      if (cuitInputRef.current) {
+        try { cuitInputRef.current.setCustomValidity("") } catch (_) {}
+      }
+      return
     }
-    
+
     // Actualizamos de forma inmutable manteniendo resto del estado
     setForm((f) => ({ ...f, [name]: value }))
-  }, [setCamposAutocompletados, setForm])
+  }, [setCamposAutocompletados, setForm, limpiarEstadosARCA, opcionConsumidorFinal, limpiarResultado])
+
+  // Efecto: sincronizar valor de IVA según longitud de CUIT
+  useEffect(() => {
+    const cuitLen = String(form.cuit || '').length
+    // Si no tiene 11 dígitos y existe Consumidor Final, forzar ese valor
+    if (cuitLen !== LONGITUD_CUIT_COMPLETO && opcionConsumidorFinal && String(form.iva) !== String(opcionConsumidorFinal.id)) {
+      setForm((prev) => ({ ...prev, iva: opcionConsumidorFinal.id }))
+    }
+    // Si tiene 11 dígitos y el IVA es Consumidor Final, vaciar para obligar selección
+    if (cuitLen === LONGITUD_CUIT_COMPLETO && opcionConsumidorFinal && String(form.iva) === String(opcionConsumidorFinal.id)) {
+      setForm((prev) => ({ ...prev, iva: "" }))
+    }
+  }, [form.cuit, form.iva, opcionConsumidorFinal])
 
   // Función para autocompletar campos con datos de ARCA
   const autocompletarCampos = useCallback((datos) => {
@@ -325,11 +428,19 @@ const ClienteForm = ({
     })
   }, [localidades, tiposIVA, camposAutocompletados, setForm, setCamposAutocompletados])
 
+  // Mantener una referencia estable a la función de autocompletado para evitar dependencias en efectos
+  const autocompletarCamposRef = useRef(autocompletarCampos)
+  useEffect(() => { autocompletarCamposRef.current = autocompletarCampos }, [autocompletarCampos])
+
   // Efecto para autocompletar cuando llegan datos de ARCA
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (datosARCA && !errorARCA) {
-      autocompletarCampos(datosARCA)
+      const lenCuit = String(cuitActualRef.current || '').length
+      if (lenCuit !== LONGITUD_CUIT_COMPLETO) {
+        return
+      }
+      autocompletarCamposRef.current(datosARCA)
       
       // Limpiar el mensaje de éxito después de 3 segundos
       const timer = setTimeout(() => {
@@ -338,7 +449,7 @@ const ClienteForm = ({
       
       return () => clearTimeout(timer)
     }
-  }, [datosARCA, errorARCA, limpiarEstadosARCA, autocompletarCampos])
+  }, [datosARCA, errorARCA, limpiarEstadosARCA])
 
   // ----- Modal para agregar entidades relacionales -----
   const openAddModal = (type) => {
@@ -617,16 +728,32 @@ const ClienteForm = ({
   const handleSubmit = (e) => {
     e.preventDefault()
     if (
-      !form.codigo ||
       !form.razon ||
-      !form.domicilio ||
-      !form.zona
+      !form.domicilio
     ) {
-      setError("Por favor completa todos los campos obligatorios.")
+      if (formRef.current) {
+        // Dejar que el navegador muestre la validación nativa
+        formRef.current.reportValidity()
+      }
+      return
+    }
+    // Si ingresaron 11 dígitos de CUIT y el verificador es inválido, no permitir guardar
+    const cuitTieneOnce = String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO
+    if (cuitTieneOnce && resultado && resultado.es_valido === false) {
+      // Mostrar mensaje nativo en el input de CUIT
+      if (cuitInputRef.current) {
+        try {
+          cuitInputRef.current.setCustomValidity("El CUIT ingresado es inválido.")
+          cuitInputRef.current.reportValidity()
+        } catch (_) {}
+      }
       return
     }
     if (form.zona && form.zona.length > 10) {
-      setError("El campo Zona no debe exceder los 10 caracteres.")
+      if (formRef.current) {
+        // No hay input directo para zona aquí con required; mostrar mensaje general
+        alert("El campo Zona no debe exceder los 10 caracteres.")
+      }
       return
     }
     
@@ -655,6 +782,7 @@ const ClienteForm = ({
           <form
             className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
             onSubmit={handleSubmit}
+            ref={formRef}
           >
             {/* Gradiente decorativo superior */}
             <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
@@ -713,14 +841,6 @@ const ClienteForm = ({
                   titulo="Información Básica"
                   icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                 >
-                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: camposAutocompletados.razon, className: `${CLASES_INPUT} ${camposAutocompletados.razon ? 'border-emerald-300 bg-emerald-50 text-slate-600 cursor-not-allowed' : ''}` }} value={form.razon} onChange={handleChange} />
-                  <FilaEditable etiqueta="Código *" inputProps={{ name: "codigo", type: "number", min: 0, required: true }} value={form.codigo} onChange={handleChange} />
-                  <FilaEditable etiqueta="Estado">
-                    <select name="activo" value={form.activo} onChange={handleChange} className={CLASES_INPUT}>
-                      <option value="A">Activo</option>
-                      <option value="I">Inactivo</option>
-                    </select>
-                  </FilaEditable>
                   <FilaEditable etiqueta="CUIT">
                     <div className="relative h-[34px]">
                         <input
@@ -731,6 +851,8 @@ const ClienteForm = ({
                         onKeyDown={(e) => { if (e.key === 'Enter' && !initialData) { handleCUITBlur(e.target.value) } }}
                           maxLength={11}
                         className={`${CLASES_INPUT} h-full pr-8`}
+                        ref={cuitInputRef}
+                          disabled={!!initialData}
                         />
                         <div className="absolute top-0 right-2 h-full flex items-center">
                           {((resultado && !isLoadingCUIT && !errorCUIT) || (errorARCA && errorARCA.trim() !== '')) ? (
@@ -755,11 +877,37 @@ const ClienteForm = ({
                         )}
                       </div>
                   </FilaEditable>
-                  <FilaEditable etiqueta="IB" inputProps={{ name: "ib", maxLength: 10 }} value={form.ib} onChange={handleChange} />
                   <FilaEditable etiqueta="Tipo IVA">
-                    <FilterableSelect compact={true} label={null} name="iva" options={tiposIVA} value={form.iva} onChange={handleChange} placeholder="Buscar tipo de IVA..." />
+                    <select
+                      name="iva"
+                      value={form.iva || ""}
+                      onChange={handleChange}
+                      className={CLASES_INPUT}
+                      disabled={String(form.cuit || '').length !== LONGITUD_CUIT_COMPLETO}
+                    >
+                      {String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO ? (
+                        <>
+                          <option value="">Seleccionar...</option>
+                          {opcionesIVAVisibles.map(opt => (
+                            <option key={opt.id} value={opt.id}>{opt.nombre}</option>
+                          ))}
+                        </>
+                      ) : (
+                        opcionConsumidorFinal && (
+                          <option value={opcionConsumidorFinal.id}>{opcionConsumidorFinal.nombre}</option>
+                        )
+                      )}
+                    </select>
                   </FilaEditable>
+                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, className: `${CLASES_INPUT}` }} value={form.razon} onChange={handleChange} />
                   <FilaEditable etiqueta="Nombre Comercial" inputProps={{ name: "fantasia" }} value={form.fantasia} onChange={handleChange} />
+                  <FilaEditable etiqueta="IB" inputProps={{ name: "ib", maxLength: 10 }} value={form.ib} onChange={handleChange} />
+                  <FilaEditable etiqueta="Estado">
+                    <select name="activo" value={form.activo} onChange={handleChange} className={CLASES_INPUT}>
+                      <option value="A">Activo</option>
+                      <option value="I">Inactivo</option>
+                    </select>
+                  </FilaEditable>
                 </SeccionLista>
 
                 {/* Tarjeta Contacto */}
@@ -779,7 +927,7 @@ const ClienteForm = ({
                   icono={<svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                 >
                   <FilaEditable etiqueta="Dirección" inputProps={{ name: "domicilio", required: true }} value={form.domicilio} onChange={handleChange} />
-                  <FilaEditable etiqueta="Zona *" inputProps={{ name: "zona", maxLength: 10, required: true }} value={form.zona} onChange={handleChange} />
+                  <FilaEditable etiqueta="Zona" inputProps={{ name: "zona", maxLength: 10 }} value={form.zona} onChange={handleChange} />
                   <FilaEditable etiqueta="Localidad" onAdd={() => openAddModal('localidad')}>
                     <FilterableSelect compact={true} label={null} name="localidad" options={opcionesLocalidades} value={form.localidad} onChange={handleChange} placeholder="Buscar localidad..." />
                   </FilaEditable>

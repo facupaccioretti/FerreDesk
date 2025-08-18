@@ -37,7 +37,6 @@ export default function ClienteSelectorModal({
 
   // Definición de columnas para la tabla
   const columnas = [
-    { id: "codigo", titulo: "Código", ancho: "100px", align: "left" },
     { id: "razon", titulo: "Razón Social / Nombre", align: "left" },
     { id: "fantasia", titulo: "Nombre Comercial", align: "left" },
     { id: "cuit", titulo: "CUIT / DNI", align: "left" },
@@ -121,9 +120,7 @@ export default function ClienteSelectorModal({
         }}
         onClick={() => setFilaSeleccionada(cli)}
       >
-        <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 bg-white text-left font-mono">
-          {cli.codigo}
-        </td>
+        
         <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 bg-white text-left">
           {cli.razon || cli.nombre}
         </td>

@@ -59,7 +59,6 @@ class ClienteBusquedaSerializer(serializers.ModelSerializer):
         model = Cliente
         fields = [
             'id',
-            'codigo', 
             'razon',
             'fantasia',
             'cuit',

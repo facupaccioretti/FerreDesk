@@ -108,7 +108,6 @@ class CategoriaCliente(models.Model):
 
 class Cliente(models.Model):
     id = models.AutoField(primary_key=True, db_column='CLI_ID')
-    codigo = models.IntegerField(unique=True, db_column='CLI_CODIGO')
     razon = models.CharField(max_length=50, unique=True, db_column='CLI_RAZON')
     fantasia = models.CharField(max_length=50, blank=True, null=True, db_column='CLI_FANTASIA')
     domicilio = models.CharField(max_length=40, db_column='CLI_DOMI')
@@ -129,7 +128,7 @@ class Cliente(models.Model):
     descu2 = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True, db_column='CLI_DESCU2')
     descu3 = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True, db_column='CLI_DESCU3')
     cpostal = models.CharField(max_length=7, blank=True, null=True, db_column='CLI_CPOSTAL')
-    zona = models.CharField(max_length=10, db_column='CLI_ZONA')
+    zona = models.CharField(max_length=10, db_column='CLI_ZONA', blank=True, null=True)
     cancela = models.CharField(max_length=1, blank=True, null=True, db_column='CLI_CANCELA')
     barrio = models.ForeignKey(Barrio, on_delete=models.PROTECT, db_column='CLI_IDBAR', blank=True, null=True)
     localidad = models.ForeignKey(Localidad, on_delete=models.PROTECT, db_column='CLI_IDLOC', blank=True, null=True)

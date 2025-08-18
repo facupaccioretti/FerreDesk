@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 
 const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, setFormError, updateStockProve, fetchStockProve }) => {
   const isEdicion = !!stock?.id
@@ -13,12 +13,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   // Nuevo estado para manejar proveedores agregados en modo nuevo
   const [proveedoresAgregados, setProveedoresAgregados] = useState(modo === "nuevo" ? [] : [])
 
-  const [newStockProve, setNewStockProve] = useState({
-    stock: stock?.id || "",
-    proveedor: "",
-    cantidad: "",
-    costo: "",
-  })
+  // Eliminado formulario de agregar proveedor: no se requiere estado temporal para newStockProve
 
   // Array de códigos pendientes solo para edición
   const [codigosPendientesEdicion, setCodigosPendientesEdicion] = useState([])
@@ -35,114 +30,13 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   const [editandoCostoId, setEditandoCostoId] = useState(null)
   const [nuevoCosto, setNuevoCosto] = useState("")
 
-  // Actualizar newStockProve cuando cambie el stock
-  useEffect(() => {
-    setNewStockProve((prev) => ({ ...prev, stock: stock?.id || "" }))
-  }, [stock?.id])
+  // Sincronización de estados ya no requiere actualizar newStockProve
 
-  // Handler para cambios en el formulario de nuevo proveedor
-  const handleNewStockProveChange = (e) => {
-    const { name, value } = e.target
-    console.log("[handleNewStockProveChange] Cambio:", name, value)
-    setNewStockProve((prev) => ({
-      ...prev,
-      [name]: name === "proveedor" ? String(value) : value,
-    }))
-  }
+  // Eliminada lógica de cambios del formulario de proveedor
 
-  // Handler para agregar un nuevo proveedor en modo edición
-  const handleAgregarProveedorEdicion = () => {
-    if (!newStockProve.proveedor) {
-      alert("Por favor seleccione un proveedor")
-      return
-    }
-    
-    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
-    if (!proveedorExiste) {
-      alert("Debe seleccionar un proveedor válido.")
-      return
-    }
+  // Eliminado handler de agregar proveedor en edición
 
-    const proveedorId = Number.parseInt(newStockProve.proveedor)
-    
-    // Verificar si el proveedor ya existe en stockProve o en codigosPendientesEdicion
-    const yaExisteEnStock = stockProveForThisStock.some((sp) => 
-      String(sp.proveedor?.id || sp.proveedor) === String(proveedorId)
-    )
-    const yaExisteEnPendientes = codigosPendientesEdicion.some((c) => 
-      String(c.proveedor_id) === String(proveedorId)
-    )
-    
-    if (yaExisteEnStock || yaExisteEnPendientes) {
-      alert("Este proveedor ya fue agregado.")
-      return
-    }
-
-    // Agregar el proveedor a codigosPendientesEdicion sin código asociado
-    setCodigosPendientesEdicion((prev) => [
-      ...prev,
-      {
-        proveedor_id: proveedorId,
-        cantidad: Number(newStockProve.cantidad) || 0,
-        costo: Number(newStockProve.costo) || 0,
-        codigo_producto_proveedor: "", // Sin código asociado
-      }
-    ])
-
-    // Agregar también a form.stock_proveedores
-    updateForm({
-      stock_proveedores: [
-        ...(form.stock_proveedores || []),
-        {
-          proveedor_id: proveedorId,
-          cantidad: Number(newStockProve.cantidad) || 0,
-          costo: Number(newStockProve.costo) || 0,
-          codigo_producto_proveedor: "",
-        }
-      ]
-    })
-
-    // Limpiar el formulario
-    setNewStockProve({ stock: stock?.id || "", proveedor: "", cantidad: "", costo: "" })
-  }
-
-  // Handler para agregar un nuevo proveedor en modo nuevo
-  const handleAgregarProveedor = () => {
-    if (!newStockProve.proveedor) {
-      alert("Por favor seleccione un proveedor")
-      return
-    }
-    
-    const proveedorExiste = proveedores.some((p) => String(p.id) === String(newStockProve.proveedor))
-    if (!proveedorExiste) {
-      alert("Debe seleccionar un proveedor válido.")
-      return
-    }
-
-    const proveedorId = Number.parseInt(newStockProve.proveedor)
-    
-    // Verificar si el proveedor ya fue agregado
-    const yaAgregado = proveedoresAgregados.some((p) => p.proveedor === proveedorId)
-    if (yaAgregado) {
-      alert("Este proveedor ya fue agregado.")
-      return
-    }
-
-    // Agregar el proveedor a la lista de proveedores agregados
-    setProveedoresAgregados((prev) => [
-      ...prev,
-      {
-        proveedor: proveedorId,
-        cantidad: 0, // Cantidad inicial en 0
-        costo: 0, // Costo inicial en 0
-        codigo_producto_proveedor: "",
-        pendiente: true, // Marcar como pendiente para mostrar con fondo amarillo
-      }
-    ])
-
-    // Limpiar el formulario
-    setNewStockProve({ stock: "", proveedor: "", cantidad: "", costo: "" })
-  }
+  // Eliminado handler de agregar proveedor en modo nuevo
 
   // Handler para eliminar un proveedor agregado en modo edición
   const handleEliminarProveedorEdicion = (proveedorId) => {
@@ -563,8 +457,6 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     setProveedoresAgregados,
     codigosPendientesEdicion,
     setCodigosPendientesEdicion,
-    newStockProve,
-    setNewStockProve,
     
     // Estados de edición
     editandoCantidadProveedorId,
@@ -581,9 +473,6 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     setNuevoCosto,
     
     // Handlers
-    handleNewStockProveChange,
-    handleAgregarProveedorEdicion,
-    handleAgregarProveedor,
     handleEliminarProveedorEdicion,
     handleEliminarProveedor,
     handleEditarCantidadProveedor,
