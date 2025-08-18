@@ -93,7 +93,7 @@ const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
               className="mr-2"
             />
             <label htmlFor="convencional" className="text-sm text-gray-700">
-              <strong>Convencional:</strong> Solo documentos fiscales (Factura A/B/C, Nota de Crédito A/B/C, Nota de Débito A/B/C)
+              <strong>Convencional:</strong> Factura A/B/C, Nota de Crédito A/B/C
             </label>
           </div>
           
