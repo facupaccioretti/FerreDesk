@@ -423,7 +423,6 @@ const ConVentaForm = ({
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
         ven_sucursal: formulario.sucursalId || 1,
         ven_fecha: formulario.fecha,
-        ven_punto: formulario.puntoVentaId || 1,
         ven_impneto: formulario.ven_impneto || 0,
         ven_descu1: formulario.descu1 || 0,
         ven_descu2: formulario.descu2 || 0,
@@ -498,9 +497,9 @@ const ConVentaForm = ({
       ];
     }
     
-    // Si es conversión de presupuesto, permitir factura interna y factura (igual que VentaForm)
+    // Si es conversión de presupuesto, permitir cotización (factura interna) y factura (igual que VentaForm)
     return [
-      { value: 'factura_interna', label: 'Factura Interna', tipo: 'factura_interna', letra: 'I' },
+      { value: 'factura_interna', label: 'Cotización', tipo: 'factura_interna', letra: 'I' },
       { value: 'factura', label: 'Factura', tipo: 'factura' }
     ];
   }, [esConversionFacturaI]);
@@ -540,7 +539,7 @@ const ConVentaForm = ({
   let letraComprobanteMostrar = "V";
   let codigoAfipMostrar = "";
   if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
-    letraComprobanteMostrar = fiscal.letra || "A";
+    letraComprobanteMostrar = fiscal.letra || "";
     codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
   } else if (comprobantes.length > 0 && comprobanteId) {
     const compSeleccionado = comprobantes.find((c) => c.id === comprobanteId);
@@ -564,7 +563,7 @@ const ConVentaForm = ({
     }
 
     // Esperar a que la lógica fiscal resuelva el comprobante (como en VentaForm)
-    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null;
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? fiscal.letra : null;
     if (letraFiscal !== 'A') {
       setMostrarBannerCuit(false);
       limpiarEstadosARCAStatus();
@@ -693,7 +692,7 @@ const ConVentaForm = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
                   </svg>
                 </div>
-{esConversionFacturaI ? 'Conversión de Factura Interna a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
+{esConversionFacturaI ? 'Conversión de Cotización a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
@@ -743,7 +742,7 @@ const ConVentaForm = ({
                   {/* Documento */}
                   <div>
                     <SelectorDocumento
-                      tipoComprobante={fiscal.letra || 'A'}
+                      tipoComprobante={fiscal.letra}
                       esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}

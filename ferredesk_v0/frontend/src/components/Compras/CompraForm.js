@@ -5,6 +5,9 @@ import ItemsGridCompras from "./ItemsGridCompras"
 import BuscadorProductoCompras from "./BuscadorProductoCompras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
+// Letras permitidas para comprobantes de compras
+const LETRAS_COMPROBANTE_PERMITIDAS = ["A", "C", "X"]
+
 const CompraForm = ({
   onSave,
   onCancel,
@@ -42,7 +45,7 @@ const CompraForm = ({
   })
 
   // Estado para N° de factura inteligente
-  const [factura, setFactura] = useState({ letra: "A", pv: "", numero: "" })
+  const [factura, setFactura] = useState({ letra: LETRAS_COMPROBANTE_PERMITIDAS[0], pv: "", numero: "" })
   const pvRef = useRef(null)
   const numeroRef = useRef(null)
 
@@ -97,7 +100,11 @@ const CompraForm = ({
       if (initialData.comp_numero_factura) {
         const m = initialData.comp_numero_factura.match(/^([A-Z])-([0-9]{1,4})-([0-9]{1,8})$/i)
         if (m) {
-          const nextFactura = { letra: m[1].toUpperCase(), pv: m[2], numero: m[3] }
+          const letraParseada = m[1].toUpperCase()
+          const letraValida = LETRAS_COMPROBANTE_PERMITIDAS.includes(letraParseada)
+            ? letraParseada
+            : LETRAS_COMPROBANTE_PERMITIDAS[0]
+          const nextFactura = { letra: letraValida, pv: m[2], numero: m[3] }
           setFactura(nextFactura)
           // Asegurar padded en form
           updateNumeroFacturaInForm(nextFactura)
@@ -145,8 +152,11 @@ const CompraForm = ({
 
   // Handlers para los subcampos de factura
   const handleFacturaLetra = (letra) => {
-    const clean = (letra || "").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 1)
-    const next = { ...factura, letra: clean || "A" }
+    const upper = String(letra || "").toUpperCase()
+    const letraValida = LETRAS_COMPROBANTE_PERMITIDAS.includes(upper)
+      ? upper
+      : LETRAS_COMPROBANTE_PERMITIDAS[0]
+    const next = { ...factura, letra: letraValida }
     setFactura(next)
     updateNumeroFacturaInForm(next)
   }
@@ -265,7 +275,7 @@ const CompraForm = ({
     if (!formData.comp_numero_factura) {
       newErrors.comp_numero_factura = "El número de factura es obligatorio"
     } else {
-      const pattern = /^[A-Z]-\d{4}-\d{8}$/
+      const pattern = /^[ACX]-\d{4}-\d{8}$/
       if (!pattern.test(formData.comp_numero_factura)) {
         newErrors.comp_numero_factura = "Formato inválido. Use: A-0001-00000009"
       }
@@ -425,42 +435,44 @@ const CompraForm = ({
                        <span className="text-[10px] text-slate-500">{buildNumeroFactura(factura.letra, factura.pv, factura.numero)}</span>
                      </div>
                      <div className="flex items-center gap-1">
-                       <input
-                         type="text"
-                         value={factura.letra}
-                         onChange={(e) => handleFacturaLetra(e.target.value)}
-                         disabled={readOnly}
-                         placeholder="A"
-                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
-                         style={{ width: 48 }}
-                         title="Letra de comprobante (A-Z)"
-                       />
-                       <input
-                         type="text"
-                         inputMode="numeric"
-                         value={factura.pv}
-                         onChange={(e) => handleFacturaPv(e.target.value)}
-                         onBlur={padPvOnBlur}
-                         disabled={readOnly}
-                         placeholder="PV"
-                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-16 text-center"
-                         ref={pvRef}
-                         title="Punto de venta (4 dígitos)"
-                       />
-                       <span className="text-slate-500 text-xs">-</span>
-                       <input
-                         type="text"
-                         inputMode="numeric"
-                         value={factura.numero}
-                         onChange={(e) => handleFacturaNumero(e.target.value)}
-                         onBlur={padNumeroOnBlur}
-                         disabled={readOnly}
-                         placeholder="Número"
-                         className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-24 text-center"
-                         ref={numeroRef}
-                         title="Número de comprobante (8 dígitos)"
-                       />
-                     </div>
+                        <select
+                          value={factura.letra}
+                          onChange={(e) => handleFacturaLetra(e.target.value)}
+                          disabled={readOnly}
+                          className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
+                          style={{ width: 64 }}
+                          title="Letra de comprobante"
+                        >
+                          {LETRAS_COMPROBANTE_PERMITIDAS.map((letra) => (
+                            <option key={letra} value={letra}>{letra}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={factura.pv}
+                          onChange={(e) => handleFacturaPv(e.target.value)}
+                          onBlur={padPvOnBlur}
+                          disabled={readOnly}
+                          placeholder="PV"
+                          className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-16 text-center"
+                          ref={pvRef}
+                          title="Punto de venta (4 dígitos)"
+                        />
+                        <span className="text-slate-500 text-xs">-</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={factura.numero}
+                          onChange={(e) => handleFacturaNumero(e.target.value)}
+                          onBlur={padNumeroOnBlur}
+                          disabled={readOnly}
+                          placeholder="Número"
+                          className="border border-slate-300 rounded-none text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-24 text-center"
+                          ref={numeroRef}
+                          title="Número de comprobante (8 dígitos)"
+                        />
+                      </div>
                      {errors.comp_numero_factura && (
                        <p className="mt-1 text-xs text-red-600">{errors.comp_numero_factura}</p>
                      )}

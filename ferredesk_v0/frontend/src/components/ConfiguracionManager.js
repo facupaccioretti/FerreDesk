@@ -3,6 +3,17 @@
 import { useEffect, useState, useCallback } from "react"
 import Navbar from "./Navbar"
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme"
+import Tabla from "./Tabla"
+import { BotonEditar } from "./Botones"
+
+// Hooks de catálogos de Clientes (reutilizamos exactamente los mismos)
+import { useBarriosAPI } from "../utils/useBarriosAPI"
+import { useLocalidadesAPI } from "../utils/useLocalidadesAPI"
+import { useProvinciasAPI } from "../utils/useProvinciasAPI"
+import { useTransportesAPI } from "../utils/useTransportesAPI"
+import { usePlazosAPI } from "../utils/usePlazosAPI"
+import { useCategoriasAPI } from "../utils/useCategoriasAPI"
+import MaestroModal from "./Clientes/MaestrosModales"
 
 // Función para obtener el valor de una cookie por nombre
 function getCookie(name) {
@@ -404,6 +415,119 @@ const ConfiguracionManager = () => {
   const [activeTab, setActiveTab] = useState("negocio")
   const [feedback, setFeedback] = useState("")
 
+  // --------- Estado y lógica de Maestros (Clientes) movido desde ClientesManager ---------
+  const { barrios, setBarrios, fetchBarrios } = useBarriosAPI()
+  const { localidades, setLocalidades, fetchLocalidades } = useLocalidadesAPI()
+  const { provincias, setProvincias, fetchProvincias } = useProvinciasAPI()
+  const { transportes, setTransportes, fetchTransportes } = useTransportesAPI()
+  const { plazos, setPlazos, fetchPlazos } = usePlazosAPI()
+  const { categorias, setCategorias, fetchCategorias } = useCategoriasAPI()
+
+  const [catalogoSeleccionado, setCatalogoSeleccionado] = useState("categorias")
+  const [searchMaestros, setSearchMaestros] = useState("")
+  const [ocultarInactivos, setOcultarInactivos] = useState(true)
+  const [modalMaestro, setModalMaestro] = useState({ open: false, tipo: null, modo: null, data: null })
+  const [modalForm, setModalForm] = useState({})
+  const [modalLoading, setModalLoading] = useState(false)
+  const [modalError, setModalError] = useState("")
+
+  const obtenerColeccionActual = () => {
+    switch (catalogoSeleccionado) {
+      case "barrios":
+        return { datos: barrios, fetch: fetchBarrios, set: setBarrios, url: "/api/clientes/barrios/", tipo: "barrio" }
+      case "localidades":
+        return { datos: localidades, fetch: fetchLocalidades, set: setLocalidades, url: "/api/clientes/localidades/", tipo: "localidad" }
+      case "provincias":
+        return { datos: provincias, fetch: fetchProvincias, set: setProvincias, url: "/api/clientes/provincias/", tipo: "provincia" }
+      case "transportes":
+        return { datos: transportes, fetch: fetchTransportes, set: setTransportes, url: "/api/clientes/transportes/", tipo: "transporte" }
+      case "plazos":
+        return { datos: plazos, fetch: fetchPlazos, set: setPlazos, url: "/api/clientes/plazos/", tipo: "plazo" }
+      case "categorias":
+      default:
+        return { datos: categorias, fetch: fetchCategorias, set: setCategorias, url: "/api/clientes/categorias/", tipo: "categoria" }
+    }
+  }
+
+  const abrirModalNuevo = () => {
+    const { tipo } = obtenerColeccionActual()
+    setModalForm({})
+    setModalError("")
+    setModalMaestro({ open: true, tipo, modo: "nuevo", data: null })
+  }
+
+  const abrirModalEditar = (fila) => {
+    const { tipo } = obtenerColeccionActual()
+    setModalForm({ ...fila })
+    setModalError("")
+    setModalMaestro({ open: true, tipo, modo: "editar", data: fila })
+  }
+
+  const cerrarModal = () => {
+    setModalMaestro({ open: false, tipo: null, modo: null, data: null })
+    setModalForm({})
+    setModalError("")
+  }
+
+  const guardarModal = async (values) => {
+    const { url, fetch: refetchColeccion, tipo } = obtenerColeccionActual()
+    setModalLoading(true)
+    setModalError("")
+    try {
+      const esEdicion = modalMaestro.modo === "editar"
+      const endpoint = esEdicion ? `${url}${modalMaestro?.data?.id || ""}/` : url
+      let body = {}
+      switch (tipo) {
+        case "barrio":
+          body = { nombre: (values?.nombre ?? modalForm.nombre), activo: (values?.activo ?? modalForm.activo) || "S" }
+          break
+        case "localidad":
+          body = { nombre: (values?.nombre ?? modalForm.nombre), activo: (values?.activo ?? modalForm.activo) || "S" }
+          break
+        case "provincia":
+          body = { nombre: (values?.nombre ?? modalForm.nombre), activo: (values?.activo ?? modalForm.activo) || "S" }
+          break
+        case "transporte":
+          body = { nombre: (values?.nombre ?? modalForm.nombre), localidad: (values?.localidad ?? modalForm.localidad), activo: (values?.activo ?? modalForm.activo) || "S" }
+          break
+        case "plazo": {
+          const fuente = values || modalForm
+          body = { nombre: fuente.nombre, activo: fuente.activo || "S" }
+          for (let i = 1; i <= 12; i += 1) {
+            const keyPlazo = `pla_pla${i}`
+            const keyPorcentaje = `pla_por${i}`
+            if (Object.prototype.hasOwnProperty.call(fuente, keyPlazo)) {
+              body[keyPlazo] = fuente[keyPlazo]
+            }
+            if (Object.prototype.hasOwnProperty.call(fuente, keyPorcentaje)) {
+              body[keyPorcentaje] = fuente[keyPorcentaje]
+            }
+          }
+          break
+        }
+        case "categoria":
+          body = { nombre: (values?.nombre ?? modalForm.nombre), activo: (values?.activo ?? modalForm.activo) || "S" }
+          break
+        default:
+          break
+      }
+
+      const res = await window.fetch(endpoint, {
+        method: esEdicion ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+        credentials: "include",
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error("Error al guardar")
+      await refetchColeccion()
+      cerrarModal()
+    } catch (e) {
+      setModalError(e.message || "Error al guardar")
+    } finally {
+      setModalLoading(false)
+    }
+  }
+
   useEffect(() => {
     document.title = "Configuración FerreDesk"
   }, [])
@@ -523,6 +647,10 @@ const ConfiguracionManager = () => {
     {
       key: "arca",
       label: "Configuración ARCA"
+    },
+    {
+      key: "maestros_clientes",
+      label: "Maestros"
     }
   ]
 
@@ -544,6 +672,69 @@ const ConfiguracionManager = () => {
          return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
        case "arca":
          return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
+       case "maestros_clientes": {
+         const { datos } = obtenerColeccionActual()
+         const datosVisibles = ocultarInactivos ? datos.filter((d) => d.activo === "S") : datos
+
+         const columnas = [
+           { id: "nombre", titulo: "Nombre" },
+           {
+             id: "estado",
+             titulo: "Estado",
+             render: (fila) => (
+               <span className={`px-2 py-0.5 rounded-full text-[11px] ${fila.activo === "S" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                 {fila.activo === "S" ? "Activo" : "Inactivo"}
+               </span>
+             ),
+             align: "center",
+             ancho: 120,
+           },
+           {
+             id: "acciones",
+             titulo: "Acciones",
+             render: (fila) => (
+               <div className="flex items-center gap-2 justify-end">
+                 <BotonEditar onClick={() => abrirModalEditar(fila)} />
+               </div>
+             ),
+             align: "right",
+             ancho: 100,
+           },
+         ]
+
+         return (
+           <div className="flex flex-col gap-4">
+             <div className="flex flex-wrap items-center gap-2">
+               <div className="flex flex-wrap gap-2">
+                 {["categorias","provincias","localidades","barrios","transportes","plazos"].map((cat) => (
+                   <button
+                     key={cat}
+                     onClick={() => setCatalogoSeleccionado(cat)}
+                     className={`${catalogoSeleccionado === cat ? theme.tabActiva : `bg-gradient-to-r ${theme.primario} text-white`} px-3 py-1 rounded-lg`}
+                   >
+                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                   </button>
+                 ))}
+               </div>
+
+               <div className="ml-auto flex items-center gap-2">
+                 <label className="flex items-center gap-1 text-sm text-slate-700">
+                   <input type="checkbox" checked={ocultarInactivos} onChange={(e) => setOcultarInactivos(e.target.checked)} />
+                   Ocultar inactivos
+                 </label>
+                 <button onClick={abrirModalNuevo} className={theme.botonPrimario}><span className="text-lg">+</span> Nuevo</button>
+               </div>
+             </div>
+
+             <Tabla
+               columnas={columnas}
+               datos={datosVisibles}
+               valorBusqueda={searchMaestros}
+               onCambioBusqueda={setSearchMaestros}
+             />
+           </div>
+         )
+       }
        default:
          return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
      }
@@ -591,31 +782,48 @@ const ConfiguracionManager = () => {
               {renderActiveTab()}
             </div>
 
-            {/* Botones de acción */}
-            <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 px-6 pb-6">
-              <button
-                onClick={handleSave}
-                disabled={saving || !user?.is_staff}
-                className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Guardando...
-                  </>
-                                 ) : (
-                   <>
-                     Guardar Configuración
-                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-2">
-                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                     </svg>
-                   </>
-                 )}
-              </button>
-            </div>
+            {/* Botones de acción (ocultos en pestaña Maestros para mantener la UX) */}
+            {activeTab !== "maestros_clientes" && (
+              <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 px-6 pb-6">
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !user?.is_staff}
+                  className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
+                >
+                  {saving ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Guardando...
+                    </>
+                                   ) : (
+                     <>
+                       Guardar Configuración
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-2">
+                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                       </svg>
+                     </>
+                   )}
+                </button>
+              </div>
+            )}
+
+            {/* Modal de Maestros */}
+            {modalMaestro.open && (
+              <MaestroModal
+                open={modalMaestro.open}
+                tipo={modalMaestro.tipo}
+                modo={modalMaestro.modo}
+                initialValues={modalForm}
+                localidades={localidades}
+                loading={modalLoading}
+                error={modalError}
+                onCancel={cerrarModal}
+                onSubmit={(values) => guardarModal(values)}
+              />
+            )}
 
             {/* Feedback */}
             {feedback && (

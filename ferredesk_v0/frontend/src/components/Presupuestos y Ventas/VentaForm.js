@@ -34,7 +34,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   puntoVentaId: puntosVenta[0]?.id || "",
   fecha: new Date().toISOString().split("T")[0],
   estado: "Abierto",
-  tipo: "Factura Interna",
+  tipo: "Cotización",
   items: [],
   bonificacionGeneral: 0,
   total: 0,
@@ -285,7 +285,7 @@ const VentaForm = ({
   let letraComprobanteMostrar = "V"
   let codigoAfipMostrar = ""
   if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
-    letraComprobanteMostrar = fiscal.letra || "A"
+    letraComprobanteMostrar = fiscal.letra || ""
     codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip
   } else if (comprobantesVenta.length > 0 && comprobanteId) {
     const compSeleccionado = comprobantesVenta.find((c) => c.id === comprobanteId)
@@ -407,7 +407,7 @@ const VentaForm = ({
     }
 
     // Solo consultar si la letra fiscal es A
-    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? fiscal.letra : null
     if (letraFiscal !== 'A') {
       setMostrarBannerCuit(false)
       limpiarEstadosARCAStatus()
@@ -510,7 +510,6 @@ const VentaForm = ({
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante, // Número de comprobante
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1, // Sucursal
         ven_fecha: formulario.fecha, // Fecha
-        ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1, // Punto de venta
         ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0, // Importe neto
         ven_descu1: Number.parseFloat(formulario.descu1) || 0, // Descuento 1
         ven_descu2: Number.parseFloat(formulario.descu2) || 0, // Descuento 2
@@ -587,7 +586,7 @@ const VentaForm = ({
 
   // Opciones fijas para el dropdown
   const opcionesComprobante = [
-    { value: "factura_interna", label: "Factura Interna", tipo: "factura_interna", letra: "I" },
+    { value: "factura_interna", label: "Cotización", tipo: "factura_interna", letra: "I" },
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
 
@@ -692,7 +691,7 @@ const VentaForm = ({
                     />
                   </svg>
                 </div>
-                {initialData ? (isReadOnly ? "Ver Factura" : "Editar Factura") : "Nueva Factura"}
+                {initialData ? (isReadOnly ? "Ver Factura" : "Editar Factura") : "Nueva Venta"}
               </h3>
 
               {isReadOnly && (
@@ -760,7 +759,7 @@ const VentaForm = ({
                   {/* Documento */}
                   <div>
                     <SelectorDocumento
-                      tipoComprobante={fiscal.letra || 'A'}
+                      tipoComprobante={fiscal.letra}
                       esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}

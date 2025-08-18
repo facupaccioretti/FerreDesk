@@ -415,10 +415,7 @@ export default function ProductosTable({
                                 Información Básica
                               </h5>
                               <div className="space-y-1 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-slate-500">Código Compra:</span>
-                                  <span className="font-medium text-slate-700">{p.codcom || "N/A"}</span>
-                                </div>
+                                
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Unidad:</span>
                                   <span className="font-medium text-slate-700">{p.unidad || "N/A"}</span>

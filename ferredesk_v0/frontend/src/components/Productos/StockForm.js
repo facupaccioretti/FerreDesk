@@ -17,6 +17,19 @@ import {
   useValidaciones 
 } from "./herramientastockform"
 
+// Constantes de validación de campos (evitar valores mágicos)
+// Longitudes máximas según el modelo en backend (productos/models.py)
+const LONGITUD_MAX_CODIGO_VENTA = 15 // Stock.codvta CharField(max_length=15)
+const LONGITUD_MAX_DENOMINACION = 50 // Stock.deno CharField(max_length=50)
+const LONGITUD_MAX_UNIDAD = 10 // Stock.unidad CharField(max_length=10)
+const LONGITUD_MAX_CODIGO_PROVEEDOR = 100 // StockProve.codigo_producto_proveedor CharField(max_length=100)
+
+// Límites para márgen y cantidad mínima
+const MARGEN_MINIMO = 0
+const MARGEN_MAXIMO = 999.99 // DecimalField(max_digits=5, decimal_places=2)
+const MARGEN_STEP = 0.01
+const CANTIDAD_MINIMA_MINIMO = 0
+
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
   let cookieValue = null
@@ -39,6 +52,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   
   // Referencias
   const refContenedorDenominacion = useRef(null)
+  const referenciaCampoBusqueda = useRef(null)
   
   // APIs existentes
   const stockProveAPI = useStockProveAPI()
@@ -120,6 +134,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     productosConDenominacion,
     loadingCodigos,
     messageAsociar,
+    setErrorAsociar,
     errorAsociar,
     costoAsociar,
     denominacionAsociar,
@@ -184,7 +199,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
       setForm({
         codvta: stock.codvta || "",
-        codcom: stock.codcom || "",
         deno: stock.deno || "",
         unidad: stock.unidad || "",
         cantmin: stock.cantmin || 0,
@@ -367,24 +381,13 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         name="codvta"
                         value={form.codvta}
                         onChange={handleChange}
+                        maxLength={LONGITUD_MAX_CODIGO_VENTA}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
                         required
                       />
                     </div>
                   </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-[12px] text-slate-700">Código Compra *</span>
-                    <div className="min-w-[180px] text-right">
-                      <input
-                        type="text"
-                        name="codcom"
-                        value={form.codcom}
-                        onChange={handleChange}
-                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                        required
-                      />
-                    </div>
-                  </div>
+                  
                   <div className="flex items-center justify-between py-2">
                     <span className="text-[12px] text-slate-700">Denominación *</span>
                     <div className="min-w-[180px] text-right">
@@ -395,6 +398,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                           value={form.deno}
                           onChange={handleChange}
                           onBlur={modo === "nuevo" ? (e) => handleDenominacionBlur(e.target.value) : undefined}
+                          maxLength={LONGITUD_MAX_DENOMINACION}
                           className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500 pr-8"
                           required
                         />
@@ -432,6 +436,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         name="unidad"
                         value={form.unidad}
                         onChange={handleChange}
+                        maxLength={LONGITUD_MAX_UNIDAD}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       />
                     </div>
@@ -484,13 +489,21 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-3">
                           {/* Mensajes */}
                           {errorAsociar && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs flex items-center gap-2">
-                              <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs flex items-start gap-2">
+                              <svg className="w-3 h-3 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              {errorAsociar}
-                    </div>
-                  )}
+                              <span className="flex-1">{errorAsociar}</span>
+                              <button
+                                type="button"
+                                onClick={() => setErrorAsociar(null)}
+                                className="text-red-500 hover:text-red-700"
+                                title="Cerrar"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
                   
                           {messageAsociar && (
                             <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-xs flex items-center gap-2">
@@ -528,7 +541,15 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                 name="modoBusqueda"
                                 value="codigo"
                                 checked={modoBusqueda === "codigo"}
-                                onChange={() => setModoBusqueda("codigo")}
+                                onChange={() => {
+                                  setModoBusqueda("codigo")
+                                  requestAnimationFrame(() => {
+                                    if (referenciaCampoBusqueda.current) {
+                                      referenciaCampoBusqueda.current.focus()
+                                      referenciaCampoBusqueda.current.select()
+                                    }
+                                  })
+                                }}
                                 className="accent-orange-600"
                               />
                               Por código
@@ -539,7 +560,15 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                 name="modoBusqueda"
                                 value="denominacion"
                                 checked={modoBusqueda === "denominacion"}
-                                onChange={() => setModoBusqueda("denominacion")}
+                                onChange={() => {
+                                  setModoBusqueda("denominacion")
+                                  requestAnimationFrame(() => {
+                                    if (referenciaCampoBusqueda.current) {
+                                      referenciaCampoBusqueda.current.focus()
+                                      referenciaCampoBusqueda.current.select()
+                                    }
+                                  })
+                                }}
                                 className="accent-orange-600"
                               />
                               Por denominación
@@ -553,6 +582,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                             </label>
                             <div className="relative">
                               <input
+                                ref={referenciaCampoBusqueda}
                                 type="text"
                                 value={codigoProveedor}
                                 onChange={(e) => {
@@ -562,6 +592,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                 onFocus={() => setShowSugeridos(codigoProveedor.length > 0 && productosConDenominacion.length > 0)}
                                 className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 pr-8"
                                 placeholder={modoBusqueda === "codigo" ? "Ingrese el código" : "Ingrese la denominación"}
+                                maxLength={modoBusqueda === "codigo" ? LONGITUD_MAX_CODIGO_PROVEEDOR : undefined}
                                 disabled={loadingCodigos || !selectedProveedor}
                               />
                               {productosConDenominacion.length > 0 && (
@@ -720,6 +751,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         name="cantmin"
                         value={form.cantmin}
                         onChange={handleChange}
+                        min={CANTIDAD_MINIMA_MINIMO}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       />
                     </div>
@@ -733,8 +765,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         value={form.margen ?? ""}
                         onChange={handleChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                        step="0.01"
-                        min="0"
+                        step={MARGEN_STEP}
+                        min={MARGEN_MINIMO}
+                        max={MARGEN_MAXIMO}
+                        required
                         placeholder="% ganancia"
                       />
                     </div>

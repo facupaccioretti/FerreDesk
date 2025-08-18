@@ -177,11 +177,11 @@ const ArcaEsperaOverlay = ({
 
                     {/* Observaciones si las hay */}
                     {(() => {
-                      console.log('🔍 [OVERLAY DEBUG] respuestaArca:', respuestaArca);
-                      console.log('🔍 [OVERLAY DEBUG] observaciones:', respuestaArca.observaciones);
-                      console.log('🔍 [OVERLAY DEBUG] ¿Tiene observaciones?', !!respuestaArca.observaciones);
-                      console.log('🔍 [OVERLAY DEBUG] ¿Es array?', Array.isArray(respuestaArca.observaciones));
-                      console.log('🔍 [OVERLAY DEBUG] ¿Tiene length?', respuestaArca.observaciones?.length);
+                      console.log('[OVERLAY DEBUG] respuestaArca:', respuestaArca);
+                      console.log('[OVERLAY DEBUG] observaciones:', respuestaArca.observaciones);
+                      console.log('[OVERLAY DEBUG] ¿Tiene observaciones?', !!respuestaArca.observaciones);
+                      console.log('[OVERLAY DEBUG] ¿Es array?', Array.isArray(respuestaArca.observaciones));
+                      console.log('[OVERLAY DEBUG] ¿Tiene length?', respuestaArca.observaciones?.length);
                       
                                      return Array.isArray(respuestaArca.observaciones) && respuestaArca.observaciones.length > 0 && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 w-full mb-6">

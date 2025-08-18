@@ -95,11 +95,11 @@ def _generar_pdf_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
     # Determinar título según tipo de libro
     if tipo_libro == 'convencional':
         titulo = f"LIBRO IVA VENTAS (CONVENCIONAL) - {periodo['mes']:02d}/{periodo['anio']}"
-    elif tipo_libro == 'informal':
+    elif tipo_libro == 'administrativo':
         if incluir_presupuestos:
-            titulo = f"LIBRO IVA VENTAS (INFORMAL CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
+            titulo = f"LIBRO IVA VENTAS (ADMINISTRATIVO CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
         else:
-            titulo = f"LIBRO IVA VENTAS (INFORMAL) - {periodo['mes']:02d}/{periodo['anio']}"
+            titulo = f"LIBRO IVA VENTAS (ADMINISTRATIVO) - {periodo['mes']:02d}/{periodo['anio']}"
     else:
         titulo = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
     
@@ -353,11 +353,11 @@ def _generar_excel_libro_iva(datos_libro: Dict[str, Any]) -> BinaryIO:
     # Determinar título según tipo de libro
     if tipo_libro == 'convencional':
         titulo_excel = f"LIBRO IVA VENTAS (CONVENCIONAL) - {periodo['mes']:02d}/{periodo['anio']}"
-    elif tipo_libro == 'informal':
+    elif tipo_libro == 'administrativo':
         if incluir_presupuestos:
-            titulo_excel = f"LIBRO IVA VENTAS (INFORMAL CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
+            titulo_excel = f"LIBRO IVA VENTAS (ADMINISTRATIVO CON PRESUPUESTOS) - {periodo['mes']:02d}/{periodo['anio']}"
         else:
-            titulo_excel = f"LIBRO IVA VENTAS (INFORMAL) - {periodo['mes']:02d}/{periodo['anio']}"
+            titulo_excel = f"LIBRO IVA VENTAS (ADMINISTRATIVO) - {periodo['mes']:02d}/{periodo['anio']}"
     else:
         titulo_excel = f"LIBRO IVA VENTAS - {periodo['mes']:02d}/{periodo['anio']}"
     
@@ -650,11 +650,11 @@ def obtener_nombre_archivo(formato: str, mes: int, anio: int, tipo_libro: str = 
     # Determinar sufijo según tipo de libro
     if tipo_libro == 'convencional':
         sufijo = 'Convencional'
-    elif tipo_libro == 'informal':
+    elif tipo_libro == 'administrativo':
         if incluir_presupuestos:
-            sufijo = 'InformalConPresupuestos'
+            sufijo = 'AdministrativoConPresupuestos'
         else:
-            sufijo = 'Informal'
+            sufijo = 'Administrativo'
     else:
         sufijo = ''
     

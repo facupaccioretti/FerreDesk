@@ -69,6 +69,11 @@ const useAsociacionCodigos = ({
     }
   }, [selectedProveedor])
 
+  // Al cambiar de proveedor, ocultar errores previos de asociación
+  useEffect(() => {
+    setErrorAsociar(null)
+  }, [selectedProveedor, setErrorAsociar])
+
   // Limpiar input al cambiar modo de búsqueda
   useEffect(() => {
     setCodigoProveedor("")
@@ -280,12 +285,31 @@ const useAsociacionCodigos = ({
     return puntuados.slice(0, 8)
   }, [productosConDenominacion, codigoProveedor, modoBusqueda])
 
+  // Validar si el código ingresado existe en la lista cargada del proveedor
+  const codigoExisteEnLista = useMemo(() => {
+    if (!selectedProveedor || !codigoProveedor) return false
+    const term = String(codigoProveedor).trim().toLowerCase()
+    return productosConDenominacion.some((p) => String(p.codigo || "").toLowerCase() === term)
+  }, [selectedProveedor, codigoProveedor, productosConDenominacion])
+
   // Función para manejar la asociación de código
   const handleAsociarCodigoIntegrado = async () => {
     setErrorAsociar(null)
     setMessageAsociar(null)
     if (!selectedProveedor || !codigoProveedor) {
       setErrorAsociar("Debe seleccionar proveedor y código.")
+      return
+    }
+
+    // Si el proveedor no tiene lista, bloquear
+    if ((productosConDenominacion || []).length === 0) {
+      setErrorAsociar("El proveedor seleccionado no tiene lista cargada o no se pudieron cargar sus códigos. No es posible asociar un código manualmente.")
+      return
+    }
+
+    // Debe seleccionar un código que exista en la lista
+    if (!codigoExisteEnLista) {
+      setErrorAsociar("No se encontró el código en la lista del proveedor. Selecciónelo desde la tabla de sugerencias.")
       return
     }
 
@@ -372,6 +396,7 @@ const useAsociacionCodigos = ({
     setShowSugeridos,
     modoBusqueda,
     setModoBusqueda,
+    codigoExisteEnLista,
     
     // Handlers
     handleAsociarCodigoPendiente,

@@ -76,7 +76,7 @@ const LibroIvaVentasManager = () => {
                 Libro IVA Ventas
               </h1>
               <p className="mt-2 text-gray-600">
-                Genera y exporta el Libro IVA Ventas para cumplimiento fiscal
+                
               </p>
             </div>
             {libroIva && (

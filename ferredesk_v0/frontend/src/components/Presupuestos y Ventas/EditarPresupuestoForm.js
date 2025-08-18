@@ -223,7 +223,6 @@ const EditarPresupuestoForm = ({
         ven_numero: Number.parseInt(formulario.numero, 10) || 1,
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,
-        ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1,
         ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
         ven_descu1: Number.parseFloat(formulario.descu1) || 0,
         ven_descu2: Number.parseFloat(formulario.descu2) || 0,

@@ -18,7 +18,6 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
       const sugs = productos.filter(
         p =>
           (p.codvta || '').toLowerCase().includes(lower) ||
-          (p.codcom || '').toLowerCase().includes(lower) ||
           (p.deno || p.nombre || '').toLowerCase().includes(lower)
       )
       setSugerencias(sugs)
@@ -95,7 +94,7 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className={`font-bold text-xs ${isSelected ? 'text-orange-800' : 'text-slate-800'}`}>
-                          {p.codvta || p.codcom}
+                          {p.codvta}
                         </span>
                       </div>
                       <p className={`text-xs truncate mt-0.5 ${isSelected ? 'text-orange-700' : 'text-slate-600'}`}>

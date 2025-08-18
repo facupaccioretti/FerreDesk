@@ -55,7 +55,7 @@ class StockViewSet(viewsets.ModelViewSet):
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = [
-        'codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti',
+        'codvta', 'deno', 'proveedor_habitual', 'acti',
         'idfam1', 'idfam2', 'idfam3',
     ]
 
@@ -240,14 +240,8 @@ class PrecioProductoProveedorAPIView(APIView):
             # Buscar precio manual (StockProve)
             stockprove = StockProve.objects.filter(
                 proveedor_id=proveedor_id,
-                stock__codcom__iexact=codigo_producto
+                stock__codvta__iexact=codigo_producto
             ).order_by('-fecha_actualizacion').first()
-            # Si no se encuentra por codcom, buscar por codvta
-            if not stockprove:
-                stockprove = StockProve.objects.filter(
-                    proveedor_id=proveedor_id,
-                    stock__codvta__iexact=codigo_producto
-                ).order_by('-fecha_actualizacion').first()
 
             # Buscar precio Excel
             precio_excel = PrecioProveedorExcel.objects.annotate(
@@ -430,13 +424,10 @@ def crear_producto_con_relaciones(request):
         if not producto_data:
             raise Exception('Faltan datos de producto.')
 
-        # Validar unicidad de codvta y codcom
+        # Validar unicidad de codvta
         codvta = producto_data.get('codvta')
-        codcom = producto_data.get('codcom')
         if Stock.objects.filter(codvta=codvta).exists():
             raise Exception('Ya existe un producto con ese código de venta (codvta).')
-        if Stock.objects.filter(codcom=codcom).exists():
-            raise Exception('Ya existe un producto con ese código de compra (codcom).')
 
         # PREVALIDAR todas las relaciones antes de crear el producto
         for rel in stock_proveedores_data:
@@ -494,13 +485,10 @@ def editar_producto_con_relaciones(request):
         if not producto_data or not producto_data.get('id'):
             raise Exception('Faltan datos de producto o ID.')
         producto_id = producto_data['id']
-        # Validar unicidad de codvta y codcom (excluyendo el propio producto)
+        # Validar unicidad de codvta (excluyendo el propio producto)
         codvta = producto_data.get('codvta')
-        codcom = producto_data.get('codcom')
         if Stock.objects.filter(codvta=codvta).exclude(id=producto_id).exists():
             raise Exception('Ya existe un producto con ese código de venta (codvta).')
-        if Stock.objects.filter(codcom=codcom).exclude(id=producto_id).exists():
-            raise Exception('Ya existe un producto con ese código de compra (codcom).')
         # PREVALIDAR todas las relaciones antes de editar el producto
         for rel in stock_proveedores_data:
             proveedor_id = rel.get('proveedor_id')
@@ -719,7 +707,10 @@ def servir_logo_empresa(request):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',
-                'Cache-Control': 'public, max-age=31536000'
+                # Desactivar caché para evitar logos viejos en PDFs
+                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         )
         return response
@@ -743,7 +734,7 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
         denominacion_normalizada = self.normalizar_denominacion(denominacion)
         
         # Obtener todas las denominaciones existentes
-        productos_existentes = Stock.objects.filter(acti='S').values('id', 'codvta', 'codcom', 'deno', 'unidad')
+        productos_existentes = Stock.objects.filter(acti='S').values('id', 'codvta', 'deno', 'unidad')
         
         productos_similares = []
         
@@ -758,7 +749,6 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
                 productos_similares.append({
                     'id': producto['id'],
                     'codigo_venta': producto['codvta'],
-                    'codigo_compra': producto['codcom'],
                     'denominacion': producto['deno'],
                     'unidad': producto['unidad'],
                     'similitud': similitud,

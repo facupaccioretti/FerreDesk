@@ -243,6 +243,19 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         data['comprobante_id'] = comprobante["codigo_afip"]
 
+        # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
+        # Para evitar desalineación con AFIP y colisiones de numeración, si el comprobante
+        # requiere emisión ARCA, forzar a usar el punto de venta configurado en Ferretería.
+        if debe_emitir_arca(tipo_comprobante):
+            pv_arca = getattr(ferreteria, 'punto_venta_arca', None)
+            if pv_arca:
+                data['ven_punto'] = pv_arca
+        # Si el frontend no envió punto de venta, usar el configurado en ferretería como valor por defecto
+        if not data.get('ven_punto'):
+            pv_defecto = getattr(ferreteria, 'punto_venta_arca', None)
+            if pv_defecto:
+                data['ven_punto'] = pv_defecto
+
         punto_venta = data.get('ven_punto')
         if not punto_venta:
             return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)

@@ -332,7 +332,6 @@ const NotaCreditoForm = ({
       comprobantes_asociados_ids: (formulario.facturasAsociadas || []).map(f => f.id || f.ven_id),
       
       ven_fecha: formulario.fecha,
-      ven_punto: formulario.puntoVentaId,
       ven_idcli: formulario.clienteId,
       ven_idpla: formulario.plazoId,
       ven_idvdo: formulario.vendedorId,
@@ -520,7 +519,7 @@ const NotaCreditoForm = ({
                       >
                         <option value="">Seleccionar...</option>
                         <option value="nota_credito">Nota de Crédito</option>
-                        <option value="nota_credito_interna">Nota de Crédito Interna</option>
+                        <option value="nota_credito_interna">Nota de Crédito</option>
                       </select>
                     </div>
 

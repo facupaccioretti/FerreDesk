@@ -11,7 +11,7 @@ export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del mod
 export const MIN_CARACTERES_BUSQUEDA = 1 // Mínimo de caracteres para que se active filtrado
 // Array de posibles nombres para el tipo de comprobante "Factura" que la API podría esperar.
 // Se utiliza el primer valor para la petición directa, los demás son para un posible filtrado local de respaldo.
-export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna"]
+export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna", "Cotización", "cotizacion"]
 export const LETRA_FACTURA_INTERNA = 'I';
 
 /**

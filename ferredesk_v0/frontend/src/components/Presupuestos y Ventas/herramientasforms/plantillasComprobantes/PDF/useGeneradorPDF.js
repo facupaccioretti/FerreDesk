@@ -26,10 +26,14 @@ export const useGeneradorPDF = () => {
   }, []);
 
   const generarNombreArchivo = useCallback((data, tipoComprobante) => {
-    const letra = data?.comprobante?.letra || tipoComprobante || 'C';
-    const numero = data?.numero_formateado || '0000-00000001';
-    const fecha = data?.fecha || new Date().toLocaleDateString('es-AR');
-    return `Factura_${letra}_${numero}_${fecha.replace(/\//g, '-')}.pdf`;
+    const nombre = data?.comprobante?.nombre || tipoComprobante || 'Comprobante';
+    const numeroRaw = data?.numero_formateado || '0000-00000001';
+    const letra = data?.comprobante?.letra || '';
+    let numero = numeroRaw;
+    if (letra && typeof numeroRaw === 'string' && numeroRaw.startsWith(`${letra} `)) {
+      numero = numeroRaw.slice(letra.length + 1);
+    }
+    return `${nombre.replace(/\s+/g, '_')}_${numero}.pdf`;
   }, []);
 
   const descargarPDF = useCallback(async (data, tipoComprobante, ferreteriaConfig) => {

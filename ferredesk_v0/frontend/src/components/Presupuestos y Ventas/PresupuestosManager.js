@@ -230,7 +230,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
     const handleNuevaVenta = () => {
       const newKey = `nueva-venta-${Date.now()}`
-      openTab(newKey, "Nueva Factura")
+      openTab(newKey, "Nueva Venta")
       setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
       localStorage.removeItem("ventaFormDraft")
     }
@@ -357,7 +357,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                            onClick={handleNuevaVenta}
                            className={theme.botonPrimario}
                          >
-                           <span className="text-lg">+</span> Nueva Factura
+                           <span className="text-lg">+</span> Nueva Venta
                          </button>
                          <button
                            onClick={handleNuevaNotaCredito}

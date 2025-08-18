@@ -556,7 +556,7 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
           {ferreteriaConfig.logo_empresa && (
             <View style={styles.logoEmpresa}>
               <Image 
-                src="http://localhost:8000/api/productos/servir-logo-empresa/"
+                src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
                 style={styles.logoImagen}
               />
             </View>

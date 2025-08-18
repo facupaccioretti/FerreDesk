@@ -39,7 +39,6 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
     }
     return {
       codvta: "",
-      codcom: "",
       deno: "",
       unidad: "",
       cantmin: 0,

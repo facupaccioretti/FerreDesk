@@ -22,7 +22,7 @@ const ConversionModal = ({
   
   // Textos dinámicos según el tipo de conversión
   const titulo = esConversionFacturaI ? 'Convertir a Factura Fiscal' : 'Convertir a Venta'
-  const subtituloItems = esConversionFacturaI ? 'Ítems de la Factura Interna' : 'Ítems del Presupuesto'
+  const subtituloItems = esConversionFacturaI ? 'Ítems de la Cotización' : 'Ítems del Presupuesto'
   const textoBoton = esConversionFacturaI ? 'Convertir a Factura' : 'Convertir a Venta'
 
   // Inicializar items seleccionados cuando se abre el modal

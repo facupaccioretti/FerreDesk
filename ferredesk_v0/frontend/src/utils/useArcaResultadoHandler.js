@@ -20,10 +20,10 @@ export const useArcaResultadoHandler = ({
    */
   const procesarResultadoArca = useCallback((resultado, tipoComprobante) => {
     // DEBUG: Log completo del resultado para ver observaciones
-    console.log('🔍 [ARCA DEBUG] Resultado completo:', resultado);
-    console.log('🔍 [ARCA DEBUG] Observaciones recibidas:', resultado?.observaciones);
-    console.log('🔍 [ARCA DEBUG] Tipo de observaciones:', typeof resultado?.observaciones);
-    console.log('🔍 [ARCA DEBUG] Es array?', Array.isArray(resultado?.observaciones));
+    console.log('[ARCA DEBUG] Resultado completo:', resultado);
+    console.log('[ARCA DEBUG] Observaciones recibidas:', resultado?.observaciones);
+    console.log('[ARCA DEBUG] Tipo de observaciones:', typeof resultado?.observaciones);
+    console.log('[ARCA DEBUG] Es array?', Array.isArray(resultado?.observaciones));
     
     // Siempre iniciar el estado de ARCA para mostrar el modal (consistencia)
     if (!esperandoArca) {
@@ -33,7 +33,7 @@ export const useArcaResultadoHandler = ({
     // Procesar respuesta de ARCA
     if (resultado?.arca_emitido === true && resultado?.cae) {
       // Éxito: ARCA fue emitido y tiene CAE (comprobante fiscal)
-      console.log('✅ [ARCA DEBUG] Enviando observaciones al overlay:', resultado.observaciones || []);
+      console.log('[ARCA DEBUG] Enviando observaciones al overlay:', resultado.observaciones || []);
       finalizarEsperaArcaExito({
         cae: resultado.cae,
         cae_vencimiento: resultado.cae_vencimiento,

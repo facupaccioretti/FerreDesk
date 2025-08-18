@@ -102,7 +102,9 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
           <div className="max-h-40 overflow-y-auto p-1">
             <div className="space-y-0.5">
               {documentos.map((doc, index) => {
-                const esNotaCredito = doc.comprobante?.tipo?.toLowerCase().includes("nota de crédito")
+                const tipoLower = String(doc.comprobante?.tipo || '').toLowerCase()
+                const nombreLower = String(doc.comprobante?.nombre || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+                const esNotaCredito = tipoLower === 'nota_credito' || tipoLower === 'nota_credito_interna' || nombreLower.includes('nota de credito')
                 const totalStyle = esNotaCredito ? "text-red-700 font-bold" : "text-emerald-700 font-bold"
                 const totalPrefijo = esNotaCredito ? "- " : ""
 

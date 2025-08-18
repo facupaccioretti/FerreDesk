@@ -68,7 +68,7 @@ class StockSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stock
         fields = [
-            'id', 'codvta', 'codcom', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva', 'idaliiva_id',
+            'id', 'codvta', 'deno', 'orden', 'unidad', 'margen', 'cantmin', 'idaliiva', 'idaliiva_id',
             'idfam1', 'idfam1_id', 'idfam2', 'idfam2_id', 'idfam3', 'idfam3_id',
             'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores',
             'stock_total',
@@ -81,19 +81,25 @@ class StockSerializer(serializers.ModelSerializer):
         return vista if vista is not None else 0
 
 class FerreteriaSerializer(serializers.ModelSerializer):
-    logo_empresa = serializers.SerializerMethodField()
+    # Campo escribible para permitir subir archivo vía PATCH
+    logo_empresa = serializers.ImageField(required=False, allow_null=True)
     
     class Meta:
         model = Ferreteria
         fields = '__all__'
-    
-    def get_logo_empresa(self, obj):
-        if obj.logo_empresa:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.logo_empresa.url)
-            return obj.logo_empresa.url
-        return None
+
+    def to_representation(self, instance):
+        """Mantener compatibilidad: devolver 'logo_empresa' como URL absoluta si existe."""
+        rep = super().to_representation(instance)
+        try:
+            if instance.logo_empresa:
+                request = self.context.get('request') if hasattr(self, 'context') else None
+                rep['logo_empresa'] = request.build_absolute_uri(instance.logo_empresa.url) if request else instance.logo_empresa.url
+            else:
+                rep['logo_empresa'] = None
+        except Exception:
+            rep['logo_empresa'] = None
+        return rep
 
 class VistaStockProductoSerializer(serializers.ModelSerializer):
     class Meta:

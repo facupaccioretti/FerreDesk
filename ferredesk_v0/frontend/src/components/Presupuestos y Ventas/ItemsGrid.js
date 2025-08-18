@@ -308,6 +308,43 @@ const ItemsGridPresupuesto = forwardRef(
       return result
     }
 
+    // Variante que preserva la fila actualmente editada aunque esté vacía,
+    // para no perder el foco cuando se borra el código.
+    function ensureSoloUnEditablePreservandoIndice(rows, preserveIdx) {
+      let result = rows.slice()
+      // Eliminar vacíos intermedios excepto el que se está editando
+      for (let i = result.length - 2; i >= 0; i--) {
+        if (i === preserveIdx) continue
+        if (isRowVacio(result[i])) {
+          result.splice(i, 1)
+          if (i < preserveIdx) preserveIdx = preserveIdx - 1
+        }
+      }
+      // Si quedan más de un renglón sin completar, eliminar uno que no sea el preservado
+      const indicesVacios = result
+        .map((row, i) => (!isRowLleno(row) ? i : -1))
+        .filter((i) => i !== -1)
+      if (indicesVacios.length > 1) {
+        // Intentar eliminar el último vacío que no sea el preservado
+        let candidato = indicesVacios.filter((i) => i !== preserveIdx).pop()
+        if (candidato !== undefined) {
+          result.splice(candidato, 1)
+          if (candidato < preserveIdx) preserveIdx = preserveIdx - 1
+        }
+      }
+      // Si hay algún renglón sin producto, no agrego otro vacío
+      if (result.some((row) => !isRowLleno(row))) {
+        const last = result[result.length - 1]
+        if (last && !last.id) {
+          last.id = Date.now() + Math.random()
+        }
+        return result
+      }
+      // Solo agrego un vacío si todos los renglones tienen producto
+      result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
+      return result
+    }
+
     // Helper para interpretar números decimales con punto o coma como separador
     const parsearNumeroFlexible = (cadena) => {
       if (cadena === null || cadena === undefined) return NaN
@@ -329,6 +366,11 @@ const ItemsGridPresupuesto = forwardRef(
       setRows((prevRows) => {
         const newRows = [...prevRows]
         if (field === "codigo") {
+          // Limpiar cualquier mensaje de validación previo al modificar el código
+          const inputCodigo = codigoRefs.current[idx]
+          if (inputCodigo && inputCodigo.setCustomValidity) {
+            inputCodigo.setCustomValidity("")
+          }
           newRows[idx] = {
             ...newRows[idx],
             codigo: value,
@@ -341,13 +383,12 @@ const ItemsGridPresupuesto = forwardRef(
                   cantidad: 1,
                   bonificacion: 0,
                   proveedorId: null, // <--- null en vez de ""
-                  id: null,         // <--- null en vez de ""
                   idSto: null,      // <--- null en vez de ""
                   vdi_idsto: null,  // <--- null en vez de ""
                 }
               : {}),
           }
-          const updatedRows = ensureSoloUnEditable(newRows)
+          const updatedRows = ensureSoloUnEditablePreservandoIndice(newRows, idx)
           onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "precio") {
@@ -728,10 +769,21 @@ const ItemsGridPresupuesto = forwardRef(
             e.stopPropagation()
             return
           } else {
-            setRows((prevRows) => {
-              const newRows = [...prevRows]
-              newRows[idx] = { ...getEmptyRow(), id: newRows[idx].id }
-              return ensureSoloUnEditable(newRows)
+            // Mostrar mensaje específico del campo y restaurar el código original si la fila ya tiene producto
+            const input = codigoRefs.current[idx]
+            if (input && input.setCustomValidity && input.reportValidity) {
+              input.setCustomValidity('No se encontro codigo de producto')
+              input.reportValidity()
+              input.focus()
+            }
+            setRows((prev) => {
+              const nuevos = [...prev]
+              const actual = nuevos[idx]
+              if (actual && actual.producto) {
+                const codigoOriginal = actual.producto.codvta || actual.producto.codigo || String(actual.producto.id || '')
+                nuevos[idx] = { ...actual, codigo: codigoOriginal }
+              }
+              return nuevos
             })
             e.preventDefault()
             e.stopPropagation()
@@ -750,6 +802,119 @@ const ItemsGridPresupuesto = forwardRef(
         e.preventDefault()
         e.stopPropagation()
       }
+    }
+
+    // Nuevo: al salir del campo código, intentar cargar el producto igual que con Enter
+    const handleCodigoBlur = (idx) => {
+      const input = codigoRefs.current[idx]
+      if (input && input.setCustomValidity) {
+        input.setCustomValidity("")
+      }
+
+      const row = rows[idx]
+      const codigo = (row.codigo || "").toString().trim()
+      if (!codigo) return
+
+      const prod = productosDisponibles.find(
+        (p) => (p.codvta || p.codigo)?.toString().toLowerCase() === codigo.toLowerCase(),
+      )
+      if (!prod) {
+        if (input && input.setCustomValidity && input.reportValidity) {
+          input.setCustomValidity('No se encontro codigo de producto')
+          input.reportValidity()
+        }
+        // Restaurar el código original si ya hay producto en la fila
+        setRows((prev) => {
+          const nuevos = [...prev]
+          const actual = nuevos[idx]
+          if (actual && actual.producto) {
+            const codigoOriginal = actual.producto.codvta || actual.producto.codigo || String(actual.producto.id || '')
+            nuevos[idx] = { ...actual, codigo: codigoOriginal }
+          }
+        return nuevos
+        })
+        return
+      }
+
+      const proveedorHabitualId = getProveedorHabitualId(prod)
+      const proveedores = getProveedoresProducto(prod.id, proveedorHabitualId)
+      const proveedorHabitual = proveedores.find((p) => p.esHabitual) || proveedores[0]
+      const proveedorId = proveedorHabitual ? proveedorHabitual.id : null
+
+      // Duplicados: misma lógica que en Enter
+      const idxExistente = rows.findIndex(
+        (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId && !r.esBloqueado && !r.idOriginal,
+      )
+      if (idxExistente !== -1) {
+        if (autoSumarDuplicados === "sumar") {
+          setRows((rs) => {
+            const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1
+            const newRows = rs.map((r, i) => (i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r))
+            newRows[idx] = getEmptyRow()
+            return ensureSoloUnEditable(newRows)
+          })
+          return
+        }
+        if (autoSumarDuplicados === "duplicar") {
+          setRows((prevRows) => {
+            const newRows = [...prevRows]
+            const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+            const aliPorc = aliMap[aliId] || 0
+            const precioBase = proveedorHabitual?.precio || 0
+            const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+            const itemCargado = {
+              ...newRows[idx],
+              codigo: prod.codvta || prod.codigo || "",
+              denominacion: prod.deno || prod.nombre || "",
+              unidad: prod.unidad || prod.unidadmedida || "-",
+              precio: precioBase,
+              precioFinal: precioFinal,
+              vdi_costo: proveedorHabitual?.costo || 0,
+              margen: prod?.margen ?? 0,
+              cantidad: row.cantidad || 1,
+              bonificacion: 0,
+              producto: prod,
+              idaliiva: aliId,
+              proveedorId: proveedorId,
+            }
+            newRows[idx] = itemCargado
+            if (newRows.every(isRowLleno)) {
+              newRows.push(getEmptyRow())
+            }
+            return ensureSoloUnEditable(newRows)
+          })
+          return
+        }
+        return
+      }
+
+      setRows((prevRows) => {
+        const newRows = [...prevRows]
+        const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+        const aliPorc = aliMap[aliId] || 0
+        const precioBase = proveedorHabitual?.precio || 0
+        const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+        const itemCargado = {
+          ...newRows[idx],
+          codigo: prod.codvta || prod.codigo || "",
+          denominacion: prod.deno || prod.nombre || "",
+          unidad: prod.unidad || prod.unidadmedida || "-",
+          precio: precioBase,
+          precioFinal: precioFinal,
+          vdi_costo: proveedorHabitual?.costo || 0,
+          margen: prod?.margen ?? 0,
+          cantidad: row.cantidad || 1,
+          bonificacion: 0,
+          producto: prod,
+          idaliiva: aliId,
+          proveedorId: proveedorHabitual ? proveedorHabitual.id : null,
+        }
+        newRows[idx] = itemCargado
+        if (newRows.every(isRowLleno)) {
+          newRows.push(getEmptyRow())
+        }
+        return ensureSoloUnEditable(newRows)
+      })
     }
 
     // useEffect para mover el foco a cantidad si idxCantidadFoco está seteado
@@ -1016,6 +1181,7 @@ const ItemsGridPresupuesto = forwardRef(
                           value={row.codigo}
                           onChange={(e) => handleRowChange(idx, "codigo", e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
+                          onBlur={() => handleCodigoBlur(idx)}
                           onFocus={manejarFocoSeleccionCompleta}
                           className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
                             row.esBloqueado 
@@ -1219,7 +1385,7 @@ const ItemsGridPresupuesto = forwardRef(
               transform: 'translateX(-50%)' // Centrado horizontalmente
             }}
           >
-            Ítem original de factura interna - No editable, no se puede eliminar ni duplicar
+            Ítem original de venta - No editable.
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-b-4 border-b-slate-800"></div>
           </div>
         )}

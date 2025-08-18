@@ -240,7 +240,7 @@ const useComprobantesCRUD = ({
     // Detectar tipo de conversión
     const esConversionFacturaI = datos.tipoConversion === 'factura_i_factura'
     const tipoTab = esConversionFacturaI ? 'conv-factura-i' : 'conventa'
-    const labelPrefix = esConversionFacturaI ? 'Conv. Factura Interna' : 'Conversión a Factura'
+    const labelPrefix = esConversionFacturaI ? 'Conv. Cotización' : 'Conversión a Factura'
     
     const tabKey = `${tipoTab}-${datos.id}`
     const label = `${labelPrefix} #${datos.numero || datos.id}`
@@ -329,7 +329,7 @@ const useComprobantesCRUD = ({
       const data = await response.json()
 
       if (!response.ok) {
-        let msg = "No se pudo convertir la factura interna"
+        let msg = "No se pudo convertir la cotización"
         try {
           msg = data.detail || msg
         } catch {}
@@ -374,9 +374,12 @@ const useComprobantesCRUD = ({
    * @returns {boolean} - True si es convertible
    */
   const esFacturaInternaConvertible = (item) => {
-    const esFacturaInterna = item.comprobante_tipo === 'factura_interna' || 
-      (item.comprobante_nombre && item.comprobante_nombre.toLowerCase().includes('interna'));
-    return esFacturaInterna;
+    const nombreLower = String(item.comprobante_nombre || '').toLowerCase()
+    const esFacturaInterna = item.comprobante_tipo === 'factura_interna' ||
+      nombreLower.includes('interna') ||
+      nombreLower.includes('cotización') ||
+      nombreLower.includes('cotizacion')
+    return esFacturaInterna
   }
 
   /**

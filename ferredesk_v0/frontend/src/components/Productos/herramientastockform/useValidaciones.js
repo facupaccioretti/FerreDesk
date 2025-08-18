@@ -11,9 +11,7 @@ const useValidaciones = ({ form, modo, stockProveParaMostrar, codigosPendientes,
       errores.push("El código de venta es obligatorio")
     }
     
-    if (!form.codcom || form.codcom.trim() === "") {
-      errores.push("El código de compra es obligatorio")
-    }
+    
     
     if (!form.deno || form.deno.trim() === "") {
       errores.push("La denominación es obligatoria")
@@ -98,8 +96,7 @@ const useValidaciones = ({ form, modo, stockProveParaMostrar, codigosPendientes,
     switch (nombreCampo) {
       case "codvta":
         return !valor || valor.trim() === "" ? "El código de venta es obligatorio" : null
-      case "codcom":
-        return !valor || valor.trim() === "" ? "El código de compra es obligatorio" : null
+      
       case "deno":
         return !valor || valor.trim() === "" ? "La denominación es obligatoria" : null
       case "idaliiva":

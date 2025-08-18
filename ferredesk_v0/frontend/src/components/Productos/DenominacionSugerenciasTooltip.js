@@ -102,7 +102,7 @@ const DenominacionSugerenciasTooltip = ({ sugerencias, onIgnorar, isLoading, err
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-1 py-1 text-left font-medium text-slate-700">Cód. Venta</th>
-                      <th className="px-1 py-1 text-left font-medium text-slate-700">Cód. Compra</th>
+                      
                       <th className="px-1 py-1 text-left font-medium text-slate-700">Denominación</th>
                       <th className="px-1 py-1 text-left font-medium text-slate-700">Unidad</th>
                       <th className="px-1 py-1 text-left font-medium text-slate-700 w-20">Tipo</th>
@@ -112,7 +112,6 @@ const DenominacionSugerenciasTooltip = ({ sugerencias, onIgnorar, isLoading, err
                     {productos.map((producto, index) => (
                       <tr key={index} className="border-t border-slate-100 hover:bg-slate-50">
                         <td className="px-1 py-1 text-slate-900 font-mono">{producto.codigo_venta}</td>
-                        <td className="px-1 py-1 text-slate-900 font-mono">{producto.codigo_compra}</td>
                         <td className="px-1 py-1 text-slate-900 max-w-32 truncate" title={producto.denominacion}>
                           {producto.denominacion}
                         </td>
