@@ -33,9 +33,11 @@ services:
       - CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
       - CSRF_TRUSTED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
     volumes:
+      - ./backend:/app
       - ./data:/app/data
       - ./media:/app/media
       - ./staticfiles:/app/staticfiles
+      - ./frontend:/app/frontend
     ports:
       - "8000:8000"
     restart: unless-stopped

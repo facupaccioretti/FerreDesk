@@ -86,7 +86,6 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.core.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -292,4 +291,10 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False  # Debe ser False para que JavaScript pueda leer la cookie
 SESSION_COOKIE_HTTPONLY = True
+
+# Configuración del Admin de Django
+ADMIN_SITE_HEADER = "FerreDesk - Administración"
+ADMIN_SITE_TITLE = "FerreDesk Admin"
+ADMIN_INDEX_TITLE = "Bienvenido a FerreDesk"
+
 
