@@ -1,6 +1,9 @@
 import React from 'react'
+import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme'
 
 const DenominacionSugerenciasTooltip = ({ sugerencias, onIgnorar, isLoading, error, mostrarTooltip, onToggle }) => {
+
+  const theme = useFerreDeskTheme()
 
   if (isLoading) {
     return (
@@ -31,39 +34,23 @@ const DenominacionSugerenciasTooltip = ({ sugerencias, onIgnorar, isLoading, err
   }
 
   const agruparPorTipo = (productos) => {
-    const grupos = {
-      exacta: [],
-      dimensiones: [],
-      especificaciones: [],
-      parcial: []
-    }
-    
+    const grupos = { exacta: [], parcial: [] }
     productos.forEach(producto => {
-      grupos[producto.tipo_similitud].push(producto)
+      const tipo = producto.tipo_similitud === 'exacta' ? 'exacta' : 'parcial'
+      grupos[tipo].push(producto)
     })
-    
     return grupos
   }
 
   const obtenerColorTipo = (tipo) => {
     switch (tipo) {
       case 'exacta': return 'text-red-600 bg-red-50 border-red-200'
-      case 'dimensiones': return 'text-orange-600 bg-orange-50 border-orange-200'
-      case 'especificaciones': return 'text-amber-600 bg-amber-50 border-amber-200'
       case 'parcial': return 'text-blue-600 bg-blue-50 border-blue-200'
       default: return 'text-slate-600 bg-slate-50 border-slate-200'
     }
   }
 
-  const obtenerTextoSimilitud = (tipo) => {
-    switch (tipo) {
-      case 'exacta': return 'Exacta'
-      case 'dimensiones': return 'Dimensiones'
-      case 'especificaciones': return 'Especificaciones'
-      case 'parcial': return 'Parcial'
-      default: return 'Parcial'
-    }
-  }
+  const obtenerTextoSimilitud = (tipo) => (tipo === 'exacta' ? 'Exacta' : 'Parcial')
 
   const grupos = agruparPorTipo(sugerencias.productos_similares)
 
@@ -98,25 +85,25 @@ const DenominacionSugerenciasTooltip = ({ sugerencias, onIgnorar, isLoading, err
                 {tipo.charAt(0).toUpperCase() + tipo.slice(1)} ({productos.length})
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-[10px]">
-                  <thead className="bg-slate-50">
+                <table className="w-full text-[10px] text-left">
+                  <thead className={`bg-gradient-to-r ${theme.primario}`}>
                     <tr>
-                      <th className="px-1 py-1 text-left font-medium text-slate-700">Cód. Venta</th>
+                      <th className="px-1 py-1 text-left font-medium text-slate-100">Cód. Venta</th>
                       
-                      <th className="px-1 py-1 text-left font-medium text-slate-700">Denominación</th>
-                      <th className="px-1 py-1 text-left font-medium text-slate-700">Unidad</th>
-                      <th className="px-1 py-1 text-left font-medium text-slate-700 w-20">Tipo</th>
+                      <th className="px-1 py-1 text-left font-medium text-slate-100">Denominación</th>
+                      <th className="px-1 py-1 text-left font-medium text-slate-100">Unidad</th>
+                      <th className="px-1 py-1 text-left font-medium text-slate-100 w-20">Tipo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {productos.map((producto, index) => (
                       <tr key={index} className="border-t border-slate-100 hover:bg-slate-50">
-                        <td className="px-1 py-1 text-slate-900 font-mono">{producto.codigo_venta}</td>
-                        <td className="px-1 py-1 text-slate-900 max-w-32 truncate" title={producto.denominacion}>
+                        <td className="px-1 py-1 text-left text-slate-900 font-mono">{producto.codigo_venta}</td>
+                        <td className="px-1 py-1 text-left text-slate-900 max-w-32 truncate" title={producto.denominacion}>
                           {producto.denominacion}
                         </td>
-                        <td className="px-1 py-1 text-slate-600">{producto.unidad}</td>
-                        <td className="px-1 py-1">
+                        <td className="px-1 py-1 text-left text-slate-600">{producto.unidad}</td>
+                        <td className="px-1 py-1 text-left">
                           <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${obtenerColorTipo(producto.tipo_similitud)}`}>
                             {obtenerTextoSimilitud(producto.tipo_similitud)}
                           </span>

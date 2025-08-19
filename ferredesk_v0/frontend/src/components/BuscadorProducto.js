@@ -73,7 +73,7 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
       </div>
       
       {showDropdown && sugerencias.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white shadow-2xl max-h-60 rounded-sm overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-xs">
+        <div className="absolute z-20 top-full left-0 mt-1 bg-white shadow-2xl max-h-60 rounded-sm overflow-y-auto overflow-x-auto focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-xs w-fit min-w-full max-w-[90vw]">
           <ul className="py-1 space-y-0" role="listbox">
             {sugerencias.map((p, idx) => {
               const isSelected = highlighted === idx
@@ -97,7 +97,7 @@ function BuscadorProducto({ productos, onSelect, disabled = false, readOnly = fa
                           {p.codvta}
                         </span>
                       </div>
-                      <p className={`text-xs truncate mt-0.5 ${isSelected ? 'text-orange-700' : 'text-slate-600'}`}>
+                      <p className={`text-xs whitespace-nowrap mt-0.5 ${isSelected ? 'text-orange-700' : 'text-slate-600'}`}>
                         {p.deno || p.nombre}
                       </p>
                     </div>

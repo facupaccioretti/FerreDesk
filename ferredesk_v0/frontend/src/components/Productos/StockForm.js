@@ -805,7 +805,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                           )}
                         </span>
                       </h6>
-                      <div className="space-y-2">
+                      <div className="space-y-1 text-xs leading-tight">
                         {stockProveParaMostrar.map((sp, index) => {
                           // Buscar código pendiente si corresponde
                           let codigoProveedor = sp.codigo_producto_proveedor
@@ -834,7 +834,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                             >
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[12px] font-semibold text-slate-700">
+                                  <span className="text-xs font-semibold text-slate-700">
                                     {typeof sp.proveedor === "object"
                                       ? sp.proveedor.razon
                                       : proveedores.find((p) => p.id === sp.proveedor)?.razon || sp.proveedor}
@@ -850,7 +850,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                     </button>
                                   )}
                                 </div>
-                                <div className="flex items-center justify-between text-[12px] text-slate-700">
+                                <div className="flex items-center justify-between text-xs text-slate-700 leading-tight">
                                   <span>
                                     Código: <span className="font-medium text-xs">{codigoProveedor || "N/A"}</span>
                                   </span>

@@ -841,7 +841,7 @@ const ClienteForm = ({
                   titulo="Información Básica"
                   icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                 >
-                  <FilaEditable etiqueta="CUIT">
+                  <FilaEditable etiqueta="CUIT/DNI">
                     <div className="relative h-[34px]">
                         <input
                           name="cuit"

@@ -845,88 +845,26 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
         return componentes
     
     def calcular_similitud(self, denominacion1, denominacion2):
-        """Calcula la similitud entre dos denominaciones"""
-        # Normalizar para comparación exacta
+        """Calcula similitud SOLO basada en el texto completo normalizado.
+        Devuelve porcentaje 0..100. 100 indica coincidencia exacta."""
         denom1_norm = self.normalizar_denominacion(denominacion1)
         denom2_norm = self.normalizar_denominacion(denominacion2)
-        
         if denom1_norm == denom2_norm:
             return 100.0
-        
-        comp1 = self.extraer_componentes(denominacion1)
-        comp2 = self.extraer_componentes(denominacion2)
-        
-        similitud = 0
-        total_peso = 0
-        
-        # Tipo de producto (peso alto: 30%)
-        if comp1['tipo'] and comp2['tipo']:
-            if comp1['tipo'] == comp2['tipo']:
-                similitud += 30
-            total_peso += 30
-        
-        # Material (peso alto: 25%)
-        if comp1['material'] and comp2['material']:
-            if comp1['material'] == comp2['material']:
-                similitud += 25
-            total_peso += 25
-        
-        # Marca (peso medio: 20%)
-        if comp1['marca'] and comp2['marca']:
-            if comp1['marca'] == comp2['marca']:
-                similitud += 20
-            total_peso += 20
-        
-        # Dimensiones (peso medio: 15%)
-        if comp1['dimensiones'] and comp2['dimensiones']:
-            if comp1['dimensiones'] == comp2['dimensiones']:
-                similitud += 15
-            total_peso += 15
-        
-        # Unidad (peso bajo: 10%)
-        if comp1['unidad'] and comp2['unidad']:
-            if comp1['unidad'] == comp2['unidad']:
-                similitud += 10
-            total_peso += 10
-        
-        # Si no hay componentes para comparar, usar similitud de texto
-        if total_peso == 0:
-            return self.similitud_texto(denominacion1, denominacion2)
-        
-        return (similitud / total_peso) * 100
+        return self.similitud_texto(denominacion1=denominacion1.lower(), texto2=denominacion2.lower())
     
-    def similitud_texto(self, texto1, texto2):
+    def similitud_texto(self, texto1=None, texto2=None, denominacion1=None, denominacion2=None):
         """Calcula similitud basada en texto usando distancia de Levenshtein"""
-        return SequenceMatcher(None, texto1, texto2).ratio() * 100
+        # Permite compatibilidad con llamadas existentes y nuevas con kwargs
+        a = denominacion1 if denominacion1 is not None else texto1
+        b = denominacion2 if denominacion2 is not None else texto2
+        return SequenceMatcher(None, a, b).ratio() * 100
     
     def determinar_tipo_similitud(self, denominacion1, denominacion2):
-        """Determina el tipo de similitud encontrada"""
-        # Normalizar las denominaciones para comparación exacta
+        """Determina tipo de similitud: 'exacta' si texto normalizado coincide, si no 'parcial'."""
         denom1_norm = self.normalizar_denominacion(denominacion1)
         denom2_norm = self.normalizar_denominacion(denominacion2)
-        
-        # Solo es exacta si las denominaciones normalizadas son idénticas
-        if denom1_norm == denom2_norm:
-            return 'exacta'
-        
-        comp1 = self.extraer_componentes(denominacion1)
-        comp2 = self.extraer_componentes(denominacion2)
-        
-        # Verificar si solo cambian las dimensiones
-        if (comp1['tipo'] == comp2['tipo'] and 
-            comp1['material'] == comp2['material'] and 
-            comp1['marca'] == comp2['marca'] and 
-            comp1['dimensiones'] != comp2['dimensiones']):
-            return 'dimensiones'
-        
-        # Verificar si solo cambian las especificaciones
-        if (comp1['tipo'] == comp2['tipo'] and 
-            comp1['material'] == comp2['material'] and 
-            comp1['marca'] == comp2['marca'] and 
-            comp1['especificaciones'] != comp2['especificaciones']):
-            return 'especificaciones'
-        
-        return 'parcial'
+        return 'exacta' if denom1_norm == denom2_norm else 'parcial'
     
     def generar_sugerencia(self, productos_similares, similitud_maxima):
         """Genera una sugerencia basada en los productos similares encontrados"""

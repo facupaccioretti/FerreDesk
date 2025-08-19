@@ -83,7 +83,7 @@ const HistorialListasModal = ({ open, onClose, proveedor }) => {
                   <Dialog.Title as="h2" className="text-xl font-bold text-white">
                     Historial de Listas - {proveedor?.razon}
                   </Dialog.Title>
-                  <p className="text-slate-300 text-sm mt-1">Visualizá las importaciones realizadas para este proveedor</p>
+                  <p className="text-slate-300 text-sm mt-1">Visualizá las últimas 10 importaciones realizadas para este proveedor</p>
                 </div>
 
                 {/* Contenido */}

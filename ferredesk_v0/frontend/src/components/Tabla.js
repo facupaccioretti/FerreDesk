@@ -11,6 +11,7 @@ const ESPACIO_HORIZONTAL_CELDA = "px-3"
 const ESPACIO_VERTICAL_CELDA = "py-2"
 const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 
+// Nota: se define una base; la variante compacta se calcula dentro del componente para acceder a props
 const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
 
 // -----------------------------------------------------------------------------
@@ -29,6 +30,8 @@ const Tabla = ({
   mostrarOrdenamiento = true,
   sinEstilos = false,
   tamañoEncabezado = "normal", // "normal" | "pequeño"
+  filasCompactas = false,
+  claseTbody = "",
 }) => {
   const [paginaActual, setPaginaActual] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
@@ -63,6 +66,11 @@ const Tabla = ({
   const datosVisibles = paginadorVisible
     ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina)
     : datosFiltrados
+
+  // Clases calculadas según modo compacto para las celdas por defecto (cuando no se usa renderFila)
+  const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${
+    filasCompactas ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA
+  } whitespace-nowrap ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-700`
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
@@ -124,7 +132,7 @@ const Tabla = ({
           </thead>
 
           {/* Cuerpo */}
-          <tbody className="divide-y-2 divide-slate-300">
+          <tbody className={`${filasCompactas ? "divide-y divide-slate-300" : "divide-y-2 divide-slate-300"} ${claseTbody}`}>
             {datosVisibles.map((fila, idxVisible) => {
               const indiceGlobal = indiceInicio + idxVisible
 
@@ -141,7 +149,7 @@ const Tabla = ({
                     return (
                       <td
                         key={col.id}
-                        className={`${CLASES_CELDA_BASE} bg-white ${
+                        className={`${clasesCeldaBaseCalculadas} bg-white ${
                           { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
                         }`}
                         style={col.ancho ? { width: col.ancho } : undefined}

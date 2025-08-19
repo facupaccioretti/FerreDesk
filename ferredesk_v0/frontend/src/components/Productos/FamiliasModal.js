@@ -45,19 +45,17 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
     { id: "comentario", titulo: "Comentario", align: "left" },
     { id: "nivel", titulo: "Nivel", align: "left" },
     { id: "acti", titulo: "Estado", align: "left" },
-    { id: "acciones", titulo: "Acciones", align: "center" }
-  ]
-
-  // Preparar datos para Tabla.js
-  const datosTabla = useMemo(() => {
-    return familias.map((f) => ({
-      ...f,
-      nivel: f.nivel === "1" ? "Familia" : f.nivel === "2" ? "Subfamilia" : "Sub-subfamilia",
-      comentario: f.comentario || "-",
-      acciones: (
+    {
+      id: "acciones",
+      titulo: "Acciones",
+      align: "center",
+      render: (fila) => (
         <div className="flex justify-center items-center gap-2">
           <button
-            onClick={() => handleEdit(f)}
+            onClick={() => {
+              const original = familias.find((x) => x.id === fila.id)
+              if (original) handleEdit(original)
+            }}
             title="Editar"
             className="transition-colors p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded"
           >
@@ -77,7 +75,7 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
             </svg>
           </button>
           <button
-            onClick={() => handleDelete(f.id)}
+            onClick={() => handleDelete(fila.id)}
             title="Eliminar"
             className="transition-colors p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
           >
@@ -97,9 +95,18 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
             </svg>
           </button>
         </div>
-      )
+      ),
+    }
+  ]
+
+  // Preparar datos para Tabla.js
+  const datosTabla = useMemo(() => {
+    return familias.map((f) => ({
+      ...f,
+      nivel: f.nivel === "1" ? "Familia" : f.nivel === "2" ? "Subfamilia" : "Sub-subfamilia",
+      comentario: f.comentario || "-",
     }))
-  }, [familias, handleEdit, handleDelete])
+  }, [familias])
 
   return (
     <Transition show={open} as={React.Fragment}>
@@ -145,32 +152,32 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
                 </div>
 
                 {/* Contenido del modal */}
-                <div className="flex-1 p-6 overflow-hidden flex flex-col bg-white">
+                <div className="flex-1 p-6 flex flex-col bg-white min-h-0">
                   {/* Formulario de alta/edición */}
-                  <div className="bg-slate-50 rounded-lg p-4 mb-4 border border-slate-200">
-                    <h3 className="font-medium text-slate-700 mb-3">
+                  <div className="bg-slate-50 rounded-lg p-3 mb-2 border border-slate-200">
+                    <h3 className="font-medium text-slate-700 mb-2 text-sm">
                       {editId ? "Editar Familia" : "Nueva Familia"}
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                       <input
                         name="deno"
                         value={form.deno}
                         onChange={handleChange}
                         placeholder="Nombre*"
-                        className="border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                        className="border border-slate-300 rounded-md p-1.5 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
                       />
                       <input
                         name="comentario"
                         value={form.comentario}
                         onChange={handleChange}
                         placeholder="Comentario"
-                        className="border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                        className="border border-slate-300 rounded-md p-1.5 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
                       />
                       <select
                         name="nivel"
                         value={form.nivel}
                         onChange={handleChange}
-                        className="border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                        className="border border-slate-300 rounded-md p-1.5 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
                       >
                         <option value="">Nivel*</option>
                         <option value="1">1 (Familia)</option>
@@ -181,35 +188,35 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
                         name="acti"
                         value={form.acti}
                         onChange={handleChange}
-                        className="border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                        className="border border-slate-300 rounded-md p-1.5 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
                       >
                         <option value="S">Activa</option>
                         <option value="N">Inactiva</option>
                       </select>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={handleSave}
-                        className={theme.botonPrimario}
-                      >
-                        {editId ? "Guardar cambios" : "Agregar familia"}
-                      </button>
-                      {editId && (
+                      <div className="flex items-end gap-2">
                         <button
-                          onClick={() => {
-                            setForm({ deno: "", comentario: "", nivel: "", acti: "S" })
-                            setEditId(null)
-                          }}
-                          className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors"
+                          onClick={handleSave}
+                          className={`${theme.botonPrimario} text-sm`}
                         >
-                          Cancelar
+                          {editId ? "Guardar cambios" : "Agregar familia"}
                         </button>
-                      )}
+                        {editId && (
+                          <button
+                            onClick={() => {
+                              setForm({ deno: "", comentario: "", nivel: "", acti: "S" })
+                              setEditId(null)
+                            }}
+                            className="px-3 py-1.5 text-sm bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Tabla con Tabla.js */}
-                  <div className="flex-1 overflow-hidden">
+                  <div className="flex-1 overflow-auto min-h-0">
                     <Tabla
                       columnas={columnas}
                       datos={datosTabla}
@@ -217,7 +224,8 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
                       onCambioBusqueda={setSearchFamilias}
                       mostrarBuscador={true}
                       mostrarOrdenamiento={false}
-                      paginadorVisible={false}
+                      paginadorVisible={true}
+                      filasPorPaginaInicial={10}
                       sinEstilos={false}
                     />
                   </div>

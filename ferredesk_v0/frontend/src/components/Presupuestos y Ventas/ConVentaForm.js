@@ -754,14 +754,14 @@ const ConVentaForm = ({
 
                   {/* Domicilio */}
                   <div>
-                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && fiscal.letra !== 'B' && <span className="text-orange-600">*</span>}</label>
                     <input
                       name="domicilio"
                       type="text"
                       value={formulario.domicilio}
                       onChange={handleChange}
                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                      required={usarFiscal && fiscal.camposRequeridos.domicilio && fiscal.letra !== 'B'}
                       readOnly={isReadOnly}
                     />
                   </div>

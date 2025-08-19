@@ -280,6 +280,8 @@ const ProveedoresManager = () => {
                     valorBusqueda={searchProveedores}
                     onCambioBusqueda={setSearchProveedores}
                     mostrarBuscador={true}
+                    filasCompactas={true}
+                    claseTbody="leading-tight"
                     renderFila={(p, idxVis, idxInicio) => {
                       const indiceGlobal = idxInicio + idxVis
                       const filaPrincipal = (
@@ -289,15 +291,15 @@ const ProveedoresManager = () => {
                           onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
                         >
                           {/* Celda enumeración */}
-                          <td className="px-2 py-1 text-center text-xs text-slate-500 font-medium">{indiceGlobal + 1}</td>
-                          <td className="px-2 py-1 whitespace-nowrap font-medium text-slate-800">{p.razon}</td>
-                          <td className="px-2 py-1 whitespace-nowrap text-slate-600">{p.fantasia}</td>
-                          <td className="px-2 py-1 whitespace-nowrap text-slate-600">{p.domicilio}</td>
-                          <td className="px-2 py-1 whitespace-nowrap text-slate-600">{p.tel1}</td>
-                          <td className="px-2 py-1 whitespace-nowrap text-slate-600">{p.cuit}</td>
-                          <td className="px-2 py-1 whitespace-nowrap text-slate-600">{p.sigla}</td>
+                          <td className="px-2 py-0.5 text-center text-xs text-slate-500 font-medium">{indiceGlobal + 1}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap font-medium text-slate-800">{p.razon}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fantasia}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.domicilio}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.tel1}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.cuit}</td>
+                          <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.sigla}</td>
                           {/* Acciones */}
-                          <td className="px-2 py-1 whitespace-nowrap text-center">
+                          <td className="px-2 py-0.5 whitespace-nowrap text-center">
                             <div className="flex gap-3 items-center justify-center">
                               {/* Orden deseado: Cargar lista, Historial, Editar, Borrar */}
                               <BotonCargarLista

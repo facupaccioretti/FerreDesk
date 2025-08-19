@@ -244,7 +244,7 @@ const ComprobantesList = ({
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-slate-300">
+          <tbody className="bg-white divide-y divide-slate-300 leading-tight">
             {datosPagina.map((p) => {
               // Obtener datos del comprobante
               let comprobanteObj = null
@@ -279,7 +279,7 @@ const ComprobantesList = ({
               return (
                 <tr key={p.id} className="hover:bg-slate-200">
                   {/* Comprobante */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex items-center gap-2 text-slate-700">
                         {icon} <span className="font-medium">{label}</span>
@@ -302,7 +302,7 @@ const ComprobantesList = ({
                   </td>
                   
                   {/* Número */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-800">
                         {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
@@ -312,18 +312,18 @@ const ComprobantesList = ({
                   </td>
                   
                   {/* Fecha */}
-                  <td className="px-3 py-1 whitespace-nowrap text-slate-600">{p.fecha}</td>
+                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fecha}</td>
                   
                   {/* Cliente */}
-                  <td className="px-3 py-1 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
+                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
                   
                   {/* Total */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <span className="font-semibold text-slate-800">${formatearMoneda(p.total)}</span>
                   </td>
                   
                   {/* Acciones */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex gap-1">
                       <ComprobanteAcciones
                         comprobante={p}

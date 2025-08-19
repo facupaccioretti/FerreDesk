@@ -52,6 +52,9 @@ const ClientesManager = () => {
     // Empezamos con un array base de las pestañas que el usuario pueda tener.
     let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
 
+    // Eliminar cualquier tab "Maestros" persistida anteriormente
+    currentTabs = currentTabs.filter((t) => t.key !== "maestros")
+
     // Aseguramos que "Lista de Clientes" esté presente y configurada correctamente.
     let listaTab = currentTabs.find((t) => t.key === "lista")
     if (listaTab) {
@@ -78,7 +81,7 @@ const ClientesManager = () => {
 
   const [activeTab, setActiveTab] = useState(() => {
     const savedActiveTab = localStorage.getItem("clientesActiveTab")
-    return savedActiveTab || "lista"
+    return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
 
   const [editCliente, setEditCliente] = useState(null)

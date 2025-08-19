@@ -91,6 +91,7 @@ const ItemsGridPresupuesto = forwardRef(
     const [stockNegativo, setStockNegativo] = useState(false)
     const codigoRefs = useRef([])
     const cantidadRefs = useRef([])
+    const bonificacionRefs = useRef([])
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
@@ -468,14 +469,10 @@ const ItemsGridPresupuesto = forwardRef(
         const proveedor = proveedores[0] // Siempre será el proveedor habitual
         const proveedorId = proveedor ? proveedor.id : null
         const cantidad = 1
-        const totalStock = proveedor ? Number(proveedor.stock) : 0
-        if (cantidad > totalStock) {
-          setStockNegativo(true)
-          return
-        }
+        // Permitir agregar siempre, independientemente del stock disponible
         addItemWithDuplicado(producto, proveedorId, cantidad)
       },
-      [addItemWithDuplicado, getProveedoresProducto, setStockNegativo],
+      [addItemWithDuplicado, getProveedoresProducto],
     )
 
     // En useImperativeHandle, expongo también getRows para acceder siempre al array actualizado
@@ -791,6 +788,18 @@ const ItemsGridPresupuesto = forwardRef(
           }
         }
         if (field === "cantidad") {
+          if (rows[idx].producto && rows[idx].codigo && rows[idx + 1] && isRowVacio(rows[idx + 1])) {
+            setTimeout(() => {
+              if (codigoRefs.current[idx + 1]) codigoRefs.current[idx + 1].focus()
+            }, 0)
+          }
+        }
+        if (field === "precio") {
+          setTimeout(() => {
+            if (bonificacionRefs.current[idx]) bonificacionRefs.current[idx].focus()
+          }, 0)
+        }
+        if (field === "bonificacion") {
           if (rows[idx].producto && rows[idx].codigo && rows[idx + 1] && isRowVacio(rows[idx + 1])) {
             setTimeout(() => {
               if (codigoRefs.current[idx + 1]) codigoRefs.current[idx + 1].focus()
@@ -1294,6 +1303,7 @@ const ItemsGridPresupuesto = forwardRef(
                           tabIndex={row.esBloqueado ? -1 : 0}
                           disabled={row.esBloqueado}
                           readOnly={row.esBloqueado}
+                          ref={(el) => (bonificacionRefs.current[idx] = el)}
                         />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">

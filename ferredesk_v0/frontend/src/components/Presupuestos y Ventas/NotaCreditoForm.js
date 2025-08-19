@@ -506,7 +506,7 @@ const NotaCreditoForm = ({
                     {/* Buscador */}
                     <div>
                       <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                      <BuscadorProducto onAdd={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} className="w-full" />
+                      <BuscadorProducto onSelect={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} className="w-full" />
                     </div>
 
                     {/* Tipo de Comprobante */}
