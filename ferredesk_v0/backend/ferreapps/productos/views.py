@@ -611,8 +611,7 @@ class FerreteriaAPIView(APIView):
         for legacy_key in [
             'margen_ganancia_por_defecto', 'comprobante_por_defecto',
             'notificaciones_email', 'notificaciones_stock_bajo',
-            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes',
-            'permitir_stock_negativo'
+            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes'
         ]:
             data.pop(legacy_key, None)
 

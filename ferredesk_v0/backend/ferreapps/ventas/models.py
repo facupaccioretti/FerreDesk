@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.db.models import JSONField
 
 # Create your models here.
@@ -125,7 +126,7 @@ class VentaDetalleItem(models.Model):
     vdi_margen = models.DecimalField(max_digits=10, decimal_places=2, db_column='VDI_MARGEN')
     vdi_precio_unitario_final = models.DecimalField(max_digits=15, decimal_places=2, db_column='VDI_PRECIO_UNITARIO_FINAL', null=True, blank=True)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDI_BONIFICA')
-    vdi_detalle1 = models.CharField(max_length=40, db_column='VDI_DETALLE1', null=True)
+    vdi_detalle1 = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='VDI_DETALLE1', null=True)
     vdi_detalle2 = models.CharField(max_length=40, db_column='VDI_DETALLE2', null=True)
     vdi_idaliiva = models.IntegerField(db_column='VDI_IDALIIVA')
 
@@ -177,7 +178,7 @@ class VentaDetalleItemCalculado(models.Model):
     vdi_costo = models.DecimalField(max_digits=13, decimal_places=3)
     vdi_margen = models.DecimalField(max_digits=10, decimal_places=2)
     vdi_bonifica = models.DecimalField(max_digits=4, decimal_places=2)
-    vdi_detalle1 = models.CharField(max_length=40, null=True)
+    vdi_detalle1 = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, null=True)
     vdi_detalle2 = models.CharField(max_length=40, null=True)
     vdi_idaliiva = models.IntegerField()
     codigo = models.CharField(max_length=40, null=True)

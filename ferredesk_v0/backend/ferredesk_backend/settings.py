@@ -228,6 +228,10 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'ferreapps.ventas.utils.ferre_exception_handler',
 }
 
+# --- Configuraciones de dominio de negocio ---
+# Cantidad máxima de caracteres para denominación de productos y detalle de ítems
+PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
+
 # Configuración de CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",

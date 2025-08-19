@@ -239,6 +239,8 @@ const ConVentaForm = ({
   });
 
   const itemsGridRef = useRef();
+  // Temporizador para mostrar overlay ARCA solo si la espera es real
+  const temporizadorArcaRef = useRef(null);
 
   // =========================
   // Selector de Clientes (Modal)
@@ -406,11 +408,6 @@ const ConVentaForm = ({
 
       const items = itemsGridRef.current.getItems();
 
-      // Verificar si requiere emisión ARCA y iniciar estado de espera
-      if (requiereEmisionArca(tipoComprobante)) {
-        iniciarEsperaArca();
-      }
-
       // Constantes descriptivas
       const ESTADO_VENTA_CERRADA = 'CE';
       const TIPO_VENTA = 'Venta';
@@ -462,11 +459,29 @@ const ConVentaForm = ({
       // Llamar al endpoint apropiado
       const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
       
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobante) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca();
+        }, 400);
+      }
+
       const resultado = await onSave(payload, tabKey, endpoint);
+
+      // Limpiar temporizador si estaba agendado
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobante)
     } catch (error) {
+      // Limpiar temporizador en error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la conversión")
     } finally {
@@ -476,6 +491,11 @@ const ConVentaForm = ({
   };
 
   const handleCancel = () => {
+    // Limpiar temporizador si está pendiente
+    if (temporizadorArcaRef.current) {
+      clearTimeout(temporizadorArcaRef.current);
+      temporizadorArcaRef.current = null;
+    }
     limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
     limpiarBorrador();
     onCancel();

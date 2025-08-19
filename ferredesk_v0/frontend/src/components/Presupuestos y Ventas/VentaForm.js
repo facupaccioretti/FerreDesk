@@ -186,6 +186,8 @@ const VentaForm = ({
   })
 
   const itemsGridRef = useRef()
+  // Temporizador para mostrar overlay ARCA solo si la espera es real (evita condiciones de carrera)
+  const temporizadorArcaRef = useRef(null)
   const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
 
   // ------------------------------------------------------------
@@ -524,7 +526,7 @@ const VentaForm = ({
         ven_idvdo: formulario.vendedorId, // ID vendedor
         ven_copia: Number.parseInt(formulario.copia, 10) || 1, // Cantidad de copias
         items: items.map((item, idx) => mapearCamposItem(item, idx)), // Ítems mapeados
-        permitir_stock_negativo: true, // Permitir stock negativo
+        permitir_stock_negativo: false, // Validar stock como en ConVentaForm
       }
 
       // Agregar documento (CUIT/DNI) y domicilio si existen
@@ -535,22 +537,40 @@ const VentaForm = ({
       }
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
 
-      // Iniciar modal de espera ARCA inmediatamente si requiere emisión
-      if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-        iniciarEsperaArca()
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca()
+        }, 400)
       }
 
       const resultado = await onSave(payload)
+
+      // Limpiar temporizador si había sido agendado (la respuesta ya llegó)
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
       
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
     } catch (error) {
+      // Asegurar limpieza del temporizador si hubo error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la venta")
     }
   }
 
   const handleCancel = () => {
+    // Limpiar temporizador si está pendiente
+    if (temporizadorArcaRef.current) {
+      clearTimeout(temporizadorArcaRef.current)
+      temporizadorArcaRef.current = null
+    }
     limpiarEstadoArca() // Limpiar estado de ARCA al cancelar
     limpiarBorrador()
     onCancel()

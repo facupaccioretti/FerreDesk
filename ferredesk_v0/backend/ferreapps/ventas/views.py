@@ -29,6 +29,115 @@ logger = logging.getLogger(__name__)
 from .utils import asignar_comprobante, _construir_respuesta_comprobante
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 
+# ------------------------------------------------------------
+# Utilidades internas para gestión de stock entre proveedores
+# ------------------------------------------------------------
+def _obtener_stock_proveedores_bloqueado(stock_id):
+    """
+    Devuelve la lista de StockProve del producto (stock_id) con bloqueo select_for_update.
+    """
+    return list(StockProve.objects.select_for_update().filter(stock_id=stock_id))
+
+
+def _total_disponible_en_proveedores(stock_id):
+    """
+    Suma el stock disponible entre todos los proveedores de un producto.
+    Retorna (total: Decimal, proveedores: List[StockProve] bloqueados).
+    """
+    proveedores = _obtener_stock_proveedores_bloqueado(stock_id)
+    total = sum((sp.cantidad for sp in proveedores), Decimal('0'))
+    return total, proveedores
+
+
+def _obtener_codigo_venta(stock_id):
+    """
+    Obtiene el código de venta (STO_CODVTA) del producto asociado al stock_id.
+    Si no se encuentra, devuelve el propio stock_id como fallback.
+    """
+    try:
+        stock = Stock.objects.get(id=stock_id)
+        # El campo del código de venta en el modelo Stock suele ser 'codigo_venta' o similar; 
+        # revisar atributos disponibles y usar el que exista.
+        codigo = getattr(stock, 'codigo_venta', None) or getattr(stock, 'codvta', None) or getattr(stock, 'STO_CODVTA', None)
+        return codigo or str(stock_id)
+    except Stock.DoesNotExist:
+        return str(stock_id)
+
+
+def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permitir_stock_negativo, errores_stock, stock_actualizado):
+    """
+    Descuenta "cantidad" del stock del producto (stock_id), priorizando el proveedor preferido,
+    y luego el resto de proveedores del mismo producto hasta cubrir la cantidad.
+
+    - Si permitir_stock_negativo es True: descuenta todo del proveedor preferido (puede quedar negativo).
+    - Si permitir_stock_negativo es False: intenta distribuir. Si la suma total no alcanza, no descuenta y agrega error.
+
+    Agrega una entrada en stock_actualizado por cada proveedor afectado.
+    Retorna True si se aplicó el descuento, False si no fue posible (y se registró el error).
+    """
+    try:
+        cantidad = Decimal(str(cantidad))
+    except Exception:
+        cantidad = Decimal('0')
+
+    # Caso simple: permitir stock negativo → todo al proveedor preferido
+    if permitir_stock_negativo:
+        try:
+            sp = StockProve.objects.select_for_update().get(stock_id=stock_id, proveedor_id=proveedor_preferido_id)
+        except StockProve.DoesNotExist:
+            errores_stock.append(f"No existe stock para el producto {stock_id} y proveedor {proveedor_preferido_id}")
+            return False
+        sp.cantidad -= cantidad
+        sp.save()
+        stock_actualizado.append((sp.stock_id, sp.proveedor_id, sp.cantidad))
+        return True
+
+    # Validación previa: ¿alcanza la suma total?
+    total_disponible, proveedores_bloqueados = _total_disponible_en_proveedores(stock_id)
+    if total_disponible < cantidad:
+        cod = _obtener_codigo_venta(stock_id)
+        errores_stock.append(
+            f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad}"
+        )
+        return False
+
+    # Mapear por proveedor para acceso rápido (todas las instancias están bloqueadas)
+    prov_map = {sp.proveedor_id: sp for sp in proveedores_bloqueados}
+    orden_proveedores = []
+
+    # 1) Proveedor preferido primero (si existe)
+    if proveedor_preferido_id in prov_map:
+        orden_proveedores.append(proveedor_preferido_id)
+
+    # 2) Resto de proveedores por mayor disponibilidad
+    resto = [sp for sp in proveedores_bloqueados if sp.proveedor_id != proveedor_preferido_id]
+    resto.sort(key=lambda x: x.cantidad, reverse=True)
+    orden_proveedores.extend([sp.proveedor_id for sp in resto])
+
+    restante = cantidad
+    for prov_id in orden_proveedores:
+        if restante <= 0:
+            break
+        sp = prov_map[prov_id]
+        disponible = Decimal(str(sp.cantidad))
+        if disponible <= 0:
+            continue
+        consumir = min(disponible, restante)
+        sp.cantidad = disponible - consumir
+        sp.save()
+        stock_actualizado.append((sp.stock_id, sp.proveedor_id, sp.cantidad))
+        restante -= consumir
+
+    if restante > 0:
+        # No debería ocurrir por la validación previa, pero por seguridad
+        cod = _obtener_codigo_venta(stock_id)
+        errores_stock.append(
+            f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad}"
+        )
+        return False
+
+    return True
+
 # Importación para integración ARCA automática
 from .ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 
@@ -190,26 +299,31 @@ class VentaViewSet(viewsets.ModelViewSet):
                     errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
                     continue
                     
-                try:
-                    stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                except StockProve.DoesNotExist:
-                    errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
-                    continue
-                
                 if es_nota_credito:
-                    # Para notas de crédito, el stock se devuelve (suma).
-                    stockprove.cantidad += cantidad
-                else:
-                    # Para ventas normales, el stock se descuenta (resta).
-                    if stockprove.cantidad < cantidad and not permitir_stock_negativo:
-                        errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
+                    # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
+                    try:
+                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                    except StockProve.DoesNotExist:
+                        cod = _obtener_codigo_venta(id_stock)
+                        errores_stock.append(f"No existe stock para el producto {cod}")
                         continue
-                    stockprove.cantidad -= cantidad
-
-                stockprove.save()
-                stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                    stockprove.cantidad += cantidad
+                    stockprove.save()
+                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                else:
+                    # Venta: descontar distribuyendo entre proveedores si hace falta
+                    _descontar_distribuyendo(
+                        stock_id=id_stock,
+                        proveedor_preferido_id=id_proveedor,
+                        cantidad=cantidad,
+                        permitir_stock_negativo=permitir_stock_negativo,
+                        errores_stock=errores_stock,
+                        stock_actualizado=stock_actualizado,
+                    )
             if errores_stock:
-                return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
+                # Imitar exactamente el formato de conversión de presupuesto: detail = str({...})
+                payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
 
         ferreteria = Ferreteria.objects.first()
         cliente_id = data.get('ven_idcli')
@@ -329,19 +443,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                     if not id_stock or not id_proveedor:
                         errores_stock.append(f"Falta stock o proveedor en item: {item.id}")
                         continue
-                    try:
-                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                    except StockProve.DoesNotExist:
-                        errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
-                        continue
-                    if stockprove.cantidad < cantidad and not permitir_stock_negativo:
-                        errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
-                        continue
-                    stockprove.cantidad -= cantidad
-                    stockprove.save()
-                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                    # Descontar distribuyendo entre proveedores si hace falta
+                    _descontar_distribuyendo(
+                        stock_id=id_stock,
+                        proveedor_preferido_id=id_proveedor,
+                        cantidad=cantidad,
+                        permitir_stock_negativo=permitir_stock_negativo,
+                        errores_stock=errores_stock,
+                        stock_actualizado=stock_actualizado,
+                    )
                 if errores_stock:
-                    return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
+                    payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                    return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
                 ferreteria = Ferreteria.objects.first()
                 cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
@@ -483,29 +596,23 @@ def convertir_presupuesto_a_venta(request):
                 print("DEBUG - Algunos ítems seleccionados no pertenecen al presupuesto")
                 raise Exception('Algunos ítems seleccionados no pertenecen al presupuesto.')
 
-            # Validar stock si es necesario
+            # Validar stock si es necesario (sumando entre TODOS los proveedores del producto)
             permitir_stock_negativo = data.get('permitir_stock_negativo', False)
-            items_editados = {str(item.get('id')): item for item in data.get('items', [])}
             if not permitir_stock_negativo:
                 errores_stock = []
-                for item_id in items_seleccionados:
-                    item_editado = items_editados.get(str(item_id))
-                    if not item_editado:
+                for item in venta_data.get('items', []):
+                    stock_id = item.get('vdi_idsto')
+                    if not stock_id:
                         continue
                     try:
-                        stockprove = StockProve.objects.select_for_update().get(
-                            stock_id=item_editado.get('vdi_idsto'),
-                            proveedor_id=item_editado.get('vdi_idpro')
-                        )
-                        cantidad = item_editado.get('vdi_cantidad', 0)
-                        if stockprove.cantidad < cantidad:
-                            errores_stock.append(
-                                f"Stock insuficiente para producto {item_editado.get('vdi_idsto')} con proveedor {item_editado.get('vdi_idpro')}. "
-                                f"Disponible: {stockprove.cantidad}, solicitado: {cantidad}"
-                            )
-                    except StockProve.DoesNotExist:
+                        cantidad_req = Decimal(str(item.get('vdi_cantidad', 0)))
+                    except Exception:
+                        cantidad_req = Decimal('0')
+                    total_disponible, _ = _total_disponible_en_proveedores(stock_id)
+                    if total_disponible < cantidad_req:
+                        cod = _obtener_codigo_venta(stock_id)
                         errores_stock.append(
-                            f"No existe stock para el producto {item_editado.get('vdi_idsto')} y proveedor {item_editado.get('vdi_idpro')}"
+                            f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad_req}"
                         )
                 if errores_stock:
                     print("DEBUG - Errores de stock:", errores_stock)
@@ -516,11 +623,10 @@ def convertir_presupuesto_a_venta(request):
             venta_data['ven_tipo'] = 'Venta'  # Tipo Venta
 
             # --- Lógica de numeración robusta ---
-            punto_venta = venta_data.get('ven_punto')
             tipo_comprobante = venta_data.get('tipo_comprobante')
-            if not punto_venta or not tipo_comprobante:
-                print("DEBUG - Falta punto de venta o tipo de comprobante")
-                raise Exception('El punto de venta y tipo de comprobante son requeridos')
+            if not tipo_comprobante:
+                print("DEBUG - Falta tipo de comprobante")
+                raise Exception('El tipo de comprobante es requerido')
 
             # Obtener la situación fiscal de la ferretería y el cliente
             ferreteria = Ferreteria.objects.first()
@@ -539,7 +645,15 @@ def convertir_presupuesto_a_venta(request):
                 pv_arca = getattr(ferreteria, 'punto_venta_arca', None)
                 if pv_arca:
                     venta_data['ven_punto'] = pv_arca
-                    punto_venta = pv_arca
+            # Si no vino punto de venta (p.ej. factura interna/Cotización), usar PV por defecto
+            if not venta_data.get('ven_punto'):
+                pv_defecto = getattr(ferreteria, 'punto_venta_arca', None)
+                if pv_defecto:
+                    venta_data['ven_punto'] = pv_defecto
+            punto_venta = venta_data.get('ven_punto')
+            if not punto_venta:
+                print("DEBUG - Falta punto de venta")
+                raise Exception('El punto de venta es requerido')
 
             # --- Asignar bonificación general a los ítems sin bonificación particular ---
             bonif_general = venta_data.get('bonificacionGeneral', 0)
@@ -620,28 +734,26 @@ def convertir_presupuesto_a_venta(request):
                     presupuesto_result = VentaSerializer(presupuesto).data
 
             print("LOG: Antes de actualizar stock")
-            # Actualizar stock
+            # Actualizar stock: aplicar EXACTAMENTE lo mismo que se validó arriba (sobre los items enviados)
             stock_actualizado = []
-            for item_id in items_seleccionados:
-                item_editado = items_editados.get(str(item_id))
-                if not item_editado:
+            errores_en_descuento = []
+            for item in venta_data.get('items', []):
+                id_stock_conv = item.get('vdi_idsto')
+                if not id_stock_conv:
                     continue
-                try:
-                    stockprove = StockProve.objects.select_for_update().get(
-                        stock_id=item_editado.get('vdi_idsto'),
-                        proveedor_id=item_editado.get('vdi_idpro')
-                    )
-                    cantidad = item_editado.get('vdi_cantidad', 0)
-                    stockprove.cantidad -= cantidad
-                    stockprove.save()
-                    stock_actualizado.append({
-                        'stock_id': stockprove.stock_id,
-                        'proveedor_id': stockprove.proveedor_id,
-                        'cantidad_actual': stockprove.cantidad
-                    })
-                except StockProve.DoesNotExist:
-                    print(f"DEBUG - No se encontró stock para el item {item_id}")
-                    continue
+                id_prov_conv = item.get('vdi_idpro')
+                cantidad_conv = item.get('vdi_cantidad', 0)
+                ok = _descontar_distribuyendo(
+                    stock_id=id_stock_conv,
+                    proveedor_preferido_id=id_prov_conv,
+                    cantidad=cantidad_conv,
+                    permitir_stock_negativo=venta_data.get('permitir_stock_negativo', False),
+                    errores_stock=errores_en_descuento,
+                    stock_actualizado=stock_actualizado,
+                )
+                if not ok:
+                    payload = {'detail': 'Error de stock', 'errores': errores_en_descuento}
+                    return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
 
             # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
             if debe_emitir_arca(tipo_comprobante):
@@ -764,9 +876,9 @@ def convertir_factura_interna_a_fiscal(request):
                 if not id_stock:
                     continue
 
-                # NUEVO: Si tiene idOriginal, proviene de factura interna - NO descontar stock
-                if item.get('idOriginal'):
-                    print(f"LOG: Item original {item.get('idOriginal')} - NO descuenta stock")
+                # NUEVO: Si tiene idOriginal o noDescontarStock, proviene de factura interna - NO descontar stock
+                if item.get('idOriginal') or item.get('noDescontarStock'):
+                    print(f"LOG: Item original/noDescontarStock - NO descuenta stock (idOriginal={item.get('idOriginal')})")
                     continue
 
                 # Si es un producto real NUEVO, DEBE tener un proveedor y SÍ descontamos stock.
@@ -775,30 +887,35 @@ def convertir_factura_interna_a_fiscal(request):
                     errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
                     continue
                     
-                try:
-                    stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                except StockProve.DoesNotExist:
-                    errores_stock.append(f"No existe stock para el producto {id_stock} y proveedor {id_proveedor}")
-                    continue
-                
                 if es_nota_credito:
-                    # Para notas de crédito, el stock se devuelve (suma).
-                    stockprove.cantidad += cantidad
-                else:
-                    # Para ventas normales, el stock se descuenta (resta).
-                    if stockprove.cantidad < cantidad and not permitir_stock_negativo:
-                        errores_stock.append(f"Stock insuficiente para producto {id_stock} con proveedor {id_proveedor}. Disponible: {stockprove.cantidad}, solicitado: {cantidad}")
+                    # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
+                    try:
+                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                    except StockProve.DoesNotExist:
+                        cod = _obtener_codigo_venta(id_stock)
+                        errores_stock.append(f"No existe stock para el producto {cod}")
                         continue
-                    stockprove.cantidad -= cantidad
-
-                stockprove.save()
-                stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
-                print(f"LOG: Item nuevo - Stock descontado: {cantidad} para stock_id {id_stock}")
+                    stockprove.cantidad += cantidad
+                    stockprove.save()
+                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                else:
+                    # Para ventas normales, descontar distribuyendo entre proveedores si hace falta
+                    _descontar_distribuyendo(
+                        stock_id=id_stock,
+                        proveedor_preferido_id=id_proveedor,
+                        cantidad=cantidad,
+                        permitir_stock_negativo=permitir_stock_negativo,
+                        errores_stock=errores_stock,
+                        stock_actualizado=stock_actualizado,
+                    )
                 
             if errores_stock:
-                return Response({'detail': 'Error de stock', 'errores': errores_stock}, status=status.HTTP_400_BAD_REQUEST)
+                payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
 
         # === LÓGICA DE COMPROBANTE (IDÉNTICA AL MÉTODO CREATE) ===
+        # Obtener ferretería para leer configuración fiscal y PV
+        ferreteria = Ferreteria.objects.first()
         cliente_id = venta_data.get('ven_idcli')
         cliente = Cliente.objects.filter(id=cliente_id).first()
         situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)

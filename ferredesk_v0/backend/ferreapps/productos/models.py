@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 class Ferreteria(models.Model):
     nombre = models.CharField(max_length=100)
@@ -100,6 +101,12 @@ class Ferreteria(models.Model):
     arca_habilitado = models.BooleanField(
         default=False,
         help_text='Activar/desactivar la emisión automática de comprobantes ARCA'
+    )
+    
+    # Política operativa: permitir stock negativo por defecto
+    permitir_stock_negativo = models.BooleanField(
+        default=False,
+        help_text='Permite que el sistema permita vender con stock negativo por defecto'
     )
     
     # Estado de configuración ARCA
@@ -407,7 +414,7 @@ class Proveedor(models.Model):
 class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
-    deno = models.CharField(max_length=50, db_column='STO_DENO')
+    deno = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='STO_DENO')
     orden = models.SmallIntegerField(null=True, blank=True, db_column='STO_ORDEN')
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
     margen = models.DecimalField(max_digits=5, decimal_places=2, null=False, blank=False, db_column='STO_MARGEN')

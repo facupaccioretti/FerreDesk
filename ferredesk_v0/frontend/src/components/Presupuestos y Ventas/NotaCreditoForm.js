@@ -178,6 +178,8 @@ const NotaCreditoForm = ({
   });
 
   const itemsGridRef = useRef();
+  // Temporizador para mostrar overlay ARCA solo si la espera es real
+  const temporizadorArcaRef = useRef(null);
   
   // Estado para controlar visibilidad del banner de estado CUIT
   const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
@@ -314,11 +316,8 @@ const NotaCreditoForm = ({
       return;
     }
 
-    // Verificar si requiere emisión ARCA y iniciar estado de espera
+    // Determinar tipo de comprobante para decidir si requiere ARCA (no iniciar overlay aquí)
     const tipoComprobanteSeleccionado = comprobanteNC?.tipo || 'nota_credito';
-    if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-      iniciarEsperaArca();
-    }
 
     const payload = {
       // Campos alineados con VentaForm.js para consistencia y robustez
@@ -354,11 +353,29 @@ const NotaCreditoForm = ({
     };
     
     try {
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca();
+        }, 400);
+      }
+
       const resultado = await onSave(payload, limpiarBorrador);
       
+      // Limpiar temporizador si estaba agendado
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
+
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
     } catch (error) {
+      // Limpiar temporizador en error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la nota de crédito")
     }
@@ -366,6 +383,11 @@ const NotaCreditoForm = ({
 
   const handleCancel = () => {
     if (window.confirm('¿Está seguro de que desea cancelar? Se perderán todos los cambios no guardados.')) {
+      // Limpiar temporizador si está pendiente
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
       limpiarBorrador();
       onCancel();
