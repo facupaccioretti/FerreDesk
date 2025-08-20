@@ -231,6 +231,13 @@ REST_FRAMEWORK = {
 # --- Configuraciones de dominio de negocio ---
 # Cantidad máxima de caracteres para denominación de productos y detalle de ítems
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
+# --- Configuraciones de paginación DRF ---
+# Tamaño por defecto de página de API (sólo lo usa productos por ahora)
+TAM_PAGINA_POR_DEFECTO = 50  # UI mostrará 50 filas típicamente
+# Límite máximo que puede pedir el frontend (buffer)
+TAM_PAGINA_MAXIMA = 200
+
+# Nota: no activamos DEFAULT_PAGINATION_CLASS global para no afectar otras apps
 
 # Configuración de CORS
 CORS_ALLOWED_ORIGINS = [

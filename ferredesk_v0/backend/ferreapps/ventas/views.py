@@ -278,7 +278,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
 
-        permitir_stock_negativo = data.get('permitir_stock_negativo', False)
+        # Obtener configuración de la ferretería para determinar política de stock negativo
+        ferreteria = Ferreteria.objects.first()
+        # Usar configuración de la ferretería, con posibilidad de override desde el frontend
+        permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+        
         tipo_comprobante = data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')
         es_nota_credito = (tipo_comprobante == 'nota_credito')
@@ -324,8 +328,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # Imitar exactamente el formato de conversión de presupuesto: detail = str({...})
                 payload = {'detail': 'Error de stock', 'errores': errores_stock}
                 return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-
-        ferreteria = Ferreteria.objects.first()
         cliente_id = data.get('ven_idcli')
         cliente = Cliente.objects.filter(id=cliente_id).first()
         situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
@@ -433,7 +435,10 @@ class VentaViewSet(viewsets.ModelViewSet):
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
                 items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
-                permitir_stock_negativo = request.data.get('permitir_stock_negativo', False)
+                # Obtener configuración de la ferretería para determinar política de stock negativo
+                ferreteria = Ferreteria.objects.first()
+                # Usar configuración de la ferretería, con posibilidad de override desde el frontend
+                permitir_stock_negativo = request.data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
                 errores_stock = []
                 stock_actualizado = []
                 for item in items:
@@ -455,7 +460,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if errores_stock:
                     payload = {'detail': 'Error de stock', 'errores': errores_stock}
                     return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-                ferreteria = Ferreteria.objects.first()
                 cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
                 tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
@@ -596,8 +600,12 @@ def convertir_presupuesto_a_venta(request):
                 print("DEBUG - Algunos ítems seleccionados no pertenecen al presupuesto")
                 raise Exception('Algunos ítems seleccionados no pertenecen al presupuesto.')
 
+            # Obtener configuración de la ferretería para determinar política de stock negativo
+            ferreteria = Ferreteria.objects.first()
+            # Usar configuración de la ferretería, con posibilidad de override desde el frontend
+            permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+            
             # Validar stock si es necesario (sumando entre TODOS los proveedores del producto)
-            permitir_stock_negativo = data.get('permitir_stock_negativo', False)
             if not permitir_stock_negativo:
                 errores_stock = []
                 for item in venta_data.get('items', []):
@@ -629,7 +637,6 @@ def convertir_presupuesto_a_venta(request):
                 raise Exception('El tipo de comprobante es requerido')
 
             # Obtener la situación fiscal de la ferretería y el cliente
-            ferreteria = Ferreteria.objects.first()
             cliente = Cliente.objects.get(id=venta_data.get('ven_idcli'))
             situacion_iva_ferreteria = ferreteria.situacion_iva
             tipo_iva_cliente = cliente.iva.nombre.strip().lower()
@@ -747,7 +754,7 @@ def convertir_presupuesto_a_venta(request):
                     stock_id=id_stock_conv,
                     proveedor_preferido_id=id_prov_conv,
                     cantidad=cantidad_conv,
-                    permitir_stock_negativo=venta_data.get('permitir_stock_negativo', False),
+                    permitir_stock_negativo=venta_data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False)),
                     errores_stock=errores_en_descuento,
                     stock_actualizado=stock_actualizado,
                 )
@@ -858,8 +865,10 @@ def convertir_factura_interna_a_fiscal(request):
                 item['vdi_bonifica'] = bonif_general
 
         # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
-        # CORREGIDO: Configuración de stock negativo se controla por payload de la operación
-        permitir_stock_negativo = venta_data.get('permitir_stock_negativo', False)
+        # Obtener configuración de la ferretería para determinar política de stock negativo
+        ferreteria = Ferreteria.objects.first()
+        # Usar configuración de la ferretería, con posibilidad de override desde el frontend
+        permitir_stock_negativo = venta_data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
         
         tipo_comprobante = venta_data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')

@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
@@ -44,13 +44,13 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
 };
 
 // Función de normalización adaptada para Nota de Crédito
-function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
-  return normalizarItems(itemsSeleccionados, { 
-    productos: productosDisponibles, 
-    modo: 'nota_credito', 
-    alicuotasMap 
-  });
-}
+// function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
+//   return normalizarItems(itemsSeleccionados, {
+//     productos: productosDisponibles,
+//     modo: 'nota_credito',
+//     alicuotasMap
+//   });
+// }
 
 // Definir constantes descriptivas para tipos y letras de comprobantes
 const TIPO_NOTA_CREDITO = 'nota_credito';
@@ -149,7 +149,7 @@ const NotaCreditoForm = ({
     datosIniciales: getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos),
     combinarConValoresPorDefecto: (data) => ({ ...getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos), ...data }),
     parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItemsNC(items, productos, alicuotasMap),
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
     validarBorrador: (borradorGuardado) => {
       return borradorGuardado.clienteId === clienteSeleccionado?.id;
     }
@@ -205,15 +205,7 @@ const NotaCreditoForm = ({
     limpiarEstadosARCAStatus();
   };
   
-  const stockProveedores = useMemo(() => {
-    const map = {};
-    if (Array.isArray(productos)) {
-      productos.forEach(p => {
-        if (p.stock_proveedores) map[p.id] = p.stock_proveedores;
-      });
-    }
-    return map;
-  }, [productos]);
+
 
   // Lógica mejorada para determinar el tipo de NC automáticamente
   const { tipo: tipoNotaCredito, letra: letraNotaCredito } = useMemo(() => obtenerTipoYLetraNotaCredito(facturasAsociadas), [facturasAsociadas]);
@@ -324,7 +316,7 @@ const NotaCreditoForm = ({
       // Campos alineados con VentaForm.js para consistencia y robustez
       ven_estado: "CE", // Las NC se crean como 'Cerrado'
       ven_tipo: "Nota de Crédito", // Tipo de operación explícito
-      permitir_stock_negativo: true, // CRÍTICO: Permite que la lógica de suma de stock no falle
+      // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
 
       // NUEVO: Enviar tipo determinado automáticamente
       tipo_comprobante: tipoComprobanteSeleccionado,
@@ -401,16 +393,10 @@ const NotaCreditoForm = ({
     }
   };
 
-  const handleRowsChange = (rows) => {
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
-  };
+  }, [actualizarItems]);
   
-  const handleSumarDuplicados = () => {
-    if (itemsGridRef.current) {
-      itemsGridRef.current.sumarDuplicados();
-    }
-  };
-
   if (loadingAlicuotasIVA) return <p className="text-slate-600 text-center py-10">Cargando datos del formulario...</p>;
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;
 
@@ -610,24 +596,21 @@ const NotaCreditoForm = ({
           <div className="mb-8">
             <ItemsGrid
               ref={itemsGridRef}
-              key={formulario.clienteId}
-              initialItems={formulario.items}
-              onRowsChange={handleRowsChange}
-              stockProveedores={stockProveedores}
-              alicuotas={alicuotasMap}
-              productosDisponibles={productos}
-              bonificacionGeneral={formulario.bonificacionGeneral}
-              setBonificacionGeneral={(val) => handleChange({ target: { name: 'bonificacionGeneral', value: val } })}
-              descu1={formulario.descu1}
-              setDescu1={(val) => handleChange({ target: { name: 'descu1', value: val } })}
-              descu2={formulario.descu2}
-              setDescu2={(val) => handleChange({ target: { name: 'descu2', value: val } })}
-              descu3={formulario.descu3}
-              setDescu3={(val) => handleChange({ target: { name: 'descu3', value: val } })}
-              totales={totales}
               autoSumarDuplicados={autoSumarDuplicados}
               setAutoSumarDuplicados={setAutoSumarDuplicados}
-              onSumarDuplicados={handleSumarDuplicados}
+              bonificacionGeneral={formulario.bonificacionGeneral}
+              setBonificacionGeneral={(val) => handleChange({ target: { name: 'bonificacionGeneral', value: val } })}
+              modo="nota_credito"
+              onRowsChange={handleRowsChange}
+              initialItems={formulario.items}
+              descu1={formulario.descu1}
+              descu2={formulario.descu2}
+              descu3={formulario.descu3}
+              setDescu1={(val) => handleChange({ target: { name: 'descu1', value: val } })}
+              setDescu2={(val) => handleChange({ target: { name: 'descu2', value: val } })}
+              setDescu3={(val) => handleChange({ target: { name: 'descu3', value: val } })}
+              totales={totales}
+              alicuotas={alicuotasMap}
             />
           </div>
           

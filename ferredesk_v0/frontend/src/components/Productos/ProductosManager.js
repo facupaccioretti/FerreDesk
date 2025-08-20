@@ -24,7 +24,7 @@ const ProductosManager = () => {
   }, [])
 
   // Hooks API
-  const { productos, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
+  const { productos, total, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -203,7 +203,10 @@ const ProductosManager = () => {
   const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, aplicaFiltrosFamilia])
 
   // ------------------------------------------------------------------
-  // Efecto: recarga productos desde el backend cuando cambian filtros o tab activa
+  // Paginación controlada y recarga server-side
+  const [pagina, setPagina] = useState(1)
+  const [itemsPorPagina, setItemsPorPagina] = useState(50)
+
   useEffect(() => {
     const timeout = setTimeout(() => {
       const filtros = {};
@@ -216,10 +219,29 @@ const ProductosManager = () => {
       } else if (activeTab === "inactivos") {
         filtros.acti = "N";
       }
-      fetchProductos(filtros);
-    }, 300);
+      // Búsqueda remota por denominación
+      if ((searchProductos || '').trim()) {
+        filtros['deno__icontains'] = searchProductos.trim();
+      }
+      fetchProductos(filtros, pagina, itemsPorPagina);
+    }, 200);
     return () => clearTimeout(timeout);
-  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, fetchProductos]);
+  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, fetchProductos]);
+
+  // Resetear a página 1 cuando cambian filtros o búsqueda
+  useEffect(() => {
+    setPagina(1)
+  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, searchProductos])
+
+  // Exponer handlers para ProductosTable sin romper la API del componente
+  if (typeof window !== 'undefined') {
+    window.__productos_paginacion_controlada = true
+    window.__productos_pagina = pagina
+    window.__productos_setPagina = setPagina
+    window.__productos_itemsPorPagina = itemsPorPagina
+    window.__productos_setItemsPorPagina = setItemsPorPagina
+    window.__productos_total = total
+  }
 
   return (
     <div className={theme.fondo}>
@@ -312,6 +334,13 @@ const ProductosManager = () => {
                   onUpdateStock={handleUpdateStock}
                   searchProductos={searchProductos}
                   setSearchProductos={setSearchProductos}
+                  paginacionControlada={true}
+                  paginaActual={pagina}
+                  onPageChange={setPagina}
+                  itemsPerPage={itemsPorPagina}
+                  onItemsPerPageChange={setItemsPorPagina}
+                  totalRemoto={total}
+                  busquedaRemota={true}
                 />
               )}
               {activeTab === "inactivos" && (
@@ -339,6 +368,13 @@ const ProductosManager = () => {
                   onUpdateStock={handleUpdateStock}
                   searchProductos={searchProductos}
                   setSearchProductos={setSearchProductos}
+                  paginacionControlada={true}
+                  paginaActual={pagina}
+                  onPageChange={setPagina}
+                  itemsPerPage={itemsPorPagina}
+                  onItemsPerPageChange={setItemsPorPagina}
+                  totalRemoto={total}
+                  busquedaRemota={true}
                 />
               )}
               {activeTab !== "lista" && activeTab !== "inactivos" && (

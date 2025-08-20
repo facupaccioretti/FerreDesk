@@ -5,10 +5,11 @@ export function useProductosAPI() {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');
 
   // Memoizar fetchProductos para evitar recreación y polling accidental
-  const fetchProductos = useCallback(async (filtros = {}) => {
+  const fetchProductos = useCallback(async (filtros = {}, page = 1, limit = 50) => {
     setLoading(true);
     setError(null);
     try {
@@ -21,11 +22,15 @@ export function useProductosAPI() {
       Object.entries(filtrosConActi).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') params.append(k, v);
       });
+      if (page) params.append('page', String(page));
+      if (limit) params.append('limit', String(limit));
       const url = params.toString() ? `/api/productos/stock/?${params.toString()}` : '/api/productos/stock/';
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener productos');
       const data = await res.json();
-      setProductos(Array.isArray(data) ? data : (data.results || []));
+      const lista = Array.isArray(data) ? data : (data.results || []);
+      setProductos(lista);
+      setTotal((Array.isArray(data) ? lista.length : (typeof data.count === 'number' ? data.count : lista.length)) || 0);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -105,8 +110,8 @@ export function useProductosAPI() {
   }, [csrftoken, fetchProductos]);
 
   useEffect(() => {
-    fetchProductos();
+    fetchProductos({}, 1, 50);
   }, [fetchProductos]);
 
-  return { productos, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };
+  return { productos, total, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };
 }

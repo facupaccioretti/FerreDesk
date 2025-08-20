@@ -21,6 +21,7 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q
 from django.db.models.functions import Lower
 import os
@@ -46,7 +47,12 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['razon', 'fantasia', 'acti']
+    filterset_fields = {
+        'razon': ['exact', 'iexact', 'icontains'],
+        'fantasia': ['exact', 'iexact', 'icontains'],
+        'acti': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
@@ -54,10 +60,17 @@ class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = [
-        'codvta', 'deno', 'proveedor_habitual', 'acti',
-        'idfam1', 'idfam2', 'idfam3',
-    ]
+    # Permitir búsquedas parciales en código y denominación
+    filterset_fields = {
+        'codvta': ['exact', 'iexact', 'icontains'],
+        'deno': ['exact', 'iexact', 'icontains'],
+        'proveedor_habitual': ['exact'],
+        'acti': ['exact'],
+        'idfam1': ['exact'],
+        'idfam2': ['exact'],
+        'idfam3': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
     def get_queryset(self):
         """

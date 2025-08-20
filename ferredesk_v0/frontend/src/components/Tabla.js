@@ -11,8 +11,7 @@ const ESPACIO_HORIZONTAL_CELDA = "px-3"
 const ESPACIO_VERTICAL_CELDA = "py-2"
 const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 
-// Nota: se define una base; la variante compacta se calcula dentro del componente para acceder a props
-const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
+// Nota: la variante compacta se calcula dentro del componente para acceder a props
 
 // -----------------------------------------------------------------------------
 // Tabla genérica con estética FerreDesk
@@ -32,25 +31,42 @@ const Tabla = ({
   tamañoEncabezado = "normal", // "normal" | "pequeño"
   filasCompactas = false,
   claseTbody = "",
+  // --- Nuevos props opcionales para paginación controlada ---
+  paginacionControlada = false,
+  paginaActual: paginaControlada,
+  onPageChange: onPageChangeControlada,
+  itemsPerPage: itemsPerPageControlada,
+  onItemsPerPageChange: onItemsPerPageChangeControlada,
+  totalRemoto = null,
+  busquedaRemota = false,
 }) => {
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
+  const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
+  const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
   const [ordenAscendente, setOrdenAscendente] = useState(false)
 
+  // Mantener sincronizado el estado interno cuando la paginación es controlada externamente
   useEffect(() => {
-    setPaginaActual(1)
-  }, [valorBusqueda, datos])
+    if (paginacionControlada && paginaControlada) setPaginaActual(paginaControlada)
+  }, [paginacionControlada, paginaControlada])
+  useEffect(() => {
+    if (paginacionControlada && itemsPerPageControlada) setFilasPorPagina(itemsPerPageControlada)
+  }, [paginacionControlada, itemsPerPageControlada])
+
+  useEffect(() => {
+    if (!paginacionControlada) setPaginaActual(1)
+  }, [valorBusqueda, datos, paginacionControlada])
 
   const datosFiltrados = useMemo(() => {
     let datosProcesados = datos
 
-    if (valorBusqueda) {
+    // Si la búsqueda es remota, no filtramos localmente
+    if (!busquedaRemota && valorBusqueda) {
       const termino = valorBusqueda.toLowerCase()
       datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
     }
 
-    // Solo aplicar ordenamiento si mostrarOrdenamiento es true
-    if (mostrarOrdenamiento) {
+    // En modo controlado no ordenamos localmente (lo debe hacer el servidor si aplica)
+    if (!paginacionControlada && mostrarOrdenamiento) {
       return datosProcesados.sort((a, b) => {
         const idA = a.id || 0
         const idB = b.id || 0
@@ -58,14 +74,13 @@ const Tabla = ({
       })
     }
 
-    // Si mostrarOrdenamiento es false, devolver los datos sin ordenar
     return datosProcesados
-  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento])
+  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento, paginacionControlada, busquedaRemota])
 
   const indiceInicio = (paginaActual - 1) * filasPorPagina
-  const datosVisibles = paginadorVisible
-    ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina)
-    : datosFiltrados
+  const datosVisibles = paginacionControlada
+    ? datosFiltrados
+    : (paginadorVisible ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina) : datosFiltrados)
 
   // Clases calculadas según modo compacto para las celdas por defecto (cuando no se usa renderFila)
   const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${
@@ -187,13 +202,17 @@ const Tabla = ({
       {paginadorVisible && !sinEstilos && (
         <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
           <Paginador
-            totalItems={datosFiltrados.length}
+            totalItems={totalRemoto ?? datosFiltrados.length}
             itemsPerPage={filasPorPagina}
             currentPage={paginaActual}
-            onPageChange={setPaginaActual}
+            onPageChange={(p) => (paginacionControlada ? onPageChangeControlada?.(p) : setPaginaActual(p))}
             onItemsPerPageChange={(n) => {
-              setFilasPorPagina(n)
-              setPaginaActual(1)
+              if (paginacionControlada) {
+                onItemsPerPageChangeControlada?.(n)
+              } else {
+                setFilasPorPagina(n)
+                setPaginaActual(1)
+              }
             }}
             opcionesItemsPorPagina={opcionesFilasPorPagina}
           />

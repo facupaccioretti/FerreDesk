@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
-import { normalizarItems } from "./herramientasforms/normalizadorItems"
+// import { normalizarItems } from "./herramientasforms/normalizadorItems" // Ya no se usa
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -149,13 +149,13 @@ const VentaForm = ({
   )
 
   // Función para normalizar items
-  const normalizarItemsVenta = (items) => {
-    return normalizarItems(items, { 
-      productos, 
-      modo: 'venta', 
-      alicuotasMap 
-    })
-  }
+  // const normalizarItemsVenta = (items) => {
+  //   return normalizarItems(items, { 
+  //     productos, 
+  //     modo: 'venta', 
+  //     alicuotasMap 
+  //   })
+  // }
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
@@ -163,7 +163,7 @@ const VentaForm = ({
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
-    normalizarItems: normalizarItemsVenta,
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
   })
 
   const alicuotasMap = useMemo(
@@ -526,7 +526,7 @@ const VentaForm = ({
         ven_idvdo: formulario.vendedorId, // ID vendedor
         ven_copia: Number.parseInt(formulario.copia, 10) || 1, // Cantidad de copias
         items: items.map((item, idx) => mapearCamposItem(item, idx)), // Ítems mapeados
-        permitir_stock_negativo: false, // Validar stock como en ConVentaForm
+        // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
       }
 
       // Agregar documento (CUIT/DNI) y domicilio si existen
@@ -599,10 +599,10 @@ const VentaForm = ({
 
   const isReadOnly = readOnlyOverride || formulario.estado === "Cerrado"
 
-  // Función para actualizar los ítems en tiempo real desde ItemsGrid
-  const handleRowsChange = (rows) => {
+  // Función para actualizar los ítems en tiempo real desde ItemsGrid (memoizada)
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows)
-  }
+  }, [actualizarItems])
 
   // Opciones fijas para el dropdown
   const opcionesComprobante = [
@@ -767,9 +767,7 @@ const VentaForm = ({
                             className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
                             title="Buscar en lista completa"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                           </button>
                         )}
                       </div>
@@ -902,62 +900,24 @@ const VentaForm = ({
             </div>
 
             <div className="mb-8">
-              {loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
-                  <p className="text-slate-600">Cargando productos, familias, proveedores y alícuotas...</p>
-                </div>
-              ) : errorProductos ? (
-                <div className="text-center py-8">
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
-                    <div className="text-red-600 font-medium mb-2">Error al cargar productos</div>
-                    <p className="text-red-700 text-sm">{errorProductos}</p>
-                  </div>
-                </div>
-              ) : errorFamilias ? (
-                <div className="text-center py-8">
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
-                    <div className="text-red-600 font-medium mb-2">Error al cargar familias</div>
-                    <p className="text-red-700 text-sm">{errorFamilias}</p>
-                  </div>
-                </div>
-              ) : errorProveedores ? (
-                <div className="text-center py-8">
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
-                    <div className="text-red-600 font-medium mb-2">Error al cargar proveedores</div>
-                    <p className="text-red-700 text-sm">{errorProveedores}</p>
-                  </div>
-                </div>
-              ) : errorAlicuotas ? (
-                <div className="text-center py-8">
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
-                    <div className="text-red-600 font-medium mb-2">Error al cargar alícuotas</div>
-                    <p className="text-red-700 text-sm">{errorAlicuotas}</p>
-                  </div>
-                </div>
-              ) : (
-                <ItemsGrid
-                  ref={itemsGridRef}
-                  productosDisponibles={productos}
-                  proveedores={proveedores}
-                  stockProveedores={stockProveedores}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  bonificacionGeneral={formulario.bonificacionGeneral}
-                  setBonificacionGeneral={(value) => setFormulario((f) => ({ ...f, bonificacionGeneral: value }))}
-                  descu1={formulario.descu1}
-                  descu2={formulario.descu2}
-                  descu3={formulario.descu3}
-                  setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-                  setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-                  setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-                  totales={totales}
-                  modo="venta"
-                  alicuotas={alicuotasMap}
-                  onRowsChange={handleRowsChange}
-                  initialItems={formulario.items}
-                />
-              )}
+              <ItemsGrid
+                ref={itemsGridRef}
+                autoSumarDuplicados={autoSumarDuplicados}
+                setAutoSumarDuplicados={setAutoSumarDuplicados}
+                bonificacionGeneral={formulario.bonificacionGeneral}
+                setBonificacionGeneral={(value) => setFormulario((f) => ({ ...f, bonificacionGeneral: value }))}
+                descu1={formulario.descu1}
+                descu2={formulario.descu2}
+                descu3={formulario.descu3}
+                setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+                setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+                setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+                totales={totales}
+                modo="venta"
+                alicuotas={alicuotasMap}
+                onRowsChange={handleRowsChange}
+                initialItems={formulario.items}
+              />
             </div>
 
             <div className="mt-8 flex justify-end space-x-4">

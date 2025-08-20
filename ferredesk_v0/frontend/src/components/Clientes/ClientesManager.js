@@ -32,7 +32,7 @@ const ClientesManager = () => {
   }, [])
 
   // Hook centralizado de clientes (alta / edición / eliminación)
-  const { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI()
+  const { clientes, total, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI({}, { autoFetch: false })
 
   // Mostrar errores como alert nativo del navegador
   useEffect(() => {
@@ -86,6 +86,8 @@ const ClientesManager = () => {
 
   const [editCliente, setEditCliente] = useState(null)
   const [expandedClientId, setExpandedClientId] = useState(null)
+  const [pagina, setPagina] = useState(1)
+  const [itemsPorPagina, setItemsPorPagina] = useState(50)
   const [user, setUser] = useState(null)
 
   // Persistencia de tabs
@@ -156,8 +158,8 @@ const ClientesManager = () => {
   }
 
   // Filtrado de clientes activos e inactivos con useMemo para optimización
-  const clientesActivos = React.useMemo(() => clientes.filter((c) => c.activo === "A"), [clientes])
-  const clientesInactivos = React.useMemo(() => clientes.filter((c) => c.activo !== "A"), [clientes])
+  const clientesActivos = React.useMemo(() => clientes, [clientes])
+  const clientesInactivos = React.useMemo(() => clientes, [clientes])
 
   // ---------- Hooks de entidades relacionales ----------
   const { barrios, setBarrios } = useBarriosAPI()
@@ -172,18 +174,26 @@ const ClientesManager = () => {
   // Estado y UI de "Maestros" eliminados (migrados a Configuración)
 
   // ------------------------------------------------------------------
-  // Efecto: cada vez que cambia 'search' realizamos consulta filtrada al
-  // backend usando __icontains sobre razón y fantasía.
+  // Efecto: cada vez que cambia búsqueda o pestaña, pedimos al backend con activo=A/I
   useEffect(() => {
+    const termino = activeTab === "inactivos" ? searchInactivos : search
     const timeout = setTimeout(() => {
-      if (search && search.trim() !== "") {
-        fetchClientes({ razon__icontains: search.trim(), fantasia__icontains: search.trim() })
-      } else {
-        fetchClientes()
+      const filtros = {}
+      if (termino && termino.trim() !== "") {
+        filtros.razon__icontains = termino.trim()
+        filtros.fantasia__icontains = termino.trim()
       }
-    }, 300) // Debounce simple
+      if (activeTab === "lista") filtros.activo = "A"
+      if (activeTab === "inactivos") filtros.activo = "I"
+      fetchClientes(filtros, pagina, itemsPorPagina)
+    }, 300)
     return () => clearTimeout(timeout)
-  }, [search, fetchClientes])
+  }, [search, searchInactivos, activeTab, pagina, itemsPorPagina, fetchClientes])
+
+  // Resetear a página 1 cuando cambian pestaña o términos de búsqueda correspondientes
+  useEffect(() => { setPagina(1) }, [activeTab])
+  useEffect(() => { if (activeTab === "lista") setPagina(1) }, [search, activeTab])
+  useEffect(() => { if (activeTab === "inactivos") setPagina(1) }, [searchInactivos, activeTab])
 
   // Eliminar cualquier renderizado visual de error relacionado a 'error' en la UI
 
@@ -266,6 +276,13 @@ const ClientesManager = () => {
                   vendedores={vendedores}
                   plazos={plazos}
                   categorias={categorias}
+                  paginacionControlada={true}
+                  paginaActual={pagina}
+                  onPageChange={setPagina}
+                  itemsPerPage={itemsPorPagina}
+                  onItemsPerPageChange={setItemsPorPagina}
+                  totalRemoto={total}
+                  busquedaRemota={true}
                 />
               )}
 

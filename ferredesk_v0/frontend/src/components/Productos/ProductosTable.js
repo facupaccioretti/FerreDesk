@@ -170,6 +170,13 @@ export default function ProductosTable({
   setFam3Filtro,
   searchProductos,
   setSearchProductos,
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto = null,
+  busquedaRemota = true,
 }) {
   const [showProvModal, setShowProvModal] = useState(false)
   // Removido el estado local search
@@ -356,6 +363,13 @@ export default function ProductosTable({
               valorBusqueda={searchProductos}
               onCambioBusqueda={setSearchProductos}
               mostrarBuscador={true}
+              paginacionControlada={paginacionControlada}
+              paginaActual={paginaActual}
+              onPageChange={onPageChange}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={onItemsPerPageChange}
+              totalRemoto={totalRemoto}
+              busquedaRemota={busquedaRemota}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 

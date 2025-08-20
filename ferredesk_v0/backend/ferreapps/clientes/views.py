@@ -14,6 +14,7 @@ from .serializers import (
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q, ProtectedError
 from .algoritmo_cuit_utils import validar_cuit
 
@@ -71,15 +72,17 @@ class CategoriaClienteViewSet(viewsets.ModelViewSet):
 class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = [
-        'razon',       # Razón social
-        'fantasia',    # Nombre comercial
-        'cuit',        # CUIT
-        'activo',      # Estado (A/I)
-        'vendedor',    # Vendedor asignado (id)
-        'plazo',       # Plazo de pago (id)
-        'categoria',   # Categoría de cliente (id)
-    ]
+    filterset_fields = {
+        'razon': ['exact', 'iexact', 'icontains'],
+        'fantasia': ['exact', 'iexact', 'icontains'],
+        'cuit': ['exact', 'iexact', 'icontains'],
+        'domicilio': ['exact', 'iexact', 'icontains'],
+        'activo': ['exact'],  # A / I
+        'vendedor': ['exact'],
+        'plazo': ['exact'],
+        'categoria': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
     def get_queryset(self):
         """

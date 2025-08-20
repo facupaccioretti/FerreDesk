@@ -10,18 +10,10 @@ import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
-const getStockProveedoresMap = (productos) => {
-  const map = {};
-  productos.forEach(p => {
-    if (p.stock_proveedores) {
-      map[p.id] = p.stock_proveedores;
-    }
-  });
-  return map;
-};
+
 
 // Función para mapear los campos del backend a los nombres del formulario
 const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
@@ -51,7 +43,7 @@ const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
     ven_vdocomvta: data.ven_vdocomvta ?? 0,
     ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? normalizarItems(data.items, { productos, alicuotasMap }) : [],
+    items: Array.isArray(data.items) ? data.items : [],
   };
   // LOG NUEVO: Loggear los datos mapeados y normalizados
   console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
@@ -93,7 +85,7 @@ const EditarPresupuestoForm = ({
   });
 
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
-  const stockProveedores = getStockProveedoresMap(productos);
+
 
   // Calcular el mapa de alícuotas y memorizarlo para evitar re-renders innecesarios
   const alicuotasMap = useMemo(() => {
@@ -121,7 +113,7 @@ const EditarPresupuestoForm = ({
       return base;
     },
     parametrosPorDefecto: [productos, alicuotasMap],
-    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap }),
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
     validarBorrador: (saved, datosOriginales) => {
       // Válido si pertenece al mismo presupuesto (por ID); evita depender de checksum
       const idOriginal = datosOriginales?.ven_id ?? datosOriginales?.id;
@@ -248,7 +240,7 @@ const EditarPresupuestoForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: Number.parseInt(formulario.copia, 10) || 1,
         items: itemsToSave.map((item, idx) => mapearCamposItem(item, idx)),
-        permitir_stock_negativo: true,
+        // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         update_atomic: true
       };
       console.log('[EditarPresupuestoForm/handleSubmit] Payload final:', payload);
@@ -335,7 +327,7 @@ const EditarPresupuestoForm = ({
                   />
                   {!isReadOnly && (
                     <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                     </button>
                   )}
                 </div>
@@ -444,38 +436,37 @@ const EditarPresupuestoForm = ({
       </div>
 
       <div className="mb-8">
-        {loadingProductos || loadingFamilias || loadingProveedores ? (
-          <div className="text-center text-gray-500 py-4">Cargando productos, familias y proveedores...</div>
-        ) : errorProductos ? (
-          <div className="text-center text-red-600 py-4">{errorProductos}</div>
-        ) : errorFamilias ? (
-          <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-        ) : errorProveedores ? (
-          <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-        ) : (
-          <ItemsGrid
-            ref={itemsGridRef}
-            key={gridKey}
-            productosDisponibles={productos}
-            proveedores={proveedores}
-            stockProveedores={stockProveedores}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={formulario.bonificacionGeneral}
-            setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
-            descu1={formulario.descu1}
-            descu2={formulario.descu2}
-            descu3={formulario.descu3}
-            setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-            setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-            setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-            totales={totales}
-            modo="presupuesto"
-            alicuotas={alicuotasMap}
-            onRowsChange={handleRowsChange}
-            initialItems={formulario.items}
-          />
+        {(loadingProductos || loadingFamilias || loadingProveedores) && (
+          <div className="text-center text-gray-500 py-2">Cargando productos, familias y proveedores...</div>
         )}
+        {errorProductos && (
+          <div className="text-center text-red-600 py-2">{errorProductos}</div>
+        )}
+        {errorFamilias && (
+          <div className="text-center text-red-600 py-2">{errorFamilias}</div>
+        )}
+        {errorProveedores && (
+          <div className="text-center text-red-600 py-2">{errorProveedores}</div>
+        )}
+        <ItemsGrid
+          ref={itemsGridRef}
+          key={gridKey}
+          autoSumarDuplicados={autoSumarDuplicados}
+          setAutoSumarDuplicados={setAutoSumarDuplicados}
+          bonificacionGeneral={formulario.bonificacionGeneral}
+          setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+          descu1={formulario.descu1}
+          descu2={formulario.descu2}
+          descu3={formulario.descu3}
+          setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+          setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+          setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+          totales={totales}
+          modo="presupuesto"
+          alicuotas={alicuotasMap}
+          onRowsChange={handleRowsChange}
+          initialItems={formulario.items}
+        />
       </div>
 
       <div className="mt-8 flex justify-end space-x-4">

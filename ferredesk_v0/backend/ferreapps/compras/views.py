@@ -23,6 +23,7 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Subquery, OuterRef, Q
 
 # Configurar logger para este módulo
@@ -66,6 +67,7 @@ class CompraViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CompraFilter
     permission_classes = [IsAuthenticated]
+    pagination_class = PaginacionPorPaginaConLimite
     
     def get_queryset(self):
         """Optimizar consultas con select_related y anotar codigo_proveedor en items"""

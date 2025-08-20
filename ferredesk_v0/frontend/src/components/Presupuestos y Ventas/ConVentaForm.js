@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
@@ -11,7 +11,7 @@ import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import { useArcaEstado } from '../../utils/useArcaEstado';
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
@@ -195,15 +195,8 @@ const ConVentaForm = ({
         ? data.items
         : (Array.isArray(itemsSeleccionados) ? itemsSeleccionados : []);
 
-      // Normalizar items con base seleccionada
-      let itemsNormalizados = normalizarItems(itemsBase, {
-        productos,
-        alicuotasMap,
-        modo: 'venta',
-        metadataConversion: esConversionFacturaI
-          ? { tipoConversion: 'factura_i_factura', facturaInternaOrigenId: facturaInternaOrigen?.id }
-          : null,
-      });
+      // ItemsGrid se encarga de la normalización - pasar items crudos
+      let itemsNormalizados = itemsBase;
 
       // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
       if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {
@@ -326,22 +319,17 @@ const ConVentaForm = ({
     if (!Array.isArray(productos) || productos.length === 0) return;
     if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
 
-    const faltanProductos = formulario.items.some(it => !it.producto);
-    if (faltanProductos) {
-      const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
-      actualizarItems(itemsNormalizados);
-      setGridKey(Date.now());
-    }
+    // ItemsGrid se encarga de la normalización - no hacer nada aquí
+    // const faltanProductos = formulario.items.some(it => !it.producto);
+    // if (faltanProductos) {
+    //   const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
+    //   actualizarItems(itemsNormalizados);
+    //   setGridKey(Date.now());
+    // }
     normalizacionInicialHechaRef.current = true;
   }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
-  const stockProveedores = useMemo(() => {
-    const map = {};
-    productos?.forEach(p => {
-      if (p.stock_proveedores) map[p.id] = p.stock_proveedores;
-    });
-    return map;
-  }, [productos]);
+
 
   // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
@@ -483,7 +471,7 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        permitir_stock_negativo: false
+        // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
       };
 
       // NUEVO: Incluir metadata de conversión para facturas internas
@@ -575,10 +563,10 @@ const ConVentaForm = ({
 
   const isReadOnly = formulario.estado === 'Cerrado';
 
-  // Función para actualizar los ítems en tiempo real desde ItemsGrid
-  const handleRowsChange = (rows) => {
+  // Función para actualizar los ítems en tiempo real desde ItemsGrid (memoizada)
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
-  };
+  }, [actualizarItems]);
 
   // Determinar cliente seleccionado
   const clienteSeleccionado = clientes.find(c => String(c.id) === String(formulario.clienteId))
@@ -801,7 +789,7 @@ const ConVentaForm = ({
                         />
                         {!isReadOnly && (
                           <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                           </button>
                         )}
                       </div>
@@ -922,40 +910,25 @@ const ConVentaForm = ({
             </div>
 
             <div className="mb-8">
-              {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
-                <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
-              ) : errorProductos ? (
-                <div className="text-center text-red-600 py-4">{errorProductos}</div>
-              ) : errorFamilias ? (
-                <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-              ) : errorProveedores ? (
-                <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-              ) : errorAlicuotas ? (
-                <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
-              ) : (
-                <ItemsGrid
-                  key={gridKey}
-                  ref={itemsGridRef}
-                  productosDisponibles={productos}
-                  proveedores={proveedores}
-                  stockProveedores={stockProveedores}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  bonificacionGeneral={formulario.bonificacionGeneral}
-                  setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
-                  descu1={formulario.descu1}
-                  descu2={formulario.descu2}
-                  descu3={formulario.descu3}
-                  setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-                  setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-                  setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-                  totales={totales}
-                  modo="venta"
-                  alicuotas={alicuotasMap}
-                  onRowsChange={handleRowsChange}
-                  initialItems={formulario.items}
-                />
-              )}
+              <ItemsGrid
+                key={gridKey}
+                ref={itemsGridRef}
+                autoSumarDuplicados={autoSumarDuplicados}
+                setAutoSumarDuplicados={setAutoSumarDuplicados}
+                bonificacionGeneral={formulario.bonificacionGeneral}
+                setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+                descu1={formulario.descu1}
+                descu2={formulario.descu2}
+                descu3={formulario.descu3}
+                setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
+                setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
+                setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+                totales={totales}
+                modo="venta"
+                alicuotas={alicuotasMap}
+                onRowsChange={handleRowsChange}
+                initialItems={formulario.items}
+              />
             </div>
 
             <div className="mt-8 flex justify-end space-x-4">

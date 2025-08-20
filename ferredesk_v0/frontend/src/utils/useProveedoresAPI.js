@@ -1,26 +1,43 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCookie } from '../utils/csrf';
 
 export function useProveedoresAPI() {
   const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');
+  const lastQueryKeyRef = useRef('');
 
-  const fetchProveedores = async () => {
-    setLoading(true);
+  const fetchProveedores = useCallback(async (page = 1, limit = 50, filtros = {}) => {
     setError(null);
     try {
-      const res = await fetch('/api/productos/proveedores/', { credentials: 'include' });
+      const params = new URLSearchParams();
+      Object.entries(filtros || {}).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') params.append(k, v);
+      });
+      if (page) params.append('page', String(page));
+      if (limit) params.append('limit', String(limit));
+      const query = params.toString();
+      const url = query ? `/api/productos/proveedores/?${query}` : '/api/productos/proveedores/';
+      const key = `GET ${url}`;
+      if (lastQueryKeyRef.current === key) {
+        return; // Evitar fetch redundante idéntico
+      }
+      lastQueryKeyRef.current = key;
+      setLoading(true);
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener proveedores');
       const data = await res.json();
-      setProveedores(Array.isArray(data) ? data : (data.results || []));
+      const lista = Array.isArray(data) ? data : (data.results || []);
+      setProveedores(lista);
+      setTotal((Array.isArray(data) ? lista.length : (typeof data.count === 'number' ? data.count : lista.length)) || 0);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const addProveedor = async (proveedor) => {
     setError(null);
@@ -90,8 +107,8 @@ export function useProveedoresAPI() {
   };
 
   useEffect(() => {
-    fetchProveedores();
-  }, []);
+    fetchProveedores(1, 50);
+  }, [fetchProveedores]);
 
-  return { proveedores, loading, error, fetchProveedores, addProveedor, updateProveedor, deleteProveedor };
+  return { proveedores, total, loading, error, fetchProveedores, addProveedor, updateProveedor, deleteProveedor };
 }

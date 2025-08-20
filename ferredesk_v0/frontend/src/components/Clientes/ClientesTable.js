@@ -21,6 +21,14 @@ const ClientesTable = ({
   vendedores,
   plazos,
   categorias,
+  // Opcionales: paginación controlada
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto = null,
+  busquedaRemota = true,
 }) => {
   // ---------------------------------------------------------------------------
   // Definición de columnas (encabezados) para Tabla
@@ -379,6 +387,13 @@ const ClientesTable = ({
       valorBusqueda={search}
       onCambioBusqueda={setSearch}
       filasPorPaginaInicial={10}
+      paginacionControlada={paginacionControlada}
+      paginaActual={paginaActual}
+      onPageChange={onPageChange}
+      itemsPerPage={itemsPerPage}
+      onItemsPerPageChange={onItemsPerPageChange}
+      totalRemoto={totalRemoto}
+      busquedaRemota={busquedaRemota}
       renderFila={renderFila}
     />
   )

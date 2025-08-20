@@ -100,9 +100,9 @@ const ComprasManager = () => {
   useEffect(() => {
     const filters = {}
     if (search.trim()) {
-      // Buscar en número de factura o razón social del proveedor
       filters.search = search.trim()
     }
+    // El hook de compras aún no soporta page/limit, por ahora mantiene client-side.
     fetchCompras(filters)
   }, [search, fetchCompras])
 
@@ -234,6 +234,7 @@ const ComprasManager = () => {
                     onAnularCompra={handleAnularCompra}
                     onEliminarCompra={handleEliminarCompra}
                     onRefresh={fetchCompras}
+                    // Paginación controlada pendiente de backend
                   />
                 </>
               ) : (

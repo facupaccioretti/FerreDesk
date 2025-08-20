@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import Navbar from "../Navbar"
 import ListaPreciosModal from "./ListaPreciosModal"
 import HistorialListasModal from "../HistorialListasModal"
@@ -14,7 +14,7 @@ const ProveedoresManager = () => {
   const theme = useFerreDeskTheme()
   
   // Hook API real
-  const { proveedores, addProveedor, updateProveedor, deleteProveedor, loading, error } = useProveedoresAPI()
+  const { proveedores, total, addProveedor, updateProveedor, deleteProveedor, loading, error, fetchProveedores } = useProveedoresAPI()
 
   // Estados para búsqueda y UI
   const [searchProveedores, setSearchProveedores] = useState("")
@@ -34,6 +34,22 @@ const ProveedoresManager = () => {
   const [user, setUser] = useState(null)
 
   // ------------------------------ Paginación ------------------------------
+  const [pagina, setPagina] = useState(1)
+  const [itemsPorPagina, setItemsPorPagina] = useState(50)
+  const firstRun = useRef(true)
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false
+      return
+    }
+    const filtros = {}
+    if (searchProveedores && searchProveedores.trim()) {
+      filtros['razon__icontains'] = searchProveedores.trim()
+      filtros['fantasia__icontains'] = searchProveedores.trim()
+    }
+    const t = setTimeout(() => fetchProveedores(pagina, itemsPorPagina, filtros), 300)
+    return () => clearTimeout(t)
+  }, [pagina, itemsPorPagina, searchProveedores, fetchProveedores])
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -277,9 +293,16 @@ const ProveedoresManager = () => {
                       },
                     ]}
                     datos={proveedores}
+                    mostrarBuscador={true}
                     valorBusqueda={searchProveedores}
                     onCambioBusqueda={setSearchProveedores}
-                    mostrarBuscador={true}
+                    busquedaRemota={true}
+                    paginacionControlada={true}
+                    paginaActual={pagina}
+                    onPageChange={setPagina}
+                    itemsPerPage={itemsPorPagina}
+                    onItemsPerPageChange={setItemsPorPagina}
+                    totalRemoto={total}
                     filasCompactas={true}
                     claseTbody="leading-tight"
                     renderFila={(p, idxVis, idxInicio) => {
