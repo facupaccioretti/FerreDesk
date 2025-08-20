@@ -156,9 +156,10 @@ const NotaCreditoForm = ({
   });
   
   useEffect(() => {
-    // Para asegurar que si el cliente cambia desde fuera, el form se reinicie.
+    // Si ya hay items (p. ej. del borrador), no reiniciar para no pisar el draft
+    if (Array.isArray(formulario?.items) && formulario.items.length > 0) return;
     setFormulario(getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos));
-  }, [clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos, setFormulario, tabKey]);
+  }, [clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos, formulario?.items, setFormulario]);
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -610,10 +611,10 @@ const NotaCreditoForm = ({
             <ItemsGrid
               ref={itemsGridRef}
               key={formulario.clienteId}
-              initialRows={formulario.items}
+              initialItems={formulario.items}
               onRowsChange={handleRowsChange}
               stockProveedores={stockProveedores}
-              alicuotasIVA={alicuotasIVA}
+              alicuotas={alicuotasMap}
               productosDisponibles={productos}
               bonificacionGeneral={formulario.bonificacionGeneral}
               setBonificacionGeneral={(val) => handleChange({ target: { name: 'bonificacionGeneral', value: val } })}

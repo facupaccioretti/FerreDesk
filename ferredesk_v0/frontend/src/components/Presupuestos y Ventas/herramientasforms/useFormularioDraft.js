@@ -130,6 +130,50 @@ export const useFormularioDraft = ({
     }
   }, [formulario, claveAlmacenamiento]);
 
+  // Rehidratación tardía desde borrador cuando datosIniciales aún no estaban listos al montar
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem(claveAlmacenamiento);
+      if (!savedData) return;
+      const parsedData = JSON.parse(savedData);
+      if (esFuncion(validarBorrador)) {
+        const esValido = validarBorrador(parsedData, datosIniciales);
+        if (!esValido) return;
+      }
+      let combinado = combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
+      if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
+        try {
+          combinado = { ...combinado, items: normalizarItems(combinado.items) };
+        } catch (_) {}
+      }
+      if (!sonFormulariosIguales(formulario, combinado)) {
+        setFormulario(combinado);
+      }
+    } catch (_) {
+      // Ignorar errores de rehidratación tardía
+    }
+  }, [claveAlmacenamiento, datosIniciales, combinarConValoresPorDefecto, parametrosPorDefecto, normalizarItems, validarBorrador, formulario]);
+
+  // Inicialización tardía con datosIniciales cuando al montar no estaban listos y no hay borrador válido
+  useEffect(() => {
+    if (!datosIniciales || (typeof datosIniciales === 'object' && Object.keys(datosIniciales).length === 0)) return;
+    // Si hay borrador guardado, no forzar inicialización desde datos iniciales (prioridad al borrador)
+    const savedData = localStorage.getItem(claveAlmacenamiento);
+    if (savedData) return;
+    const baseVacia = combinarConValoresPorDefecto({}, ...parametrosPorDefecto);
+    // Solo proceder si el formulario actual coincide con la base vacía
+    if (!sonFormulariosIguales(formulario, baseVacia)) return;
+    let combinado = combinarConValoresPorDefecto(datosIniciales || {}, ...parametrosPorDefecto);
+    if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
+      try {
+        combinado = { ...combinado, items: normalizarItems(combinado.items) };
+      } catch (_) {}
+    }
+    if (!sonFormulariosIguales(formulario, combinado)) {
+      setFormulario(combinado);
+    }
+  }, [datosIniciales, claveAlmacenamiento, combinarConValoresPorDefecto, parametrosPorDefecto, normalizarItems, formulario]);
+
   // Función para limpiar el borrador
   const limpiarBorrador = () => {
     localStorage.removeItem(claveAlmacenamiento);

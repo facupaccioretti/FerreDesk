@@ -32,8 +32,10 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     // Si el ítem ya tiene un ID (ej. viene de la BD), se mantiene.
     const itemId = item.id || Date.now() + Math.random();
 
-    // Reconstruir producto si es necesario
-    const prod = item.producto || productos.find(p => String(p.id) === String(item.vdi_idsto || item.idSto || item.idsto || item.id));
+    // Reconstruir producto si es necesario (usar item.producto solo si es objeto)
+    const prod = (item.producto && typeof item.producto === 'object')
+      ? item.producto
+      : productos.find(p => String(p.id) === String(item.vdi_idsto || item.idSto || item.idsto || item.id));
 
     // Margen con precedencia: vdi_margen > margen > producto.margen
     // Para ítems genéricos, el margen es siempre 0.
@@ -117,8 +119,8 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
       id: itemId,
       producto: prod,
       // CORRECCIÓN: Mejorar mapeo de código para items originales
-      // Priorizar código del item, luego del producto, considerando diferentes campos fuente
-      codigo: valorNoVacio(item.codigo) ?? valorNoVacio(item.codvta) ?? prod?.codvta ?? prod?.codigo ?? '',
+      // Priorizar variantes del código en el ítem (incluido vdi_codigo) y luego el del producto
+      codigo: valorNoVacio(item.vdi_codigo) ?? valorNoVacio(item.codigo) ?? valorNoVacio(item.codvta) ?? prod?.codvta ?? prod?.codigo ?? '',
       denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? prod?.deno ?? prod?.nombre ?? '',
       unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? prod?.unidad ?? prod?.unidadmedida ?? '-',
       cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,

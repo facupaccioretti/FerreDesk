@@ -150,6 +150,10 @@ const ConVentaForm = ({
   // Determinar origen de datos
   const origenDatos = facturaInternaOrigen || presupuestoOrigen;
   const esConversionFacturaI = tipoConversion === 'factura_i_factura';
+  // Clave de borrador estable por origen (evita pérdida por cambios de tabKey)
+  const claveDraft = `conVentaFormDraft_${esConversionFacturaI ? 'factura_interna' : 'presupuesto'}_${esConversionFacturaI ? (facturaInternaOrigen?.id ?? '0') : (presupuestoOrigen?.id ?? '0')}`;
+
+  // (eliminado indicador isReady no utilizado)
 
   // Usar el hook useFormularioDraft
   const { 
@@ -158,7 +162,7 @@ const ConVentaForm = ({
     limpiarBorrador, 
     actualizarItems 
   } = useFormularioDraft({
-    claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
+    claveAlmacenamiento: claveDraft,
     datosIniciales: origenDatos,
     combinarConValoresPorDefecto: (data) => {
       if (!data) return {
@@ -180,7 +184,39 @@ const ConVentaForm = ({
         descu3: 0,
         copia: 1,
         cae: '',
+        // Metadatos de origen para asociar el borrador a esta conversión
+        __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
+        __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
+      // Usar items del borrador SOLO si 'data' proviene de borrador (tiene metadata propia)
+      const esBorrador = data && Object.prototype.hasOwnProperty.call(data, '__origenTipo');
+      const tieneItemsGuardados = esBorrador && Array.isArray(data.items) && data.items.length > 0;
+      const itemsBase = tieneItemsGuardados
+        ? data.items
+        : (Array.isArray(itemsSeleccionados) ? itemsSeleccionados : []);
+
+      // Normalizar items con base seleccionada
+      let itemsNormalizados = normalizarItems(itemsBase, {
+        productos,
+        alicuotasMap,
+        modo: 'venta',
+        metadataConversion: esConversionFacturaI
+          ? { tipoConversion: 'factura_i_factura', facturaInternaOrigenId: facturaInternaOrigen?.id }
+          : null,
+      });
+
+      // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
+      if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {
+        const idsOriginales = new Set(itemsSeleccionados.map(it => it.id));
+        itemsNormalizados = itemsNormalizados.map(it => {
+          const idOri = it.idOriginal ?? null;
+          if (idOri != null && idsOriginales.has(idOri)) {
+            return { ...it, esBloqueado: true, noDescontarStock: true };
+          }
+          return it;
+        });
+      }
+
       return {
         clienteId: data.ven_idcli ?? data.clienteId ?? '',
         cuit: data.ven_cuit ?? data.cuit ?? '',
@@ -197,24 +233,37 @@ const ConVentaForm = ({
         fecha: new Date().toISOString().split('T')[0],
         estado: 'Abierto',
         tipo: 'Venta',
-        items: normalizarItems(itemsSeleccionados, { 
-          productos, 
-          alicuotasMap, 
-          modo: 'venta',
-          // NUEVO: metadata para conversión de facturas internas
-          metadataConversion: esConversionFacturaI ? {
-            tipoConversion: 'factura_i_factura',
-            facturaInternaOrigenId: facturaInternaOrigen?.id
-          } : null
-        }),
+        items: itemsNormalizados,
         cae: '',
         total: 0,
+        __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
+        __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
     },
     parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
-    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap, modo: 'venta' }),
-    validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
+    validarBorrador: (saved) => {
+      const origenTipoActual = esConversionFacturaI ? 'factura_interna' : 'presupuesto';
+      const origenIdActual = esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null);
+      const coincideOrigen = (saved?.__origenTipo === origenTipoActual)
+        && (String(saved?.__origenId ?? '') === String(origenIdActual ?? ''));
+      const clienteOrigen = esConversionFacturaI
+        ? (facturaInternaOrigen?.ven_idcli ?? facturaInternaOrigen?.clienteId ?? '')
+        : (presupuestoOrigen?.ven_idcli ?? presupuestoOrigen?.clienteId ?? '');
+      const coincideCliente = String(saved?.clienteId ?? '') === String(clienteOrigen ?? '');
+      return coincideOrigen && coincideCliente;
+    }
   });
+
+
+  // Remontar el grid cuando el borrador haya sido rehidratado y existan items
+  const remountBorradorRef = useRef(false);
+  useEffect(() => {
+    if (remountBorradorRef.current) return;
+    if (Array.isArray(formulario.items) && formulario.items.length > 0) {
+      setGridKey(Date.now());
+      remountBorradorRef.current = true;
+    }
+  }, [formulario.items]);
 
   // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
   const [documentoInfo, setDocumentoInfo] = useState({

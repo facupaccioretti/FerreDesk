@@ -58,15 +58,7 @@ const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
   return mapeado;
 };
 
-// Utilidad simple para generar un checksum estable del presupuesto original
-const generarChecksum = (data) => {
-  if (!data) return '';
-  return JSON.stringify({
-    total: data?.ven_total ?? data?.total ?? 0,
-    itemsLen: Array.isArray(data?.items) ? data.items.length : 0,
-    actualizado: data?.updated_at ?? null
-  });
-};
+// (eliminada utilidad generarChecksum no utilizada)
 
 const EditarPresupuestoForm = ({
   onSave,
@@ -114,25 +106,44 @@ const EditarPresupuestoForm = ({
   }, [alicuotas]);
 
   // Hook unificado de estado con soporte de borrador
+  const [gridKey, setGridKey] = useState(Date.now());
+
   const {
     formulario,
     setFormulario,
     limpiarBorrador,
     actualizarItems
   } = useFormularioDraft({
-    claveAlmacenamiento: initialData && initialData.id ? `editarPresupuestoDraft_${initialData.id}` : 'editarPresupuestoDraft_nuevo',
+    claveAlmacenamiento: (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
     combinarConValoresPorDefecto: (data) => {
       const base = mapearCamposPresupuesto(data, productos, alicuotasMap);
-      return { ...base, __checksum: generarChecksum(data) };
+      return base;
     },
     parametrosPorDefecto: [productos, alicuotasMap],
     normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap }),
     validarBorrador: (saved, datosOriginales) => {
-      // Se considera válido solo si el checksum coincide
-      return saved?.__checksum === generarChecksum(datosOriginales);
+      // Válido si pertenece al mismo presupuesto (por ID); evita depender de checksum
+      const idOriginal = datosOriginales?.ven_id ?? datosOriginales?.id;
+      return String(saved?.id ?? '') === String(idOriginal ?? '');
     }
   });
+
+  // Remontar el grid una sola vez si detectamos borrador con items (rehidratación)
+  const remountHechoRef = useRef(false);
+  useEffect(() => {
+    if (remountHechoRef.current) return;
+    const clave = (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo';
+    try {
+      const saved = localStorage.getItem(clave);
+      if (!saved) return;
+      const borrador = JSON.parse(saved);
+      if (Array.isArray(borrador?.items) && borrador.items.length > 0) {
+        setGridKey(Date.now());
+        remountHechoRef.current = true;
+      }
+    } catch (_) {}
+  }, [initialData]);
 
   const itemsGridRef = useRef();
   
@@ -444,6 +455,7 @@ const EditarPresupuestoForm = ({
         ) : (
           <ItemsGrid
             ref={itemsGridRef}
+            key={gridKey}
             productosDisponibles={productos}
             proveedores={proveedores}
             stockProveedores={stockProveedores}
