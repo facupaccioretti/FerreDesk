@@ -16,7 +16,7 @@ from .serializers import (
     VentaCalculadaSerializer
 )
 from django.db import transaction
-from ferreapps.productos.models import Stock, StockProve
+from ferreapps.productos.models import Stock, StockProve, Proveedor
 from decimal import Decimal
 from ferreapps.productos.models import Ferreteria
 from ferreapps.clientes.models import Cliente, TipoIVA
@@ -74,6 +74,21 @@ def _obtener_nombre_proveedor(proveedor_id):
         return proveedor.razon or proveedor.fantasia or str(proveedor_id)
     except Proveedor.DoesNotExist:
         return str(proveedor_id)
+
+
+def _obtener_proveedor_habitual_stock(stock_id):
+    """
+    Obtiene el proveedor habitual de un stock.
+    Como todos los productos tienen proveedor habitual obligatorio, esto nunca debería fallar.
+    """
+    try:
+        stock = Stock.objects.get(id=stock_id)
+        return stock.proveedor_habitual.id
+    except Stock.DoesNotExist:
+        return None
+    except AttributeError:
+        # Si por alguna razón el proveedor_habitual es None (no debería ocurrir)
+        return None
 
 
 def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permitir_stock_negativo, errores_stock, stock_actualizado):
@@ -311,10 +326,12 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if not id_stock:
                     continue
 
-                # Si es un producto real, DEBE tener un proveedor.
-                id_proveedor = item.get('vdi_idpro')
+                # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+                # El frontend solo debe enviar vdi_idsto, el backend maneja toda la lógica
+                id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
                 if not id_proveedor:
-                    errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
+                    cod = _obtener_codigo_venta(id_stock)
+                    errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
                     continue
                     
                 if es_nota_credito:
@@ -457,11 +474,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                 stock_actualizado = []
                 for item in items:
                     id_stock = item.vdi_idsto
-                    id_proveedor = item.vdi_idpro
                     cantidad = Decimal(str(item.vdi_cantidad))
-                    if not id_stock or not id_proveedor:
-                        errores_stock.append(f"Falta stock o proveedor en item: {item.id}")
+                    if not id_stock:
+                        errores_stock.append(f"Falta stock en item: {item.id}")
                         continue
+                    
+                    # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+                    id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
+                    if not id_proveedor:
+                        cod = _obtener_codigo_venta(id_stock)
+                        errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
+                        continue
+                    
                     # Descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
                         stock_id=id_stock,
@@ -762,8 +786,17 @@ def convertir_presupuesto_a_venta(request):
                 id_stock_conv = item.get('vdi_idsto')
                 if not id_stock_conv:
                     continue
-                id_prov_conv = item.get('vdi_idpro')
+                
+                # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+                # El frontend solo debe enviar vdi_idsto, el backend maneja toda la lógica
+                id_prov_conv = _obtener_proveedor_habitual_stock(id_stock_conv)
+                if not id_prov_conv:
+                    cod = _obtener_codigo_venta(id_stock_conv)
+                    errores_en_descuento.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock_conv})")
+                    continue
+                
                 cantidad_conv = item.get('vdi_cantidad', 0)
+                
                 ok = _descontar_distribuyendo(
                     stock_id=id_stock_conv,
                     proveedor_preferido_id=id_prov_conv,
@@ -774,7 +807,7 @@ def convertir_presupuesto_a_venta(request):
                 )
                 if not ok:
                     payload = {'detail': 'Error de stock', 'errores': errores_en_descuento}
-                    return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
+                    raise Exception(str(payload))
 
             # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
             if debe_emitir_arca(tipo_comprobante):
@@ -899,15 +932,16 @@ def convertir_factura_interna_a_fiscal(request):
                 if not id_stock:
                     continue
 
-                # NUEVO: Si tiene idOriginal o noDescontarStock, proviene de factura interna - NO descontar stock
-                if item.get('idOriginal') or item.get('noDescontarStock'):
-                    print(f"LOG: Item original/noDescontarStock - NO descuenta stock (idOriginal={item.get('idOriginal')})")
+                # NUEVO: Si tiene idOriginal, noDescontarStock o esBloqueado, proviene de factura interna - NO descontar stock
+                if item.get('idOriginal') or item.get('noDescontarStock') or item.get('esBloqueado'):
+                    print(f"LOG: Item original/noDescontarStock/esBloqueado - NO descuenta stock (idOriginal={item.get('idOriginal')}, noDescontarStock={item.get('noDescontarStock')}, esBloqueado={item.get('esBloqueado')})")
                     continue
 
-                # Si es un producto real NUEVO, DEBE tener un proveedor y SÍ descontamos stock.
-                id_proveedor = item.get('vdi_idpro')
+                # Si es un producto real NUEVO, el backend obtiene automáticamente el proveedor habitual
+                id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
                 if not id_proveedor:
-                    errores_stock.append(f"Falta proveedor en item con ID de stock: {id_stock}")
+                    cod = _obtener_codigo_venta(id_stock)
+                    errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
                     continue
                     
                 if es_nota_credito:

@@ -43,7 +43,8 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     vdi_idve: item.vdi_idve ?? null,
     vdi_orden: idx + 1,
     vdi_idsto: (item.producto?.id && item.producto?.id !== '') ? item.producto?.id : (item.idSto && item.idSto !== '') ? item.idSto : (item.vdi_idsto && item.vdi_idsto !== '') ? item.vdi_idsto : (item.idsto && item.idsto !== '') ? item.idsto : null,
-    vdi_idpro: (item.proveedorId && item.proveedorId !== '') ? item.proveedorId : (item.idPro && item.idPro !== '') ? item.idPro : (item.vdi_idpro && item.vdi_idpro !== '') ? item.vdi_idpro : null,
+    // NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+    // vdi_idpro: (item.proveedorId && item.proveedorId !== '') ? item.proveedorId : (item.idPro && item.idPro !== '') ? item.idPro : (item.vdi_idpro && item.vdi_idpro !== '') ? item.vdi_idpro : null,
     vdi_cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
     vdi_costo: vdi_costo,
     vdi_margen: item.margen ?? item.vdi_margen ?? (item.producto?.margen ?? 0),

@@ -540,7 +540,8 @@ const ItemsGridPresupuesto = forwardRef(
                 return {
                   vdi_orden: idx + 1,
                   vdi_idsto: row.producto.id,
-                  vdi_idpro: row.proveedorId,
+                  // NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+                  // vdi_idpro: row.proveedorId,
                   vdi_cantidad: cantidad,
                   vdi_costo: row.vdi_costo ?? 0,
                   vdi_margen: margen,
@@ -558,7 +559,8 @@ const ItemsGridPresupuesto = forwardRef(
                 return {
                   vdi_orden: idx + 1,
                   vdi_idsto: null,
-                  vdi_idpro: null,
+                  // NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
+                  // vdi_idpro: null,
                   vdi_cantidad: cantidad,
                   vdi_costo: Number.parseFloat(row.vdi_costo) || 0,
                   vdi_margen: 0,
