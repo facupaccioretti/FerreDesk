@@ -87,7 +87,7 @@ const ClientesManager = () => {
   const [editCliente, setEditCliente] = useState(null)
   const [expandedClientId, setExpandedClientId] = useState(null)
   const [pagina, setPagina] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(50)
+  const [itemsPorPagina, setItemsPorPagina] = useState(10)
   const [user, setUser] = useState(null)
 
   // Persistencia de tabs

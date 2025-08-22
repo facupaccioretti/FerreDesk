@@ -74,11 +74,24 @@ class StockViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Aplicar filtro de productos activos solo si no se especifica acti explícitamente
+        Aplicar filtro de productos activos por defecto y búsqueda general.
         """
-        queryset = Stock.objects.all()
-        
-        # Si no se especifica acti en los parámetros, filtrar por activos por defecto
+        queryset = super().get_queryset()
+
+        # Búsqueda exacta por código (para el grid)
+        codigo_exacto = self.request.query_params.get('codvta', None)
+        if codigo_exacto:
+            queryset = queryset.filter(codvta__iexact=codigo_exacto)
+        else:
+            # Búsqueda general por código o denominación (para otros casos)
+            termino_busqueda = self.request.query_params.get('search', None)
+            if termino_busqueda:
+                queryset = queryset.filter(
+                    Q(codvta__icontains=termino_busqueda) |
+                    Q(deno__icontains=termino_busqueda)
+                ).distinct()
+
+        # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
         if 'acti' not in self.request.query_params:
             queryset = queryset.filter(acti='S')
         

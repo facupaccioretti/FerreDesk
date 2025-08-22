@@ -9,7 +9,7 @@ export function useProductosAPI() {
   const csrftoken = getCookie('csrftoken');
 
   // Memoizar fetchProductos para evitar recreación y polling accidental
-  const fetchProductos = useCallback(async (filtros = {}, page = 1, limit = 50) => {
+  const fetchProductos = useCallback(async (filtros = {}, page = 1, limit = 10) => {
     setLoading(true);
     setError(null);
     try {
@@ -110,7 +110,7 @@ export function useProductosAPI() {
   }, [csrftoken, fetchProductos]);
 
   useEffect(() => {
-    fetchProductos({}, 1, 50);
+    fetchProductos({}, 1, 10);
   }, [fetchProductos]);
 
   return { productos, total, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };

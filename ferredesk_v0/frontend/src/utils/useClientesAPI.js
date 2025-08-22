@@ -9,7 +9,7 @@ export function useClientesAPI(filtrosIniciales = {}, opciones = { autoFetch: tr
   const csrftoken = getCookie('csrftoken');
   const lastQueryKeyRef = useRef('');
 
-  const fetchClientes = useCallback(async (filtros = {}, page = 1, limit = 50) => {
+  const fetchClientes = useCallback(async (filtros = {}, page = 1, limit = 10) => {
     setError(null);
     try {
       // Construir querystring si hay filtros

@@ -9,7 +9,7 @@ export function useProveedoresAPI() {
   const csrftoken = getCookie('csrftoken');
   const lastQueryKeyRef = useRef('');
 
-  const fetchProveedores = useCallback(async (page = 1, limit = 50, filtros = {}) => {
+  const fetchProveedores = useCallback(async (page = 1, limit = 10, filtros = {}) => {
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -107,7 +107,7 @@ export function useProveedoresAPI() {
   };
 
   useEffect(() => {
-    fetchProveedores(1, 50);
+    fetchProveedores(1, 10);
   }, [fetchProveedores]);
 
   return { proveedores, total, loading, error, fetchProveedores, addProveedor, updateProveedor, deleteProveedor };

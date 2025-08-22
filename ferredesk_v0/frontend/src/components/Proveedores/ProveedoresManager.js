@@ -35,7 +35,7 @@ const ProveedoresManager = () => {
 
   // ------------------------------ Paginación ------------------------------
   const [pagina, setPagina] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(50)
+  const [itemsPorPagina, setItemsPorPagina] = useState(10)
   const firstRun = useRef(true)
   useEffect(() => {
     if (firstRun.current) {

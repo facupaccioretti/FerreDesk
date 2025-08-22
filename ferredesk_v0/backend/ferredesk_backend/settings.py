@@ -233,7 +233,7 @@ REST_FRAMEWORK = {
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
 # --- Configuraciones de paginación DRF ---
 # Tamaño por defecto de página de API (sólo lo usa productos por ahora)
-TAM_PAGINA_POR_DEFECTO = 50  # UI mostrará 50 filas típicamente
+TAM_PAGINA_POR_DEFECTO = 10  # UI mostrará 10 filas típicamente
 # Límite máximo que puede pedir el frontend (buffer)
 TAM_PAGINA_MAXIMA = 200
 

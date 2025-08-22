@@ -396,6 +396,23 @@ const NotaCreditoForm = ({
   const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
   }, [actualizarItems]);
+
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    handleChange({ target: { name: 'descu1', value } })
+  }, [handleChange])
+
+  const setDescu2 = useCallback((value) => {
+    handleChange({ target: { name: 'descu2', value } })
+  }, [handleChange])
+
+  const setDescu3 = useCallback((value) => {
+    handleChange({ target: { name: 'descu3', value } })
+  }, [handleChange])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    handleChange({ target: { name: 'bonificacionGeneral', value } })
+  }, [handleChange])
   
   if (loadingAlicuotasIVA) return <p className="text-slate-600 text-center py-10">Cargando datos del formulario...</p>;
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;
@@ -515,7 +532,7 @@ const NotaCreditoForm = ({
                     {/* Buscador */}
                     <div>
                       <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                      <BuscadorProducto onSelect={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} className="w-full" />
+                                             <BuscadorProducto onSelect={handleAddItemToGrid} className="w-full" />
                     </div>
 
                     {/* Tipo de Comprobante */}
@@ -599,16 +616,16 @@ const NotaCreditoForm = ({
               autoSumarDuplicados={autoSumarDuplicados}
               setAutoSumarDuplicados={setAutoSumarDuplicados}
               bonificacionGeneral={formulario.bonificacionGeneral}
-              setBonificacionGeneral={(val) => handleChange({ target: { name: 'bonificacionGeneral', value: val } })}
+              setBonificacionGeneral={setBonificacionGeneral}
               modo="nota_credito"
               onRowsChange={handleRowsChange}
               initialItems={formulario.items}
               descu1={formulario.descu1}
               descu2={formulario.descu2}
               descu3={formulario.descu3}
-              setDescu1={(val) => handleChange({ target: { name: 'descu1', value: val } })}
-              setDescu2={(val) => handleChange({ target: { name: 'descu2', value: val } })}
-              setDescu3={(val) => handleChange({ target: { name: 'descu3', value: val } })}
+              setDescu1={setDescu1}
+              setDescu2={setDescu2}
+              setDescu3={setDescu3}
               totales={totales}
               alicuotas={alicuotasMap}
             />

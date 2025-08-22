@@ -72,7 +72,7 @@ const ItemsGridPresupuesto = forwardRef(
         const resp = await fetch(url, { credentials: 'include' })
         if (!resp.ok) return null
         const data = await resp.json()
-        const lista = Array.isArray(data) ? data : []
+        const lista = Array.isArray(data) ? data : (data.results || [])
         if (!Array.isArray(lista) || lista.length === 0) return null
         // Elegir coincidencia exacta por codvta si existe, ignorando mayúsculas/minúsculas
         const exacta = lista.find(p => (p.codvta || p.codigo || '').toString().toLowerCase() === codigoTrim.toLowerCase())
@@ -1164,7 +1164,7 @@ const ItemsGridPresupuesto = forwardRef(
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-10">
                     Nro.
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-14">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">
                     Código
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-48">
@@ -1179,7 +1179,7 @@ const ItemsGridPresupuesto = forwardRef(
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-32">
                     Precio Unitario
                   </th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-16">
                     Bonif. %
                   </th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">

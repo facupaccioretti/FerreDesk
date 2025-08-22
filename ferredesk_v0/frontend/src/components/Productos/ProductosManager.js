@@ -205,7 +205,7 @@ const ProductosManager = () => {
   // ------------------------------------------------------------------
   // Paginación controlada y recarga server-side
   const [pagina, setPagina] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(50)
+  const [itemsPorPagina, setItemsPorPagina] = useState(10)
 
   useEffect(() => {
     const timeout = setTimeout(() => {

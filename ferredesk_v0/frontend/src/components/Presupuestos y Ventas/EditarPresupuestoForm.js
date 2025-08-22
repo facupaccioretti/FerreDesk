@@ -158,6 +158,23 @@ const EditarPresupuestoForm = ({
     actualizarItems(rowsActualizados)
   }, [actualizarItems]);
 
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu1: value }))
+  }, [setFormulario])
+
+  const setDescu2 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu2: value }))
+  }, [setFormulario])
+
+  const setDescu3 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu3: value }))
+  }, [setFormulario])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
+
   // Manejadores de cambios
   const handleChange = manejarCambioFormulario(setFormulario);
 
@@ -406,7 +423,7 @@ const EditarPresupuestoForm = ({
             {/* Buscador */}
             <div>
               <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-              <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+                             <BuscadorProducto onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
             </div>
 
             {/* Tipo de Comprobante */}
@@ -454,13 +471,13 @@ const EditarPresupuestoForm = ({
           autoSumarDuplicados={autoSumarDuplicados}
           setAutoSumarDuplicados={setAutoSumarDuplicados}
           bonificacionGeneral={formulario.bonificacionGeneral}
-          setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
+          setBonificacionGeneral={setBonificacionGeneral}
           descu1={formulario.descu1}
           descu2={formulario.descu2}
           descu3={formulario.descu3}
-          setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-          setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-          setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
+          setDescu1={setDescu1}
+          setDescu2={setDescu2}
+          setDescu3={setDescu3}
           totales={totales}
           modo="presupuesto"
           alicuotas={alicuotasMap}
