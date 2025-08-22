@@ -40,20 +40,20 @@ WITH PreciosBase AS (
 )
 SELECT
     pb.id,
-    pb."VDI_IDVE",
-    pb."VDI_ORDEN",
-    pb."VDI_IDSTO",
-    pb."VDI_IDPRO",
-    pb."VDI_CANTIDAD",
-    pb."VDI_COSTO",
-    pb."VDI_MARGEN",
-    pb."VDI_BONIFICA",
-    pb."VDI_DETALLE1",
-    pb."VDI_DETALLE2",
-    pb."VDI_IDALIIVA",
+    pb."VDI_IDVE" AS vdi_idve,
+    pb."VDI_ORDEN" AS vdi_orden,
+    pb."VDI_IDSTO" AS vdi_idsto,
+    pb."VDI_IDPRO" AS vdi_idpro,
+    pb."VDI_CANTIDAD" AS vdi_cantidad,
+    pb."VDI_COSTO" AS vdi_costo,
+    pb."VDI_MARGEN" AS vdi_margen,
+    pb."VDI_BONIFICA" AS vdi_bonifica,
+    pb."VDI_DETALLE1" AS vdi_detalle1,
+    pb."VDI_DETALLE2" AS vdi_detalle2,
+    pb."VDI_IDALIIVA" AS vdi_idaliiva,
     pb.codigo,
     pb.unidad,
-    pb."ALI_PORCE",
+    pb."ALI_PORCE" AS ali_porce,
     ROUND(pb."VDI_PRECIO_UNITARIO_FINAL", 2) AS vdi_precio_unitario_final,
     pb.precio_unitario_sin_iva,
     ROUND(pb.precio_unitario_sin_iva * pb."ALI_PORCE" / 100.0, 4) AS iva_unitario,
@@ -106,29 +106,29 @@ SELECT
     , 2) AS total_item,
     ROUND(pb.precio_unitario_sin_iva - pb."VDI_COSTO", 3) AS margen_monto,
     ROUND(CASE WHEN pb."VDI_COSTO" > 0 THEN ((pb.precio_unitario_sin_iva - pb."VDI_COSTO") / pb."VDI_COSTO") * 100.0 ELSE 0 END, 3) AS margen_porcentaje,
-    pb."VEN_DESCU1",
-    pb."VEN_DESCU2"
+    pb."VEN_DESCU1" AS ven_descu1,
+    pb."VEN_DESCU2" AS ven_descu2
 FROM PreciosBase pb;
 
 CREATE VIEW "VENTAIVA_ALICUOTA" AS
 SELECT
     row_number() OVER () AS id,
-    d."VDI_IDVE" AS vdi_idve,
-    d."ALI_PORCE" as ali_porce,
+    d.vdi_idve,
+    d.ali_porce AS ali_porce,
     SUM(d.subtotal_neto) as neto_gravado,
     SUM(d.iva_monto) as iva_total
 FROM "VENTADETALLEITEM_CALCULADO" d
-GROUP BY d."VDI_IDVE", d."ALI_PORCE";
+GROUP BY d.vdi_idve, d.ali_porce;
 
 CREATE VIEW "VENTA_CALCULADO" AS
 WITH Totales AS (
     SELECT
-        "VDI_IDVE" AS vdi_idve,
+        vdi_idve,
         SUM(subtotal_neto) AS total_neto,
         SUM(iva_monto) AS total_iva,
         SUM(total_item) AS total_final
     FROM "VENTADETALLEITEM_CALCULADO"
-    GROUP BY "VDI_IDVE"
+    GROUP BY vdi_idve
 )
 SELECT
     v."VEN_ID" AS ven_id,
@@ -174,9 +174,9 @@ SELECT
     t.total_iva AS iva_global,
     t.total_final AS ven_total,
     (
-        SELECT ROUND(SUM(precio_unitario_bonificado * "VDI_CANTIDAD"), 2)
+        SELECT ROUND(SUM(precio_unitario_bonificado * vdi_cantidad), 2)
         FROM "VENTADETALLEITEM_CALCULADO"
-        WHERE "VDI_IDVE" = v."VEN_ID"
+        WHERE vdi_idve = v."VEN_ID"
     ) AS subtotal_bruto,
     -- NUEVOS CAMPOS: Datos completos del cliente
     cli."CLI_RAZON" AS cliente_razon,
@@ -203,7 +203,7 @@ LEFT JOIN "TIPOSIVA" iva ON cli."CLI_IVA" = iva."TIV_ID";
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ventas', '0001_initial'),
+        ('ventas', '0002_datos_iniciales_comprobantes'),
     ]
 
     operations = [

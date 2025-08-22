@@ -47,7 +47,7 @@ def revertir_comprobantes(apps, schema_editor):
 class Migration(migrations.Migration):
 
 	dependencies = [
-		('ventas', '0002_vistas_ventas'),
+		('ventas', '0001_initial'),
 	]
 
 	operations = [
