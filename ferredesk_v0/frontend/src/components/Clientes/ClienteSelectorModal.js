@@ -37,7 +37,6 @@ export default function ClienteSelectorModal({
 
   // Definición de columnas para la tabla
   const columnas = [
-    { id: "codigo", titulo: "Código", ancho: "100px", align: "left" },
     { id: "razon", titulo: "Razón Social / Nombre", align: "left" },
     { id: "fantasia", titulo: "Nombre Comercial", align: "left" },
     { id: "cuit", titulo: "CUIT / DNI", align: "left" },
@@ -121,9 +120,7 @@ export default function ClienteSelectorModal({
         }}
         onClick={() => setFilaSeleccionada(cli)}
       >
-        <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 bg-white text-left font-mono">
-          {cli.codigo}
-        </td>
+        
         <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 bg-white text-left">
           {cli.razon || cli.nombre}
         </td>
@@ -224,19 +221,13 @@ export default function ClienteSelectorModal({
               </div>
 
                              {/* Contenido */}
-               {cargando ? (
-                 <div className="p-8 text-center text-slate-500">Cargando...</div>
-               ) : error ? (
+               {error ? (
                  <div className="p-8 text-center text-red-600">{error}</div>
                ) : (
                  <div className="px-6 pb-6" style={{ maxHeight: ALTURA_MAX_TABLA }}>
                    {termino.length < MIN_CARACTERES_BUSQUEDA ? (
                      <div className="text-center py-12 text-slate-500">
                        <p>Escribe al menos {MIN_CARACTERES_BUSQUEDA} caracteres para buscar...</p>
-                     </div>
-                   ) : buscando ? (
-                     <div className="text-center py-12 text-slate-500">
-                       <p>Buscando cliente...</p>
                      </div>
                    ) : (
                      <Tabla
@@ -247,6 +238,7 @@ export default function ClienteSelectorModal({
                        mostrarOrdenamiento={false}
                        paginadorVisible={false}
                        sinEstilos={true}
+                       cargando={cargando || buscando}
                      />
                    )}
                  </div>

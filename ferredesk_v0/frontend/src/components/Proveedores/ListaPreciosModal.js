@@ -1,6 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { Fragment, useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx'; // Import the xlsx library
 import { getCookie } from '../../utils/csrf'; // Ajusta el path si es necesario
+import { Dialog, Transition } from "@headlessui/react";
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
 
 const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const fileInputRef = useRef();
@@ -14,6 +16,52 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const [errorVistaPrevia, setErrorVistaPrevia] = useState('');
 
   const csrftoken = getCookie('csrftoken');
+  const theme = useFerreDeskTheme();
+
+  // Cantidad máxima de filas a mostrar en la vista previa
+  const CANTIDAD_MAX_VISTA_PREVIA = 10;
+  // Longitud mínima de token para considerar coincidencia en nombre de archivo
+  const LONGITUD_MINIMA_TOKEN = 3;
+  // Cantidad mínima de tokens de fantasía que deben coincidir en el nombre del archivo
+  const CANTIDAD_MINIMA_TOKENS_COINCIDEN = 1;
+  // Mensaje de advertencia si no se encuentra coincidencia entre archivo y proveedor
+  const MENSAJE_ADVERTENCIA_NO_COINCIDENCIA = 'No se encontró coincidencia entre el archivo y el proveedor. Verifique que la lista subida sea la correcta.';
+
+  // Estado para advertencia de coincidencia de nombre de archivo
+  const [advertenciaNombreArchivo, setAdvertenciaNombreArchivo] = useState('');
+  const [nombreArchivoSeleccionado, setNombreArchivoSeleccionado] = useState('');
+  const [importando, setImportando] = useState(false);
+
+  // Normaliza cadenas: sin acentos, en minúsculas y sólo alfanumérico/espacios
+  const normalizarCadena = (texto) => {
+    if (!texto) return '';
+    return texto
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+  };
+
+  // Evalúa coincidencia entre nombre de archivo y fantasía del proveedor
+  const existeCoincidenciaArchivoProveedor = (archivoNombre, fantasiaProveedor) => {
+    const nombreNorm = normalizarCadena(archivoNombre);
+    const fantasiaNorm = normalizarCadena(fantasiaProveedor);
+    if (!nombreNorm || !fantasiaNorm) return false;
+    const tokens = fantasiaNorm.split(' ').filter(t => t.length >= LONGITUD_MINIMA_TOKEN);
+    if (tokens.length === 0) return false;
+    let tokensCoinciden = 0;
+    for (const tk of tokens) {
+      if (nombreNorm.includes(tk)) tokensCoinciden += 1;
+    }
+    return tokensCoinciden >= CANTIDAD_MINIMA_TOKENS_COINCIDEN;
+  };
+
+  // Genera el mensaje de confirmación para la importación
+  const construirMensajeConfirmacionImportacion = (archivoNombre, proveedorNombre) => {
+    return `Estás importando la lista "${archivoNombre}" para el proveedor "${proveedorNombre}". ¿Está seguro de proceder?`;
+  };
 
   // Helper to convert column letter to index (A=0, B=1, AA=26)
   const letterToColumnIndex = (letter) => {
@@ -30,11 +78,24 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       setFile(null);
       setVistaPrevia([]);
       setErrorVistaPrevia('');
+      setAdvertenciaNombreArchivo('');
+      setNombreArchivoSeleccionado('');
       return;
     }
     setFile(f);
+    setNombreArchivoSeleccionado(f.name || '');
     setErrorVistaPrevia('');
     setLoading(true);
+
+    // Verificar coincidencia de nombre con fantasía del proveedor (o razón como fallback)
+    try {
+      const fantasiaReferencia = proveedor?.fantasia || proveedor?.razon || '';
+      const hayCoincidencia = existeCoincidenciaArchivoProveedor(f.name || '', fantasiaReferencia);
+      setAdvertenciaNombreArchivo(hayCoincidencia ? '' : MENSAJE_ADVERTENCIA_NO_COINCIDENCIA);
+    } catch (_) {
+      // En caso de error, no bloquear
+      setAdvertenciaNombreArchivo('');
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -58,9 +119,8 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
         const denominacionIdx = letterToColumnIndex(colDenominacion.toUpperCase());
         
         const previewData = [];
-        // Start from filaInicio - 1 (because dataRows is 0-indexed)
-        // and take up to, say, 10 rows for preview
-        for (let i = filaInicio - 1; i < dataRows.length && previewData.length < 10; i++) {
+        // Comenzar desde filaInicio - 1 (dataRows es 0-indexado) y tomar hasta CANTIDAD_MAX_VISTA_PREVIA filas
+        for (let i = filaInicio - 1; i < dataRows.length && previewData.length < CANTIDAD_MAX_VISTA_PREVIA; i++) {
           const row = dataRows[i];
           const codigo = row[codigoIdx];
           const precio = row[precioIdx];
@@ -118,6 +178,21 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
     }
   }, [open]);
 
+  // Al abrir el modal, limpiar archivo y vista previa para evitar datos residuales
+  useEffect(() => {
+    if (open) {
+      setFile(null);
+      setVistaPrevia([]);
+      setErrorVistaPrevia('');
+      setLoading(false);
+      setAdvertenciaNombreArchivo('');
+      setNombreArchivoSeleccionado('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [open]);
+
   const handleImport = async () => {
     if (!file) {
       alert("Por favor, seleccione un archivo primero.");
@@ -132,6 +207,14 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       return;
     }
 
+    // Confirmación antes de proceder con la importación
+    const nombreProveedor = proveedor?.razon || proveedor?.nombre || 'Proveedor';
+    const mensajeConfirmacion = construirMensajeConfirmacionImportacion(file.name, nombreProveedor);
+    if (!window.confirm(mensajeConfirmacion)) {
+      return;
+    }
+
+    setImportando(true);
     setLoading(true);
     
     // The actual data to send will be the file itself,
@@ -154,6 +237,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       });
 
       setLoading(false);
+      setImportando(false);
       if (response.ok) {
         const result = await response.json();
         // Pass relevant info from result to onImport if needed
@@ -162,8 +246,12 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
           fileName: file.name,
           status: 'success',
           message: result.message || 'Lista importada correctamente.',
-          registrosProcesados: result.registros_procesados || 0
+          registrosProcesados: result.registros_procesados || 0,
+          registrosActualizados: result.registros_actualizados || 0,
         });
+        if ((result.registros_actualizados || 0) === 0) {
+          alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
+        }
         onClose(); // Close modal on success
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Error desconocido al importar.' }));
@@ -171,95 +259,154 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       }
     } catch (err) {
       setLoading(false);
+      setImportando(false);
       console.error("Error during import request:", err);
       alert(`Error de red o conexión al importar: ${err.message}`);
     }
   };
 
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl relative">
-        <button onClick={onClose} className="absolute top-3 right-3 text-2xl text-gray-400 hover:text-red-500">×</button>
-        <h2 className="text-xl font-bold mb-4">Cargar Lista de Precios - {proveedor?.razon}</h2>
-        <div className="mb-4">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="mb-2 block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
-          />
-          <div className="grid grid-cols-4 gap-4 mb-2">
-            <div>
-              <label htmlFor={`colCodigo-${proveedor?.id}`} className="block text-sm font-medium">Columna Código</label>
-              <input id={`colCodigo-${proveedor?.id}`} type="text" value={colCodigo} onChange={e => setColCodigo(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
-            </div>
-            <div>
-              <label htmlFor={`colPrecio-${proveedor?.id}`} className="block text-sm font-medium">Columna Precio</label>
-              <input id={`colPrecio-${proveedor?.id}`} type="text" value={colPrecio} onChange={e => setColPrecio(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
-            </div>
-            <div>
-              <label htmlFor={`colDenominacion-${proveedor?.id}`} className="block text-sm font-medium">Columna Denominación</label>
-              <input id={`colDenominacion-${proveedor?.id}`} type="text" value={colDenominacion} onChange={e => setColDenominacion(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
-            </div>
-            <div>
-              <label htmlFor={`filaInicio-${proveedor?.id}`} className="block text-sm font-medium">Fila de Inicio</label>
-              <input id={`filaInicio-${proveedor?.id}`} type="number" value={filaInicio} onChange={e => setFilaInicio(Number(e.target.value))} className="border rounded p-2 w-full" min={1} />
-            </div>
+    <Transition show={open} as={Fragment} appear>
+      <Dialog as="div" className="relative z-50" onClose={() => { if (!importando) onClose(); }}>
+        {/* Fondo oscuro */}
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-200"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-150"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black bg-opacity-40" />
+        </Transition.Child>
+
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-200"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-150"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
+                {/* Encabezado con colores FerreDesk */}
+                <div className={`bg-gradient-to-r ${theme.primario} p-6 relative`}>
+                  <button
+                    onClick={onClose}
+                    disabled={importando}
+                    className="absolute top-4 right-4 text-2xl text-slate-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    ×
+                  </button>
+                  <Dialog.Title as="h2" className="text-xl font-bold text-white">
+                    Cargar Lista de Precios - {proveedor?.razon}
+                  </Dialog.Title>
+                  <p className="text-slate-300 text-sm mt-1">Importá la lista Excel y previsualizá antes de aplicar</p>
+                </div>
+
+                {/* Contenido */}
+                <div className="p-6 overflow-y-auto">
+                  <div className="mb-4">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="mb-2 block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
+                    />
+                    {advertenciaNombreArchivo && (
+                      <div className="mb-3 p-2 text-sm bg-yellow-50 text-yellow-800 border border-yellow-200 rounded">
+                        {advertenciaNombreArchivo}
+                        {nombreArchivoSeleccionado ? (
+                          <span className="ml-1 italic">(archivo: {nombreArchivoSeleccionado})</span>
+                        ) : null}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-4 gap-4 mb-2">
+                      <div>
+                        <label htmlFor={`colCodigo-${proveedor?.id}`} className="block text-sm font-medium">Columna Código</label>
+                        <input id={`colCodigo-${proveedor?.id}`} type="text" value={colCodigo} onChange={e => setColCodigo(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                      </div>
+                      <div>
+                        <label htmlFor={`colDenominacion-${proveedor?.id}`} className="block text-sm font-medium">Columna Denominación</label>
+                        <input id={`colDenominacion-${proveedor?.id}`} type="text" value={colDenominacion} onChange={e => setColDenominacion(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                      </div>
+                      <div>
+                        <label htmlFor={`colPrecio-${proveedor?.id}`} className="block text-sm font-medium">Columna Precio</label>
+                        <input id={`colPrecio-${proveedor?.id}`} type="text" value={colPrecio} onChange={e => setColPrecio(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                      </div>
+                      <div>
+                        <label htmlFor={`filaInicio-${proveedor?.id}`} className="block text-sm font-medium">Fila de Inicio</label>
+                        <input id={`filaInicio-${proveedor?.id}`} type="number" value={filaInicio} onChange={e => setFilaInicio(Number(e.target.value))} className="border rounded p-2 w-full" min={1} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {errorVistaPrevia && (
+                    <div className="my-3 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">
+                      {errorVistaPrevia}
+                    </div>
+                  )}
+
+                  {loading && file && <div className="my-3 text-blue-600">Procesando vista previa...</div>}
+
+                  {vistaPrevia.length > 0 && (
+                    <div className="mb-4 max-h-60 overflow-y-auto">
+                      <h3 className="text-md font-semibold mb-2">Vista Previa (primeros {vistaPrevia.length} registros):</h3>
+                      <table className="min-w-full text-sm border">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="border px-2 py-1 text-left">Código ({colCodigo})</th>
+                            <th className="border px-2 py-1 text-left">Denominación ({colDenominacion})</th>
+                            <th className="border px-2 py-1 text-left">Precio ({colPrecio})</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vistaPrevia.map((item, index) => (
+                            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="border px-2 py-1">{item.codigo}</td>
+                              <td className="border px-2 py-1">{item.denominacion}</td>
+                              <td className="border px-2 py-1">{typeof item.precio === 'number' ? item.precio.toFixed(2) : item.precio}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {(vistaPrevia.length === 0 && file && !loading && !errorVistaPrevia) && (
+                    <div className="my-3 p-3 bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-md">
+                      No se encontraron datos para la vista previa con la configuración actual.
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={onClose}
+                      disabled={importando}
+                      className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleImport}
+                      className={`${theme.botonPrimario} disabled:opacity-50`}
+                      disabled={loading || !file || (errorVistaPrevia && vistaPrevia.length === 0)}
+                    >
+                      {loading && !file ? 'Cargando...' : loading && file ? 'Importando...' : 'Importar'}
+                    </button>
+                  </div>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
           </div>
         </div>
-
-        {errorVistaPrevia && (
-          <div className="my-3 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">
-            {errorVistaPrevia}
-          </div>
-        )}
-
-        {loading && file && <div className="my-3 text-blue-600">Procesando vista previa...</div>}
-
-        {vistaPrevia.length > 0 && (
-          <div className="mb-4 max-h-60 overflow-y-auto">
-            <h3 className="text-md font-semibold mb-2">Vista Previa (primeros {vistaPrevia.length} registros):</h3>
-            <table className="min-w-full text-sm border">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="border px-2 py-1 text-left">Código ({colCodigo})</th>
-                  <th className="border px-2 py-1 text-left">Precio ({colPrecio})</th>
-                  <th className="border px-2 py-1 text-left">Denominación ({colDenominacion})</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vistaPrevia.map((item, index) => (
-                  <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="border px-2 py-1">{item.codigo}</td>
-                    <td className="border px-2 py-1">{typeof item.precio === 'number' ? item.precio.toFixed(2) : item.precio}</td>
-                    <td className="border px-2 py-1">{item.denominacion}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        
-        {(vistaPrevia.length === 0 && file && !loading && !errorVistaPrevia) && (
-            <div className="my-3 p-3 bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-md">
-                No se encontraron datos para la vista previa con la configuración actual.
-            </div>
-        )}
-
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors">Cancelar</button>
-          <button 
-            onClick={handleImport} 
-            className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors disabled:opacity-50"
-            disabled={loading || !file || (errorVistaPrevia && vistaPrevia.length === 0)}
-          >
-            {loading && !file ? 'Cargando...' : loading && file ? 'Importando...' : 'Importar'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Dialog>
+    </Transition>
   );
 };
 

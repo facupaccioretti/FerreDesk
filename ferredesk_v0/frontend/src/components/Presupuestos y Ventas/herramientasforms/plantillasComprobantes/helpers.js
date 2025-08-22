@@ -243,7 +243,7 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
         {ferreteriaConfig.logo_empresa && (
           <View style={styles.logoEmpresa}>
             <Image 
-              src="/api/productos/servir-logo-empresa/"
+              src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
               style={styles.logoImagen}
             />
           </View>
@@ -681,7 +681,7 @@ export function mapearTipoComprobante(comprobante) {
   // fallback por tipo
   const tipo = String(comprobante.tipo || "").toLowerCase();
   if (tipo === "presupuesto") return "Presupuesto";
-  if (tipo === "factura_interna") return "Factura";
+  if (tipo === "factura_interna") return "Cotización";
   if (tipo === "nota_credito_interna") return "Nota de Crédito";
   if (tipo === "nota_credito") return "Nota de Crédito";
   if (tipo === "nota_debito") return "Nota de Débito";

@@ -14,6 +14,7 @@ from .serializers import (
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q, ProtectedError
 from .algoritmo_cuit_utils import validar_cuit
 
@@ -71,16 +72,17 @@ class CategoriaClienteViewSet(viewsets.ModelViewSet):
 class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = [
-        'codigo',      # Código numérico interno
-        'razon',       # Razón social
-        'fantasia',    # Nombre comercial
-        'cuit',        # CUIT
-        'activo',      # Estado (A/I)
-        'vendedor',    # Vendedor asignado (id)
-        'plazo',       # Plazo de pago (id)
-        'categoria',   # Categoría de cliente (id)
-    ]
+    filterset_fields = {
+        'razon': ['exact', 'iexact', 'icontains'],
+        'fantasia': ['exact', 'iexact', 'icontains'],
+        'cuit': ['exact', 'iexact', 'icontains'],
+        'domicilio': ['exact', 'iexact', 'icontains'],
+        'activo': ['exact'],  # A / I
+        'vendedor': ['exact'],
+        'plazo': ['exact'],
+        'categoria': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
     def get_queryset(self):
         """
@@ -101,13 +103,35 @@ class ClienteViewSet(viewsets.ModelViewSet):
         if termino_busqueda:
             # Búsqueda en múltiples campos usando Q objects
             queryset = queryset.filter(
-                Q(codigo__icontains=termino_busqueda) |
                 Q(razon__icontains=termino_busqueda) |
                 Q(fantasia__icontains=termino_busqueda) |
                 Q(cuit__icontains=termino_busqueda) |
                 Q(domicilio__icontains=termino_busqueda) |
                 Q(iva__nombre__icontains=termino_busqueda)
             ).distinct()
+        
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+
+        if orden == 'id':
+            if direccion == 'asc':
+                queryset = queryset.order_by('id')
+            else:
+                queryset = queryset.order_by('-id')
+        elif orden == 'razon':
+            if direccion == 'asc':
+                queryset = queryset.order_by('razon')
+            else:
+                queryset = queryset.order_by('-razon')
+        elif orden == 'fantasia':
+            if direccion == 'asc':
+                queryset = queryset.order_by('fantasia')
+            else:
+                queryset = queryset.order_by('-fantasia')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            queryset = queryset.order_by('-id')
         
         return queryset
 

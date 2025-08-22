@@ -22,4 +22,7 @@ No anda buscador productos en ningun form
 
 Datos autocompletados por el padron no se pueden editar cuando deberian (por ej: domicilio, los ineditables se bloquean por ej: razon social)
 
+
+(node:2436) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+
 Agregar buscador de pproducto en compraform y UI

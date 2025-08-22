@@ -21,6 +21,17 @@ const ClientesTable = ({
   vendedores,
   plazos,
   categorias,
+  // Opcionales: paginación controlada
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto = null,
+  busquedaRemota = true,
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
+  cargando = false,
 }) => {
   // ---------------------------------------------------------------------------
   // Definición de columnas (encabezados) para Tabla
@@ -165,10 +176,7 @@ const ClientesTable = ({
                         Información Básica
                       </h5>
                       <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Código:</span>
-                          <span className="font-medium text-slate-700">{cli.codigo || "N/A"}</span>
-                        </div>
+                        
                         {(() => {
                           const estado = cli.activo === "A" ? "Activo" : "Inactivo"
                           return (
@@ -382,7 +390,17 @@ const ClientesTable = ({
       valorBusqueda={search}
       onCambioBusqueda={setSearch}
       filasPorPaginaInicial={10}
+      paginacionControlada={paginacionControlada}
+      paginaActual={paginaActual}
+      onPageChange={onPageChange}
+      itemsPerPage={itemsPerPage}
+      onItemsPerPageChange={onItemsPerPageChange}
+      totalRemoto={totalRemoto}
+      busquedaRemota={busquedaRemota}
+      onOrdenamientoChange={onOrdenamientoChange}
+      ordenamientoControlado={ordenamientoControlado}
       renderFila={renderFila}
+      cargando={cargando}
     />
   )
 }

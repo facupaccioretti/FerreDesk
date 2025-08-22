@@ -11,7 +11,7 @@ export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del mod
 export const MIN_CARACTERES_BUSQUEDA = 1 // Mínimo de caracteres para que se active filtrado
 // Array de posibles nombres para el tipo de comprobante "Factura" que la API podría esperar.
 // Se utiliza el primer valor para la petición directa, los demás son para un posible filtrado local de respaldo.
-export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna"]
+export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna", "Cotización", "cotizacion"]
 export const LETRA_FACTURA_INTERNA = 'I';
 
 /**
@@ -271,7 +271,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                     stroke="currentColor"
                     className="w-6 h-6"
                   >
-                    <path strokeLinecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
@@ -289,12 +289,8 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
               </div>
 
               {/* Contenido */}
-              {cargando ? (
-                <div className="p-8 text-center text-slate-500">Cargando facturas…</div>
-              ) : error ? (
+              {error ? (
                 <div className="p-8 text-center text-red-600">{error}</div>
-              ) : facturasFiltradas.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">Sin resultados</div>
               ) : (
                 <div className="px-6 pb-6" style={{ height: ALTURA_MAX_TABLA }}>
                   <Tabla
@@ -307,6 +303,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                     paginadorVisible={false}
                     renderFila={renderFila}
                     sinEstilos={true}
+                    cargando={cargando}
                   />
                 </div>
               )}

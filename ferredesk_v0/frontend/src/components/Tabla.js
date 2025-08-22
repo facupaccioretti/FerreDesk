@@ -11,7 +11,7 @@ const ESPACIO_HORIZONTAL_CELDA = "px-3"
 const ESPACIO_VERTICAL_CELDA = "py-2"
 const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 
-const CLASES_CELDA_BASE = `${ESPACIO_HORIZONTAL_CELDA} ${ESPACIO_VERTICAL_CELDA} whitespace-nowrap text-sm text-slate-700` // sin fondo
+// Nota: la variante compacta se calcula dentro del componente para acceder a props
 
 // -----------------------------------------------------------------------------
 // Tabla genérica con estética FerreDesk
@@ -29,25 +29,49 @@ const Tabla = ({
   mostrarOrdenamiento = true,
   sinEstilos = false,
   tamañoEncabezado = "normal", // "normal" | "pequeño"
+  filasCompactas = false,
+  claseTbody = "",
+  // --- Nuevos props opcionales para paginación controlada ---
+  paginacionControlada = false,
+  paginaActual: paginaControlada,
+  onPageChange: onPageChangeControlada,
+  itemsPerPage: itemsPerPageControlada,
+  onItemsPerPageChange: onItemsPerPageChangeControlada,
+  totalRemoto = null,
+  busquedaRemota = false,
+  // --- Nuevos props para ordenamiento remoto ---
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null, // Estado de ordenamiento desde el padre
+  // --- Prop para estado de carga ---
+  cargando = false,
 }) => {
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [filasPorPagina, setFilasPorPagina] = useState(filasPorPaginaInicial)
+  const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
+  const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
   const [ordenAscendente, setOrdenAscendente] = useState(false)
 
+  // Mantener sincronizado el estado interno cuando la paginación es controlada externamente
   useEffect(() => {
-    setPaginaActual(1)
-  }, [valorBusqueda, datos])
+    if (paginacionControlada && paginaControlada) setPaginaActual(paginaControlada)
+  }, [paginacionControlada, paginaControlada])
+  useEffect(() => {
+    if (paginacionControlada && itemsPerPageControlada) setFilasPorPagina(itemsPerPageControlada)
+  }, [paginacionControlada, itemsPerPageControlada])
+
+  useEffect(() => {
+    if (!paginacionControlada) setPaginaActual(1)
+  }, [valorBusqueda, datos, paginacionControlada])
 
   const datosFiltrados = useMemo(() => {
     let datosProcesados = datos
 
-    if (valorBusqueda) {
+    // Si la búsqueda es remota, no filtramos localmente
+    if (!busquedaRemota && valorBusqueda) {
       const termino = valorBusqueda.toLowerCase()
       datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
     }
 
-    // Solo aplicar ordenamiento si mostrarOrdenamiento es true
-    if (mostrarOrdenamiento) {
+    // En modo controlado no ordenamos localmente (lo debe hacer el servidor si aplica)
+    if (!paginacionControlada && mostrarOrdenamiento) {
       return datosProcesados.sort((a, b) => {
         const idA = a.id || 0
         const idB = b.id || 0
@@ -55,14 +79,18 @@ const Tabla = ({
       })
     }
 
-    // Si mostrarOrdenamiento es false, devolver los datos sin ordenar
     return datosProcesados
-  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento])
+  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento, paginacionControlada, busquedaRemota])
 
   const indiceInicio = (paginaActual - 1) * filasPorPagina
-  const datosVisibles = paginadorVisible
-    ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina)
-    : datosFiltrados
+  const datosVisibles = paginacionControlada
+    ? datosFiltrados
+    : (paginadorVisible ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina) : datosFiltrados)
+
+  // Clases calculadas según modo compacto para las celdas por defecto (cuando no se usa renderFila)
+  const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${
+    filasCompactas ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA
+  } whitespace-nowrap ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-700`
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
@@ -87,16 +115,25 @@ const Tabla = ({
           {/* Control de ordenamiento */}
           {mostrarOrdenamiento && (
             <button
-              onClick={() => setOrdenAscendente(!ordenAscendente)}
+              onClick={() => {
+                if (paginacionControlada && onOrdenamientoChange) {
+                  // En modo controlado, notificar al componente padre
+                  const nuevoOrdenamiento = ordenamientoControlado !== null ? !ordenamientoControlado : !ordenAscendente;
+                  onOrdenamientoChange(nuevoOrdenamiento);
+                } else {
+                  // En modo local, cambiar estado interno
+                  setOrdenAscendente(!ordenAscendente);
+                }
+              }}
               className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
               title={
-                ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
+                (ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Cambiar a orden descendente (más recientes primero)" : "Cambiar a orden ascendente (más antiguos primero)"
               }
             >
               <ArrowUpDown
-                className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
+                className={`w-4 h-4 transition-transform duration-200 ${(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "rotate-180" : ""}`}
               />
-              <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
+              <span className="hidden sm:inline">{(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Más antiguos" : "Más recientes"}</span>
             </button>
           )}
         </div>
@@ -124,7 +161,7 @@ const Tabla = ({
           </thead>
 
           {/* Cuerpo */}
-          <tbody className="divide-y-2 divide-slate-300">
+          <tbody className={`${filasCompactas ? "divide-y divide-slate-300" : "divide-y-2 divide-slate-300"} ${claseTbody}`}>
             {datosVisibles.map((fila, idxVisible) => {
               const indiceGlobal = indiceInicio + idxVisible
 
@@ -141,7 +178,7 @@ const Tabla = ({
                     return (
                       <td
                         key={col.id}
-                        className={`${CLASES_CELDA_BASE} bg-white ${
+                        className={`${clasesCeldaBaseCalculadas} bg-white ${
                           { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
                         }`}
                         style={col.ancho ? { width: col.ancho } : undefined}
@@ -154,20 +191,27 @@ const Tabla = ({
               )
             })}
 
-            {/* Estado vacío */}
+            {/* Estado vacío o cargando */}
             {datosVisibles.length === 0 && (
               <tr>
                 <td
                   colSpan={columnas.length}
                   className="text-center py-12 text-slate-500 bg-gradient-to-b from-slate-50/50 to-white/80"
                 >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                      <Search className="w-5 h-5 text-slate-400" />
+                  {cargando ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+                      <p className="text-sm font-medium">Cargando tabla</p>
                     </div>
-                    <p className="text-sm font-medium">No se encontraron resultados</p>
-                    {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
-                  </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                        <Search className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <p className="text-sm font-medium">No se encontraron resultados</p>
+                      {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
@@ -179,13 +223,17 @@ const Tabla = ({
       {paginadorVisible && !sinEstilos && (
         <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
           <Paginador
-            totalItems={datosFiltrados.length}
+            totalItems={totalRemoto ?? datosFiltrados.length}
             itemsPerPage={filasPorPagina}
             currentPage={paginaActual}
-            onPageChange={setPaginaActual}
+            onPageChange={(p) => (paginacionControlada ? onPageChangeControlada?.(p) : setPaginaActual(p))}
             onItemsPerPageChange={(n) => {
-              setFilasPorPagina(n)
-              setPaginaActual(1)
+              if (paginacionControlada) {
+                onItemsPerPageChangeControlada?.(n)
+              } else {
+                setFilasPorPagina(n)
+                setPaginaActual(1)
+              }
             }}
             opcionesItemsPorPagina={opcionesFilasPorPagina}
           />

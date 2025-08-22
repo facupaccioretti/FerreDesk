@@ -20,20 +20,18 @@ export const useArcaResultadoHandler = ({
    */
   const procesarResultadoArca = useCallback((resultado, tipoComprobante) => {
     // DEBUG: Log completo del resultado para ver observaciones
-    console.log('🔍 [ARCA DEBUG] Resultado completo:', resultado);
-    console.log('🔍 [ARCA DEBUG] Observaciones recibidas:', resultado?.observaciones);
-    console.log('🔍 [ARCA DEBUG] Tipo de observaciones:', typeof resultado?.observaciones);
-    console.log('🔍 [ARCA DEBUG] Es array?', Array.isArray(resultado?.observaciones));
+    console.log('[ARCA DEBUG] Resultado completo:', resultado);
+    console.log('[ARCA DEBUG] Observaciones recibidas:', resultado?.observaciones);
+    console.log('[ARCA DEBUG] Tipo de observaciones:', typeof resultado?.observaciones);
+    console.log('[ARCA DEBUG] Es array?', Array.isArray(resultado?.observaciones));
     
-    // Siempre iniciar el estado de ARCA para mostrar el modal (consistencia)
-    if (!esperandoArca) {
-      iniciarEsperaArca();
-    }
-
-    // Procesar respuesta de ARCA
+    // Procesar respuesta de ARCA: iniciar overlay solo si fue emisión fiscal exitosa
     if (resultado?.arca_emitido === true && resultado?.cae) {
+      if (!esperandoArca) {
+        iniciarEsperaArca();
+      }
       // Éxito: ARCA fue emitido y tiene CAE (comprobante fiscal)
-      console.log('✅ [ARCA DEBUG] Enviando observaciones al overlay:', resultado.observaciones || []);
+      console.log('[ARCA DEBUG] Enviando observaciones al overlay:', resultado.observaciones || []);
       finalizarEsperaArcaExito({
         cae: resultado.cae,
         cae_vencimiento: resultado.cae_vencimiento,
@@ -41,21 +39,14 @@ export const useArcaResultadoHandler = ({
         observaciones: Array.isArray(resultado.observaciones) ? resultado.observaciones : []
       });
     } else if (resultado?.arca_emitido === false) {
-      // Éxito: No se emitió ARCA pero no es error (comprobante interno)
-      finalizarEsperaArcaExito({
-        cae: null,
-        cae_vencimiento: null,
-        qr_generado: false,
-        observaciones: [resultado.arca_motivo || "Comprobante interno - no requiere emisión ARCA"]
-      });
+      // Éxito: No se emitió ARCA (comprobante interno) → no usar overlay
+      // Se podría informar por UI normal si se desea; aquí no abrimos/cerramos overlay
     } else if (resultado?.error) {
-      // Error específico del backend
-      finalizarEsperaArcaError(resultado.error);
+      // Error específico del backend → no iniciar overlay aquí
     } else {
-      // Error desconocido
-      finalizarEsperaArcaError("Error desconocido en la emisión ARCA");
+      // Resultado no reconocido → no iniciar overlay
     }
-  }, [esperandoArca, iniciarEsperaArca, finalizarEsperaArcaExito, finalizarEsperaArcaError]);
+  }, [esperandoArca, iniciarEsperaArca, finalizarEsperaArcaExito]);
 
   /**
    * Maneja errores de la operación, asegurando que se muestren en el modal de ARCA
@@ -65,13 +56,19 @@ export const useArcaResultadoHandler = ({
   const manejarErrorArca = useCallback((error, mensajePorDefecto = "Error al procesar la operación") => {
     console.error("Error en operación:", error);
     
-    // Siempre mostrar el error en el modal de ARCA, sin importar si estaba esperando o no
-    if (!esperandoArca) {
-      // Si no estaba esperando ARCA, iniciar el estado primero
-      iniciarEsperaArca();
+    // Mostrar en overlay SOLO si ya se estaba esperando ARCA
+    if (esperandoArca) {
+      finalizarEsperaArcaError(error.message || mensajePorDefecto);
+    } else {
+      // Error no relacionado a ARCA: mostrar como alerta estándar y NO abrir overlay
+      const mensaje = (error && error.message) ? error.message : mensajePorDefecto;
+      try {
+        window.alert(mensaje);
+      } catch (_) {
+        // Entorno sin window (por seguridad): no hacer nada extra
+      }
     }
-    finalizarEsperaArcaError(error.message || mensajePorDefecto);
-  }, [esperandoArca, iniciarEsperaArca, finalizarEsperaArcaError]);
+  }, [esperandoArca, finalizarEsperaArcaError]);
 
   /**
    * Crea una función personalizada para aceptar resultado de ARCA

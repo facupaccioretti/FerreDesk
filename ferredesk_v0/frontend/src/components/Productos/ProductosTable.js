@@ -170,6 +170,16 @@ export default function ProductosTable({
   setFam3Filtro,
   searchProductos,
   setSearchProductos,
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto = null,
+  busquedaRemota = true,
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
+  cargando = false,
 }) {
   const [showProvModal, setShowProvModal] = useState(false)
   // Removido el estado local search
@@ -356,6 +366,17 @@ export default function ProductosTable({
               valorBusqueda={searchProductos}
               onCambioBusqueda={setSearchProductos}
               mostrarBuscador={true}
+              mostrarOrdenamiento={true}
+              paginacionControlada={paginacionControlada}
+              paginaActual={paginaActual}
+              onPageChange={onPageChange}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={onItemsPerPageChange}
+              totalRemoto={totalRemoto}
+              busquedaRemota={busquedaRemota}
+              onOrdenamientoChange={onOrdenamientoChange}
+              ordenamientoControlado={ordenamientoControlado}
+              cargando={cargando}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 
@@ -415,10 +436,7 @@ export default function ProductosTable({
                                 Información Básica
                               </h5>
                               <div className="space-y-1 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-slate-500">Código Compra:</span>
-                                  <span className="font-medium text-slate-700">{p.codcom || "N/A"}</span>
-                                </div>
+                                
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Unidad:</span>
                                   <span className="font-medium text-slate-700">{p.unidad || "N/A"}</span>
@@ -517,25 +535,25 @@ export default function ProductosTable({
                               </h5>
                               <div className="max-h-24 overflow-y-auto">
                                 {(p.stock_proveedores || []).length > 0 ? (
-                                  <div className="space-y-1">
+                                  <div className="space-y-0.5">
                                     {p.stock_proveedores.map((sp, index) => (
                                       <div
                                         key={index}
-                                        className="flex justify-between items-center text-xs bg-slate-50 rounded p-2"
+                                        className="flex justify-between items-center text-xs bg-slate-100 rounded px-2 py-1"
                                       >
                                         <div className="flex-1 min-w-0">
                                           <div
-                                            className="font-medium text-slate-700 truncate"
+                                            className="font-medium text-slate-700 truncate leading-tight"
                                             title={sp.proveedor?.razon}
                                           >
                                             {sp.proveedor?.razon || "N/A"}
                                           </div>
                                         </div>
-                                        <div className="flex gap-2 text-right">
-                                          <span className="text-slate-600">
+                                        <div className="flex gap-2 text-right leading-tight">
+                                          <span className="text-slate-600 leading-tight">
                                             Cant: <strong>{sp.cantidad}</strong>
                                           </span>
-                                          <span className="text-slate-600">
+                                          <span className="text-slate-600 leading-tight">
                                             $<strong>{sp.costo}</strong>
                                           </span>
                                         </div>

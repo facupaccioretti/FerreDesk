@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCookie } from './csrf';
 
-export function useClientesAPI(filtrosIniciales = {}) {
+export function useClientesAPI(filtrosIniciales = {}, opciones = { autoFetch: true }) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');
+  const lastQueryKeyRef = useRef('');
 
-  const fetchClientes = useCallback(async (filtros = {}) => {
-    setLoading(true);
+  const fetchClientes = useCallback(async (filtros = {}, page = 1, limit = 10, orden = 'id', direccion = 'desc') => {
     setError(null);
     try {
       // Construir querystring si hay filtros
@@ -18,11 +19,24 @@ export function useClientesAPI(filtrosIniciales = {}) {
           params.append(key, value);
         }
       });
-      const url = params.toString() ? `/api/clientes/clientes/?${params.toString()}` : '/api/clientes/clientes/';
+      if (page) params.append('page', String(page));
+      if (limit) params.append('limit', String(limit));
+      if (orden) params.append('orden', orden);
+      if (direccion) params.append('direccion', direccion);
+      const query = params.toString();
+      const url = query ? `/api/clientes/clientes/?${query}` : '/api/clientes/clientes/';
+      const key = `GET ${url}`;
+      if (lastQueryKeyRef.current === key) {
+        return; // Evitar fetch redundante idéntico
+      }
+      lastQueryKeyRef.current = key;
+      setLoading(true);
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener clientes');
       const data = await res.json();
-      setClientes(Array.isArray(data) ? data : (data.results || []));
+      const lista = Array.isArray(data) ? data : (data.results || []);
+      setClientes(lista);
+      setTotal((Array.isArray(data) ? lista.length : (typeof data.count === 'number' ? data.count : lista.length)) || 0);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -127,8 +141,10 @@ export function useClientesAPI(filtrosIniciales = {}) {
   const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
-    fetchClientes(filtrosIniciales);
-  }, [fetchClientes]);
+    if (opciones && opciones.autoFetch) {
+      fetchClientes(filtrosIniciales);
+    }
+  }, [fetchClientes, filtrosIniciales, opciones]);
 
-  return { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
+  return { clientes, total, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, fetchClientePorDefecto, clearError };
 }

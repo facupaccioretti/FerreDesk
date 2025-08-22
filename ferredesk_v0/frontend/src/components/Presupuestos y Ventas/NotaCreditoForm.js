@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
+// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
@@ -44,13 +44,13 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
 };
 
 // Función de normalización adaptada para Nota de Crédito
-function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
-  return normalizarItems(itemsSeleccionados, { 
-    productos: productosDisponibles, 
-    modo: 'nota_credito', 
-    alicuotasMap 
-  });
-}
+// function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
+//   return normalizarItems(itemsSeleccionados, {
+//     productos: productosDisponibles,
+//     modo: 'nota_credito',
+//     alicuotasMap
+//   });
+// }
 
 // Definir constantes descriptivas para tipos y letras de comprobantes
 const TIPO_NOTA_CREDITO = 'nota_credito';
@@ -147,18 +147,22 @@ const NotaCreditoForm = ({
   } = useFormularioDraft({
     claveAlmacenamiento: `notaCreditoFormDraft_${tabKey}`,
     datosIniciales: getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos),
-    combinarConValoresPorDefecto: (data) => ({ ...getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos), ...data }),
+    combinarConValoresPorDefecto: (data) => {
+      const base = getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos);
+      return {
+        ...base,
+        ...data,
+        items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
+      };
+    },
     parametrosPorDefecto: [],
-    normalizarItems: (items) => normalizarItemsNC(items, productos, alicuotasMap),
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
     validarBorrador: (borradorGuardado) => {
       return borradorGuardado.clienteId === clienteSeleccionado?.id;
     }
   });
   
-  useEffect(() => {
-    // Para asegurar que si el cliente cambia desde fuera, el form se reinicie.
-    setFormulario(getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos));
-  }, [clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos, setFormulario, tabKey]);
+
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -178,6 +182,8 @@ const NotaCreditoForm = ({
   });
 
   const itemsGridRef = useRef();
+  // Temporizador para mostrar overlay ARCA solo si la espera es real
+  const temporizadorArcaRef = useRef(null);
   
   // Estado para controlar visibilidad del banner de estado CUIT
   const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
@@ -202,15 +208,7 @@ const NotaCreditoForm = ({
     limpiarEstadosARCAStatus();
   };
   
-  const stockProveedores = useMemo(() => {
-    const map = {};
-    if (Array.isArray(productos)) {
-      productos.forEach(p => {
-        if (p.stock_proveedores) map[p.id] = p.stock_proveedores;
-      });
-    }
-    return map;
-  }, [productos]);
+
 
   // Lógica mejorada para determinar el tipo de NC automáticamente
   const { tipo: tipoNotaCredito, letra: letraNotaCredito } = useMemo(() => obtenerTipoYLetraNotaCredito(facturasAsociadas), [facturasAsociadas]);
@@ -314,17 +312,14 @@ const NotaCreditoForm = ({
       return;
     }
 
-    // Verificar si requiere emisión ARCA y iniciar estado de espera
+    // Determinar tipo de comprobante para decidir si requiere ARCA (no iniciar overlay aquí)
     const tipoComprobanteSeleccionado = comprobanteNC?.tipo || 'nota_credito';
-    if (requiereEmisionArca(tipoComprobanteSeleccionado)) {
-      iniciarEsperaArca();
-    }
 
     const payload = {
       // Campos alineados con VentaForm.js para consistencia y robustez
       ven_estado: "CE", // Las NC se crean como 'Cerrado'
       ven_tipo: "Nota de Crédito", // Tipo de operación explícito
-      permitir_stock_negativo: true, // CRÍTICO: Permite que la lógica de suma de stock no falle
+      // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
 
       // NUEVO: Enviar tipo determinado automáticamente
       tipo_comprobante: tipoComprobanteSeleccionado,
@@ -332,7 +327,6 @@ const NotaCreditoForm = ({
       comprobantes_asociados_ids: (formulario.facturasAsociadas || []).map(f => f.id || f.ven_id),
       
       ven_fecha: formulario.fecha,
-      ven_punto: formulario.puntoVentaId,
       ven_idcli: formulario.clienteId,
       ven_idpla: formulario.plazoId,
       ven_idvdo: formulario.vendedorId,
@@ -355,11 +349,29 @@ const NotaCreditoForm = ({
     };
     
     try {
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca();
+        }, 400);
+      }
+
       const resultado = await onSave(payload, limpiarBorrador);
       
+      // Limpiar temporizador si estaba agendado
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
+
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
     } catch (error) {
+      // Limpiar temporizador en error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la nota de crédito")
     }
@@ -367,6 +379,11 @@ const NotaCreditoForm = ({
 
   const handleCancel = () => {
     if (window.confirm('¿Está seguro de que desea cancelar? Se perderán todos los cambios no guardados.')) {
+      // Limpiar temporizador si está pendiente
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
       limpiarBorrador();
       onCancel();
@@ -379,16 +396,34 @@ const NotaCreditoForm = ({
     }
   };
 
-  const handleRowsChange = (rows) => {
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
-  };
-  
-  const handleSumarDuplicados = () => {
-    if (itemsGridRef.current) {
-      itemsGridRef.current.sumarDuplicados();
-    }
-  };
+  }, [actualizarItems]);
 
+  // Inicializar autoSumarDuplicados si es false (igual que en VentaForm)
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados("sumar")
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados])
+
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    handleChange({ target: { name: 'descu1', value } })
+  }, [handleChange])
+
+  const setDescu2 = useCallback((value) => {
+    handleChange({ target: { name: 'descu2', value } })
+  }, [handleChange])
+
+  const setDescu3 = useCallback((value) => {
+    handleChange({ target: { name: 'descu3', value } })
+  }, [handleChange])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    handleChange({ target: { name: 'bonificacionGeneral', value } })
+  }, [handleChange])
+  
   if (loadingAlicuotasIVA) return <p className="text-slate-600 text-center py-10">Cargando datos del formulario...</p>;
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;
 
@@ -507,7 +542,7 @@ const NotaCreditoForm = ({
                     {/* Buscador */}
                     <div>
                       <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                      <BuscadorProducto onAdd={handleAddItemToGrid} {...{productos, loadingProductos, familias, loadingFamilias, proveedores, loadingProveedores}} className="w-full" />
+                                             <BuscadorProducto onSelect={handleAddItemToGrid} className="w-full" />
                     </div>
 
                     {/* Tipo de Comprobante */}
@@ -520,7 +555,7 @@ const NotaCreditoForm = ({
                       >
                         <option value="">Seleccionar...</option>
                         <option value="nota_credito">Nota de Crédito</option>
-                        <option value="nota_credito_interna">Nota de Crédito Interna</option>
+                        <option value="nota_credito_interna">Nota de Crédito</option>
                       </select>
                     </div>
 
@@ -588,24 +623,21 @@ const NotaCreditoForm = ({
           <div className="mb-8">
             <ItemsGrid
               ref={itemsGridRef}
-              key={formulario.clienteId}
-              initialRows={formulario.items}
-              onRowsChange={handleRowsChange}
-              stockProveedores={stockProveedores}
-              alicuotasIVA={alicuotasIVA}
-              productosDisponibles={productos}
-              bonificacionGeneral={formulario.bonificacionGeneral}
-              setBonificacionGeneral={(val) => handleChange({ target: { name: 'bonificacionGeneral', value: val } })}
-              descu1={formulario.descu1}
-              setDescu1={(val) => handleChange({ target: { name: 'descu1', value: val } })}
-              descu2={formulario.descu2}
-              setDescu2={(val) => handleChange({ target: { name: 'descu2', value: val } })}
-              descu3={formulario.descu3}
-              setDescu3={(val) => handleChange({ target: { name: 'descu3', value: val } })}
-              totales={totales}
               autoSumarDuplicados={autoSumarDuplicados}
               setAutoSumarDuplicados={setAutoSumarDuplicados}
-              onSumarDuplicados={handleSumarDuplicados}
+              bonificacionGeneral={formulario.bonificacionGeneral}
+              setBonificacionGeneral={setBonificacionGeneral}
+              modo="nota_credito"
+              onRowsChange={handleRowsChange}
+              initialItems={formulario.items}
+              descu1={formulario.descu1}
+              descu2={formulario.descu2}
+              descu3={formulario.descu3}
+              setDescu1={setDescu1}
+              setDescu2={setDescu2}
+              setDescu3={setDescu3}
+              totales={totales}
+              alicuotas={alicuotasMap}
             />
           </div>
           

@@ -4,9 +4,7 @@
   import { useNavigate } from "react-router-dom"
   import Navbar from "../Navbar"
   import { useVentasAPI } from "../../utils/useVentasAPI"
-  import { useProductosAPI } from "../../utils/useProductosAPI"
-  import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
-  import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
+
   import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
   import { useComprobantesAPI } from "../../utils/useComprobantesAPI"
   import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
@@ -73,9 +71,16 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
     const { ventas, error: ventasError, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
 
-    const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI()
-    const { familias, loading: loadingFamilias, error: errorFamilias } = useFamiliasAPI()
-    const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI()
+    // Ya no necesitamos cargar productos, familias y proveedores porque ItemsGrid hace búsquedas a demanda
+    const productos = []
+    const loadingProductos = false
+    const errorProductos = null
+    const familias = []
+    const loadingFamilias = false
+    const errorFamilias = null
+    const proveedores = []
+    const loadingProveedores = false
+    const errorProveedores = null
     const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI()
     const { comprobantes, loading: loadingComprobantes, error: errorComprobantes } = useComprobantesAPI()
     const { clientes } = useClientesConDefecto()
@@ -230,7 +235,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
     const handleNuevaVenta = () => {
       const newKey = `nueva-venta-${Date.now()}`
-      openTab(newKey, "Nueva Factura")
+      openTab(newKey, "Nueva Venta")
       setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
       localStorage.removeItem("ventaFormDraft")
     }
@@ -331,6 +336,10 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
+                            
+                            const confirmado = window.confirm('¿Está seguro de cerrar? Se perderán los cambios no guardados.');
+                            if (!confirmado) return;
+                            
                             closeTab(tab.key)
                           }}
                           className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
@@ -357,7 +366,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                            onClick={handleNuevaVenta}
                            className={theme.botonPrimario}
                          >
-                           <span className="text-lg">+</span> Nueva Factura
+                           <span className="text-lg">+</span> Nueva Venta
                          </button>
                          <button
                            onClick={handleNuevaNotaCredito}

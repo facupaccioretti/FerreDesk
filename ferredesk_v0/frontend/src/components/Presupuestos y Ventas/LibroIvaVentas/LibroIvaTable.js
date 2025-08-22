@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import Tabla from '../../Tabla';
 
 const LibroIvaTable = ({ libroIva, loading }) => {
@@ -257,6 +257,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
         mostrarBuscador={true}
         mostrarOrdenamiento={false}
         renderFila={renderFila}
+        cargando={loading}
       />
     </div>
   );

@@ -5,14 +5,18 @@ import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from
 
 // Utilidad para icono y nombre corto
 const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
+  const t = String(tipo || "").toLowerCase()
   const n = (nombre || "").toLowerCase()
-  if (n.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
-  if (n.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
-  if (n.includes("factura")) return { icon: <IconFactura />, label: `Factura${letra ? " " + letra : ""}` }
-  if (n.includes("nota de crédito interna")) return { icon: <IconCredito />, label: "N. Cred. Int." }
-  if (n.includes("nota de crédito")) return { icon: <IconCredito />, label: "N. Cred." }
-  if (n.includes("nota de débito")) return { icon: <IconCredito />, label: "N. Deb." }
-  if (n.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
+  const sinAcentos = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  const nClean = sinAcentos(n)
+  if (nClean.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
+  if (nClean.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
+  if (t === 'nota_credito' || t === 'nota_credito_interna' || nClean.includes('nota de credito')) {
+    return { icon: <IconCredito />, label: "N. Cred." }
+  }
+  if (nClean.includes("nota de debito")) return { icon: <IconCredito />, label: "N. Deb." }
+  if (nClean.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
+  if (nClean.includes("factura")) return { icon: <IconFactura />, label: `Factura${letra ? " " + letra : ""}` }
   return { icon: <IconFactura />, label: nombre }
 }
 

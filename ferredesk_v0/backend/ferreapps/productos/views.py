@@ -21,12 +21,14 @@ from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q
 from django.db.models.functions import Lower
 import os
 import pyexcel as pe
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from ferreapps.proveedores.models import HistorialImportacionProveedor
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.conf import settings
@@ -45,7 +47,12 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['codigo', 'razon', 'fantasia', 'acti']
+    filterset_fields = {
+        'razon': ['exact', 'iexact', 'icontains'],
+        'fantasia': ['exact', 'iexact', 'icontains'],
+        'acti': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
@@ -53,22 +60,78 @@ class StockViewSet(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = [
-        'codvta', 'codcom', 'deno', 'proveedor_habitual', 'acti',
-        'idfam1', 'idfam2', 'idfam3',
-    ]
+    # Permitir búsquedas parciales en código y denominación
+    filterset_fields = {
+        'codvta': ['exact', 'iexact', 'icontains'],
+        'deno': ['exact', 'iexact', 'icontains'],
+        'proveedor_habitual': ['exact'],
+        'acti': ['exact'],
+        'idfam1': ['exact'],
+        'idfam2': ['exact'],
+        'idfam3': ['exact'],
+    }
+    pagination_class = PaginacionPorPaginaConLimite
 
     def get_queryset(self):
         """
-        Aplicar filtro de productos activos solo si no se especifica acti explícitamente
+        Aplicar filtro de productos activos por defecto y búsqueda general.
         """
-        queryset = Stock.objects.all()
-        
-        # Si no se especifica acti en los parámetros, filtrar por activos por defecto
+        queryset = super().get_queryset()
+
+        # Búsqueda exacta por código (para el grid)
+        codigo_exacto = self.request.query_params.get('codvta', None)
+        if codigo_exacto:
+            queryset = queryset.filter(codvta__iexact=codigo_exacto)
+        else:
+            # Búsqueda general por código o denominación (para otros casos)
+            termino_busqueda = self.request.query_params.get('search', None)
+            if termino_busqueda:
+                queryset = queryset.filter(
+                    Q(codvta__icontains=termino_busqueda) |
+                    Q(deno__icontains=termino_busqueda)
+                ).distinct()
+
+        # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
         if 'acti' not in self.request.query_params:
             queryset = queryset.filter(acti='S')
         
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+        
+        if orden == 'id':
+            if direccion == 'asc':
+                queryset = queryset.order_by('id')
+            else:
+                queryset = queryset.order_by('-id')
+        elif orden == 'deno':
+            if direccion == 'asc':
+                queryset = queryset.order_by('deno')
+            else:
+                queryset = queryset.order_by('-deno')
+        elif orden == 'codvta':
+            if direccion == 'asc':
+                queryset = queryset.order_by('codvta')
+            else:
+                queryset = queryset.order_by('-codvta')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            queryset = queryset.order_by('-id')
+        
         return queryset
+
+    def retrieve(self, request, *args, **kwargs):
+        """Detalle optimizado: prefetch de relaciones necesarias para un único producto.
+        Incluye proveedor habitual, alícuota e items de stock_proveedores con su proveedor.
+        """
+        qs = (
+            Stock.objects
+            .select_related('proveedor_habitual', 'idaliiva')
+            .prefetch_related('stock_proveedores__proveedor')
+        )
+        instance = get_object_or_404(qs, pk=kwargs.get(self.lookup_field, kwargs.get('pk')))
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -191,15 +254,29 @@ class UploadListaPreciosProveedor(APIView):
             # Actualizar costo y fecha_actualizacion en StockProve para los productos/proveedor de la lista
             # que ya tienen un codigo_producto_proveedor asociado.
             now = timezone.now()
+            registros_actualizados = 0
             for item_excel in to_create:
-                StockProve.objects.filter(
+                actualizados = StockProve.objects.filter(
                     proveedor=proveedor,
                     codigo_producto_proveedor=str(item_excel.codigo_producto_excel).strip()
                 ).update(costo=item_excel.precio, fecha_actualizacion=now)
+                registros_actualizados += int(actualizados)
+
+            # Registrar historial de importación en la app proveedores
+            HistorialImportacionProveedor.objects.create(
+                proveedor=proveedor,
+                nombre_archivo=excel_file.name,
+                registros_procesados=precios_cargados,
+                registros_actualizados=registros_actualizados,
+            )
 
             return Response({
-                'message': f'Lista importada correctamente. {precios_cargados} precios cargados.',
-                'registros_procesados': precios_cargados
+                'message': (
+                    f'Lista importada correctamente. {precios_cargados} precios cargados.' +
+                    (" Advertencia: no se actualizó ningún costo para este proveedor. Verifique que el archivo corresponda." if registros_actualizados == 0 else "")
+                ),
+                'registros_procesados': precios_cargados,
+                'registros_actualizados': registros_actualizados
             }, status=201)
         except Exception as e:
             return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
@@ -225,14 +302,8 @@ class PrecioProductoProveedorAPIView(APIView):
             # Buscar precio manual (StockProve)
             stockprove = StockProve.objects.filter(
                 proveedor_id=proveedor_id,
-                stock__codcom__iexact=codigo_producto
+                stock__codvta__iexact=codigo_producto
             ).order_by('-fecha_actualizacion').first()
-            # Si no se encuentra por codcom, buscar por codvta
-            if not stockprove:
-                stockprove = StockProve.objects.filter(
-                    proveedor_id=proveedor_id,
-                    stock__codvta__iexact=codigo_producto
-                ).order_by('-fecha_actualizacion').first()
 
             # Buscar precio Excel
             precio_excel = PrecioProveedorExcel.objects.annotate(
@@ -308,6 +379,7 @@ def asociar_codigo_proveedor(request):
     stock_id = request.data.get('stock_id')
     proveedor_id = request.data.get('proveedor_id')
     codigo_producto_proveedor = request.data.get('codigo_producto_proveedor')
+    costo_value = request.data.get('costo', None)
     if not (stock_id and proveedor_id and codigo_producto_proveedor):
         return Response({'detail': 'Faltan datos requeridos.'}, status=400)
     try:
@@ -332,15 +404,26 @@ def asociar_codigo_proveedor(request):
     obj = StockProve.objects.filter(stock=stock, proveedor=proveedor).first()
     if obj:
         obj.codigo_producto_proveedor = codigo_producto_proveedor
+        # Actualizar costo si fue provisto
+        if costo_value is not None:
+            try:
+                obj.costo = float(costo_value)
+            except Exception:
+                pass
+        obj.fecha_actualizacion = timezone.now()
         obj.save()
         return Response({'detail': 'Código de proveedor actualizado.'}, status=200)
     else:
+        try:
+            costo_num = float(costo_value) if costo_value is not None else 0
+        except Exception:
+            costo_num = 0
         StockProve.objects.create(
             stock=stock,
             proveedor=proveedor,
             codigo_producto_proveedor=codigo_producto_proveedor,
             cantidad=0,
-            costo=0
+            costo=costo_num
         )
         return Response({'detail': 'Código de proveedor asociado (relación creada con cantidad y costo en 0).'}, status=201)
 
@@ -403,13 +486,10 @@ def crear_producto_con_relaciones(request):
         if not producto_data:
             raise Exception('Faltan datos de producto.')
 
-        # Validar unicidad de codvta y codcom
+        # Validar unicidad de codvta
         codvta = producto_data.get('codvta')
-        codcom = producto_data.get('codcom')
         if Stock.objects.filter(codvta=codvta).exists():
             raise Exception('Ya existe un producto con ese código de venta (codvta).')
-        if Stock.objects.filter(codcom=codcom).exists():
-            raise Exception('Ya existe un producto con ese código de compra (codcom).')
 
         # PREVALIDAR todas las relaciones antes de crear el producto
         for rel in stock_proveedores_data:
@@ -467,13 +547,10 @@ def editar_producto_con_relaciones(request):
         if not producto_data or not producto_data.get('id'):
             raise Exception('Faltan datos de producto o ID.')
         producto_id = producto_data['id']
-        # Validar unicidad de codvta y codcom (excluyendo el propio producto)
+        # Validar unicidad de codvta (excluyendo el propio producto)
         codvta = producto_data.get('codvta')
-        codcom = producto_data.get('codcom')
         if Stock.objects.filter(codvta=codvta).exclude(id=producto_id).exists():
             raise Exception('Ya existe un producto con ese código de venta (codvta).')
-        if Stock.objects.filter(codcom=codcom).exclude(id=producto_id).exists():
-            raise Exception('Ya existe un producto con ese código de compra (codcom).')
         # PREVALIDAR todas las relaciones antes de editar el producto
         for rel in stock_proveedores_data:
             proveedor_id = rel.get('proveedor_id')
@@ -502,15 +579,60 @@ def editar_producto_con_relaciones(request):
             if not stock_serializer.is_valid():
                 raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
             stock = stock_serializer.save()
-            # Eliminar relaciones actuales
-            StockProve.objects.filter(stock=stock).delete()
-            # Crear nuevas relaciones
+            # Actualización incremental de relaciones (preservar códigos si no se envían)
+            existentes = {sp.proveedor_id: sp for sp in StockProve.objects.filter(stock=stock)}
+            proveedores_enviados = set()
             for rel in stock_proveedores_data:
-                rel_data = rel.copy()
-                rel_data['stock'] = stock.id
-                sp_serializer = StockProveSerializer(data=rel_data)
-                sp_serializer.is_valid(raise_exception=True)
-                sp_serializer.save()
+                proveedor_id = rel.get('proveedor_id')
+                if not proveedor_id:
+                    continue
+                proveedores_enviados.add(int(proveedor_id))
+                cantidad = rel.get('cantidad')
+                costo = rel.get('costo')
+                codigo_rel = rel.get('codigo_producto_proveedor')
+
+                sp_existente = existentes.get(int(proveedor_id))
+                if sp_existente:
+                    # Actualizar cantidad y costo
+                    if cantidad is not None:
+                        sp_existente.cantidad = cantidad
+                    if costo is not None:
+                        sp_existente.costo = costo
+                    # Actualizar código solo si viene presente y no vacío
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad del código dentro del proveedor, excluyendo este producto
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        sp_existente.codigo_producto_proveedor = codigo_rel
+                    sp_existente.save()
+                else:
+                    # Crear nueva relación. Solo setear código si viene y no es vacío
+                    create_kwargs = {
+                        'stock': stock,
+                        'proveedor_id': proveedor_id,
+                        'cantidad': cantidad if cantidad is not None else 0,
+                        'costo': costo if costo is not None else 0,
+                    }
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad antes de crear
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        create_kwargs['codigo_producto_proveedor'] = codigo_rel
+                    StockProve.objects.create(**create_kwargs)
+
+            # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
         return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
     except serializers.ValidationError as ve:
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
@@ -551,8 +673,7 @@ class FerreteriaAPIView(APIView):
         for legacy_key in [
             'margen_ganancia_por_defecto', 'comprobante_por_defecto',
             'notificaciones_email', 'notificaciones_stock_bajo',
-            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes',
-            'permitir_stock_negativo'
+            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes'
         ]:
             data.pop(legacy_key, None)
 
@@ -647,7 +768,10 @@ def servir_logo_empresa(request):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',
-                'Cache-Control': 'public, max-age=31536000'
+                # Desactivar caché para evitar logos viejos en PDFs
+                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         )
         return response
@@ -671,7 +795,7 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
         denominacion_normalizada = self.normalizar_denominacion(denominacion)
         
         # Obtener todas las denominaciones existentes
-        productos_existentes = Stock.objects.filter(acti='S').values('id', 'codvta', 'codcom', 'deno', 'unidad')
+        productos_existentes = Stock.objects.filter(acti='S').values('id', 'codvta', 'deno', 'unidad')
         
         productos_similares = []
         
@@ -686,7 +810,6 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
                 productos_similares.append({
                     'id': producto['id'],
                     'codigo_venta': producto['codvta'],
-                    'codigo_compra': producto['codcom'],
                     'denominacion': producto['deno'],
                     'unidad': producto['unidad'],
                     'similitud': similitud,
@@ -783,88 +906,26 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
         return componentes
     
     def calcular_similitud(self, denominacion1, denominacion2):
-        """Calcula la similitud entre dos denominaciones"""
-        # Normalizar para comparación exacta
+        """Calcula similitud SOLO basada en el texto completo normalizado.
+        Devuelve porcentaje 0..100. 100 indica coincidencia exacta."""
         denom1_norm = self.normalizar_denominacion(denominacion1)
         denom2_norm = self.normalizar_denominacion(denominacion2)
-        
         if denom1_norm == denom2_norm:
             return 100.0
-        
-        comp1 = self.extraer_componentes(denominacion1)
-        comp2 = self.extraer_componentes(denominacion2)
-        
-        similitud = 0
-        total_peso = 0
-        
-        # Tipo de producto (peso alto: 30%)
-        if comp1['tipo'] and comp2['tipo']:
-            if comp1['tipo'] == comp2['tipo']:
-                similitud += 30
-            total_peso += 30
-        
-        # Material (peso alto: 25%)
-        if comp1['material'] and comp2['material']:
-            if comp1['material'] == comp2['material']:
-                similitud += 25
-            total_peso += 25
-        
-        # Marca (peso medio: 20%)
-        if comp1['marca'] and comp2['marca']:
-            if comp1['marca'] == comp2['marca']:
-                similitud += 20
-            total_peso += 20
-        
-        # Dimensiones (peso medio: 15%)
-        if comp1['dimensiones'] and comp2['dimensiones']:
-            if comp1['dimensiones'] == comp2['dimensiones']:
-                similitud += 15
-            total_peso += 15
-        
-        # Unidad (peso bajo: 10%)
-        if comp1['unidad'] and comp2['unidad']:
-            if comp1['unidad'] == comp2['unidad']:
-                similitud += 10
-            total_peso += 10
-        
-        # Si no hay componentes para comparar, usar similitud de texto
-        if total_peso == 0:
-            return self.similitud_texto(denominacion1, denominacion2)
-        
-        return (similitud / total_peso) * 100
+        return self.similitud_texto(denominacion1=denominacion1.lower(), texto2=denominacion2.lower())
     
-    def similitud_texto(self, texto1, texto2):
+    def similitud_texto(self, texto1=None, texto2=None, denominacion1=None, denominacion2=None):
         """Calcula similitud basada en texto usando distancia de Levenshtein"""
-        return SequenceMatcher(None, texto1, texto2).ratio() * 100
+        # Permite compatibilidad con llamadas existentes y nuevas con kwargs
+        a = denominacion1 if denominacion1 is not None else texto1
+        b = denominacion2 if denominacion2 is not None else texto2
+        return SequenceMatcher(None, a, b).ratio() * 100
     
     def determinar_tipo_similitud(self, denominacion1, denominacion2):
-        """Determina el tipo de similitud encontrada"""
-        # Normalizar las denominaciones para comparación exacta
+        """Determina tipo de similitud: 'exacta' si texto normalizado coincide, si no 'parcial'."""
         denom1_norm = self.normalizar_denominacion(denominacion1)
         denom2_norm = self.normalizar_denominacion(denominacion2)
-        
-        # Solo es exacta si las denominaciones normalizadas son idénticas
-        if denom1_norm == denom2_norm:
-            return 'exacta'
-        
-        comp1 = self.extraer_componentes(denominacion1)
-        comp2 = self.extraer_componentes(denominacion2)
-        
-        # Verificar si solo cambian las dimensiones
-        if (comp1['tipo'] == comp2['tipo'] and 
-            comp1['material'] == comp2['material'] and 
-            comp1['marca'] == comp2['marca'] and 
-            comp1['dimensiones'] != comp2['dimensiones']):
-            return 'dimensiones'
-        
-        # Verificar si solo cambian las especificaciones
-        if (comp1['tipo'] == comp2['tipo'] and 
-            comp1['material'] == comp2['material'] and 
-            comp1['marca'] == comp2['marca'] and 
-            comp1['especificaciones'] != comp2['especificaciones']):
-            return 'especificaciones'
-        
-        return 'parcial'
+        return 'exacta' if denom1_norm == denom2_norm else 'parcial'
     
     def generar_sugerencia(self, productos_similares, similitud_maxima):
         """Genera una sugerencia basada en los productos similares encontrados"""

@@ -3,25 +3,17 @@ import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
-const getStockProveedoresMap = (productos) => {
-  const map = {};
-  productos.forEach(p => {
-    if (p.stock_proveedores) {
-      map[p.id] = p.stock_proveedores;
-    }
-  });
-  return map;
-};
+
 
 // Función para mapear los campos del backend a los nombres del formulario
 const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
@@ -51,22 +43,14 @@ const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
     ven_vdocomvta: data.ven_vdocomvta ?? 0,
     ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? normalizarItems(data.items, { productos, alicuotasMap }) : [],
+    items: Array.isArray(data.items) ? normalizarItemsStock(data.items) : [],
   };
   // LOG NUEVO: Loggear los datos mapeados y normalizados
   console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
   return mapeado;
 };
 
-// Utilidad simple para generar un checksum estable del presupuesto original
-const generarChecksum = (data) => {
-  if (!data) return '';
-  return JSON.stringify({
-    total: data?.ven_total ?? data?.total ?? 0,
-    itemsLen: Array.isArray(data?.items) ? data.items.length : 0,
-    actualizado: data?.updated_at ?? null
-  });
-};
+// (eliminada utilidad generarChecksum no utilizada)
 
 const EditarPresupuestoForm = ({
   onSave,
@@ -101,7 +85,7 @@ const EditarPresupuestoForm = ({
   });
 
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
-  const stockProveedores = getStockProveedoresMap(productos);
+
 
   // Calcular el mapa de alícuotas y memorizarlo para evitar re-renders innecesarios
   const alicuotasMap = useMemo(() => {
@@ -114,25 +98,44 @@ const EditarPresupuestoForm = ({
   }, [alicuotas]);
 
   // Hook unificado de estado con soporte de borrador
+  const [gridKey, setGridKey] = useState(Date.now());
+
   const {
     formulario,
     setFormulario,
     limpiarBorrador,
     actualizarItems
   } = useFormularioDraft({
-    claveAlmacenamiento: initialData && initialData.id ? `editarPresupuestoDraft_${initialData.id}` : 'editarPresupuestoDraft_nuevo',
+    claveAlmacenamiento: (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
     combinarConValoresPorDefecto: (data) => {
       const base = mapearCamposPresupuesto(data, productos, alicuotasMap);
-      return { ...base, __checksum: generarChecksum(data) };
+      return base;
     },
     parametrosPorDefecto: [productos, alicuotasMap],
-    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap }),
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
     validarBorrador: (saved, datosOriginales) => {
-      // Se considera válido solo si el checksum coincide
-      return saved?.__checksum === generarChecksum(datosOriginales);
+      // Válido si pertenece al mismo presupuesto (por ID); evita depender de checksum
+      const idOriginal = datosOriginales?.ven_id ?? datosOriginales?.id;
+      return String(saved?.id ?? '') === String(idOriginal ?? '');
     }
   });
+
+  // Remontar el grid una sola vez si detectamos borrador con items (rehidratación)
+  const remountHechoRef = useRef(false);
+  useEffect(() => {
+    if (remountHechoRef.current) return;
+    const clave = (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo';
+    try {
+      const saved = localStorage.getItem(clave);
+      if (!saved) return;
+      const borrador = JSON.parse(saved);
+      if (Array.isArray(borrador?.items) && borrador.items.length > 0) {
+        setGridKey(Date.now());
+        remountHechoRef.current = true;
+      }
+    } catch (_) {}
+  }, [initialData]);
 
   const itemsGridRef = useRef();
   
@@ -154,6 +157,30 @@ const EditarPresupuestoForm = ({
   const handleRowsChange = useCallback((rowsActualizados) => {
     actualizarItems(rowsActualizados)
   }, [actualizarItems]);
+
+  // Inicializar autoSumarDuplicados si es false (igual que en VentaForm)
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados("sumar")
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados])
+
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu1: value }))
+  }, [setFormulario])
+
+  const setDescu2 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu2: value }))
+  }, [setFormulario])
+
+  const setDescu3 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu3: value }))
+  }, [setFormulario])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
 
   // Manejadores de cambios
   const handleChange = manejarCambioFormulario(setFormulario);
@@ -177,6 +204,12 @@ const EditarPresupuestoForm = ({
     descu3: formulario.descu3,
     alicuotas: alicuotasMap
   });
+
+  // Manejo simple de errores (sin ARCA)
+  const mostrarError = useCallback((error, mensajePorDefecto = "Error al procesar la edición del presupuesto") => {
+    const mensaje = (error && error.message) ? error.message : mensajePorDefecto
+    try { window.alert(mensaje) } catch (_) {}
+  }, [])
 
   // =========================
   // Selector de Clientes (Modal)
@@ -223,7 +256,6 @@ const EditarPresupuestoForm = ({
         ven_numero: Number.parseInt(formulario.numero, 10) || 1,
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,
-        ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1,
         ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
         ven_descu1: Number.parseFloat(formulario.descu1) || 0,
         ven_descu2: Number.parseFloat(formulario.descu2) || 0,
@@ -238,7 +270,7 @@ const EditarPresupuestoForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: Number.parseInt(formulario.copia, 10) || 1,
         items: itemsToSave.map((item, idx) => mapearCamposItem(item, idx)),
-        permitir_stock_negativo: true,
+        // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         update_atomic: true
       };
       console.log('[EditarPresupuestoForm/handleSubmit] Payload final:', payload);
@@ -247,12 +279,15 @@ const EditarPresupuestoForm = ({
       await onSave(payload);
       limpiarBorrador();
       onCancel();
-    } catch (err) {
-      console.error('Error al guardar:', err);
+    } catch (error) {
+      mostrarError(error, "Error al procesar la edición del presupuesto")
     }
   };
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     limpiarBorrador();
     onCancel();
   };
@@ -325,7 +360,7 @@ const EditarPresupuestoForm = ({
                   />
                   {!isReadOnly && (
                     <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                     </button>
                   )}
                 </div>
@@ -404,7 +439,7 @@ const EditarPresupuestoForm = ({
             {/* Buscador */}
             <div>
               <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-              <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+                             <BuscadorProducto onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
             </div>
 
             {/* Tipo de Comprobante */}
@@ -434,37 +469,37 @@ const EditarPresupuestoForm = ({
       </div>
 
       <div className="mb-8">
-        {loadingProductos || loadingFamilias || loadingProveedores ? (
-          <div className="text-center text-gray-500 py-4">Cargando productos, familias y proveedores...</div>
-        ) : errorProductos ? (
-          <div className="text-center text-red-600 py-4">{errorProductos}</div>
-        ) : errorFamilias ? (
-          <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-        ) : errorProveedores ? (
-          <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-        ) : (
-          <ItemsGrid
-            ref={itemsGridRef}
-            productosDisponibles={productos}
-            proveedores={proveedores}
-            stockProveedores={stockProveedores}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={formulario.bonificacionGeneral}
-            setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
-            descu1={formulario.descu1}
-            descu2={formulario.descu2}
-            descu3={formulario.descu3}
-            setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-            setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-            setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-            totales={totales}
-            modo="presupuesto"
-            alicuotas={alicuotasMap}
-            onRowsChange={handleRowsChange}
-            initialItems={formulario.items}
-          />
+        {(loadingProductos || loadingFamilias || loadingProveedores) && (
+          <div className="text-center text-gray-500 py-2">Cargando productos, familias y proveedores...</div>
         )}
+        {errorProductos && (
+          <div className="text-center text-red-600 py-2">{errorProductos}</div>
+        )}
+        {errorFamilias && (
+          <div className="text-center text-red-600 py-2">{errorFamilias}</div>
+        )}
+        {errorProveedores && (
+          <div className="text-center text-red-600 py-2">{errorProveedores}</div>
+        )}
+        <ItemsGrid
+          ref={itemsGridRef}
+          key={gridKey}
+          autoSumarDuplicados={autoSumarDuplicados}
+          setAutoSumarDuplicados={setAutoSumarDuplicados}
+          bonificacionGeneral={formulario.bonificacionGeneral}
+          setBonificacionGeneral={setBonificacionGeneral}
+          descu1={formulario.descu1}
+          descu2={formulario.descu2}
+          descu3={formulario.descu3}
+          setDescu1={setDescu1}
+          setDescu2={setDescu2}
+          setDescu3={setDescu3}
+          totales={totales}
+          modo="presupuesto"
+          alicuotas={alicuotasMap}
+          onRowsChange={handleRowsChange}
+          initialItems={formulario.items}
+        />
       </div>
 
       <div className="mt-8 flex justify-end space-x-4">

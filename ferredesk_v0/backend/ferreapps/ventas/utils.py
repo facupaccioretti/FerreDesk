@@ -105,7 +105,8 @@ def _aplicar_logica_fiscal(comprobantes, situacion_iva_cliente):
     
     # Determinar la letra según las reglas fiscales
     if emisor == 'responsable_inscripto':
-        if cliente == 'consumidor_final':
+        
+        if cliente in ('consumidor_final', 'exento'):
             letra_objetivo = 'B'
         else:
             letra_objetivo = 'A'

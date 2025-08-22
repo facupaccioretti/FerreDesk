@@ -39,6 +39,7 @@ INSTALLED_APPS = [
         # Apps propias
     'ferreapps.usuarios',
     'ferreapps.productos',
+    'ferreapps.proveedores',
     'ferreapps.login',
     'ferreapps.clientes',
     'ferreapps.ventas',
@@ -268,6 +269,17 @@ REST_FRAMEWORK = {
     ),
     'EXCEPTION_HANDLER': 'ferreapps.ventas.utils.ferre_exception_handler',
 }
+
+# --- Configuraciones de dominio de negocio ---
+# Cantidad máxima de caracteres para denominación de productos y detalle de ítems
+PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
+# --- Configuraciones de paginación DRF ---
+# Tamaño por defecto de página de API (sólo lo usa productos por ahora)
+TAM_PAGINA_POR_DEFECTO = 10  # UI mostrará 10 filas típicamente
+# Límite máximo que puede pedir el frontend (buffer)
+TAM_PAGINA_MAXIMA = 200
+
+# Nota: no activamos DEFAULT_PAGINATION_CLASS global para no afectar otras apps
 
 # Configuración de CORS
 # Usar variables de entorno si están disponibles (Docker), sino usar valores por defecto

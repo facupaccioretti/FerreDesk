@@ -13,14 +13,19 @@ import Paginador from "../Paginador"
  * @returns {Object} - Objeto con icon y label
  */
 const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
+  const t = String(tipo || "").toLowerCase()
   const n = String(nombre || "").toLowerCase()
-  if (n.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
-  if (n.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
-  if (n.includes("factura")) return { icon: <IconFactura />, label: "Factura" }
-  if (n.includes("nota de crédito interna")) return { icon: <IconCredito />, label: "N. Cred. Int." }
-  if (n.includes("nota de crédito")) return { icon: <IconCredito />, label: "N. Cred." }
-  if (n.includes("nota de débito")) return { icon: <IconCredito />, label: "N. Deb." }
-  if (n.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
+  // Normalización sin acentos para robustez
+  const sinAcentos = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  const nClean = sinAcentos(n)
+  if (nClean.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
+  if (nClean.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
+  if (t === 'nota_credito' || t === 'nota_credito_interna' || nClean.includes('nota de credito')) {
+    return { icon: <IconCredito />, label: "N. Cred." }
+  }
+  if (nClean.includes("nota de debito")) return { icon: <IconCredito />, label: "N. Deb." }
+  if (nClean.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
+  if (nClean.includes("factura")) return { icon: <IconFactura />, label: "Factura" }
   return { icon: <IconFactura />, label: String(nombre) }
 }
 
@@ -239,7 +244,7 @@ const ComprobantesList = ({
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-slate-300">
+          <tbody className="bg-white divide-y divide-slate-300 leading-tight">
             {datosPagina.map((p) => {
               // Obtener datos del comprobante
               let comprobanteObj = null
@@ -274,7 +279,7 @@ const ComprobantesList = ({
               return (
                 <tr key={p.id} className="hover:bg-slate-200">
                   {/* Comprobante */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex items-center gap-2 text-slate-700">
                         {icon} <span className="font-medium">{label}</span>
@@ -290,14 +295,14 @@ const ComprobantesList = ({
                       {tieneFacturasAnuladas && (
                         <ComprobanteAsociadoTooltip
                           documentos={facturasAnuladas}
-                          titulo="Facturas que Anula"
+                          titulo="Comprobantes Asociados"
                         />
                       )}
                     </div>
                   </td>
                   
                   {/* Número */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-800">
                         {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
@@ -307,18 +312,18 @@ const ComprobantesList = ({
                   </td>
                   
                   {/* Fecha */}
-                  <td className="px-3 py-1 whitespace-nowrap text-slate-600">{p.fecha}</td>
+                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fecha}</td>
                   
                   {/* Cliente */}
-                  <td className="px-3 py-1 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
+                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
                   
                   {/* Total */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <span className="font-semibold text-slate-800">${formatearMoneda(p.total)}</span>
                   </td>
                   
                   {/* Acciones */}
-                  <td className="px-3 py-1 whitespace-nowrap">
+                  <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex gap-1">
                       <ComprobanteAcciones
                         comprobante={p}

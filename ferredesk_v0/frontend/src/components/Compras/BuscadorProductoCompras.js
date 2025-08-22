@@ -33,7 +33,6 @@ function BuscadorProductoCompras({
           const sugs = productos.filter(
             p =>
               (p.codvta || '').toLowerCase().includes(lower) ||
-              (p.codcom || '').toLowerCase().includes(lower) ||
               (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
               (p.codigo_proveedor || '').toLowerCase().includes(lower)
           )
@@ -147,7 +146,7 @@ function BuscadorProductoCompras({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className={`font-bold text-xs ${isSelected ? 'text-orange-800' : 'text-slate-800'}`}>
-                          {p.codvta || p.codcom}
+                          {p.codvta}
                         </span>
                         {p.codigo_proveedor && (
                           <span className={`text-xs px-1 py-0.5 rounded-sm ${

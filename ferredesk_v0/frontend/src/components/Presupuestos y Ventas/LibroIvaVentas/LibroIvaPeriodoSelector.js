@@ -93,27 +93,27 @@ const LibroIvaPeriodoSelector = ({ onGenerar, loading, disabled = false }) => {
               className="mr-2"
             />
             <label htmlFor="convencional" className="text-sm text-gray-700">
-              <strong>Convencional:</strong> Solo documentos fiscales (Factura A/B/C, Nota de Crédito A/B/C, Nota de Débito A/B/C)
+              <strong>Convencional:</strong> Factura A/B/C, Nota de Crédito A/B/C
             </label>
           </div>
           
           <div className="flex items-center">
             <input
               type="radio"
-              id="informal"
+              id="administrativo"
               name="tipoLibro"
-              value="informal"
-              checked={tipoLibro === 'informal'}
+              value="administrativo"
+              checked={tipoLibro === 'administrativo'}
               onChange={(e) => setTipoLibro(e.target.value)}
               disabled={disabled || loading}
               className="mr-2"
             />
-            <label htmlFor="informal" className="text-sm text-gray-700">
-              <strong>Informal:</strong> Con comprobantes internos (Factura Interna, Nota de Crédito Interna)
+            <label htmlFor="administrativo" className="text-sm text-gray-700">
+              <strong>Administrativo:</strong> Todos los movimientos.
             </label>
           </div>
           
-          {tipoLibro === 'informal' && (
+          {tipoLibro === 'administrativo' && (
             <div className="ml-6">
               <div className="flex items-center">
                 <input

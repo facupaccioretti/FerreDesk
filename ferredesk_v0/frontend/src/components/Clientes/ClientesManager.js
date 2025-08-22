@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import Navbar from "../Navbar"
 
 // Hooks API (rutas ajustadas un nivel arriba)
@@ -32,7 +32,7 @@ const ClientesManager = () => {
   }, [])
 
   // Hook centralizado de clientes (alta / edición / eliminación)
-  const { clientes, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI()
+  const { clientes, total, loading, error, fetchClientes, addCliente, updateCliente, deleteCliente, clearError } = useClientesAPI({}, { autoFetch: false })
 
   // Mostrar errores como alert nativo del navegador
   useEffect(() => {
@@ -51,6 +51,9 @@ const ClientesManager = () => {
     const savedTabs = localStorage.getItem("clientesTabs")
     // Empezamos con un array base de las pestañas que el usuario pueda tener.
     let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
+
+    // Eliminar cualquier tab "Maestros" persistida anteriormente
+    currentTabs = currentTabs.filter((t) => t.key !== "maestros")
 
     // Aseguramos que "Lista de Clientes" esté presente y configurada correctamente.
     let listaTab = currentTabs.find((t) => t.key === "lista")
@@ -71,16 +74,24 @@ const ClientesManager = () => {
       currentTabs.splice(listaIndex + 1, 0, { key: "inactivos", label: "Clientes Inactivos", closable: false })
     }
 
+    // Pestaña "Maestros" eliminada (movida a Configuración)
+
     return currentTabs
   })
 
   const [activeTab, setActiveTab] = useState(() => {
     const savedActiveTab = localStorage.getItem("clientesActiveTab")
-    return savedActiveTab || "lista"
+    return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
 
   const [editCliente, setEditCliente] = useState(null)
   const [expandedClientId, setExpandedClientId] = useState(null)
+  const [pagina, setPagina] = useState(1)
+  const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  
+  // Estado de ordenamiento
+  const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
+  
   const [user, setUser] = useState(null)
 
   // Persistencia de tabs
@@ -106,11 +117,11 @@ const ClientesManager = () => {
 
   // -------- Navegación de sub-pestañas --------
   const openTab = (key, label, cliente = null) => {
-    if (key === "nuevo") clearError()
+    if (key.startsWith("nuevo")) clearError()
     setEditCliente(cliente)
     setTabs((prev) => {
       if (prev.find((t) => t.key === key)) return prev
-      return [...prev, { key, label, closable: true }]
+      return [...prev, { key, label, closable: true, cliente }]
     })
     setActiveTab(key)
   }
@@ -119,18 +130,21 @@ const ClientesManager = () => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
     if (activeTab === key) setActiveTab("lista")
     setEditCliente(null)
-    if (key === "nuevo") clearError()
+    if (String(key).startsWith("nuevo")) clearError()
   }
 
   // Guardar cliente (alta / edición)
-  const handleSaveCliente = async (data) => {
+  const handleSaveCliente = async (data, tabKeyParam) => {
     let exito = false
     if (editCliente) {
       exito = await updateCliente(editCliente.id, data)
     } else {
       exito = await addCliente(data)
     }
-    if (exito) closeTab("nuevo")
+    if (exito) {
+      const keyToClose = tabKeyParam || activeTab || "nuevo"
+      closeTab(keyToClose)
+    }
   }
 
   // Eliminar cliente
@@ -142,12 +156,14 @@ const ClientesManager = () => {
 
   // Editar cliente
   const handleEditCliente = (cliente) => {
-    openTab("nuevo", "Nuevo Cliente", cliente)
+    const razon = cliente?.razon || cliente?.fantasia || cliente?.nombre || "Cliente"
+    const key = `cliente-${cliente?.id || "sinid"}-${Date.now()}`
+    openTab(key, `Editar: ${razon}`, cliente)
   }
 
   // Filtrado de clientes activos e inactivos con useMemo para optimización
-  const clientesActivos = React.useMemo(() => clientes.filter((c) => c.activo === "A"), [clientes])
-  const clientesInactivos = React.useMemo(() => clientes.filter((c) => c.activo !== "A"), [clientes])
+  const clientesActivos = React.useMemo(() => clientes, [clientes])
+  const clientesInactivos = React.useMemo(() => clientes, [clientes])
 
   // ---------- Hooks de entidades relacionales ----------
   const { barrios, setBarrios } = useBarriosAPI()
@@ -159,19 +175,36 @@ const ClientesManager = () => {
   const { categorias, setCategorias } = useCategoriasAPI()
   const { tiposIVA } = useTiposIVAAPI()
 
+  // Estado y UI de "Maestros" eliminados (migrados a Configuración)
+
   // ------------------------------------------------------------------
-  // Efecto: cada vez que cambia 'search' realizamos consulta filtrada al
-  // backend usando __icontains sobre razón y fantasía.
+  // Función para manejar cambios de ordenamiento
+  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
+    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
+    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Efecto: cada vez que cambia búsqueda o pestaña, pedimos al backend con activo=A/I
   useEffect(() => {
+    const termino = activeTab === "inactivos" ? searchInactivos : search
     const timeout = setTimeout(() => {
-      if (search && search.trim() !== "") {
-        fetchClientes({ razon__icontains: search.trim(), fantasia__icontains: search.trim() })
-      } else {
-        fetchClientes()
+      const filtros = {}
+      if (termino && termino.trim() !== "") {
+        filtros.razon__icontains = termino.trim()
+        filtros.fantasia__icontains = termino.trim()
       }
-    }, 300) // Debounce simple
+      if (activeTab === "lista") filtros.activo = "A"
+      if (activeTab === "inactivos") filtros.activo = "I"
+      fetchClientes(filtros, pagina, itemsPorPagina, 'id', ordenamiento)
+    }, 300)
     return () => clearTimeout(timeout)
-  }, [search, fetchClientes])
+  }, [search, searchInactivos, activeTab, pagina, itemsPorPagina, ordenamiento, fetchClientes])
+
+  // Resetear a página 1 cuando cambian pestaña o términos de búsqueda correspondientes
+  useEffect(() => { setPagina(1) }, [activeTab])
+  useEffect(() => { if (activeTab === "lista") setPagina(1) }, [search, activeTab])
+  useEffect(() => { if (activeTab === "inactivos") setPagina(1) }, [searchInactivos, activeTab])
 
   // Eliminar cualquier renderizado visual de error relacionado a 'error' en la UI
 
@@ -228,7 +261,7 @@ const ClientesManager = () => {
               {activeTab === "lista" && (
                 <div className="mb-4 flex gap-2">
                   <button
-                    onClick={() => openTab("nuevo", "Nuevo Cliente")}
+                    onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Cliente")}
                     className={theme.botonPrimario}
                   >
                     <span className="text-lg">+</span> Nuevo Cliente
@@ -254,6 +287,16 @@ const ClientesManager = () => {
                   vendedores={vendedores}
                   plazos={plazos}
                   categorias={categorias}
+                  paginacionControlada={true}
+                  paginaActual={pagina}
+                  onPageChange={setPagina}
+                  itemsPerPage={itemsPorPagina}
+                  onItemsPerPageChange={setItemsPorPagina}
+                  totalRemoto={total}
+                  busquedaRemota={true}
+                  onOrdenamientoChange={handleOrdenamientoChange}
+                  ordenamientoControlado={ordenamiento === 'asc'}
+                  cargando={loading}
                 />
               )}
 
@@ -274,32 +317,43 @@ const ClientesManager = () => {
                   vendedores={vendedores}
                   plazos={plazos}
                   categorias={categorias}
+                  cargando={loading}
                 />
               )}
 
-              {activeTab === "nuevo" && (
+              {/* Pestaña "Maestros" eliminada */}
+
+              {activeTab !== "lista" && activeTab !== "inactivos" && activeTab !== "maestros" && (
                 <div className="flex justify-center items-center min-h-[60vh]">
-                  <ClienteForm
-                    onSave={handleSaveCliente}
-                    onCancel={() => closeTab("nuevo")}
-                    initialData={editCliente}
-                    barrios={barrios}
-                    localidades={localidades}
-                    provincias={provincias}
-                    transportes={transportes}
-                    vendedores={vendedores}
-                    plazos={plazos}
-                    categorias={categorias}
-                    setBarrios={setBarrios}
-                    setLocalidades={setLocalidades}
-                    setProvincias={setProvincias}
-                    setTransportes={setTransportes}
-                    setVendedores={setVendedores}
-                    setPlazos={setPlazos}
-                    setCategorias={setCategorias}
-                    tiposIVA={tiposIVA}
-                    apiError={error}
-                  />
+                  {(() => {
+                    const tabActual = tabs.find((t) => t.key === activeTab)
+                    const initialData = tabActual?.cliente || null
+                    return (
+                      <ClienteForm
+                        key={activeTab}
+                        onSave={(data) => handleSaveCliente(data, activeTab)}
+                        onCancel={() => closeTab(activeTab)}
+                        initialData={initialData}
+                        tabKey={activeTab}
+                        barrios={barrios}
+                        localidades={localidades}
+                        provincias={provincias}
+                        transportes={transportes}
+                        vendedores={vendedores}
+                        plazos={plazos}
+                        categorias={categorias}
+                        setBarrios={setBarrios}
+                        setLocalidades={setLocalidades}
+                        setProvincias={setProvincias}
+                        setTransportes={setTransportes}
+                        setVendedores={setVendedores}
+                        setPlazos={setPlazos}
+                        setCategorias={setCategorias}
+                        tiposIVA={tiposIVA}
+                        apiError={error}
+                      />
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -307,6 +361,8 @@ const ClientesManager = () => {
         </div>
       </div>
     </div>
+
+      {/* Modal de Maestros eliminado en Clientes (migrado a Configuración) */}
 
       {loading && <div className="p-4 text-center text-slate-600">Cargando clientes...</div>}
       {error && (

@@ -21,6 +21,7 @@ import ConfiguracionManager from './components/ConfiguracionManager';
 import InformesManager from './components/Informes/InformesManager';
 import DashboardsManager from './components/DashboardsManager';
 import ComprasManager from './components/Compras/ComprasManager';
+import CargaInicialProveedor from './components/Proveedores/CargaInicialProveedor';
 
 // Componente principal con rutas
 export default function App() {
@@ -33,6 +34,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <Home />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/home/carga-inicial-proveedor"
+          element={
+            <PrivateRoute>
+              <CargaInicialProveedor />
             </PrivateRoute>
           }
         />

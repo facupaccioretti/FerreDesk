@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 class Ferreteria(models.Model):
     nombre = models.CharField(max_length=100)
@@ -102,6 +103,12 @@ class Ferreteria(models.Model):
         help_text='Activar/desactivar la emisión automática de comprobantes ARCA'
     )
     
+    # Política operativa: permitir stock negativo por defecto
+    permitir_stock_negativo = models.BooleanField(
+        default=False,
+        help_text='Permite que el sistema permita vender con stock negativo por defecto'
+    )
+    
     # Estado de configuración ARCA
     arca_configurado = models.BooleanField(
         default=False,
@@ -185,12 +192,18 @@ class Ferreteria(models.Model):
                     self.clave_privada_arca != old_instance.clave_privada_arca and 
                     self.clave_privada_arca is not None
                 )
+                logo_nuevo = (
+                    self.logo_empresa != old_instance.logo_empresa and
+                    self.logo_empresa is not None
+                )
             except Ferreteria.DoesNotExist:
                 certificado_nuevo = self.certificado_arca is not None
                 clave_privada_nueva = self.clave_privada_arca is not None
+                logo_nuevo = self.logo_empresa is not None
         else:
             certificado_nuevo = self.certificado_arca is not None
             clave_privada_nueva = self.clave_privada_arca is not None
+            logo_nuevo = self.logo_empresa is not None
         
         # Guardar primero para obtener el ID
         super().save(*args, **kwargs)
@@ -198,6 +211,8 @@ class Ferreteria(models.Model):
         # Renombrar archivos si son nuevos
         if certificado_nuevo or clave_privada_nueva:
             self._renombrar_archivos_estandar()
+        if logo_nuevo:
+            self._normalizar_logo_empresa()
     
     def _renombrar_archivos_estandar(self):
         """
@@ -277,6 +292,76 @@ class Ferreteria(models.Model):
                     [self.clave_privada_arca.name, self.id]
                 )
 
+    def _normalizar_logo_empresa(self):
+        """
+        Mueve el logo de empresa a un nombre estándar 'logos/logo.jpg' (o mantiene la extensión original 
+        si no es .jpg) y elimina archivos anteriores en esa carpeta, preservando 'logo-arca.jpg'.
+        """
+        import os
+        import shutil
+        from django.conf import settings
+        from django.db import connection
+
+        if not self.logo_empresa:
+            return
+
+        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
+        os.makedirs(logos_dir, exist_ok=True)
+
+        # Determinar extensión del archivo subido
+        try:
+            origen_path = self.logo_empresa.path
+        except Exception:
+            return
+
+        _, ext = os.path.splitext(origen_path)
+        ext = ext.lower() if ext else '.jpg'
+        # Normalizar a .jpg si no es una extensión común
+        if ext not in {'.jpg', '.jpeg', '.png', '.gif', '.webp'}:
+            ext = '.jpg'
+
+        destino_nombre = f'logo{ext}'
+        destino_path = os.path.join(logos_dir, destino_nombre)
+
+        # Eliminar archivo destino previo si existe
+        if os.path.exists(destino_path):
+            try:
+                os.remove(destino_path)
+            except Exception:
+                pass
+
+        # Mover el archivo subido al nombre estándar
+        try:
+            shutil.move(origen_path, destino_path)
+        except Exception:
+            # Si falló el move, no continuar
+            return
+
+        # Actualizar referencia en el modelo a 'logos/logo.ext'
+        self.logo_empresa.name = f'logos/{destino_nombre}'
+
+        # Limpiar otros archivos en la carpeta 'logos', excepto el logo estándar y 'logo-arca.jpg'
+        try:
+            for archivo in os.listdir(logos_dir):
+                if archivo in {destino_nombre, 'logo-arca.jpg'}:
+                    continue
+                archivo_path = os.path.join(logos_dir, archivo)
+                # Solo eliminar archivos (no directorios)
+                if os.path.isfile(archivo_path):
+                    try:
+                        os.remove(archivo_path)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Persistir ruta actualizada en BD directamente
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE productos_ferreteria SET logo_empresa = %s WHERE id = %s",
+                [self.logo_empresa.name, self.id]
+            )
+
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
@@ -303,14 +388,13 @@ class Producto(models.Model):
 
 class Proveedor(models.Model):
     id = models.AutoField(primary_key=True, db_column='PRO_ID')
-    codigo = models.IntegerField(unique=True, db_column='PRO_CODIGO')
     razon = models.CharField(max_length=50, db_column='PRO_RAZON')
     fantasia = models.CharField(max_length=50, db_column='PRO_FANTASIA')
     domicilio = models.CharField(max_length=50, db_column='PRO_DOMI')
     tel1 = models.CharField(max_length=12, null=True, blank=True, db_column='PRO_TEL1')
     tel2 = models.CharField(max_length=12, null=True, blank=True, db_column='PRO_TEL2')
     tel3 = models.CharField(max_length=12, null=True, blank=True, db_column='PRO_TEL3')
-    cuit = models.CharField(max_length=11, null=True, blank=True, db_column='PRO_CUIT')
+    cuit = models.CharField(max_length=11, null=False, blank=False, db_column='PRO_CUIT', unique=True)
     ib = models.CharField(max_length=10, null=True, blank=True, db_column='PRO_IB')
     cpostal = models.CharField(max_length=7, null=True, blank=True, db_column='PRO_CPOSTAL')
     iva = models.SmallIntegerField(null=True, blank=True, db_column='PRO_IVA')
@@ -330,8 +414,7 @@ class Proveedor(models.Model):
 class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
-    codcom = models.CharField(max_length=15, unique=True, db_column='STO_CODCOM')
-    deno = models.CharField(max_length=50, db_column='STO_DENO')
+    deno = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='STO_DENO')
     orden = models.SmallIntegerField(null=True, blank=True, db_column='STO_ORDEN')
     unidad = models.CharField(max_length=10, null=True, blank=True, db_column='STO_UNIDAD')
     margen = models.DecimalField(max_digits=5, decimal_places=2, null=False, blank=False, db_column='STO_MARGEN')

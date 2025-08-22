@@ -1,30 +1,27 @@
 import { useMemo } from "react"
 
-const useValidaciones = ({ form, modo, stockProveParaMostrar, codigosPendientes, codigosPendientesEdicion }) => {
+const useValidaciones = ({ form, modo, stockProveParaMostrar, codigosPendientes, codigosPendientesEdicion, ferreteria }) => {
   
   // Validaciones del formulario
   const validaciones = useMemo(() => {
     const errores = []
+    const erroresCampo = []
     
-    // Validaciones básicas
+    // Validaciones básicas (errores de campo específico)
     if (!form.codvta || form.codvta.trim() === "") {
-      errores.push("El código de venta es obligatorio")
-    }
-    
-    if (!form.codcom || form.codcom.trim() === "") {
-      errores.push("El código de compra es obligatorio")
+      erroresCampo.push({ campo: "codvta", mensaje: "El código de venta es obligatorio" })
     }
     
     if (!form.deno || form.deno.trim() === "") {
-      errores.push("La denominación es obligatoria")
+      erroresCampo.push({ campo: "deno", mensaje: "La denominación es obligatoria" })
     }
     
     if (!form.idaliiva) {
-      errores.push("Debe seleccionar una alícuota de IVA")
+      erroresCampo.push({ campo: "idaliiva", mensaje: "Debe seleccionar una alícuota de IVA" })
     }
     
     if (!form.acti) {
-      errores.push("Debe seleccionar el estado del producto")
+      erroresCampo.push({ campo: "acti", mensaje: "Debe seleccionar el estado del producto" })
     }
     
     // Validaciones de códigos duplicados
@@ -69,37 +66,45 @@ const useValidaciones = ({ form, modo, stockProveParaMostrar, codigosPendientes,
       })
     }
     
-    // Validaciones de stock
+    // Validaciones de stock (errores generales)
     if (stockProveParaMostrar && stockProveParaMostrar.length === 0) {
       errores.push("Debe agregar al menos un proveedor con stock")
     }
     
-    // Validaciones de cantidades
+    // Validaciones de cantidades y costos (errores generales)
     if (stockProveParaMostrar) {
       stockProveParaMostrar.forEach((sp, index) => {
-        if (sp.cantidad < 0) {
+        // Validar cantidad negativa solo si no está permitido el stock negativo
+        if (sp.cantidad < 0 && !ferreteria?.permitir_stock_negativo) {
           errores.push(`La cantidad del proveedor ${index + 1} no puede ser negativa`)
         }
-        if (sp.costo < 0) {
+        
+        // Validar que el costo no sea nulo o vacío si hay código asociado (PRIMERO)
+        if (sp.codigo_producto_proveedor && (sp.costo === null || sp.costo === undefined || sp.costo === "" || sp.costo === 0)) {
+          errores.push(`Hay un proveedor con código asociado pero sin costo. Debe ingresar un costo válido para poder guardar el producto.`)
+        }
+        
+        // Validar que el costo no sea negativo (SOLO si no es nulo)
+        if (sp.costo !== null && sp.costo !== undefined && sp.costo !== "" && sp.costo < 0) {
           errores.push(`El costo del proveedor ${index + 1} no puede ser negativo`)
         }
       })
     }
     
     return {
-      esValido: errores.length === 0,
-      errores,
-      cantidadErrores: errores.length
+      esValido: errores.length === 0 && erroresCampo.length === 0,
+      errores, // Errores generales (para alertas)
+      erroresCampo, // Errores de campo específico (para tooltips nativos)
+      cantidadErrores: errores.length + erroresCampo.length
     }
-  }, [form, modo, stockProveParaMostrar, codigosPendientes, codigosPendientesEdicion])
+  }, [form, modo, stockProveParaMostrar, codigosPendientes, codigosPendientesEdicion, ferreteria])
   
   // Función para validar un campo específico
   const validarCampo = (nombreCampo, valor) => {
     switch (nombreCampo) {
       case "codvta":
         return !valor || valor.trim() === "" ? "El código de venta es obligatorio" : null
-      case "codcom":
-        return !valor || valor.trim() === "" ? "El código de compra es obligatorio" : null
+      
       case "deno":
         return !valor || valor.trim() === "" ? "La denominación es obligatoria" : null
       case "idaliiva":

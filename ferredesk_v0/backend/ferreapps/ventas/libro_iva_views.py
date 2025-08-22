@@ -59,9 +59,9 @@ def generar_libro_iva_ventas_endpoint(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Validar tipo de libro
-        if tipo_libro not in ['convencional', 'informal']:
+        if tipo_libro not in ['convencional', 'administrativo']:
             return Response({
-                'detail': 'El parámetro "tipo_libro" debe ser "convencional" o "informal"'
+                'detail': 'El parámetro "tipo_libro" debe ser "convencional" o "administrativo"'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Validar tipos de datos

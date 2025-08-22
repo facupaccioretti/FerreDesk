@@ -78,11 +78,25 @@ const useTabsManager = (setEditVendedorData = null) => {
         const tab = tabs.find((t) => t.key === key)
         const idPres = tab?.data?.id || tab?.data?.ven_id || null
         if (idPres) localStorage.removeItem(`editarPresupuestoDraft_${idPres}`)
+        // Compatibilidad: eliminar posible clave legada por key
+        localStorage.removeItem(`editarPresupuestoDraft_${key}`)
+        // Safety net: eliminar también la variante '_nuevo' si existiera por claves antiguas
+        localStorage.removeItem('editarPresupuestoDraft_nuevo')
       } else if (key.startsWith("nuevo-")) {
         localStorage.removeItem(`presupuestoFormDraft_${key}`)
       } else if (key.startsWith("nueva-venta-")) {
         localStorage.removeItem(`ventaFormDraft_${key}`)
-      } else if (key.startsWith("conventa-")) {
+      } else if (key.startsWith("conventa-") || key.startsWith("conv-factura-i")) {
+        const tab = tabs.find((t) => t.key === key)
+        // Esquema nuevo: claves estables por origen
+        if (key.startsWith("conventa-")) {
+          const idPres = tab?.data?.presupuestoOrigen?.id ?? null
+          if (idPres) localStorage.removeItem(`conVentaFormDraft_presupuesto_${idPres}`)
+        } else if (key.startsWith("conv-factura-i")) {
+          const idFacI = tab?.data?.facturaInternaOrigen?.id ?? null
+          if (idFacI) localStorage.removeItem(`conVentaFormDraft_factura_interna_${idFacI}`)
+        }
+        // Compatibilidad: esquema anterior por tabKey
         localStorage.removeItem(`conVentaFormDraft_${key}`)
       } else if (key.startsWith("nota-credito-")) {
         localStorage.removeItem(`notaCreditoFormDraft_${key}`)

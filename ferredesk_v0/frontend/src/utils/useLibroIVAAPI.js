@@ -25,7 +25,7 @@ export function useLibroIvaAPI() {
         body: JSON.stringify({ 
           mes, 
           anio, 
-          tipo_libro: tipoLibro, 
+          tipo_libro: (tipoLibro === 'administrativo' ? 'administrativo' : tipoLibro), 
           incluir_presupuestos: incluirPresupuestos 
         })
       });
@@ -90,7 +90,8 @@ export function useLibroIvaAPI() {
     setError(null);
     
     try {
-      const response = await fetch(`/api/libro-iva-ventas/export/${formato}/?mes=${mes}&anio=${anio}&tipo_libro=${tipoLibro}&incluir_presupuestos=${incluirPresupuestos}`, {
+      const tipoParaBackend = (tipoLibro === 'administrativo' ? 'administrativo' : tipoLibro)
+      const response = await fetch(`/api/libro-iva-ventas/export/${formato}/?mes=${mes}&anio=${anio}&tipo_libro=${tipoParaBackend}&incluir_presupuestos=${incluirPresupuestos}`, {
         method: 'GET',
         headers: {
           'X-CSRFToken': csrftoken,
@@ -112,13 +113,13 @@ export function useLibroIvaAPI() {
       
       // Generar nombre de archivo según tipo de libro
       let nombreArchivo = `Libro_IVA_Ventas_`;
-      if (tipoLibro === 'convencional') {
+      if (tipoParaBackend === 'convencional') {
         nombreArchivo += 'Convencional_';
-      } else if (tipoLibro === 'informal') {
+      } else if (tipoParaBackend === 'administrativo') {
         if (incluirPresupuestos) {
-          nombreArchivo += 'InformalConPresupuestos_';
+          nombreArchivo += 'AdministrativoConPresupuestos_';
         } else {
-          nombreArchivo += 'Informal_';
+          nombreArchivo += 'Administrativo_';
         }
       }
       nombreArchivo += `${mes.toString().padStart(2, '0')}${anio}.${extension}`;

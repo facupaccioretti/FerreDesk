@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
@@ -150,6 +150,10 @@ const ConVentaForm = ({
   // Determinar origen de datos
   const origenDatos = facturaInternaOrigen || presupuestoOrigen;
   const esConversionFacturaI = tipoConversion === 'factura_i_factura';
+  // Clave de borrador estable por origen (evita pérdida por cambios de tabKey)
+  const claveDraft = `conVentaFormDraft_${esConversionFacturaI ? 'factura_interna' : 'presupuesto'}_${esConversionFacturaI ? (facturaInternaOrigen?.id ?? '0') : (presupuestoOrigen?.id ?? '0')}`;
+
+  // (eliminado indicador isReady no utilizado)
 
   // Usar el hook useFormularioDraft
   const { 
@@ -158,7 +162,7 @@ const ConVentaForm = ({
     limpiarBorrador, 
     actualizarItems 
   } = useFormularioDraft({
-    claveAlmacenamiento: `conVentaFormDraft_${tabKey}`,
+    claveAlmacenamiento: claveDraft,
     datosIniciales: origenDatos,
     combinarConValoresPorDefecto: (data) => {
       if (!data) return {
@@ -180,7 +184,33 @@ const ConVentaForm = ({
         descu3: 0,
         copia: 1,
         cae: '',
+        // Metadatos de origen para asociar el borrador a esta conversión
+        __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
+        __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
+      // Usar items del borrador SOLO si 'data' proviene de borrador (tiene metadata propia)
+      const esBorrador = data && Object.prototype.hasOwnProperty.call(data, '__origenTipo');
+      const tieneItemsGuardados = esBorrador && Array.isArray(data.items) && data.items.length > 0;
+      const itemsBase = tieneItemsGuardados
+        ? data.items
+        : (Array.isArray(itemsSeleccionados) ? itemsSeleccionados : []);
+
+      // Normalizar items de stock para asegurar estructura consistente
+      // NUEVO: Usar normalizarItems en lugar de normalizarItemsStock para preservar flags de conversión
+      let itemsNormalizados = normalizarItems(itemsBase, { productos, alicuotasMap });
+
+      // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
+      if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {
+        const idsOriginales = new Set(itemsSeleccionados.map(it => it.id));
+        itemsNormalizados = itemsNormalizados.map(it => {
+          const idOri = it.idOriginal ?? null;
+          if (idOri != null && idsOriginales.has(idOri)) {
+            return { ...it, esBloqueado: true, noDescontarStock: true };
+          }
+          return it;
+        });
+      }
+
       return {
         clienteId: data.ven_idcli ?? data.clienteId ?? '',
         cuit: data.ven_cuit ?? data.cuit ?? '',
@@ -197,24 +227,37 @@ const ConVentaForm = ({
         fecha: new Date().toISOString().split('T')[0],
         estado: 'Abierto',
         tipo: 'Venta',
-        items: normalizarItems(itemsSeleccionados, { 
-          productos, 
-          alicuotasMap, 
-          modo: 'venta',
-          // NUEVO: metadata para conversión de facturas internas
-          metadataConversion: esConversionFacturaI ? {
-            tipoConversion: 'factura_i_factura',
-            facturaInternaOrigenId: facturaInternaOrigen?.id
-          } : null
-        }),
+        items: itemsNormalizados,
         cae: '',
         total: 0,
+        __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
+        __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
     },
     parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
-    normalizarItems: (items) => normalizarItems(items, { productos, alicuotasMap, modo: 'venta' }),
-    validarBorrador: () => false // Nunca se reutiliza borrador en Conversión
+    validarBorrador: (saved) => {
+      const origenTipoActual = esConversionFacturaI ? 'factura_interna' : 'presupuesto';
+      const origenIdActual = esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null);
+      const coincideOrigen = (saved?.__origenTipo === origenTipoActual)
+        && (String(saved?.__origenId ?? '') === String(origenIdActual ?? ''));
+      const clienteOrigen = esConversionFacturaI
+        ? (facturaInternaOrigen?.ven_idcli ?? facturaInternaOrigen?.clienteId ?? '')
+        : (presupuestoOrigen?.ven_idcli ?? presupuestoOrigen?.clienteId ?? '');
+      const coincideCliente = String(saved?.clienteId ?? '') === String(clienteOrigen ?? '');
+      return coincideOrigen && coincideCliente;
+    }
   });
+
+
+  // Remontar el grid cuando el borrador haya sido rehidratado y existan items
+  const remountBorradorRef = useRef(false);
+  useEffect(() => {
+    if (remountBorradorRef.current) return;
+    if (Array.isArray(formulario.items) && formulario.items.length > 0) {
+      setGridKey(Date.now());
+      remountBorradorRef.current = true;
+    }
+  }, [formulario.items]);
 
   // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
   const [documentoInfo, setDocumentoInfo] = useState({
@@ -239,6 +282,8 @@ const ConVentaForm = ({
   });
 
   const itemsGridRef = useRef();
+  // Temporizador para mostrar overlay ARCA solo si la espera es real
+  const temporizadorArcaRef = useRef(null);
 
   // =========================
   // Selector de Clientes (Modal)
@@ -268,26 +313,24 @@ const ConVentaForm = ({
     }
   };
 
-  // Efecto para re-normalizar items cuando los productos llegan tarde
+  // Efecto para re-normalizar items SOLO una vez cuando los productos llegan tarde (evita remounts durante la edición)
+  const normalizacionInicialHechaRef = useRef(false);
   useEffect(() => {
+    if (normalizacionInicialHechaRef.current) return;
     if (!Array.isArray(productos) || productos.length === 0) return;
     if (!Array.isArray(formulario.items) || formulario.items.length === 0) return;
 
-    const faltanProductos = formulario.items.some(it => !it.producto);
-    if (faltanProductos) {
-      const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
-      actualizarItems(itemsNormalizados);
-      setGridKey(Date.now());
-    }
+    // ItemsGrid se encarga de la normalización - no hacer nada aquí
+    // const faltanProductos = formulario.items.some(it => !it.producto);
+    // if (faltanProductos) {
+    //   const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
+    //   actualizarItems(itemsNormalizados);
+    //   setGridKey(Date.now());
+    // }
+    normalizacionInicialHechaRef.current = true;
   }, [productos, alicuotasMap, actualizarItems, formulario.items]);
 
-  const stockProveedores = useMemo(() => {
-    const map = {};
-    productos?.forEach(p => {
-      if (p.stock_proveedores) map[p.id] = p.stock_proveedores;
-    });
-    return map;
-  }, [productos]);
+
 
   // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
@@ -403,11 +446,6 @@ const ConVentaForm = ({
 
       const items = itemsGridRef.current.getItems();
 
-      // Verificar si requiere emisión ARCA y iniciar estado de espera
-      if (requiereEmisionArca(tipoComprobante)) {
-        iniciarEsperaArca();
-      }
-
       // Constantes descriptivas
       const ESTADO_VENTA_CERRADA = 'CE';
       const TIPO_VENTA = 'Venta';
@@ -420,7 +458,6 @@ const ConVentaForm = ({
         ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
         ven_sucursal: formulario.sucursalId || 1,
         ven_fecha: formulario.fecha,
-        ven_punto: formulario.puntoVentaId || 1,
         ven_impneto: formulario.ven_impneto || 0,
         ven_descu1: formulario.descu1 || 0,
         ven_descu2: formulario.descu2 || 0,
@@ -435,7 +472,7 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        permitir_stock_negativo: false
+        // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
       };
 
       // NUEVO: Incluir metadata de conversión para facturas internas
@@ -460,11 +497,29 @@ const ConVentaForm = ({
       // Llamar al endpoint apropiado
       const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
       
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobante) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca();
+        }, 400);
+      }
+
       const resultado = await onSave(payload, tabKey, endpoint);
+
+      // Limpiar temporizador si estaba agendado
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobante)
     } catch (error) {
+      // Limpiar temporizador en error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
       // Manejar error usando la lógica modularizada
       manejarErrorArca(error, "Error al procesar la conversión")
     } finally {
@@ -474,6 +529,14 @@ const ConVentaForm = ({
   };
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
+    // Limpiar temporizador si está pendiente
+    if (temporizadorArcaRef.current) {
+      clearTimeout(temporizadorArcaRef.current);
+      temporizadorArcaRef.current = null;
+    }
     limpiarEstadoArca(); // Limpiar estado de ARCA al cancelar
     limpiarBorrador();
     onCancel();
@@ -495,19 +558,36 @@ const ConVentaForm = ({
       ];
     }
     
-    // Si es conversión de presupuesto, permitir factura interna y factura (igual que VentaForm)
+    // Si es conversión de presupuesto, permitir cotización (factura interna) y factura (igual que VentaForm)
     return [
-      { value: 'factura_interna', label: 'Factura Interna', tipo: 'factura_interna', letra: 'I' },
+      { value: 'factura_interna', label: 'Cotización', tipo: 'factura_interna', letra: 'I' },
       { value: 'factura', label: 'Factura', tipo: 'factura' }
     ];
   }, [esConversionFacturaI]);
 
   const isReadOnly = formulario.estado === 'Cerrado';
 
-  // Función para actualizar los ítems en tiempo real desde ItemsGrid
-  const handleRowsChange = (rows) => {
+  // Función para actualizar los ítems en tiempo real desde ItemsGrid (memoizada)
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
-  };
+  }, [actualizarItems]);
+
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu1: value }))
+  }, [setFormulario])
+
+  const setDescu2 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu2: value }))
+  }, [setFormulario])
+
+  const setDescu3 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu3: value }))
+  }, [setFormulario])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
 
   // Determinar cliente seleccionado
   const clienteSeleccionado = clientes.find(c => String(c.id) === String(formulario.clienteId))
@@ -537,7 +617,7 @@ const ConVentaForm = ({
   let letraComprobanteMostrar = "V";
   let codigoAfipMostrar = "";
   if (usarFiscal && fiscal.comprobanteFiscal && fiscal.comprobanteFiscal.codigo_afip) {
-    letraComprobanteMostrar = fiscal.letra || "A";
+    letraComprobanteMostrar = fiscal.letra || "";
     codigoAfipMostrar = fiscal.comprobanteFiscal.codigo_afip;
   } else if (comprobantes.length > 0 && comprobanteId) {
     const compSeleccionado = comprobantes.find((c) => c.id === comprobanteId);
@@ -561,7 +641,7 @@ const ConVentaForm = ({
     }
 
     // Esperar a que la lógica fiscal resuelva el comprobante (como en VentaForm)
-    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? (fiscal.letra || 'A') : null;
+    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? fiscal.letra : null;
     if (letraFiscal !== 'A') {
       setMostrarBannerCuit(false);
       limpiarEstadosARCAStatus();
@@ -690,7 +770,7 @@ const ConVentaForm = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
                   </svg>
                 </div>
-{esConversionFacturaI ? 'Conversión de Factura Interna a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
+{esConversionFacturaI ? 'Conversión de Cotización a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
@@ -730,7 +810,7 @@ const ConVentaForm = ({
                         />
                         {!isReadOnly && (
                           <button type="button" onClick={abrirSelector} className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center" title="Buscar en lista completa">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                           </button>
                         )}
                       </div>
@@ -740,7 +820,7 @@ const ConVentaForm = ({
                   {/* Documento */}
                   <div>
                     <SelectorDocumento
-                      tipoComprobante={fiscal.letra || 'A'}
+                      tipoComprobante={fiscal.letra}
                       esObligatorio={usarFiscal && fiscal.camposRequeridos.cuit}
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}
@@ -752,14 +832,14 @@ const ConVentaForm = ({
 
                   {/* Domicilio */}
                   <div>
-                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && <span className="text-orange-600">*</span>}</label>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio {usarFiscal && fiscal.camposRequeridos.domicilio && fiscal.letra !== 'B' && <span className="text-orange-600">*</span>}</label>
                     <input
                       name="domicilio"
                       type="text"
                       value={formulario.domicilio}
                       onChange={handleChange}
                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      required={usarFiscal && fiscal.camposRequeridos.domicilio}
+                      required={usarFiscal && fiscal.camposRequeridos.domicilio && fiscal.letra !== 'B'}
                       readOnly={isReadOnly}
                     />
                   </div>
@@ -790,7 +870,12 @@ const ConVentaForm = ({
                       disabled={isReadOnly}
                     >
                       <option value="">Seleccionar...</option>
-                      {plazos.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+                      {(() => {
+                        const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
+                        const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                        const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
+                        return visibles.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))
+                      })()}
                     </select>
                   </div>
 
@@ -816,7 +901,7 @@ const ConVentaForm = ({
                   {/* Buscador */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                    <BuscadorProducto productos={productos} onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+                    <BuscadorProducto onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
                   </div>
 
                   {/* Tipo de Comprobante */}
@@ -846,40 +931,25 @@ const ConVentaForm = ({
             </div>
 
             <div className="mb-8">
-              {(loadingProductos || loadingFamilias || loadingProveedores || loadingAlicuotas) ? (
-                <div className="text-center text-gray-500 py-4">Cargando productos, familias, proveedores y alícuotas...</div>
-              ) : errorProductos ? (
-                <div className="text-center text-red-600 py-4">{errorProductos}</div>
-              ) : errorFamilias ? (
-                <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-              ) : errorProveedores ? (
-                <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-              ) : errorAlicuotas ? (
-                <div className="text-center text-red-600 py-4">{errorAlicuotas}</div>
-              ) : (
-                <ItemsGrid
-                  key={gridKey}
-                  ref={itemsGridRef}
-                  productosDisponibles={productos}
-                  proveedores={proveedores}
-                  stockProveedores={stockProveedores}
-                  autoSumarDuplicados={autoSumarDuplicados}
-                  setAutoSumarDuplicados={setAutoSumarDuplicados}
-                  bonificacionGeneral={formulario.bonificacionGeneral}
-                  setBonificacionGeneral={value => setFormulario(f => ({ ...f, bonificacionGeneral: value }))}
-                  descu1={formulario.descu1}
-                  descu2={formulario.descu2}
-                  descu3={formulario.descu3}
-                  setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-                  setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-                  setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-                  totales={totales}
-                  modo="venta"
-                  alicuotas={alicuotasMap}
-                  onRowsChange={handleRowsChange}
-                  initialItems={formulario.items}
-                />
-              )}
+              <ItemsGrid
+                key={gridKey}
+                ref={itemsGridRef}
+                autoSumarDuplicados={autoSumarDuplicados}
+                setAutoSumarDuplicados={setAutoSumarDuplicados}
+                bonificacionGeneral={formulario.bonificacionGeneral}
+                setBonificacionGeneral={setBonificacionGeneral}
+                descu1={formulario.descu1}
+                descu2={formulario.descu2}
+                descu3={formulario.descu3}
+                setDescu1={setDescu1}
+                setDescu2={setDescu2}
+                setDescu3={setDescu3}
+                totales={totales}
+                modo="venta"
+                alicuotas={alicuotasMap}
+                onRowsChange={handleRowsChange}
+                initialItems={formulario.items}
+              />
             </div>
 
             <div className="mt-8 flex justify-end space-x-4">

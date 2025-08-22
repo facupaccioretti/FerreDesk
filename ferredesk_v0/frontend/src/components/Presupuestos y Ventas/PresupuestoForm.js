@@ -1,29 +1,21 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
-import { normalizarItems } from './herramientasforms/normalizadorItems'
+// import { normalizarItems } from './herramientasforms/normalizadorItems' // Ya no se usa
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
-const getStockProveedoresMap = (productos) => {
-  const map = {}
-  productos.forEach((p) => {
-    if (p.stock_proveedores) {
-      map[p.id] = p.stock_proveedores
-    }
-  })
-  return map
-}
+// (eliminado helper de stock_proveedores no utilizado en Presupuesto)
 
 //  getInitialFormState arriba para que esté definida antes de mergeWithDefaults
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
@@ -59,7 +51,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 // Agrego la función mergeWithDefaults
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta)
-  return { ...defaults, ...data, items: Array.isArray(data?.items) ? data.items : [] }
+  return { ...defaults, ...data, items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [] }
 }
 
 const PresupuestoForm = ({
@@ -107,13 +99,13 @@ const PresupuestoForm = ({
   )
 
   // Función wrapper para normalizar items usando el normalizador unificado
-  const normalizarItemsPresupuesto = (items) => {
-    return normalizarItems(items, { 
-      productos, 
-      modo: 'presupuesto', 
-      alicuotasMap 
-    })
-  }
+  // const normalizarItemsPresupuesto = (items) => {
+  //   return normalizarItems(items, { 
+  //     productos, 
+  //     modo: 'presupuesto', 
+  //     alicuotasMap 
+  //   })
+  // }
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
@@ -121,7 +113,7 @@ const PresupuestoForm = ({
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
-    normalizarItems: normalizarItemsPresupuesto,
+    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
   })
 
   const { totales } = useCalculosFormulario(formulario.items, {
@@ -133,11 +125,11 @@ const PresupuestoForm = ({
   })
 
   // handleRowsChange ahora usa actualizarItems
-  const handleRowsChange = (rows) => {
+  const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows)
-  }
+  }, [actualizarItems])
 
-  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+  // (eliminada memoización de stock_proveedores no utilizada)
 
   const itemsGridRef = useRef()
 
@@ -178,16 +170,11 @@ const PresupuestoForm = ({
     setIsLoading(false)
   }, [loadingClientes, loadingAlicuotasHook, loadingProductos, loadingProveedores, errorClientes, errorAlicuotas, errorProductos, errorProveedores])
 
-  // ------------------------------------------------------------
-  // LOG DE DIAGNÓSTICO: comparar con VentaForm
-  // ------------------------------------------------------------
-  useEffect(() => {
-    console.debug("[PresupuestoForm] stockProveedores listo", {
-      loadingProductos,
-      loadingProveedores,
-      keys: Object.keys(stockProveedores || {}).length,
-    })
-  }, [loadingProductos, loadingProveedores, stockProveedores])
+  // Manejo simple de errores (sin ARCA)
+  const mostrarError = useCallback((error, mensajePorDefecto = "Error al procesar el presupuesto") => {
+    const mensaje = (error && error.message) ? error.message : mensajePorDefecto
+    try { window.alert(mensaje) } catch (_) {}
+  }, [])
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -224,7 +211,6 @@ const PresupuestoForm = ({
           ven_numero: Number.parseInt(formulario.numero, 10) || 1,
           ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
           ven_fecha: formulario.fecha,
-          ven_punto: Number.parseInt(formulario.puntoVentaId, 10) || 1,
           ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
           ven_descu1: Number.parseFloat(formulario.descu1) || 0,
           ven_descu2: Number.parseFloat(formulario.descu2) || 0,
@@ -239,7 +225,7 @@ const PresupuestoForm = ({
           ven_idvdo: formulario.vendedorId,
           ven_copia: Number.parseInt(formulario.copia, 10) || 1,
           items: items.map((item, idx) => mapearCamposItem(item, idx)),
-          permitir_stock_negativo: true,
+          // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         }
         if (formulario.cuit) payload.ven_cuit = formulario.cuit;
         if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
@@ -255,7 +241,6 @@ const PresupuestoForm = ({
           ven_numero: formulario.numero || 1,
           ven_sucursal: formulario.sucursalId || 1,
           ven_fecha: formulario.fecha,
-          ven_punto: formulario.puntoVentaId || 1,
           ven_impneto: formulario.ven_impneto || 0,
           ven_descu1: formulario.descu1 || 0,
           ven_descu2: formulario.descu2 || 0,
@@ -270,7 +255,7 @@ const PresupuestoForm = ({
           ven_idvdo: formulario.vendedorId,
           ven_copia: formulario.copia || 1,
           items: items.map((item, idx) => mapearCamposItem(item, idx)),
-          permitir_stock_negativo: true,
+          // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         }
         if (formulario.cuit) payload.ven_cuit = formulario.cuit;
         if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
@@ -280,11 +265,14 @@ const PresupuestoForm = ({
       limpiarBorrador()
       onCancel()
     } catch (error) {
-      console.error("Error al guardar presupuesto:", error)
+      mostrarError(error, "Error al procesar el presupuesto")
     }
   }
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     limpiarBorrador() // Usar limpiarBorrador en lugar de localStorage.removeItem
     onCancel()
   }
@@ -295,6 +283,23 @@ const PresupuestoForm = ({
   const handleChange = manejarCambioFormulario(setFormulario)
 
   const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
+
+  // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
+  const setDescu1 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu1: value }))
+  }, [setFormulario])
+
+  const setDescu2 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu2: value }))
+  }, [setFormulario])
+
+  const setDescu3 = useCallback((value) => {
+    setFormulario(f => ({ ...f, descu3: value }))
+  }, [setFormulario])
+
+  const setBonificacionGeneral = useCallback((value) => {
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
 
   const [selectorAbierto, setSelectorAbierto] = useState(false)
   const abrirSelector = () => setSelectorAbierto(true)
@@ -419,9 +424,7 @@ const PresupuestoForm = ({
                       className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
                       title="Buscar en lista completa"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                      </svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                     </button>
                   )}
                 </div>
@@ -480,9 +483,14 @@ const PresupuestoForm = ({
                 disabled={isReadOnly}
               >
                 <option value="">Seleccionar...</option>
-                {plazos.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
+                {(() => {
+                  const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
+                  const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                  const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
+                  return visibles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))
+                })()}
               </select>
             </div>
 
@@ -545,37 +553,36 @@ const PresupuestoForm = ({
         </div>
       </div>
       <div className="mb-8">
-        {loadingProductos || loadingFamilias || loadingProveedores ? (
-          <div className="text-center text-gray-500 py-4">Cargando productos, familias y proveedores...</div>
-        ) : errorProductos ? (
-          <div className="text-center text-red-600 py-4">{errorProductos}</div>
-        ) : errorFamilias ? (
-          <div className="text-center text-red-600 py-4">{errorFamilias}</div>
-        ) : errorProveedores ? (
-          <div className="text-center text-red-600 py-4">{errorProveedores}</div>
-        ) : (
-          <ItemsGrid
-            ref={itemsGridRef}
-            productosDisponibles={productos}
-            proveedores={proveedores}
-            stockProveedores={stockProveedores}
-            autoSumarDuplicados={autoSumarDuplicados}
-            setAutoSumarDuplicados={setAutoSumarDuplicados}
-            bonificacionGeneral={formulario.bonificacionGeneral}
-            setBonificacionGeneral={(value) => setFormulario((f) => ({ ...f, bonificacionGeneral: value }))}
-            descu1={formulario.descu1}
-            descu2={formulario.descu2}
-            descu3={formulario.descu3}
-            setDescu1={(value)=>setFormulario(f=>({...f, descu1:value}))}
-            setDescu2={(value)=>setFormulario(f=>({...f, descu2:value}))}
-            setDescu3={(value)=>setFormulario(f=>({...f, descu3:value}))}
-            totales={totales}
-            modo="presupuesto"
-            alicuotas={alicuotasMap}
-            onRowsChange={handleRowsChange}
-            initialItems={formulario.items}
-          />
+        {(loadingProductos || loadingFamilias || loadingProveedores) && (
+          <div className="text-center text-gray-500 py-2">Cargando productos, familias y proveedores...</div>
         )}
+        {errorProductos && (
+          <div className="text-center text-red-600 py-2">{errorProductos}</div>
+        )}
+        {errorFamilias && (
+          <div className="text-center text-red-600 py-2">{errorFamilias}</div>
+        )}
+        {errorProveedores && (
+          <div className="text-center text-red-600 py-2">{errorProveedores}</div>
+        )}
+        <ItemsGrid
+          ref={itemsGridRef}
+          autoSumarDuplicados={autoSumarDuplicados}
+          setAutoSumarDuplicados={setAutoSumarDuplicados}
+          bonificacionGeneral={formulario.bonificacionGeneral}
+          setBonificacionGeneral={setBonificacionGeneral}
+          descu1={formulario.descu1}
+          descu2={formulario.descu2}
+          descu3={formulario.descu3}
+          setDescu1={setDescu1}
+          setDescu2={setDescu2}
+          setDescu3={setDescu3}
+          totales={totales}
+          modo="presupuesto"
+          alicuotas={alicuotasMap}
+          onRowsChange={handleRowsChange}
+          initialItems={formulario.items}
+        />
       </div>
       <div className="mt-8 flex justify-end space-x-3">
         <button

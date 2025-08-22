@@ -40,8 +40,8 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
     Args:
         mes: Mes del período (1-12)
         anio: Año del período (YYYY)
-        tipo_libro: 'convencional' (solo fiscales) o 'informal' (con internos)
-        incluir_presupuestos: Incluir presupuestos en libro informal
+        tipo_libro: 'convencional' (solo fiscales) o 'administrativo' (con internos)
+        incluir_presupuestos: Incluir presupuestos en libro administrativo
         usuario: Usuario que solicita la generación (opcional)
     
     Returns:
@@ -68,7 +68,7 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
             'comprobante_tipo__in': ['factura', 'nota_credito', 'nota_debito'],
             'comprobante_letra__in': ['A', 'B', 'C']
         }
-    elif tipo_libro == 'informal':
+    elif tipo_libro == 'administrativo':
         # Comprobantes fiscales + internos
         filtros_comprobante = {
             'comprobante_tipo__in': ['factura', 'nota_credito', 'nota_debito', 'factura_interna', 'nota_credito_interna']

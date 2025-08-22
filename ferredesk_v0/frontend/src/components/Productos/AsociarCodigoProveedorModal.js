@@ -303,7 +303,7 @@ const AsociarCodigoProveedorModal = ({
                   </div>
                   <p className="text-slate-800 font-medium">{producto ? `${producto.deno}` : "No disponible"}</p>
                   <p className="text-xs text-slate-600">
-                    Código: {producto?.codcom || producto?.codvta || producto?.id || "N/A"}
+                    Código: {producto?.codvta || producto?.id || "N/A"}
                   </p>
                 </div>
 
