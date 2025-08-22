@@ -3,7 +3,7 @@ import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -43,7 +43,7 @@ const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
     ven_vdocomvta: data.ven_vdocomvta ?? 0,
     ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? data.items : [],
+    items: Array.isArray(data.items) ? normalizarItemsStock(data.items) : [],
   };
   // LOG NUEVO: Loggear los datos mapeados y normalizados
   console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
@@ -158,6 +158,13 @@ const EditarPresupuestoForm = ({
     actualizarItems(rowsActualizados)
   }, [actualizarItems]);
 
+  // Inicializar autoSumarDuplicados si es false (igual que en VentaForm)
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados("sumar")
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados])
+
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
   const setDescu1 = useCallback((value) => {
     setFormulario(f => ({ ...f, descu1: value }))
@@ -197,6 +204,12 @@ const EditarPresupuestoForm = ({
     descu3: formulario.descu3,
     alicuotas: alicuotasMap
   });
+
+  // Manejo simple de errores (sin ARCA)
+  const mostrarError = useCallback((error, mensajePorDefecto = "Error al procesar la edición del presupuesto") => {
+    const mensaje = (error && error.message) ? error.message : mensajePorDefecto
+    try { window.alert(mensaje) } catch (_) {}
+  }, [])
 
   // =========================
   // Selector de Clientes (Modal)
@@ -266,8 +279,8 @@ const EditarPresupuestoForm = ({
       await onSave(payload);
       limpiarBorrador();
       onCancel();
-    } catch (err) {
-      console.error('Error al guardar:', err);
+    } catch (error) {
+      mostrarError(error, "Error al procesar la edición del presupuesto")
     }
   };
 

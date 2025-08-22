@@ -6,7 +6,7 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 // import { normalizarItems } from "./herramientasforms/normalizadorItems" // Ya no se usa
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
@@ -47,7 +47,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => ({
   ...getInitialFormState(sucursales, puntosVenta),
   ...data,
-  items: Array.isArray(data?.items) ? data.items : [],
+  items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
 })
 
 const getStockProveedoresMap = (productos) => {

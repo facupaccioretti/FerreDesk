@@ -95,7 +95,43 @@ class StockViewSet(viewsets.ModelViewSet):
         if 'acti' not in self.request.query_params:
             queryset = queryset.filter(acti='S')
         
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+        
+        if orden == 'id':
+            if direccion == 'asc':
+                queryset = queryset.order_by('id')
+            else:
+                queryset = queryset.order_by('-id')
+        elif orden == 'deno':
+            if direccion == 'asc':
+                queryset = queryset.order_by('deno')
+            else:
+                queryset = queryset.order_by('-deno')
+        elif orden == 'codvta':
+            if direccion == 'asc':
+                queryset = queryset.order_by('codvta')
+            else:
+                queryset = queryset.order_by('-codvta')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            queryset = queryset.order_by('-id')
+        
         return queryset
+
+    def retrieve(self, request, *args, **kwargs):
+        """Detalle optimizado: prefetch de relaciones necesarias para un único producto.
+        Incluye proveedor habitual, alícuota e items de stock_proveedores con su proveedor.
+        """
+        qs = (
+            Stock.objects
+            .select_related('proveedor_habitual', 'idaliiva')
+            .prefetch_related('stock_proveedores__proveedor')
+        )
+        instance = get_object_or_404(qs, pk=kwargs.get(self.lookup_field, kwargs.get('pk')))
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     @transaction.atomic
     def perform_create(self, serializer):

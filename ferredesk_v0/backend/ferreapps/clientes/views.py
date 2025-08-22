@@ -110,6 +110,29 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 Q(iva__nombre__icontains=termino_busqueda)
             ).distinct()
         
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+
+        if orden == 'id':
+            if direccion == 'asc':
+                queryset = queryset.order_by('id')
+            else:
+                queryset = queryset.order_by('-id')
+        elif orden == 'razon':
+            if direccion == 'asc':
+                queryset = queryset.order_by('razon')
+            else:
+                queryset = queryset.order_by('-razon')
+        elif orden == 'fantasia':
+            if direccion == 'asc':
+                queryset = queryset.order_by('fantasia')
+            else:
+                queryset = queryset.order_by('-fantasia')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            queryset = queryset.order_by('-id')
+        
         return queryset
 
     def get_serializer_class(self):

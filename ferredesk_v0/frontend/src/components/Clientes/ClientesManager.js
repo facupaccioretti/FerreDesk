@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import Navbar from "../Navbar"
 
 // Hooks API (rutas ajustadas un nivel arriba)
@@ -88,6 +88,10 @@ const ClientesManager = () => {
   const [expandedClientId, setExpandedClientId] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  
+  // Estado de ordenamiento
+  const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
+  
   const [user, setUser] = useState(null)
 
   // Persistencia de tabs
@@ -174,6 +178,13 @@ const ClientesManager = () => {
   // Estado y UI de "Maestros" eliminados (migrados a Configuración)
 
   // ------------------------------------------------------------------
+  // Función para manejar cambios de ordenamiento
+  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
+    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
+    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
+  }, []);
+
+  // ------------------------------------------------------------------
   // Efecto: cada vez que cambia búsqueda o pestaña, pedimos al backend con activo=A/I
   useEffect(() => {
     const termino = activeTab === "inactivos" ? searchInactivos : search
@@ -185,10 +196,10 @@ const ClientesManager = () => {
       }
       if (activeTab === "lista") filtros.activo = "A"
       if (activeTab === "inactivos") filtros.activo = "I"
-      fetchClientes(filtros, pagina, itemsPorPagina)
+      fetchClientes(filtros, pagina, itemsPorPagina, 'id', ordenamiento)
     }, 300)
     return () => clearTimeout(timeout)
-  }, [search, searchInactivos, activeTab, pagina, itemsPorPagina, fetchClientes])
+  }, [search, searchInactivos, activeTab, pagina, itemsPorPagina, ordenamiento, fetchClientes])
 
   // Resetear a página 1 cuando cambian pestaña o términos de búsqueda correspondientes
   useEffect(() => { setPagina(1) }, [activeTab])
@@ -283,6 +294,8 @@ const ClientesManager = () => {
                   onItemsPerPageChange={setItemsPorPagina}
                   totalRemoto={total}
                   busquedaRemota={true}
+                  onOrdenamientoChange={handleOrdenamientoChange}
+                  ordenamientoControlado={ordenamiento === 'asc'}
                 />
               )}
 

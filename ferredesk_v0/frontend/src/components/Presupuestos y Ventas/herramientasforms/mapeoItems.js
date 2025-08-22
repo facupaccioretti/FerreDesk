@@ -86,3 +86,40 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
 };
 // FIN DE LA FUNCIÓN mapearCamposItem
 // Si necesitas agregar un campo nuevo, consulta primero la documentación y valida que sea un campo base físico, no calculado. 
+
+/**
+ * Normaliza items de stock para asegurar que tengan la estructura correcta del objeto producto
+ * Esta función se debe usar en las funciones de mapeo de datos de todos los formularios
+ * @param {Array} items - Array de items a normalizar
+ * @returns {Array} Array de items normalizados
+ */
+export const normalizarItemsStock = (items) => {
+  if (!Array.isArray(items)) return [];
+  
+  return items.map(item => {
+    // Si el item es de stock (tiene vdi_idsto) pero no tiene objeto producto anidado
+    if (item.vdi_idsto && !item.producto) {
+      // Crear objeto producto anidado con los datos disponibles
+      return {
+        ...item,
+        producto: {
+          id: item.vdi_idsto,
+          codvta: item.codigo || String(item.vdi_idsto),
+          codigo: item.codigo || String(item.vdi_idsto),
+          deno: item.denominacion || item.vdi_detalle1 || '',
+          nombre: item.denominacion || item.vdi_detalle1 || '',
+          unidad: item.unidad || item.vdi_detalle2 || '-',
+          unidadmedida: item.unidad || item.vdi_detalle2 || '-',
+          idaliiva: item.vdi_idaliiva || item.idaliiva || 3,
+          margen: item.vdi_margen || item.margen || 0,
+          // Agregar campos adicionales para asegurar que se reconozca como producto completo
+          stock_proveedores: [],
+          proveedor_habitual: null,
+        }
+      };
+    }
+    
+    // Si ya tiene objeto producto, mantenerlo tal como está
+    return item;
+  });
+}; 

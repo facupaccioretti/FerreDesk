@@ -73,6 +73,13 @@ const ProductosManager = () => {
   // Estado de búsqueda para ProductosTable
   const [searchProductos, setSearchProductos] = useState("")
 
+  // Estado de paginación
+  const [pagina, setPagina] = useState(1)
+  const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  
+  // Estado de ordenamiento
+  const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
+
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
     localStorage.setItem("productosTabs", JSON.stringify(tabs))
@@ -116,9 +123,18 @@ const ProductosManager = () => {
   }
 
   // Editar producto
-  const handleEditProducto = (producto) => {
+  const handleEditProducto = async (producto) => {
     const editKey = `editar-${producto.id}-${Date.now()}`
+    // Abrir tab con placeholder rápido
     openTab(editKey, `Editar Producto: ${producto.deno.substring(0, 15)}...`, producto)
+    try {
+      // Cargar DETALLE optimizado (incluye stock_proveedores con proveedor)
+      const res = await fetch(`/api/productos/stock/${producto.id}/`, { credentials: 'include' })
+      if (res.ok) {
+        const detalle = await res.json()
+        setEditStates((prev) => ({ ...prev, [editKey]: detalle }))
+      }
+    } catch (_) {}
   }
 
   // Actualizar stock de un proveedor específico
@@ -204,8 +220,11 @@ const ProductosManager = () => {
 
   // ------------------------------------------------------------------
   // Paginación controlada y recarga server-side
-  const [pagina, setPagina] = useState(1)
-  const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  // Función para manejar cambios de ordenamiento
+  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
+    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
+    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -223,10 +242,10 @@ const ProductosManager = () => {
       if ((searchProductos || '').trim()) {
         filtros['deno__icontains'] = searchProductos.trim();
       }
-      fetchProductos(filtros, pagina, itemsPorPagina);
+      fetchProductos(filtros, pagina, itemsPorPagina, 'id', ordenamiento);
     }, 200);
     return () => clearTimeout(timeout);
-  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, fetchProductos]);
+  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, ordenamiento, fetchProductos]);
 
   // Resetear a página 1 cuando cambian filtros o búsqueda
   useEffect(() => {
@@ -341,6 +360,8 @@ const ProductosManager = () => {
                   onItemsPerPageChange={setItemsPorPagina}
                   totalRemoto={total}
                   busquedaRemota={true}
+                  onOrdenamientoChange={handleOrdenamientoChange}
+                  ordenamientoControlado={ordenamiento === 'asc'}
                 />
               )}
               {activeTab === "inactivos" && (
@@ -375,6 +396,8 @@ const ProductosManager = () => {
                   onItemsPerPageChange={setItemsPorPagina}
                   totalRemoto={total}
                   busquedaRemota={true}
+                  onOrdenamientoChange={handleOrdenamientoChange}
+                  ordenamientoControlado={ordenamiento === 'asc'}
                 />
               )}
               {activeTab !== "lista" && activeTab !== "inactivos" && (

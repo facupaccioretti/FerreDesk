@@ -129,7 +129,7 @@ const useAsociacionCodigos = ({
         console.log("[handleAsociarCodigoPendiente] Código ya usado en pendientes")
         return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
       }
-      // Si el producto aún no fue guardado (ID temporal), solo guardar en pendientes
+      // Producto nuevo (incluye caso con ID temporal): NO llamar backend, persistir en estado local
       if (!stock) {
         setCodigosPendientes((prev) => {
           const otros = (prev || []).filter((c) => String(c.proveedor_id) !== String(proveedor_id))
@@ -151,20 +151,11 @@ const useAsociacionCodigos = ({
       }
     }
 
-    // Log antes del condicional de edición
-    console.log(
-      "[handleAsociarCodigoPendiente] isEdicion:",
-      isEdicion,
-      typeof isEdicion,
-      "form.id:",
-      form.id,
-      typeof form.id,
-    )
-    // Refuerzo el condicional para aceptar cualquier valor no vacío de form.id
+    // En EDICIÓN: registrar en pendientes de edición y sincronizar el form
     if (isEdicion && form.id != null && String(form.id).length > 0) {
       // Validar contra los códigos ya asociados (guardados y pendientes)
       const codigosActuales = [
-        ...stockProve.map((sp) => sp.codigo_producto_proveedor).filter(Boolean),
+        ...(Array.isArray(form.stock_proveedores) ? form.stock_proveedores.map((sp) => sp.codigo_producto_proveedor).filter(Boolean) : []),
         ...codigosPendientesEdicion.map((c) => c.codigo_producto_proveedor),
       ]
       // Si el código ya está en uso para otro proveedor, error
@@ -184,7 +175,9 @@ const useAsociacionCodigos = ({
       })
       // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
       const actualizado = (form.stock_proveedores || []).map((sp) =>
-        String(sp.proveedor_id) === String(proveedor_id) ? { ...sp, codigo_producto_proveedor, costo } : sp,
+        String(sp.proveedor_id ?? (sp.proveedor?.id || sp.proveedor)) === String(proveedor_id)
+          ? { ...sp, codigo_producto_proveedor, costo }
+          : sp,
       )
       // Si no existe, agregarlo
       const existe = actualizado.some((sp) => String(sp.proveedor_id) === String(proveedor_id))
@@ -196,54 +189,9 @@ const useAsociacionCodigos = ({
       return { ok: true }
     }
 
+    // Producto nuevo con id temporal: ya manejado arriba en la rama !isEdicion
     if (!isEdicion && form.id) {
-      try {
-        const res = await fetch("/api/productos/asociar-codigo-proveedor/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie("csrftoken"),
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            stock_id: form.id,
-            proveedor_id,
-            codigo_producto_proveedor,
-            costo: costo !== "" ? costo : 0,
-          }),
-        })
-        const data = await res.json()
-        console.log("[handleAsociarCodigoPendiente] Respuesta backend (nuevo):", data)
-        if (!res.ok) {
-          // Si el error es producto/proveedor no encontrado, mostrar mensaje claro
-          if (data.detail && data.detail.includes("Producto o proveedor no encontrado")) {
-            return { ok: false, error: "Debes guardar el producto antes de asociar un código de proveedor." }
-          }
-          console.log("[handleAsociarCodigoPendiente] Error backend (nuevo):", data.detail)
-          return { ok: false, error: data.detail || "Error al validar código de proveedor" }
-        }
-        setCodigosPendientes((prev) => {
-          const otros = (prev || []).filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-          return [
-            ...otros,
-            {
-              proveedor_id,
-              codigo_producto_proveedor,
-              costo: costo !== "" ? costo : 0,
-            },
-          ]
-        })
-        setStockProvePendientes((prev) =>
-          (prev || []).map((sp) =>
-            String(sp.proveedor) === String(proveedor_id) ? { ...sp, costo: costo !== "" ? costo : 0 } : sp,
-          ),
-        )
-        console.log("[handleAsociarCodigoPendiente] Asociación exitosa (nuevo)")
-        return { ok: true }
-      } catch (err) {
-        console.log("[handleAsociarCodigoPendiente] Excepción (nuevo):", err)
-        return { ok: false, error: err.message || "Error al validar código de proveedor" }
-      }
+      return { ok: true }
     }
     console.log("[handleAsociarCodigoPendiente] Fallback error")
     return { ok: false, error: "No se pudo asociar el código." }

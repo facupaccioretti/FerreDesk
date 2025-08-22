@@ -9,7 +9,7 @@ export function useProveedoresAPI() {
   const csrftoken = getCookie('csrftoken');
   const lastQueryKeyRef = useRef('');
 
-  const fetchProveedores = useCallback(async (page = 1, limit = 10, filtros = {}) => {
+  const fetchProveedores = useCallback(async (page = 1, limit = 10, filtros = {}, orden = 'id', direccion = 'desc') => {
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -18,6 +18,8 @@ export function useProveedoresAPI() {
       });
       if (page) params.append('page', String(page));
       if (limit) params.append('limit', String(limit));
+      if (orden) params.append('orden', orden);
+      if (direccion) params.append('direccion', direccion);
       const query = params.toString();
       const url = query ? `/api/productos/proveedores/?${query}` : '/api/productos/proveedores/';
       const key = `GET ${url}`;

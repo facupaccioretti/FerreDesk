@@ -29,6 +29,8 @@ const ClientesTable = ({
   onItemsPerPageChange,
   totalRemoto = null,
   busquedaRemota = true,
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
 }) => {
   // ---------------------------------------------------------------------------
   // Definición de columnas (encabezados) para Tabla
@@ -394,6 +396,8 @@ const ClientesTable = ({
       onItemsPerPageChange={onItemsPerPageChange}
       totalRemoto={totalRemoto}
       busquedaRemota={busquedaRemota}
+      onOrdenamientoChange={onOrdenamientoChange}
+      ordenamientoControlado={ordenamientoControlado}
       renderFila={renderFila}
     />
   )

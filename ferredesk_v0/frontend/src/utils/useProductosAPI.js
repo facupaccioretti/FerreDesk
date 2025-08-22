@@ -9,7 +9,7 @@ export function useProductosAPI() {
   const csrftoken = getCookie('csrftoken');
 
   // Memoizar fetchProductos para evitar recreación y polling accidental
-  const fetchProductos = useCallback(async (filtros = {}, page = 1, limit = 10) => {
+  const fetchProductos = useCallback(async (filtros = {}, page = 1, limit = 10, orden = 'id', direccion = 'desc') => {
     setLoading(true);
     setError(null);
     try {
@@ -24,6 +24,8 @@ export function useProductosAPI() {
       });
       if (page) params.append('page', String(page));
       if (limit) params.append('limit', String(limit));
+      if (orden) params.append('orden', orden);
+      if (direccion) params.append('direccion', direccion);
       const url = params.toString() ? `/api/productos/stock/?${params.toString()}` : '/api/productos/stock/';
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Error al obtener productos');

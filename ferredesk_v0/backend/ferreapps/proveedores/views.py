@@ -28,6 +28,37 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
 
+    def get_queryset(self):
+        """
+        Aplicar filtros y ordenamiento a los proveedores.
+        """
+        queryset = super().get_queryset()
+
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+
+        if orden == 'id':
+            if direccion == 'asc':
+                queryset = queryset.order_by('id')
+            else:
+                queryset = queryset.order_by('-id')
+        elif orden == 'razon':
+            if direccion == 'asc':
+                queryset = queryset.order_by('razon')
+            else:
+                queryset = queryset.order_by('-razon')
+        elif orden == 'fantasia':
+            if direccion == 'asc':
+                queryset = queryset.order_by('fantasia')
+            else:
+                queryset = queryset.order_by('-fantasia')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            queryset = queryset.order_by('-id')
+
+        return queryset
+
 
 class HistorialImportacionesProveedorAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]

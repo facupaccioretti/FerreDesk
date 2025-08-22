@@ -4,7 +4,24 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   const isEdicion = !!stock?.id
 
   // Stock prove para este stock específico - debe definirse primero
-  const stockProveForThisStock = stockProve.filter((sp) => sp.stock === stock?.id)
+  // En edición: usar SIEMPRE los datos embebidos en stock.stock_proveedores (detalle por id)
+  // En nuevo: usar la colección global del hook y filtrar por stock.id (si existiera)
+  const stockProveForThisStock = (() => {
+    if (isEdicion) {
+      const lista = Array.isArray(stock?.stock_proveedores) ? stock.stock_proveedores : []
+      return lista.map((sp) => ({
+        id: sp.id,
+        stock: sp.stock?.id || sp.stock || stock.id,
+        proveedor: sp.proveedor, // puede ser objeto {id, razon} o id; más abajo se normaliza
+        proveedor_id: sp.proveedor_id || (typeof sp.proveedor === 'object' ? sp.proveedor.id : sp.proveedor),
+        cantidad: sp.cantidad ?? 0,
+        costo: sp.costo ?? 0,
+        codigo_producto_proveedor: sp.codigo_producto_proveedor || "",
+        fecha_actualizacion: sp.fecha_actualizacion,
+      }))
+    }
+    return stockProve.filter((sp) => sp.stock === stock?.id)
+  })()
 
   // Estado para stock y códigos pendientes SOLO en modo nuevo
   const [stockProvePendientes, setStockProvePendientes] = useState(modo === "nuevo" ? [] : [])
@@ -222,8 +239,9 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
       return
     }
     
-    // Proveedor existente en stockProve
-    const sp = stockProve.find((sp) => sp.id === id)
+    // Proveedor existente en detalle embebido del producto (en edición)
+    const sp = (stockProveForThisStock || []).find((item) => item.id === id) ||
+               (Array.isArray(form.stock_proveedores) ? form.stock_proveedores.find((item) => item.id === id) : null)
     if (!sp) return
     // Permitir negativos y decimales
     const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
@@ -233,7 +251,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     }
     
     // Para proveedores existentes, actualizar codigosPendientesEdicion en lugar de llamar a updateStockProve
-    const proveedorId = sp.proveedor?.id || sp.proveedor
+    const proveedorId = sp.proveedor?.id || sp.proveedor_id || sp.proveedor
     setCodigosPendientesEdicion((prev) => {
       const otros = prev.filter((c) => String(c.proveedor_id) !== String(proveedorId))
       return [...otros, { 
@@ -247,10 +265,10 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     
     // Actualizar también form.stock_proveedores
     updateForm({
-      stock_proveedores: (form.stock_proveedores || []).map((sp) =>
-        String(sp.proveedor_id) === String(proveedorId)
-          ? { ...sp, cantidad: cantidadNum }
-          : sp
+      stock_proveedores: (form.stock_proveedores || []).map((rel) =>
+        String(rel.proveedor_id ?? (rel.proveedor?.id || rel.proveedor)) === String(proveedorId)
+          ? { ...rel, cantidad: cantidadNum }
+          : rel
       )
     })
     
@@ -292,8 +310,9 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
       return
     }
     
-    // Proveedor existente en stockProve
-    const sp = stockProve.find((sp) => sp.id === id)
+    // Proveedor existente en detalle embebido del producto (en edición)
+    const sp = (stockProveForThisStock || []).find((item) => item.id === id) ||
+               (Array.isArray(form.stock_proveedores) ? form.stock_proveedores.find((item) => item.id === id) : null)
     if (!sp) return
     const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
     if (isNaN(costoNum) || costoNum < 0) {
@@ -302,7 +321,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     }
 
     // Para proveedores existentes, actualizar codigosPendientesEdicion en lugar de llamar a updateStockProve
-    const proveedorId = sp.proveedor?.id || sp.proveedor
+    const proveedorId = sp.proveedor?.id || sp.proveedor_id || sp.proveedor
     setCodigosPendientesEdicion((prev) => {
       const otros = prev.filter((c) => String(c.proveedor_id) !== String(proveedorId))
       return [...otros, { 
@@ -315,10 +334,10 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     
     // Actualizar también form.stock_proveedores
     updateForm({
-      stock_proveedores: (form.stock_proveedores || []).map((sp) =>
-        String(sp.proveedor_id) === String(proveedorId)
-          ? { ...sp, costo: costoNum }
-          : sp
+      stock_proveedores: (form.stock_proveedores || []).map((rel) =>
+        String(rel.proveedor_id ?? (rel.proveedor?.id || rel.proveedor)) === String(proveedorId)
+          ? { ...rel, costo: costoNum }
+          : rel
       )
     })
     

@@ -47,6 +47,13 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
     return () => clearTimeout(timer)
   }, [busqueda, buscarProductos])
 
+  // Mostrar dropdown cuando se cargan sugerencias y el input tiene focus
+  useEffect(() => {
+    if (sugerencias.length > 0 && !disabled && !readOnly) {
+      setShowDropdown(true)
+    }
+  }, [sugerencias, disabled, readOnly])
+
   const handleChange = (e) => {
     const value = e.target.value
     setBusqueda(value)

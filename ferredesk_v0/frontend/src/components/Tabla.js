@@ -39,6 +39,9 @@ const Tabla = ({
   onItemsPerPageChange: onItemsPerPageChangeControlada,
   totalRemoto = null,
   busquedaRemota = false,
+  // --- Nuevos props para ordenamiento remoto ---
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null, // Estado de ordenamiento desde el padre
 }) => {
   const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
   const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
@@ -110,16 +113,25 @@ const Tabla = ({
           {/* Control de ordenamiento */}
           {mostrarOrdenamiento && (
             <button
-              onClick={() => setOrdenAscendente(!ordenAscendente)}
+              onClick={() => {
+                if (paginacionControlada && onOrdenamientoChange) {
+                  // En modo controlado, notificar al componente padre
+                  const nuevoOrdenamiento = ordenamientoControlado !== null ? !ordenamientoControlado : !ordenAscendente;
+                  onOrdenamientoChange(nuevoOrdenamiento);
+                } else {
+                  // En modo local, cambiar estado interno
+                  setOrdenAscendente(!ordenAscendente);
+                }
+              }}
               className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
               title={
-                ordenAscendente ? "Orden descendente (más recientes primero)" : "Orden ascendente (más antiguos primero)"
+                (ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Cambiar a orden descendente (más recientes primero)" : "Cambiar a orden ascendente (más antiguos primero)"
               }
             >
               <ArrowUpDown
-                className={`w-4 h-4 transition-transform duration-200 ${ordenAscendente ? "rotate-180" : ""}`}
+                className={`w-4 h-4 transition-transform duration-200 ${(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "rotate-180" : ""}`}
               />
-              <span className="hidden sm:inline">{ordenAscendente ? "Más antiguos" : "Más recientes"}</span>
+              <span className="hidden sm:inline">{(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Más antiguos" : "Más recientes"}</span>
             </button>
           )}
         </div>

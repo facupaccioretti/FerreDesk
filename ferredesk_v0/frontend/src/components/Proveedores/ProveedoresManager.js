@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState, useCallback } from "react"
 import Navbar from "../Navbar"
 import ListaPreciosModal from "./ListaPreciosModal"
 import HistorialListasModal from "../HistorialListasModal"
@@ -36,6 +36,10 @@ const ProveedoresManager = () => {
   // ------------------------------ Paginación ------------------------------
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  
+  // Estado de ordenamiento
+  const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
+  
   const firstRun = useRef(true)
   useEffect(() => {
     if (firstRun.current) {
@@ -47,9 +51,9 @@ const ProveedoresManager = () => {
       filtros['razon__icontains'] = searchProveedores.trim()
       filtros['fantasia__icontains'] = searchProveedores.trim()
     }
-    const t = setTimeout(() => fetchProveedores(pagina, itemsPorPagina, filtros), 300)
+    const t = setTimeout(() => fetchProveedores(pagina, itemsPorPagina, filtros, 'id', ordenamiento), 300)
     return () => clearTimeout(t)
-  }, [pagina, itemsPorPagina, searchProveedores, fetchProveedores])
+  }, [pagina, itemsPorPagina, searchProveedores, ordenamiento, fetchProveedores])
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -85,6 +89,13 @@ const ProveedoresManager = () => {
     setEditProveedor(null)
     setFormError(null)
   }
+
+  // ------------------------------------------------------------------
+  // Función para manejar cambios de ordenamiento
+  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
+    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
+    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
+  }, []);
 
   // Guardar proveedor (alta o edición)
   const handleSaveProveedor = async (data) => {
@@ -305,6 +316,9 @@ const ProveedoresManager = () => {
                     totalRemoto={total}
                     filasCompactas={true}
                     claseTbody="leading-tight"
+                    mostrarOrdenamiento={true}
+                    onOrdenamientoChange={handleOrdenamientoChange}
+                    ordenamientoControlado={ordenamiento === 'asc'}
                     renderFila={(p, idxVis, idxInicio) => {
                       const indiceGlobal = idxInicio + idxVis
                       const filaPrincipal = (

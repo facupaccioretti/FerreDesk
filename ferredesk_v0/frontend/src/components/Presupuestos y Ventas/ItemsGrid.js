@@ -94,14 +94,16 @@ const ItemsGridPresupuesto = forwardRef(
       if (Array.isArray(initialItems) && initialItems.length > 0) {
         // Mapear los items del backend a los campos que espera la interfaz
         let baseRows = initialItems.map(item => {
-          const esGenerico = !item.vdi_idsto
+          // CORRECCIÓN: Un item solo es genérico si no tiene vdi_idsto Y tampoco tiene un objeto producto
+          // Esto evita que items de stock recargados desde la caché se clasifiquen incorrectamente como genéricos
+          const esGenerico = !item.vdi_idsto && !item.producto
           if (esGenerico) {
             // Ítem genérico: mapear a los campos del grid
             return {
               ...item,
               denominacion: item.vdi_detalle1 || item.denominacion || "",
               unidad: item.vdi_detalle2 || item.unidad || "",
-              codigo: item.codigo || "-",
+              codigo: item.codigo || "",
               cantidad: item.vdi_cantidad || item.cantidad || 0,
               precio: item.vdi_precio_unitario_final || item.precio || 0,
               precioFinal: item.vdi_precio_unitario_final || item.precioFinal || 0,
@@ -110,7 +112,7 @@ const ItemsGridPresupuesto = forwardRef(
               producto: null,
             }
           }
-          // Ítem de stock: crear stub de producto sin ir a la red
+          // Ítem de stock: crear stub de producto más completo para bloquear edición
           const idaliivaStub = item.vdi_idaliiva ?? item.idaliiva ?? 3
           const margenStub = item.vdi_margen ?? item.margen ?? 0
           return {
@@ -119,8 +121,18 @@ const ItemsGridPresupuesto = forwardRef(
               id: item.vdi_idsto,
               idaliiva: idaliivaStub,
               margen: margenStub,
+              // Agregar campos básicos necesarios para que el sistema reconozca el producto como cargado
+              codvta: item.codigo || '',
+              codigo: item.codigo || '',
+              deno: item.denominacion || item.vdi_detalle1 || '',
+              nombre: item.denominacion || item.vdi_detalle1 || '',
+              unidad: item.unidad || item.vdi_detalle2 || '-',
+              unidadmedida: item.unidad || item.vdi_detalle2 || '-',
+              // Agregar campos adicionales para asegurar que se reconozca como producto completo
+              stock_proveedores: [],
+              proveedor_habitual: null,
             },
-            codigo: item.codigo || String(item.vdi_idsto || ''),
+            codigo: item.codigo || '',
             denominacion: item.denominacion || item.vdi_detalle1 || '',
             unidad: item.unidad || item.vdi_detalle2 || '-',
             cantidad: item.vdi_cantidad ?? item.cantidad ?? 1,
@@ -234,7 +246,7 @@ const ItemsGridPresupuesto = forwardRef(
                 bonificacion: 0,
                 producto: producto,
                 idaliiva: aliIdTmp,
-                proveedorId: proveedorHabitual?.proveedor?.id || null,
+                proveedorId: producto.proveedor_habitual?.id || null,
               }
               return [...prevRows.slice(0, idxExistente), nuevoItem, ...prevRows.slice(idxExistente)]
             })
@@ -245,7 +257,7 @@ const ItemsGridPresupuesto = forwardRef(
         setRows((prevRows) => {
           const lastRow = prevRows[prevRows.length - 1]
           
-          // Buscar el proveedor habitual en stock_proveedores
+          // Buscar el proveedor habitual en stock_proveedores para obtener costo y precio
           const proveedorHabitual = producto.stock_proveedores?.find(
             sp => sp.proveedor?.id === producto.proveedor_habitual?.id
           )
@@ -276,7 +288,7 @@ const ItemsGridPresupuesto = forwardRef(
             bonificacion: 0,
             producto: producto,
             idaliiva: aliIdTmp,
-            proveedorId: proveedorHabitual?.proveedor?.id || null,
+            proveedorId: producto.proveedor_habitual?.id || null,
           }
           if (!lastRow.producto && !lastRow.codigo) {
             return [...prevRows.slice(0, -1), nuevoItem, getEmptyRow()]
@@ -814,12 +826,18 @@ const ItemsGridPresupuesto = forwardRef(
             }
             return ensureSoloUnEditable(newRows)
           })
+          // Mover foco a cantidad después de cargar el producto
+          setIdxCantidadFoco(idx)
         }
         if (field === "cantidad") {
-          if (rows[idx].producto && rows[idx].codigo && rows[idx + 1] && isRowVacio(rows[idx + 1])) {
-            setTimeout(() => {
-              if (codigoRefs.current[idx + 1]) codigoRefs.current[idx + 1].focus()
-            }, 0)
+          if (rows[idx].producto && rows[idx].codigo) {
+            // Buscar el primer renglón vacío disponible
+            const idxRenglonVacio = rows.findIndex((row, i) => i > idx && isRowVacio(row))
+            if (idxRenglonVacio !== -1) {
+              setTimeout(() => {
+                if (codigoRefs.current[idxRenglonVacio]) codigoRefs.current[idxRenglonVacio].focus()
+              }, 0)
+            }
           }
         }
         if (field === "precio") {
@@ -828,10 +846,14 @@ const ItemsGridPresupuesto = forwardRef(
           }, 0)
         }
         if (field === "bonificacion") {
-          if (rows[idx].producto && rows[idx].codigo && rows[idx + 1] && isRowVacio(rows[idx + 1])) {
-            setTimeout(() => {
-              if (codigoRefs.current[idx + 1]) codigoRefs.current[idx + 1].focus()
-            }, 0)
+          if (rows[idx].producto && rows[idx].codigo) {
+            // Buscar el primer renglón vacío disponible
+            const idxRenglonVacio = rows.findIndex((row, i) => i > idx && isRowVacio(row))
+            if (idxRenglonVacio !== -1) {
+              setTimeout(() => {
+                if (codigoRefs.current[idxRenglonVacio]) codigoRefs.current[idxRenglonVacio].focus()
+              }, 0)
+            }
           }
         }
       }

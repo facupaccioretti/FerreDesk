@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react'
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
 // import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
@@ -147,7 +147,14 @@ const NotaCreditoForm = ({
   } = useFormularioDraft({
     claveAlmacenamiento: `notaCreditoFormDraft_${tabKey}`,
     datosIniciales: getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos),
-    combinarConValoresPorDefecto: (data) => ({ ...getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos), ...data }),
+    combinarConValoresPorDefecto: (data) => {
+      const base = getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos);
+      return {
+        ...base,
+        ...data,
+        items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
+      };
+    },
     parametrosPorDefecto: [],
     normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
     validarBorrador: (borradorGuardado) => {
@@ -396,6 +403,13 @@ const NotaCreditoForm = ({
   const handleRowsChange = useCallback((rows) => {
     actualizarItems(rows);
   }, [actualizarItems]);
+
+  // Inicializar autoSumarDuplicados si es false (igual que en VentaForm)
+  useEffect(() => {
+    if (!autoSumarDuplicados) {
+      setAutoSumarDuplicados("sumar")
+    }
+  }, [autoSumarDuplicados, setAutoSumarDuplicados])
 
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
   const setDescu1 = useCallback((value) => {

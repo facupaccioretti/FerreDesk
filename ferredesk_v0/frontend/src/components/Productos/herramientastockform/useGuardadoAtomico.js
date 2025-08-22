@@ -60,10 +60,12 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
               proveedor_id: sp.proveedor,
               cantidad: sp.cantidad,
               costo: sp.costo,
-              // Solo enviar código si existe uno pendiente; de lo contrario, omitir para preservar en backend
+              // Priorizar código del pendiente; si no está, respetar código ya guardado en estructura pendiente si existiera
               ...(codigoPendiente && codigoPendiente.codigo_producto_proveedor
                 ? { codigo_producto_proveedor: codigoPendiente.codigo_producto_proveedor }
-                : {}),
+                : (sp.codigo_producto_proveedor
+                  ? { codigo_producto_proveedor: sp.codigo_producto_proveedor }
+                  : {})),
             }
           }),
           ...proveedoresAgregados.map((pa) => {
@@ -72,9 +74,12 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
               proveedor_id: pa.proveedor,
               cantidad: pa.cantidad,
               costo: pa.costo,
+              // Incluir el código si viene desde pendientes o si ya está en el objeto agregado
               ...(codigoPendiente && codigoPendiente.codigo_producto_proveedor
                 ? { codigo_producto_proveedor: codigoPendiente.codigo_producto_proveedor }
-                : {}),
+                : (pa.codigo_producto_proveedor
+                  ? { codigo_producto_proveedor: pa.codigo_producto_proveedor }
+                  : {})),
             }
           })
         ]
@@ -108,45 +113,16 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
         return { success: true, data: productoGuardado }
       } else {
         // EDICIÓN ATÓMICA: enviar todo junto
-        // Construir stock_proveedores a partir de stockProve (los reales) y codigosPendientesEdicion (los editados)
-        const stockProveedores = [
-          // Proveedores existentes con sus cambios
-          ...stockProve
-            .filter((sp) => sp.stock === stock.id)
-            .map((sp) => {
-              // Si hay un pendiente de edición para este proveedor, usar su código/costo
-              const pendiente = codigosPendientesEdicion.find(
-                (c) => String(c.proveedor_id) === String(sp.proveedor?.id || sp.proveedor),
-              )
-              return {
-                proveedor_id: sp.proveedor?.id || sp.proveedor,
-                cantidad: pendiente && pendiente.cantidad !== undefined ? pendiente.cantidad : sp.cantidad,
-                costo: pendiente && pendiente.costo !== undefined ? pendiente.costo : sp.costo,
-                ...(pendiente && pendiente.codigo_producto_proveedor
-                  ? { codigo_producto_proveedor: pendiente.codigo_producto_proveedor }
-                  : sp.codigo_producto_proveedor
-                  ? { codigo_producto_proveedor: sp.codigo_producto_proveedor }
-                  : {}),
-              }
-            }),
-          // Proveedores agregados durante la edición (están en codigosPendientesEdicion pero no en stockProve)
-          ...codigosPendientesEdicion
-            .filter((pendiente) => {
-              // Solo incluir si no está en stockProve
-              return !stockProve.some((sp) => 
-                sp.stock === stock.id && 
-                String(sp.proveedor?.id || sp.proveedor) === String(pendiente.proveedor_id)
-              )
-            })
-            .map((pendiente) => ({
-              proveedor_id: pendiente.proveedor_id,
-              cantidad: pendiente.cantidad || 0,
-              costo: pendiente.costo || 0,
-              ...(pendiente.codigo_producto_proveedor
-                ? { codigo_producto_proveedor: pendiente.codigo_producto_proveedor }
-                : {}),
+        // Construir stock_proveedores a partir del DETALLE actual (form.stock_proveedores)
+        // SOLUCIÓN SIMPLIFICADA: usar solo form.stock_proveedores como fuente única de verdad
+        const stockProveedores = Array.isArray(form.stock_proveedores) 
+          ? form.stock_proveedores.map((sp) => ({
+              proveedor_id: Number(sp.proveedor_id || sp.proveedor?.id || sp.proveedor),
+              cantidad: sp.cantidad ?? 0,
+              costo: sp.costo ?? 0,
+              ...(sp.codigo_producto_proveedor ? { codigo_producto_proveedor: sp.codigo_producto_proveedor } : {})
             }))
-        ]
+          : []
         
         const response = await fetch("/api/productos/editar-producto-con-relaciones/", {
           method: "PUT",

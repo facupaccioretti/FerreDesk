@@ -177,6 +177,8 @@ export default function ProductosTable({
   onItemsPerPageChange,
   totalRemoto = null,
   busquedaRemota = true,
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
 }) {
   const [showProvModal, setShowProvModal] = useState(false)
   // Removido el estado local search
@@ -363,6 +365,7 @@ export default function ProductosTable({
               valorBusqueda={searchProductos}
               onCambioBusqueda={setSearchProductos}
               mostrarBuscador={true}
+              mostrarOrdenamiento={true}
               paginacionControlada={paginacionControlada}
               paginaActual={paginaActual}
               onPageChange={onPageChange}
@@ -370,6 +373,8 @@ export default function ProductosTable({
               onItemsPerPageChange={onItemsPerPageChange}
               totalRemoto={totalRemoto}
               busquedaRemota={busquedaRemota}
+              onOrdenamientoChange={onOrdenamientoChange}
+              ordenamientoControlado={ordenamientoControlado}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 

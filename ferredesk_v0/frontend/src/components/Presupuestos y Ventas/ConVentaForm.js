@@ -3,7 +3,7 @@ import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
@@ -195,8 +195,8 @@ const ConVentaForm = ({
         ? data.items
         : (Array.isArray(itemsSeleccionados) ? itemsSeleccionados : []);
 
-      // ItemsGrid se encarga de la normalización - pasar items crudos
-      let itemsNormalizados = itemsBase;
+      // Normalizar items de stock para asegurar estructura consistente
+      let itemsNormalizados = normalizarItemsStock(itemsBase);
 
       // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
       if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {

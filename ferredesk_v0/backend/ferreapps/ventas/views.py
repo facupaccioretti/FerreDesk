@@ -64,6 +64,18 @@ def _obtener_codigo_venta(stock_id):
         return str(stock_id)
 
 
+def _obtener_nombre_proveedor(proveedor_id):
+    """
+    Obtiene el nombre del proveedor (razón social o fantasía) asociado al proveedor_id.
+    Si no se encuentra, devuelve el propio proveedor_id como fallback.
+    """
+    try:
+        proveedor = Proveedor.objects.get(id=proveedor_id)
+        return proveedor.razon or proveedor.fantasia or str(proveedor_id)
+    except Proveedor.DoesNotExist:
+        return str(proveedor_id)
+
+
 def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permitir_stock_negativo, errores_stock, stock_actualizado):
     """
     Descuenta "cantidad" del stock del producto (stock_id), priorizando el proveedor preferido,
@@ -85,7 +97,9 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
         try:
             sp = StockProve.objects.select_for_update().get(stock_id=stock_id, proveedor_id=proveedor_preferido_id)
         except StockProve.DoesNotExist:
-            errores_stock.append(f"No existe stock para el producto {stock_id} y proveedor {proveedor_preferido_id}")
+            cod = _obtener_codigo_venta(stock_id)
+            nombre_proveedor = _obtener_nombre_proveedor(proveedor_preferido_id)
+            errores_stock.append(f"No existe stock para el producto {cod} y proveedor {nombre_proveedor}")
             return False
         sp.cantidad -= cantidad
         sp.save()

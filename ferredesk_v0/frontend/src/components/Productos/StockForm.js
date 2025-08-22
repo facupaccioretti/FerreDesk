@@ -55,10 +55,12 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const referenciaCampoBusqueda = useRef(null)
   
   // APIs existentes
-  const stockProveAPI = useStockProveAPI()
-  const stockProveEditAPI = useStockProveEditAPI()
   const isEdicion = !!stock?.id
-  const { stockProve, updateStockProve, fetchStockProve } = isEdicion ? stockProveEditAPI : stockProveAPI
+  // Evitar fetch global de stockprove en edición: solo en modo "nuevo" usamos el hook
+  const stockProveAPI = useStockProveAPI()
+  const stockProve = isEdicion ? [] : stockProveAPI.stockProve
+  const updateStockProve = isEdicion ? async () => {} : stockProveAPI.updateStockProve
+  const fetchStockProve = isEdicion ? async () => {} : stockProveAPI.fetchStockProve
   const { alicuotas } = useAlicuotasIVAAPI()
 
   // Hook para detectar denominaciones similares
@@ -180,45 +182,36 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   
 
   useEffect(() => {
-    if (stock) {
-      // Construir stock_proveedores para edición con solo proveedor_id
-      const stockProveedores =
-        stock.stock_proveedores && stock.stock_proveedores.length > 0
-          ? stock.stock_proveedores.map((sp) => ({
-              ...sp,
-              proveedor_id: sp.proveedor_id || (sp.proveedor && (sp.proveedor.id || sp.proveedor)),
-            }))
-          : stockProve
-              .filter((sp) => sp.stock === stock.id)
-              .map((sp) => ({
-                proveedor_id: sp.proveedor?.id || sp.proveedor,
-                cantidad: sp.cantidad,
-                costo: sp.costo,
-                codigo_producto_proveedor: sp.codigo_producto_proveedor || "",
-              }))
+    if (!stock) return
+    // Usar SIEMPRE el detalle enriquecido del producto: stock.stock_proveedores embebido
+    const stockProveedoresDetallado = Array.isArray(stock.stock_proveedores)
+      ? stock.stock_proveedores.map((sp) => ({
+          ...sp,
+          proveedor_id: sp.proveedor_id || (sp.proveedor && (sp.proveedor.id || sp.proveedor)),
+        }))
+      : []
 
-      setForm({
-        codvta: stock.codvta || "",
-        deno: stock.deno || "",
-        unidad: stock.unidad || "",
-        cantmin: stock.cantmin || 0,
-        proveedor_habitual_id:
-          stock.proveedor_habitual && typeof stock.proveedor_habitual === "object"
-            ? String(stock.proveedor_habitual.id)
-            : stock.proveedor_habitual && typeof stock.proveedor_habitual === "string"
-              ? stock.proveedor_habitual
-              : "",
-        idfam1: stock.idfam1 && typeof stock.idfam1 === "object" ? stock.idfam1.id : (stock.idfam1 ?? null),
-        idfam2: stock.idfam2 && typeof stock.idfam2 === "object" ? stock.idfam2.id : (stock.idfam2 ?? null),
-        idfam3: stock.idfam3 && typeof stock.idfam3 === "object" ? stock.idfam3.id : (stock.idfam3 ?? null),
-        idaliiva: stock.idaliiva && typeof stock.idaliiva === "object" ? stock.idaliiva.id : (stock.idaliiva ?? ""),
-        margen: stock.margen !== undefined && stock.margen !== null ? String(stock.margen) : "",
-        acti: stock.acti !== undefined && stock.acti !== null ? String(stock.acti) : "",
-        id: stock.id,
-        stock_proveedores: stockProveedores,
-      })
-    }
-  }, [stock, stockProve, setForm])
+    setForm({
+      codvta: stock.codvta || "",
+      deno: stock.deno || "",
+      unidad: stock.unidad || "",
+      cantmin: stock.cantmin || 0,
+      proveedor_habitual_id:
+        stock.proveedor_habitual && typeof stock.proveedor_habitual === "object"
+          ? String(stock.proveedor_habitual.id)
+          : stock.proveedor_habitual && typeof stock.proveedor_habitual === "string"
+            ? stock.proveedor_habitual
+            : "",
+      idfam1: stock.idfam1 && typeof stock.idfam1 === "object" ? stock.idfam1.id : (stock.idfam1 ?? null),
+      idfam2: stock.idfam2 && typeof stock.idfam2 === "object" ? stock.idfam2.id : (stock.idfam2 ?? null),
+      idfam3: stock.idfam3 && typeof stock.idfam3 === "object" ? stock.idfam3.id : (stock.idfam3 ?? null),
+      idaliiva: stock.idaliiva && typeof stock.idaliiva === "object" ? stock.idaliiva.id : (stock.idaliiva ?? ""),
+      margen: stock.margen !== undefined && stock.margen !== null ? String(stock.margen) : "",
+      acti: stock.acti !== undefined && stock.acti !== null ? String(stock.acti) : "",
+      id: stock.id,
+      stock_proveedores: stockProveedoresDetallado,
+    })
+  }, [stock, setForm])
 
   // Persistencia automática del borrador la maneja useStockForm (clave dinámica)
 
@@ -286,8 +279,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
 
 
-  console.log("form state:", JSON.stringify(form))
-  console.log("select value:", form.proveedor_habitual_id)
+  // Logs ruidosos eliminados para mejorar rendimiento
 
   // Calcular si hay un solo proveedor
   const unProveedor = proveedoresAsociados.length === 1
@@ -379,7 +371,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <input
                         type="text"
                         name="codvta"
-                        value={form.codvta}
+                        value={form.codvta ?? ""}
                         onChange={handleChange}
                         maxLength={LONGITUD_MAX_CODIGO_VENTA}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
@@ -395,7 +387,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         <input
                           type="text"
                           name="deno"
-                          value={form.deno}
+                          value={form.deno ?? ""}
                           onChange={handleChange}
                           onBlur={modo === "nuevo" ? (e) => handleDenominacionBlur(e.target.value) : undefined}
                           maxLength={LONGITUD_MAX_DENOMINACION}
@@ -434,7 +426,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <input
                         type="text"
                         name="unidad"
-                        value={form.unidad}
+                        value={form.unidad ?? ""}
                         onChange={handleChange}
                         maxLength={LONGITUD_MAX_UNIDAD}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -737,7 +729,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                     <div className="min-w-[180px] text-right">
                       <input
                         type="number"
-                        value={stockTotal}
+                        value={stockTotal ?? 0}
                         readOnly
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-slate-100 text-slate-700"
                       />
@@ -749,7 +741,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <input
                         type="number"
                         name="cantmin"
-                        value={form.cantmin}
+                        value={form.cantmin ?? ""}
                         onChange={handleChange}
                         min={CANTIDAD_MINIMA_MINIMO}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"

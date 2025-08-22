@@ -5,7 +5,7 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -15,15 +15,7 @@ import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 // import { normalizarItems } from './herramientasforms/normalizadorItems' // Ya no se usa
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 
-const getStockProveedoresMap = (productos) => {
-  const map = {}
-  productos.forEach((p) => {
-    if (p.stock_proveedores) {
-      map[p.id] = p.stock_proveedores
-    }
-  })
-  return map
-}
+// (eliminado helper de stock_proveedores no utilizado en Presupuesto)
 
 //  getInitialFormState arriba para que esté definida antes de mergeWithDefaults
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
@@ -59,7 +51,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 // Agrego la función mergeWithDefaults
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta)
-  return { ...defaults, ...data, items: Array.isArray(data?.items) ? data.items : [] }
+  return { ...defaults, ...data, items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [] }
 }
 
 const PresupuestoForm = ({
@@ -137,7 +129,7 @@ const PresupuestoForm = ({
     actualizarItems(rows)
   }, [actualizarItems])
 
-  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+  // (eliminada memoización de stock_proveedores no utilizada)
 
   const itemsGridRef = useRef()
 
@@ -178,16 +170,11 @@ const PresupuestoForm = ({
     setIsLoading(false)
   }, [loadingClientes, loadingAlicuotasHook, loadingProductos, loadingProveedores, errorClientes, errorAlicuotas, errorProductos, errorProveedores])
 
-  // ------------------------------------------------------------
-  // LOG DE DIAGNÓSTICO: comparar con VentaForm
-  // ------------------------------------------------------------
-  useEffect(() => {
-    console.debug("[PresupuestoForm] stockProveedores listo", {
-      loadingProductos,
-      loadingProveedores,
-      keys: Object.keys(stockProveedores || {}).length,
-    })
-  }, [loadingProductos, loadingProveedores, stockProveedores])
+  // Manejo simple de errores (sin ARCA)
+  const mostrarError = useCallback((error, mensajePorDefecto = "Error al procesar el presupuesto") => {
+    const mensaje = (error && error.message) ? error.message : mensajePorDefecto
+    try { window.alert(mensaje) } catch (_) {}
+  }, [])
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -278,7 +265,7 @@ const PresupuestoForm = ({
       limpiarBorrador()
       onCancel()
     } catch (error) {
-      console.error("Error al guardar presupuesto:", error)
+      mostrarError(error, "Error al procesar el presupuesto")
     }
   }
 
