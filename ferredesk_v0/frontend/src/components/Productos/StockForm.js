@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useStockProveAPI, useStockProveEditAPI } from "../../utils/useStockProveAPI"
+import { useStockProveAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
+import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
@@ -62,6 +63,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const updateStockProve = isEdicion ? async () => {} : stockProveAPI.updateStockProve
   const fetchStockProve = isEdicion ? async () => {} : stockProveAPI.fetchStockProve
   const { alicuotas } = useAlicuotasIVAAPI()
+
+  // Hook para obtener la configuración de la ferretería
+  const { ferreteria } = useFerreteriaAPI()
 
   // Hook para detectar denominaciones similares
   const { sugerencias, isLoading: isLoadingSugerencias, error: errorSugerencias, mostrarTooltip, handleDenominacionBlur, limpiarSugerencias, toggleTooltip } = useDetectorDenominaciones()
@@ -167,12 +171,13 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   
   const { guardarProductoAtomico } = useGuardadoAtomico({ modo, stock, stockProve, onSave })
   
-  const { esValido } = useValidaciones({
+  const { esValido, errores, erroresCampo } = useValidaciones({
     form,
     modo,
     stockProveParaMostrar,
     codigosPendientes,
-    codigosPendientesEdicion
+    codigosPendientesEdicion,
+    ferreteria
   })
   
   // Estados adicionales que no están en los hooks
@@ -247,6 +252,25 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     
     // Validar el formulario antes de guardar
     if (!esValido) {
+      // Primero manejar errores de campo específico (tooltips nativos)
+      if (erroresCampo && erroresCampo.length > 0) {
+        const primerErrorCampo = erroresCampo[0]
+        // Buscar el campo en el formulario y mostrar tooltip nativo
+        const campoElement = document.querySelector(`[name="${primerErrorCampo.campo}"]`)
+        if (campoElement) {
+          campoElement.setCustomValidity(primerErrorCampo.mensaje)
+          campoElement.reportValidity()
+          return
+        }
+      }
+      
+      // Si no hay errores de campo o no se pudo mostrar el tooltip, mostrar error general
+      if (errores && errores.length > 0) {
+        alert(errores[0]) // Notificación flotante con botón de aceptar
+        return
+      }
+      
+      // Fallback: mensaje genérico
       setFormError("Por favor corrija los errores en el formulario antes de guardar.")
       return
     }

@@ -1,21 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
 
-// Función para obtener el token CSRF de la cookie
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== "") {
-    const cookies = document.cookie.split(";")
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
-
 const useAsociacionCodigos = ({ 
   stock, 
   modo, 
@@ -249,17 +233,18 @@ const useAsociacionCodigos = ({
       return
     }
 
-    // Si el proveedor no tiene lista, bloquear
-    if ((productosConDenominacion || []).length === 0) {
-      setErrorAsociar("El proveedor seleccionado no tiene lista cargada o no se pudieron cargar sus códigos. No es posible asociar un código manualmente.")
-      return
-    }
+    // VALIDACIONES DESHABILITADAS: Permitir asociar cualquier código, aunque no esté en la lista del proveedor
+    // Si el proveedor no tiene lista, permitir asociar código manualmente
+    // if ((productosConDenominacion || []).length === 0) {
+    //   setErrorAsociar("El proveedor seleccionado no tiene lista cargada o no se pudieron cargar sus códigos. No es posible asociar un código manualmente.")
+    //   return
+    // }
 
-    // Debe seleccionar un código que exista en la lista
-    if (!codigoExisteEnLista) {
-      setErrorAsociar("No se encontró el código en la lista del proveedor. Selecciónelo desde la tabla de sugerencias.")
-      return
-    }
+    // Permitir asociar cualquier código, aunque no exista en la lista
+    // if (!codigoExisteEnLista) {
+    //   setErrorAsociar("No se encontró el código en la lista del proveedor. Selecciónelo desde la tabla de sugerencias.")
+    //   return
+    // }
 
     const resultado = await handleAsociarCodigoPendiente({
       proveedor_id: selectedProveedor,

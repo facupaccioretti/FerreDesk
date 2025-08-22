@@ -96,8 +96,10 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
     Descuenta "cantidad" del stock del producto (stock_id), priorizando el proveedor preferido,
     y luego el resto de proveedores del mismo producto hasta cubrir la cantidad.
 
-    - Si permitir_stock_negativo es True: descuenta todo del proveedor preferido (puede quedar negativo).
-    - Si permitir_stock_negativo es False: intenta distribuir. Si la suma total no alcanza, no descuenta y agrega error.
+    - Si permitir_stock_negativo es True: primero distribuye todo el stock disponible, 
+      luego descuenta lo que falte del proveedor preferido (puede quedar negativo).
+    - Si permitir_stock_negativo es False: intenta distribuir. Si la suma total no alcanza, 
+      no descuenta y agrega error.
 
     Agrega una entrada en stock_actualizado por cada proveedor afectado.
     Retorna True si se aplicó el descuento, False si no fue posible (y se registró el error).
@@ -107,29 +109,18 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
     except Exception:
         cantidad = Decimal('0')
 
-    # Caso simple: permitir stock negativo → todo al proveedor preferido
-    if permitir_stock_negativo:
-        try:
-            sp = StockProve.objects.select_for_update().get(stock_id=stock_id, proveedor_id=proveedor_preferido_id)
-        except StockProve.DoesNotExist:
-            cod = _obtener_codigo_venta(stock_id)
-            nombre_proveedor = _obtener_nombre_proveedor(proveedor_preferido_id)
-            errores_stock.append(f"No existe stock para el producto {cod} y proveedor {nombre_proveedor}")
-            return False
-        sp.cantidad -= cantidad
-        sp.save()
-        stock_actualizado.append((sp.stock_id, sp.proveedor_id, sp.cantidad))
-        return True
-
-    # Validación previa: ¿alcanza la suma total?
+    # Obtener todos los proveedores con stock bloqueado
     total_disponible, proveedores_bloqueados = _total_disponible_en_proveedores(stock_id)
-    if total_disponible < cantidad:
-        cod = _obtener_codigo_venta(stock_id)
-        errores_stock.append(
-            f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad}"
-        )
-        return False
-
+    
+    # Si no permitir stock negativo, validar que alcance
+    if not permitir_stock_negativo:
+        if total_disponible < cantidad:
+            cod = _obtener_codigo_venta(stock_id)
+            errores_stock.append(
+                f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad}"
+            )
+            return False
+    
     # Mapear por proveedor para acceso rápido (todas las instancias están bloqueadas)
     prov_map = {sp.proveedor_id: sp for sp in proveedores_bloqueados}
     orden_proveedores = []
@@ -143,6 +134,7 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
     resto.sort(key=lambda x: x.cantidad, reverse=True)
     orden_proveedores.extend([sp.proveedor_id for sp in resto])
 
+    # Distribuir primero todo el stock disponible
     restante = cantidad
     for prov_id in orden_proveedores:
         if restante <= 0:
@@ -157,8 +149,25 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
         stock_actualizado.append((sp.stock_id, sp.proveedor_id, sp.cantidad))
         restante -= consumir
 
+    # Si aún queda cantidad por descontar y está permitido stock negativo
+    if restante > 0 and permitir_stock_negativo:
+        # Verificar que existe el proveedor preferido
+        if proveedor_preferido_id not in prov_map:
+            cod = _obtener_codigo_venta(stock_id)
+            nombre_proveedor = _obtener_nombre_proveedor(proveedor_preferido_id)
+            errores_stock.append(f"No existe stock para el producto {cod} y proveedor {nombre_proveedor}")
+            return False
+        
+        # Descontar lo que falte del proveedor preferido (puede quedar negativo)
+        sp = prov_map[proveedor_preferido_id]
+        sp.cantidad -= restante
+        sp.save()
+        stock_actualizado.append((sp.stock_id, sp.proveedor_id, sp.cantidad))
+        restante = 0
+    
+    # Verificación final de seguridad
     if restante > 0:
-        # No debería ocurrir por la validación previa, pero por seguridad
+        # No debería ocurrir, pero por seguridad
         cod = _obtener_codigo_venta(stock_id)
         errores_stock.append(
             f"Stock insuficiente para producto {cod}. Disponible total: {total_disponible}, solicitado: {cantidad}"

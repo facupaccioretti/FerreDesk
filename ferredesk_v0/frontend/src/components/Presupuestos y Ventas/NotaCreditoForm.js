@@ -162,11 +162,7 @@ const NotaCreditoForm = ({
     }
   });
   
-  useEffect(() => {
-    // Si ya hay items (p. ej. del borrador), no reiniciar para no pisar el draft
-    if (Array.isArray(formulario?.items) && formulario.items.length > 0) return;
-    setFormulario(getInitialFormState(clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos));
-  }, [clienteSeleccionado, facturasAsociadas, sucursales, puntosVenta, vendedores, plazos, formulario?.items, setFormulario]);
+
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
