@@ -289,12 +289,8 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
               </div>
 
               {/* Contenido */}
-              {cargando ? (
-                <div className="p-8 text-center text-slate-500">Cargando facturas…</div>
-              ) : error ? (
+              {error ? (
                 <div className="p-8 text-center text-red-600">{error}</div>
-              ) : facturasFiltradas.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">Sin resultados</div>
               ) : (
                 <div className="px-6 pb-6" style={{ height: ALTURA_MAX_TABLA }}>
                   <Tabla
@@ -307,6 +303,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                     paginadorVisible={false}
                     renderFila={renderFila}
                     sinEstilos={true}
+                    cargando={cargando}
                   />
                 </div>
               )}

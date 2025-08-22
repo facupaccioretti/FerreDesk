@@ -31,6 +31,7 @@ const ClientesTable = ({
   busquedaRemota = true,
   onOrdenamientoChange = null,
   ordenamientoControlado = null,
+  cargando = false,
 }) => {
   // ---------------------------------------------------------------------------
   // Definición de columnas (encabezados) para Tabla
@@ -399,6 +400,7 @@ const ClientesTable = ({
       onOrdenamientoChange={onOrdenamientoChange}
       ordenamientoControlado={ordenamientoControlado}
       renderFila={renderFila}
+      cargando={cargando}
     />
   )
 }

@@ -3,7 +3,7 @@ import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
+import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
@@ -529,6 +529,9 @@ const ConVentaForm = ({
   };
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     // Limpiar temporizador si está pendiente
     if (temporizadorArcaRef.current) {
       clearTimeout(temporizadorArcaRef.current);

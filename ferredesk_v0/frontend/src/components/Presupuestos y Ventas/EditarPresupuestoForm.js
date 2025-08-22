@@ -285,6 +285,9 @@ const EditarPresupuestoForm = ({
   };
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     limpiarBorrador();
     onCancel();
   };

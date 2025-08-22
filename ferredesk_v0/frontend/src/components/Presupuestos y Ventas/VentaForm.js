@@ -566,6 +566,9 @@ const VentaForm = ({
   }
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     // Limpiar temporizador si está pendiente
     if (temporizadorArcaRef.current) {
       clearTimeout(temporizadorArcaRef.current)

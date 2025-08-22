@@ -317,6 +317,7 @@ const ProveedoresManager = () => {
                     filasCompactas={true}
                     claseTbody="leading-tight"
                     mostrarOrdenamiento={true}
+                    cargando={loading}
                     onOrdenamientoChange={handleOrdenamientoChange}
                     ordenamientoControlado={ordenamiento === 'asc'}
                     renderFila={(p, idxVis, idxInicio) => {

@@ -221,19 +221,13 @@ export default function ClienteSelectorModal({
               </div>
 
                              {/* Contenido */}
-               {cargando ? (
-                 <div className="p-8 text-center text-slate-500">Cargando...</div>
-               ) : error ? (
+               {error ? (
                  <div className="p-8 text-center text-red-600">{error}</div>
                ) : (
                  <div className="px-6 pb-6" style={{ maxHeight: ALTURA_MAX_TABLA }}>
                    {termino.length < MIN_CARACTERES_BUSQUEDA ? (
                      <div className="text-center py-12 text-slate-500">
                        <p>Escribe al menos {MIN_CARACTERES_BUSQUEDA} caracteres para buscar...</p>
-                     </div>
-                   ) : buscando ? (
-                     <div className="text-center py-12 text-slate-500">
-                       <p>Buscando cliente...</p>
                      </div>
                    ) : (
                      <Tabla
@@ -244,6 +238,7 @@ export default function ClienteSelectorModal({
                        mostrarOrdenamiento={false}
                        paginadorVisible={false}
                        sinEstilos={true}
+                       cargando={cargando || buscando}
                      />
                    )}
                  </div>

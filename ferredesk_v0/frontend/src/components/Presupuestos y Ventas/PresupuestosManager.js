@@ -336,6 +336,10 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
+                            
+                            const confirmado = window.confirm('¿Está seguro de cerrar? Se perderán los cambios no guardados.');
+                            if (!confirmado) return;
+                            
                             closeTab(tab.key)
                           }}
                           className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"

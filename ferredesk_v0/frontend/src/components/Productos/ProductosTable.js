@@ -179,6 +179,7 @@ export default function ProductosTable({
   busquedaRemota = true,
   onOrdenamientoChange = null,
   ordenamientoControlado = null,
+  cargando = false,
 }) {
   const [showProvModal, setShowProvModal] = useState(false)
   // Removido el estado local search
@@ -375,6 +376,7 @@ export default function ProductosTable({
               busquedaRemota={busquedaRemota}
               onOrdenamientoChange={onOrdenamientoChange}
               ordenamientoControlado={ordenamientoControlado}
+              cargando={cargando}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 

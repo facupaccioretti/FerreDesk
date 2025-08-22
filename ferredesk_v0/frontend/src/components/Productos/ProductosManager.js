@@ -24,7 +24,7 @@ const ProductosManager = () => {
   }, [])
 
   // Hooks API
-  const { productos, total, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
+  const { productos, total, loading: loadingProductos, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -362,6 +362,7 @@ const ProductosManager = () => {
                   busquedaRemota={true}
                   onOrdenamientoChange={handleOrdenamientoChange}
                   ordenamientoControlado={ordenamiento === 'asc'}
+                  cargando={loadingProductos}
                 />
               )}
               {activeTab === "inactivos" && (
@@ -398,6 +399,7 @@ const ProductosManager = () => {
                   busquedaRemota={true}
                   onOrdenamientoChange={handleOrdenamientoChange}
                   ordenamientoControlado={ordenamiento === 'asc'}
+                  cargando={loadingProductos}
                 />
               )}
               {activeTab !== "lista" && activeTab !== "inactivos" && (

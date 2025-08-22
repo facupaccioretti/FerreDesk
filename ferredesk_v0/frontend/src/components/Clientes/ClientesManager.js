@@ -296,6 +296,7 @@ const ClientesManager = () => {
                   busquedaRemota={true}
                   onOrdenamientoChange={handleOrdenamientoChange}
                   ordenamientoControlado={ordenamiento === 'asc'}
+                  cargando={loading}
                 />
               )}
 
@@ -316,6 +317,7 @@ const ClientesManager = () => {
                   vendedores={vendedores}
                   plazos={plazos}
                   categorias={categorias}
+                  cargando={loading}
                 />
               )}
 

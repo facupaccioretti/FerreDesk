@@ -42,6 +42,8 @@ const Tabla = ({
   // --- Nuevos props para ordenamiento remoto ---
   onOrdenamientoChange = null,
   ordenamientoControlado = null, // Estado de ordenamiento desde el padre
+  // --- Prop para estado de carga ---
+  cargando = false,
 }) => {
   const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
   const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
@@ -189,20 +191,27 @@ const Tabla = ({
               )
             })}
 
-            {/* Estado vacío */}
+            {/* Estado vacío o cargando */}
             {datosVisibles.length === 0 && (
               <tr>
                 <td
                   colSpan={columnas.length}
                   className="text-center py-12 text-slate-500 bg-gradient-to-b from-slate-50/50 to-white/80"
                 >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                      <Search className="w-5 h-5 text-slate-400" />
+                  {cargando ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+                      <p className="text-sm font-medium">Cargando tabla</p>
                     </div>
-                    <p className="text-sm font-medium">No se encontraron resultados</p>
-                    {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
-                  </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                        <Search className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <p className="text-sm font-medium">No se encontraron resultados</p>
+                      {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
+                    </div>
+                  )}
                 </td>
               </tr>
             )}

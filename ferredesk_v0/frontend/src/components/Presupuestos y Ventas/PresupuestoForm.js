@@ -270,6 +270,9 @@ const PresupuestoForm = ({
   }
 
   const handleCancel = () => {
+    const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
+    if (!confirmado) return;
+    
     limpiarBorrador() // Usar limpiarBorrador en lugar de localStorage.removeItem
     onCancel()
   }
