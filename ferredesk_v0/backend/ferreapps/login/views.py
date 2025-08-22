@@ -24,6 +24,32 @@ def index(request):
     index_path = os.path.join(settings.REACT_APP_DIR, 'index.html')
     return FileResponse(open(index_path, 'rb'))
 
+def serve_static_file(request, filename):
+    """Vista para servir archivos estáticos del frontend"""
+    file_path = os.path.join(settings.REACT_APP_DIR, filename)
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        # Determinar el tipo de contenido basado en la extensión
+        content_type = 'text/plain'
+        if filename.endswith('.json'):
+            content_type = 'application/json'
+        elif filename.endswith('.ico'):
+            content_type = 'image/x-icon'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            content_type = 'image/jpeg'
+        elif filename.endswith('.png'):
+            content_type = 'image/png'
+        elif filename.endswith('.css'):
+            content_type = 'text/css'
+        elif filename.endswith('.js'):
+            content_type = 'application/javascript'
+        
+        return FileResponse(content, content_type=content_type)
+    else:
+        from django.http import Http404
+        raise Http404("Archivo no encontrado")
+
 @csrf_exempt
 def login_view(request):
     if request.method == 'POST':

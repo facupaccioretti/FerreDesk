@@ -10,6 +10,11 @@ while ! nc -z postgres 5432; do
 done
 echo "✅ PostgreSQL listo!"
 
+# Ejecutar migraciones automáticamente
+echo "🔄 Ejecutando migraciones de Django..."
+python manage.py migrate --noinput
+echo "✅ Migraciones completadas!"
+
 # Crear superusuario si no existe
 echo "👤 Verificando superusuario..."
 python manage.py shell -c "
