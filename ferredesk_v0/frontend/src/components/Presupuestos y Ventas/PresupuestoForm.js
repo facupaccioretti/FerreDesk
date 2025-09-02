@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
@@ -147,6 +147,54 @@ const PresupuestoForm = ({
     }))
   }
 
+  // Sincronizar documentoInfo cuando cambie formulario.cuit
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: '',
+        esValido: false
+      })
+    }
+  }, [formulario.cuit])
+
+  // Inicializar documentoInfo cuando se cargue el formulario
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    }
+  }, [formulario.cuit]) // Agregar formulario.cuit como dependencia
+
   // ----------------- Estado de carga General ------------------
   const [isLoading, setIsLoading] = useState(true)
   const [loadingError, setLoadingError] = useState(null)
@@ -282,7 +330,15 @@ const PresupuestoForm = ({
   // Reemplazar handleChange por manejarCambioFormulario
   const handleChange = manejarCambioFormulario(setFormulario)
 
-  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
+  const handleClienteSelect = (clienteSeleccionado) => {
+    // Usar la función estándar para autocompletar todos los campos del cliente
+    manejarSeleccionClienteObjeto(setFormulario)(clienteSeleccionado)
+    
+    // Usar la función centralizada para validar y actualizar el documento
+    const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
+    console.log('[handleClienteSelect] Documento validado:', documentoValidado)
+    setDocumentoInfo(documentoValidado)
+  }
 
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
   const setDescu1 = useCallback((value) => {

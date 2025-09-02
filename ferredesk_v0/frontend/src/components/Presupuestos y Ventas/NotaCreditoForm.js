@@ -336,7 +336,8 @@ const NotaCreditoForm = ({
       ven_descu1: formulario.descu1 || 0,
       ven_descu2: formulario.descu2 || 0,
       ven_descu3: formulario.descu3 || 0,
-      ven_bonificacion_general: formulario.bonificacionGeneral || 0,
+      bonificacionGeneral: formulario.bonificacionGeneral || 0, // Bonificación general
+      ven_bonificacion_general: formulario.bonificacionGeneral || 0, // Bonificación general (duplicado por compatibilidad)
 
       // Campos requeridos por el modelo que no se usan en NC pero deben estar presentes
       ven_vdocomvta: 0,
@@ -421,8 +422,8 @@ const NotaCreditoForm = ({
   }, [handleChange])
 
   const setBonificacionGeneral = useCallback((value) => {
-    handleChange({ target: { name: 'bonificacionGeneral', value } })
-  }, [handleChange])
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
   
   if (loadingAlicuotasIVA) return <p className="text-slate-600 text-center py-10">Cargando datos del formulario...</p>;
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;

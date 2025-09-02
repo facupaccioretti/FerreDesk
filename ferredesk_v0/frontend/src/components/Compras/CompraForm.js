@@ -13,6 +13,12 @@ const CompraForm = ({
   onCancel,
   initialData,
   readOnly = false,
+  // NUEVAS PROPS para conversión
+  ordenOrigen = null,           // Datos de la orden original
+  itemsSeleccionados = [],      // Items seleccionados del modal
+  itemsSeleccionadosIds = [],   // IDs de items seleccionados
+  modoConversion = false,       // Flag para indicar modo conversión
+  // Props existentes
   proveedores = [],
   productos = [],
   alicuotas = [],
@@ -24,24 +30,56 @@ const CompraForm = ({
   errorProductos,
   errorAlicuotas,
 }) => {
-  const [formData, setFormData] = useState({
-    comp_sucursal: sucursales[0]?.id || 1,
-    comp_fecha: new Date().toISOString().split("T")[0],
-    comp_numero_factura: "",
-    comp_tipo: "COMPRA",
-    comp_idpro: "",
-    comp_cuit: "",
-    comp_razon_social: "",
-    comp_domicilio: "",
-    comp_observacion: "",
-    comp_total_final: 0,
-    comp_importe_neto: 0,
-    comp_iva_21: 0,
-    comp_iva_10_5: 0,
-    comp_iva_27: 0,
-    comp_iva_0: 0,
-    comp_estado: "BORRADOR",
-    items_data: [],
+  const [formData, setFormData] = useState(() => {
+    // Estado inicial del formulario
+    const initialState = {
+      comp_sucursal: sucursales[0]?.id || 1,
+      comp_fecha: new Date().toISOString().split("T")[0],
+      comp_numero_factura: "",
+      comp_tipo: "COMPRA",
+      comp_idpro: "",
+      comp_cuit: "",
+      comp_razon_social: "",
+      comp_domicilio: "",
+      comp_observacion: "",
+      comp_total_final: 0,
+      comp_importe_neto: 0,
+      comp_iva_21: 0,
+      comp_iva_10_5: 0,
+      comp_iva_27: 0,
+      comp_iva_0: 0,
+      comp_estado: "BORRADOR",
+      items_data: [],
+    }
+
+    // Si es modo conversión, procesar items inmediatamente
+    if (modoConversion && ordenOrigen && itemsSeleccionados && itemsSeleccionados.length > 0) {
+      // Pre-cargar datos de la orden
+      initialState.comp_idpro = ordenOrigen.ord_idpro
+      initialState.comp_cuit = ordenOrigen.ord_cuit || ""
+      initialState.comp_razon_social = ordenOrigen.ord_razon_social || ""
+      initialState.comp_domicilio = ordenOrigen.ord_domicilio || ""
+      initialState.comp_observacion = ordenOrigen.ord_observacion || ""
+
+      // Convertir items de orden de compra a formato de compra
+      const itemsConvertidos = itemsSeleccionados.map(item => ({
+        id: Date.now() + Math.random(),
+        codigo_proveedor: item.producto_codigo || item.codigo_proveedor || "",
+        producto: item.producto || null,
+        cdi_idsto: item.odi_idsto || item.producto?.id,
+        cdi_idpro: ordenOrigen.ord_idpro,
+        cdi_detalle1: item.producto_denominacion || item.odi_detalle1 || item.producto?.deno || "",
+        cdi_detalle2: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
+        cdi_cantidad: Number(item.odi_cantidad) || 0,
+        cdi_costo: 0, // Los costos se completan en la compra
+        cdi_idaliiva: item.producto?.idaliiva || 3, // IVA del producto o 21% por defecto
+        unidad: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
+      }))
+      
+      initialState.items_data = itemsConvertidos
+    }
+
+    return initialState
   })
 
   // Estado para N° de factura inteligente
@@ -91,7 +129,19 @@ const CompraForm = ({
         items_data: initialData.items || [],
       })
 
-      if (initialData.comp_idpro) {
+      // Manejar proveedor seleccionado desde el modal
+      if (initialData.proveedorSeleccionado) {
+        const proveedor = initialData.proveedorSeleccionado
+        setSelectedProveedor(proveedor)
+        setFormData(prev => ({
+          ...prev,
+          comp_idpro: proveedor.id,
+          comp_cuit: proveedor.cuit || "",
+          comp_razon_social: proveedor.razon || "",
+          comp_domicilio: proveedor.domicilio || "",
+        }))
+      } else if (initialData.comp_idpro) {
+        // Caso de edición: buscar proveedor por ID
         const proveedor = proveedores.find((p) => p.id === initialData.comp_idpro)
         setSelectedProveedor(proveedor)
       }
@@ -112,6 +162,15 @@ const CompraForm = ({
       }
     }
   }, [initialData, proveedores, sucursales, updateNumeroFacturaInForm])
+
+  // NUEVO: useEffect para manejar modo conversión (solo para establecer proveedor)
+  useEffect(() => {
+    if (modoConversion && ordenOrigen) {
+      // Establecer proveedor seleccionado
+      const proveedor = proveedores.find((p) => p.id === ordenOrigen.ord_idpro)
+      setSelectedProveedor(proveedor)
+    }
+  }, [modoConversion, ordenOrigen, proveedores])
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
@@ -298,7 +357,15 @@ const CompraForm = ({
     if (!validateForm()) return
     setIsSubmitting(true)
     try {
-      await onSave(formData)
+      const payload = { ...formData }
+      
+      // Agregar datos de conversión si es necesario
+      if (modoConversion && ordenOrigen) {
+        payload.orden_origen = ordenOrigen.ord_id
+        payload.items_seleccionados = itemsSeleccionadosIds
+      }
+      
+      await onSave(payload)
     } catch (error) {
       console.error("Error al guardar compra:", error)
       setErrors({ submit: error.message || "Error al guardar la compra" })
@@ -340,10 +407,15 @@ const CompraForm = ({
                     />
                   </svg>
                 </div>
-                {initialData ? (readOnly ? "Ver Compra" : "Editar Compra") : "Nueva Compra"}
+                {modoConversion ? "Convertir Orden a Compra" : (initialData?.comp_id ? (readOnly ? "Ver Compra" : "Editar Compra") : "Nueva Compra")}
               </h3>
-              {initialData && <p className="text-slate-600 text-sm">Compra #{initialData.comp_id}</p>}
+              {modoConversion && ordenOrigen && (
+                <p className="text-blue-600 text-sm">Convirtiendo orden {ordenOrigen.ord_numero}</p>
+              )}
+              {initialData?.comp_id && !modoConversion && <p className="text-slate-600 text-sm">Compra #{initialData.comp_id}</p>}
             </div>
+
+
 
                         {/* Una sola tarjeta con campos organizados en grid */}
             <div className="mb-6">
@@ -353,7 +425,12 @@ const CompraForm = ({
                 <div className="grid gap-4 mb-3" style={{ gridTemplateColumns: '2fr 1fr 1.5fr 0.8fr 1.7fr' }}>
                   {/* Proveedor */}
                   <div>
-                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Proveedor *</label>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">
+                      Proveedor *
+                      {initialData?.proveedorSeleccionado && (
+                        <span className="ml-1 text-xs text-green-600 font-normal">(Seleccionado)</span>
+                      )}
+                    </label>
                     {loadingProveedores ? (
                       <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
                         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
@@ -363,7 +440,17 @@ const CompraForm = ({
                       <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
                         {errorProveedores}
                       </div>
+                    ) : modoConversion || initialData?.proveedorSeleccionado ? (
+                      // Campo de texto de solo lectura cuando viene seleccionado desde el modal o en modo conversión
+                      <input
+                        type="text"
+                        value={formData.comp_razon_social}
+                        readOnly
+                        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-50 text-slate-700 cursor-not-allowed"
+                        placeholder="Proveedor seleccionado"
+                      />
                     ) : (
+                      // Dropdown normal cuando no viene seleccionado desde el modal
                       <select
                         value={formData.comp_idpro}
                         onChange={(e) => handleProveedorChange(e.target.value)}
@@ -507,6 +594,7 @@ const CompraForm = ({
               <ItemsGridCompras
                 ref={itemsGridRef}
                 items={formData.items_data}
+                initialItems={formData.items_data} // NUEVO: pasar items iniciales
                 onItemsChange={handleItemsChange}
                 readOnly={readOnly}
                 productos={productos}

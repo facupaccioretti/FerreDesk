@@ -143,7 +143,7 @@ export const useFormularioDraft = ({
       let combinado = combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
       if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
         try {
-          combinado = { ...combinado, items: normalizarItems(combinado.items) };
+          combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
         } catch (_) {}
       }
       if (!sonFormulariosIguales(formulario, combinado)) {
@@ -166,7 +166,7 @@ export const useFormularioDraft = ({
     let combinado = combinarConValoresPorDefecto(datosIniciales || {}, ...parametrosPorDefecto);
     if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
       try {
-        combinado = { ...combinado, items: normalizarItems(combinado.items) };
+        combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
       } catch (_) {}
     }
     if (!sonFormulariosIguales(formulario, combinado)) {

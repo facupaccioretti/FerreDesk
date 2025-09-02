@@ -12,12 +12,11 @@ const ALICUOTAS_POR_DEFECTO = {
  * Normaliza un array de ítems crudos según reglas de negocio.
  * @param {Array} itemsSeleccionados - Ítems provenientes de la vista o del estado.
  * @param {Object} opciones - Opciones de normalización.
- * @param {Array} opciones.productos - Catálogo de productos disponibles.
  * @param {string} opciones.modo - 'venta'|'presupuesto'|'nota_credito'.
  * @param {Object} opciones.alicuotasMap - Mapa de alícuotas IVA (id: porcentaje) de la API.
  * @returns {Array} Lista de ítems normalizados preparados para la grilla.
  */
-export function normalizarItems(itemsSeleccionados = [], { productos = [], modo = 'venta', alicuotasMap = {} } = {}) {
+export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicuotasMap = {} } = {}) {
   if (!Array.isArray(itemsSeleccionados)) return [];
 
   // Helper: devuelve el valor solo si no es string vacío ni null/undefined
@@ -32,56 +31,77 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     // Si el ítem ya tiene un ID (ej. viene de la BD), se mantiene.
     const itemId = item.id || Date.now() + Math.random();
 
-    // Reconstruir producto si es necesario (usar item.producto solo si es objeto)
-    const prod = (item.producto && typeof item.producto === 'object')
-      ? item.producto
-      : productos.find(p => String(p.id) === String(item.vdi_idsto || item.idSto || item.idsto || item.id));
+    // NUEVA LÓGICA: Determinar si es item de stock basándose en vdi_idsto, no en catálogo
+    const tieneIdStock = item.vdi_idsto || item.idSto || item.idsto;
+    const esGenerico = !tieneIdStock && !item.producto;
+
+    if (esGenerico) {
+      // Ítem genérico: no tiene ID de stock, se trata como producto libre
+      const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null;
+      const idaliiva = item.vdi_idaliiva ?? item.idaliiva ?? 3;
+      const aliPorc = alicuotasMap[idaliiva] ?? ALICUOTAS_POR_DEFECTO[idaliiva] ?? 0;
+
+      return {
+        id: itemId,
+        producto: null,
+        codigo: valorNoVacio(item.vdi_codigo) ?? valorNoVacio(item.codigo) ?? '',
+        denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? '',
+        unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? item.unidadmedida ?? '-',
+        cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
+        // Para genéricos, el precio y precioFinal son el mismo valor que se edita.
+        precio: Number(precioFinalBD || 0),
+        precioFinal: Number(precioFinalBD || 0),
+        // El costo de un genérico es su propio precio de venta sin IVA.
+        vdi_costo: (precioFinalBD && (1 + aliPorc / 100) > 0) ? precioFinalBD / (1 + aliPorc / 100) : 0,
+        margen: 0,
+        bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
+        proveedorId: null,
+        idaliiva,
+        // Preservar metadatos de conversión si existen
+        ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
+        ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
+        ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
+      };
+    }
+
+    // Ítem de stock: tiene vdi_idsto o producto, crear producto stub si no existe
+    let producto = item.producto;
+    if (!producto && tieneIdStock) {
+      // Crear producto stub con los datos disponibles del item
+      producto = {
+        id: tieneIdStock,
+        codvta: item.vdi_codigo ?? item.codigo ?? String(tieneIdStock),
+        codigo: item.vdi_codigo ?? item.codigo ?? String(tieneIdStock),
+        deno: item.denominacion ?? item.vdi_detalle1 ?? '',
+        nombre: item.denominacion ?? item.vdi_detalle1 ?? '',
+        unidad: item.unidad ?? item.vdi_detalle2 ?? '-',
+        unidadmedida: item.unidad ?? item.vdi_detalle2 ?? '-',
+        idaliiva: item.vdi_idaliiva ?? item.idaliiva ?? 3,
+        margen: item.vdi_margen ?? item.margen ?? 0,
+        costo: item.vdi_costo ?? item.costo ?? 0,
+        stock_proveedores: [],
+        proveedor_habitual: null,
+      };
+    }
 
     // Margen con precedencia: vdi_margen > margen > producto.margen
-    // Para ítems genéricos, el margen es siempre 0.
     let margen = 0;
-    if (prod) { // Si es un producto de stock (no genérico)
+    if (producto) {
       margen = item.vdi_margen && Number(item.vdi_margen) !== 0
         ? Number(item.vdi_margen)
         : item.margen && Number(item.margen) !== 0
           ? Number(item.margen)
-          : Number(prod?.margen || 0);
-    } // Si no es un producto de stock, margen ya es 0 por defecto.
+          : Number(producto?.margen || 0);
+    }
+
     // CORRECCIÓN: Priorizar IVA histórico del detalle de venta para mantener integridad fiscal
-    // Para ítems originales, usar el IVA que tenía al momento de la venta, no el actual del producto
-    const idaliivaRawTmp = item.vdi_idaliiva ?? item.idaliiva ?? prod?.idaliiva ?? null;
+    const idaliivaRawTmp = item.vdi_idaliiva ?? item.idaliiva ?? producto?.idaliiva ?? null;
     const idAliVal = (idaliivaRawTmp && typeof idaliivaRawTmp === 'object') ? idaliivaRawTmp.id : idaliivaRawTmp;
     const idaliiva = Number(idAliVal) || 0;
     const aliPorc = alicuotasMap[idaliiva] ?? ALICUOTAS_POR_DEFECTO[idaliiva] ?? 0;
 
     // Lógica robusta para determinar precioBase (sin IVA) y precioFinal (con IVA)
-    const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null; // Precio final si viene de la base de datos
-
-    // Para ítems genéricos, el precio de entrada es el final. No se calcula base.
-    const esGenerico = !prod;
-    if (esGenerico) {
-        return {
-            id: itemId,
-            producto: null,
-            codigo: valorNoVacio(item.vdi_detalle1) ? '-' : '',
-            denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? '',
-            unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? item.unidadmedida ?? '-',
-            cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
-            // Para genéricos, el precio y precioFinal son el mismo valor que se edita.
-            precio: Number(precioFinalBD || 0),
-            precioFinal: Number(precioFinalBD || 0),
-            // El costo de un genérico es su propio precio de venta sin IVA.
-            vdi_costo: (precioFinalBD && (1 + aliPorc / 100) > 0) ? precioFinalBD / (1 + aliPorc / 100) : 0,
-            margen: 0,
-            bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
-            proveedorId: null,
-            idaliiva,
-            // NUEVO: Preservar metadatos de conversión si existen
-            ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
-            ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
-            ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
-        };
-    }
+    const precioFinalBD = item.vdi_precio_unitario_final ?? item.precioFinal ?? null;
 
     let precioBase = (() => {
       // 1. Si el precio base ya viene explícitamente en el ítem (del formulario), usarlo.
@@ -99,7 +119,7 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
         return Number(precioDirecto);
       }
       // 4. Como último recurso, calcularlo desde el costo del producto + margen.
-      const costoDelProducto = item.vdi_costo ?? item.costo ?? Number(prod?.costo || 0);
+      const costoDelProducto = item.vdi_costo ?? item.costo ?? Number(producto?.costo || 0);
       return costoDelProducto * (1 + margen / 100);
     })();
 
@@ -107,34 +127,34 @@ export function normalizarItems(itemsSeleccionados = [], { productos = [], modo 
     precioBase = Number.isFinite(precioBase) ? precioBase : 0;
 
     // Precio final (con IVA) - Recalcular si no vino en BD o si el precio base cambió significativamente.
-    let precioFinal = Number(precioFinalBD || 0); // Asegurar que precioFinal es un número desde el inicio
+    let precioFinal = Number(precioFinalBD || 0);
     const precioFinalCalculado = precioBase * (1 + aliPorc / 100);
     // Revaluar si el precioFinal existente es consistente con el precioBase y alícuota actual.
     if (!precioFinal || Number(precioFinal) === 0 || Math.abs(precioFinal.toFixed(2) - precioFinalCalculado.toFixed(2)) > 0.001) {
-        precioFinal = precioFinalCalculado;
+      precioFinal = precioFinalCalculado;
     }
-    precioFinal = Number(precioFinal.toFixed(2)); // Asegurar 2 decimales para el precio final
+    precioFinal = Number(precioFinal.toFixed(2));
 
     return {
       id: itemId,
-      producto: prod,
+      producto: producto,
       // CORRECCIÓN: Mejorar mapeo de código para items originales
       // Priorizar variantes del código en el ítem (incluido vdi_codigo) y luego el del producto
-      codigo: valorNoVacio(item.vdi_codigo) ?? valorNoVacio(item.codigo) ?? valorNoVacio(item.codvta) ?? prod?.codvta ?? prod?.codigo ?? '',
-      denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? prod?.deno ?? prod?.nombre ?? '',
-      unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? prod?.unidad ?? prod?.unidadmedida ?? '-',
+      codigo: valorNoVacio(item.vdi_codigo) ?? valorNoVacio(item.codigo) ?? valorNoVacio(item.codvta) ?? producto?.codvta ?? producto?.codigo ?? '',
+      denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? producto?.deno ?? producto?.nombre ?? '',
+      unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? producto?.unidad ?? producto?.unidadmedida ?? '-',
       cantidad: item.cantidad ?? item.vdi_cantidad ?? 1,
-      precio: Number(precioBase.toFixed(4)), // Redondeo a 4 decimales para precio sin IVA (interno)
-      precioFinal: precioFinal, // Ya está redondeado a 2 decimales para el precio con IVA (mostrar)
+      precio: Number(precioBase.toFixed(4)),
+      precioFinal: precioFinal,
       // El vdi_costo para ítems genéricos es el precioBase (precio de venta sin IVA).
-      vdi_costo: prod
-        ? Number(item.costo ?? item.vdi_costo ?? prod?.costo ?? 0) // Si es producto de stock, toma costo de item o producto
-        : Number(item.costo ?? item.vdi_costo ?? precioBase ?? 0), // Si es genérico, toma precioBase como costo
+      vdi_costo: producto
+        ? Number(item.costo ?? item.vdi_costo ?? producto?.costo ?? 0)
+        : Number(item.costo ?? item.vdi_costo ?? precioBase ?? 0),
       margen: Number(margen),
       bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
       proveedorId: item.vdi_idpro ?? item.proveedorId ?? null,
       idaliiva,
-      // NUEVO: Preservar metadatos de conversión si existen
+      // Preservar metadatos de conversión si existen
       ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
       ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
       ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),

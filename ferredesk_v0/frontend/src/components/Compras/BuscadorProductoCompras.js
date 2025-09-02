@@ -7,54 +7,113 @@ function BuscadorProductoCompras({
   onSelect, 
   disabled = false, 
   readOnly = false, 
-  className = "" 
+  className = "",
+  modoOrdenCompra = false // Nuevo prop para modo orden de compra
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [sugerencias, setSugerencias] = useState([])
+  const [productosProveedor, setProductosProveedor] = useState([]) // Productos cargados del proveedor
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  // Cargar productos del proveedor automáticamente en modo orden de compra
+  useEffect(() => {
+    if (modoOrdenCompra && selectedProveedor?.id) {
+      setLoading(true)
+      fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
+        credentials: "include"
+      })
+      .then(response => {
+        if (response.ok) {
+          return response.json()
+        } else {
+          throw new Error('Error al cargar productos')
+        }
+      })
+      .then(productos => {
+        setProductosProveedor(productos)
+        // NO mostrar productos inicialmente - solo cargar en memoria
+        setSugerencias([])
+        setShowDropdown(false)
+      })
+      .catch(error => {
+        console.error('Error al cargar productos del proveedor:', error)
+        setProductosProveedor([])
+        setSugerencias([])
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+    } else {
+      setProductosProveedor([])
+      setSugerencias([])
+      setShowDropdown(false)
+    }
+  }, [selectedProveedor?.id, modoOrdenCompra])
 
   const handleChange = async (e) => {
     const value = e.target.value
     setBusqueda(value)
     
-    if (value.length >= 2 && selectedProveedor?.id) {
-      setLoading(true)
-      try {
-        const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
-          credentials: "include"
-        })
-        
-        if (response.ok) {
-          const productos = await response.json()
-          const lower = value.toLowerCase()
-          
-          const sugs = productos.filter(
-            p =>
-              (p.codvta || '').toLowerCase().includes(lower) ||
-              (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
-              (p.codigo_proveedor || '').toLowerCase().includes(lower)
-          )
-          
-          setSugerencias(sugs)
-          setShowDropdown(true)
-          setHighlighted(0)
-        } else {
-          setSugerencias([])
-          setShowDropdown(false)
-        }
-      } catch (error) {
-        console.error('Error al buscar productos:', error)
+    if (modoOrdenCompra) {
+      // En modo orden de compra, filtrar localmente los productos ya cargados
+      if (value.length >= 2) {
+        const lower = value.toLowerCase()
+        const sugs = productosProveedor.filter(
+          p =>
+            (p.codvta || '').toLowerCase().includes(lower) ||
+            (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
+            (p.codigo_proveedor || '').toLowerCase().includes(lower)
+        )
+        setSugerencias(sugs)
+        setShowDropdown(true)
+        setHighlighted(0)
+      } else {
+        // Si no hay suficientes caracteres, no mostrar nada
         setSugerencias([])
         setShowDropdown(false)
-      } finally {
-        setLoading(false)
+        setHighlighted(0)
       }
     } else {
-      setSugerencias([])
-      setShowDropdown(false)
-      setHighlighted(0)
+      // Modo normal: búsqueda por API
+      if (value.length >= 2 && selectedProveedor?.id) {
+        setLoading(true)
+        try {
+          const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
+            credentials: "include"
+          })
+          
+          if (response.ok) {
+            const productos = await response.json()
+            const lower = value.toLowerCase()
+            
+            const sugs = productos.filter(
+              p =>
+                (p.codvta || '').toLowerCase().includes(lower) ||
+                (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
+                (p.codigo_proveedor || '').toLowerCase().includes(lower)
+            )
+            
+            setSugerencias(sugs)
+            setShowDropdown(true)
+            setHighlighted(0)
+          } else {
+            setSugerencias([])
+            setShowDropdown(false)
+          }
+        } catch (error) {
+          console.error('Error al buscar productos:', error)
+          setSugerencias([])
+          setShowDropdown(false)
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        setSugerencias([])
+        setShowDropdown(false)
+        setHighlighted(0)
+      }
     }
   }
 
@@ -71,7 +130,11 @@ function BuscadorProductoCompras({
     setSugerencias([])
     setShowDropdown(false)
     setHighlighted(0)
-  }, [selectedProveedor?.id])
+    // En modo orden de compra, no limpiar productosProveedor aquí porque se maneja en el otro useEffect
+    if (!modoOrdenCompra) {
+      setProductosProveedor([])
+    }
+  }, [selectedProveedor?.id, modoOrdenCompra])
 
   const isDisabled = disabled || readOnly || !selectedProveedor?.id
 
@@ -91,7 +154,9 @@ function BuscadorProductoCompras({
               ? selectedProveedor?.id 
                 ? "Seleccione un proveedor primero" 
                 : "Buscar productos..." 
-              : "Buscar productos del proveedor..."
+              : modoOrdenCompra
+                ? "Escriba al menos 2 caracteres para buscar productos..."
+                : "Buscar productos del proveedor..."
           }
           className={`w-full px-2 py-1 border border-slate-300 rounded-sm bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 text-xs h-8 ${
             isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""

@@ -5,7 +5,7 @@ import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
@@ -153,6 +153,54 @@ const EditarPresupuestoForm = ({
     }));
   };
 
+  // Sincronizar documentoInfo cuando cambie formulario.cuit
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: '',
+        esValido: false
+      })
+    }
+  }, [formulario.cuit])
+
+  // Inicializar documentoInfo cuando se cargue el formulario
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    }
+  }, [formulario.cuit]) // Agregar formulario.cuit como dependencia
+
   // Handler para cambios en la grilla memorizado para evitar renders infinitos
   const handleRowsChange = useCallback((rowsActualizados) => {
     actualizarItems(rowsActualizados)
@@ -221,7 +269,15 @@ const EditarPresupuestoForm = ({
   const cerrarSelector = () => setSelectorAbierto(false);
 
   // Callback para aplicar cliente al formulario
-  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+  const handleClienteSelect = (clienteSeleccionado) => {
+    // Usar la función estándar para autocompletar todos los campos del cliente
+    manejarSeleccionClienteObjeto(setFormulario)(clienteSeleccionado)
+    
+    // Usar la función centralizada para validar y actualizar el documento
+    const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
+    console.log('[handleClienteSelect] Documento validado:', documentoValidado)
+    setDocumentoInfo(documentoValidado)
+  };
 
   // Previene envíos involuntarios con Enter
   const bloquearEnterSubmit = (e) => {

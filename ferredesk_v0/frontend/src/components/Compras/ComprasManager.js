@@ -5,13 +5,19 @@ import Navbar from "../Navbar"
 import ComprasList from "./ComprasList"
 import CompraForm from "./CompraForm"
 import DetalleCompra from "./DetalleCompra"
+import OrdenCompraList from "./OrdenCompraList"
+import OrdenCompraForm from "./OrdenCompraForm"
+import ConversionCompraModal from "./ConversionCompraModal"
+import ProveedorSelectorModal from "./ProveedorSelectorModal"
 import { useComprasAPI } from "../../utils/useComprasAPI"
+import useOrdenCompraAPI from "../../utils/useOrdenCompraAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const MAIN_TAB_KEY = "compras"
+const ORDENES_TAB_KEY = "ordenes-compra"
 
 const ComprasManager = () => {
   const theme = useFerreDeskTheme()
@@ -19,21 +25,43 @@ const ComprasManager = () => {
   const [user, setUser] = useState(null)
   const [search, setSearch] = useState("")
   
-  // Estado para controlar el modal de detalle
-  const [detalleModal, setDetalleModal] = useState({ abierto: false, compra: null })
+  // Estado para controlar el modal de detalle (compra u orden)
+  const [detalleModal, setDetalleModal] = useState({ abierto: false, modo: "compra", compra: null, orden: null })
+  
+  // Estado para controlar el modal de conversión de órdenes
+  const [conversionModal, setConversionModal] = useState({ 
+    abierto: false, 
+    ordenCompra: null,
+    loading: false 
+  })
+
+  // Estado para controlar el modal de selección de proveedor
+  const [proveedorSelectorModal, setProveedorSelectorModal] = useState({ 
+    abierto: false 
+  })
 
   // Tabs estado (persistencia simple en localStorage)
   const [tabs, setTabs] = useState(() => {
     try {
       const saved = localStorage.getItem("comprasTabs")
       const parsed = saved ? JSON.parse(saved) : null
-      const base = [{ key: MAIN_TAB_KEY, label: "Compras", closable: false }]
+      const base = [
+        { key: MAIN_TAB_KEY, label: "Compras", closable: false },
+        { key: ORDENES_TAB_KEY, label: "Órdenes de Compra", closable: false }
+      ]
       if (!parsed || !Array.isArray(parsed) || parsed.length === 0) return base
-      // Asegurar que la pestaña principal exista
+      // Asegurar que las pestañas principales existan
       const hasMain = parsed.some((t) => t.key === MAIN_TAB_KEY)
-      return hasMain ? parsed : [base[0], ...parsed]
+      const hasOrdenes = parsed.some((t) => t.key === ORDENES_TAB_KEY)
+      let result = parsed
+      if (!hasMain) result = [base[0], ...result]
+      if (!hasOrdenes) result = [...result, base[1]]
+      return result
     } catch {
-      return [{ key: MAIN_TAB_KEY, label: "Compras", closable: false }]
+      return [
+        { key: MAIN_TAB_KEY, label: "Compras", closable: false },
+        { key: ORDENES_TAB_KEY, label: "Órdenes de Compra", closable: false }
+      ]
     }
   })
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem("comprasActiveTab") || MAIN_TAB_KEY)
@@ -57,7 +85,14 @@ const ComprasManager = () => {
 
   const closeTab = useCallback((key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
-    if (activeTab === key) setActiveTab(MAIN_TAB_KEY)
+    if (activeTab === key) {
+      // Si es una pestaña de órdenes, volver a órdenes, sino a compras
+      if (key.includes('orden')) {
+        setActiveTab(ORDENES_TAB_KEY)
+      } else {
+        setActiveTab(MAIN_TAB_KEY)
+      }
+    }
   }, [activeTab]) // Depende del valor de activeTab
 
   // APIs
@@ -72,6 +107,18 @@ const ComprasManager = () => {
     cerrarCompra,
     anularCompra,
   } = useComprasAPI()
+
+  const {
+    ordenesCompra,
+    loading: loadingOrdenesCompra,
+    error: errorOrdenesCompra,
+    getOrdenesCompra,
+    createOrdenCompra,
+    updateOrdenCompra,
+    deleteOrdenCompra,
+    getOrdenCompraItems,
+    convertirOrdenCompraACompra,
+  } = useOrdenCompraAPI()
 
   const { proveedores, loading: loadingProveedores, error: errorProveedores } = useProveedoresAPI()
   const { productos, loading: loadingProductos, error: errorProductos } = useProductosAPI()
@@ -106,11 +153,35 @@ const ComprasManager = () => {
     fetchCompras(filters)
   }, [search, fetchCompras])
 
+  // Efecto para cargar órdenes de compra
+  useEffect(() => {
+    getOrdenesCompra()
+  }, [getOrdenesCompra])
+
   // Acciones tabs
   const handleNuevaCompra = useCallback(() => {
-    const key = `nueva-compra-${Date.now()}`
-    openTab(key, "Nueva Compra", null, "form")
-  }, [openTab])
+    // Abrir modal de selección de proveedor primero
+    setProveedorSelectorModal({ abierto: true, tipo: "compra" })
+  }, [])
+
+  const handleNuevaOrdenCompra = useCallback(() => {
+    // Abrir modal de selección de proveedor primero
+    setProveedorSelectorModal({ abierto: true, tipo: "orden" })
+  }, [])
+
+  const handleProveedorSeleccionado = useCallback((proveedor) => {
+    // Cerrar modal y abrir formulario con el proveedor seleccionado
+    const tipo = proveedorSelectorModal.tipo
+    setProveedorSelectorModal({ abierto: false })
+    
+    if (tipo === "compra") {
+      const key = `nueva-compra-${Date.now()}`
+      openTab(key, "Nueva Compra", { proveedorSeleccionado: proveedor }, "form")
+    } else if (tipo === "orden") {
+      const key = `nueva-orden-compra-${Date.now()}`
+      openTab(key, "Nueva Orden de Compra", { proveedorSeleccionado: proveedor }, "orden-form")
+    }
+  }, [openTab, proveedorSelectorModal.tipo])
 
   const handleEditarCompra = useCallback((compra) => {
     const key = `editar-${compra.comp_id}`
@@ -118,38 +189,42 @@ const ComprasManager = () => {
   }, [openTab])
 
   const handleVerCompra = useCallback((compra) => {
-    setDetalleModal({ abierto: true, compra })
+    setDetalleModal({ abierto: true, modo: "compra", compra, orden: null })
   }, [])
 
   const handleGuardarCompra = useCallback(async (tabKey, compraData, existing = null) => {
     try {
       if (existing && existing.comp_id) {
         await updateCompra(existing.comp_id, compraData)
+        alert("Compra actualizada correctamente")
       } else {
         await addCompra(compraData)
+        alert("Compra creada correctamente")
       }
       await fetchCompras()
       closeTab(tabKey)
     } catch (error) {
-      console.error("Error al guardar compra:", error)
+      alert(`Error al guardar compra: ${error.message || error}`)
     }
   }, [updateCompra, addCompra, fetchCompras, closeTab])
 
   const handleCerrarCompra = useCallback(async (compraId) => {
     try {
       await cerrarCompra(compraId)
+      alert("Compra cerrada correctamente")
       fetchCompras()
     } catch (error) {
-      console.error("Error al cerrar compra:", error)
+      alert(`Error al cerrar compra: ${error.message || error}`)
     }
   }, [cerrarCompra, fetchCompras])
 
   const handleAnularCompra = useCallback(async (compraId) => {
     try {
       await anularCompra(compraId)
+      alert("Compra anulada correctamente")
       fetchCompras()
     } catch (error) {
-      console.error("Error al anular compra:", error)
+      alert(`Error al anular compra: ${error.message || error}`)
     }
   }, [anularCompra, fetchCompras])
 
@@ -157,14 +232,108 @@ const ComprasManager = () => {
     if (window.confirm("¿Está seguro de que desea eliminar esta compra?")) {
       try {
         await deleteCompra(compraId)
+        alert("Compra eliminada correctamente")
         fetchCompras()
       } catch (error) {
-        console.error("Error al eliminar compra:", error)
+        alert(`Error al eliminar compra: ${error.message || error}`)
       }
     }
   }, [deleteCompra, fetchCompras])
 
+  // Acciones para órdenes de compra
+
+  const handleEditarOrdenCompra = useCallback(async (ordenCompra) => {
+    try {
+      // Cargar items de la orden antes de abrir el formulario
+      const items = await getOrdenCompraItems(ordenCompra.ord_id)
+      const ordenCompleta = { ...ordenCompra, items }
+      const key = `editar-orden-${ordenCompra.ord_id}`
+      openTab(key, `Editar ${ordenCompra.ord_numero || ordenCompra.ord_id}`, ordenCompleta, "orden-form")
+    } catch (error) {
+      alert(`Error al cargar items de la orden: ${error.message || error}`)
+    }
+  }, [openTab, getOrdenCompraItems])
+
+  const handleVerOrdenCompra = useCallback((ordenCompra) => {
+    // Abrir modal reutilizando DetalleCompra en modo "orden"
+    setDetalleModal({ abierto: true, modo: "orden", compra: null, orden: ordenCompra })
+  }, [])
+
+  const handleConvertirOrdenCompra = useCallback(async (ordenCompra) => {
+    try {
+      // Cargar items de la orden
+      const items = await getOrdenCompraItems(ordenCompra.ord_id)
+      const ordenCompleta = { ...ordenCompra, items }
+      setConversionModal({ 
+        abierto: true, 
+        ordenCompra: ordenCompleta,
+        loading: false 
+      })
+    } catch (error) {
+      alert(`Error al cargar items de la orden: ${error.message || error}`)
+    }
+  }, [getOrdenCompraItems])
+
+  const handleGuardarOrdenCompra = useCallback(async (tabKey, ordenData, existing = null) => {
+    try {
+      if (existing && existing.ord_id) {
+        await updateOrdenCompra(existing.ord_id, ordenData)
+        alert("Orden de compra actualizada correctamente")
+      } else {
+        await createOrdenCompra(ordenData)
+        alert("Orden de compra creada correctamente")
+      }
+      await getOrdenesCompra()
+      closeTab(tabKey)
+    } catch (error) {
+      alert(`Error al guardar orden de compra: ${error.message || error}`)
+    }
+  }, [updateOrdenCompra, createOrdenCompra, getOrdenesCompra, closeTab])
+
+  const handleEliminarOrdenCompra = useCallback(async (ordenId) => {
+    if (window.confirm("¿Está seguro de que desea eliminar esta orden de compra?")) {
+      try {
+        await deleteOrdenCompra(ordenId)
+        alert("Orden de compra eliminada correctamente")
+        getOrdenesCompra()
+      } catch (error) {
+        alert(`Error al eliminar orden de compra: ${error.message || error}`)
+      }
+    }
+  }, [deleteOrdenCompra, getOrdenesCompra])
+
+  const handleConvertirOrdenACompra = useCallback(async (data) => {
+    // En lugar de procesar directamente, abrir nueva pestaña
+    const key = `conversion-orden-${data.orden_origen}-${Date.now()}`
+    openTab(key, `Convertir Orden a Compra`, {
+      ordenOrigen: conversionModal.ordenCompra,
+      itemsSeleccionados: conversionModal.ordenCompra.items.filter(item => 
+        data.items_seleccionados.includes(item.id)
+      ),
+      itemsSeleccionadosIds: data.items_seleccionados
+    }, "conversion-compra")
+    
+    // Cerrar modal
+    setConversionModal({ abierto: false, ordenCompra: null, loading: false })
+  }, [openTab, conversionModal.ordenCompra])
+
+  // NUEVO: Handler para guardar la conversión
+  const handleConCompraFormSave = useCallback(async (payload, tabKey) => {
+    try {
+      await convertirOrdenCompraACompra(payload)
+      alert("Orden convertida a compra correctamente")
+      await getOrdenesCompra() // Recargar órdenes
+      await fetchCompras() // Recargar compras
+      closeTab(tabKey)
+      // Redirigir a la pestaña de compras para ver la nueva compra
+      setActiveTab(MAIN_TAB_KEY)
+    } catch (error) {
+      alert(`Error al convertir orden a compra: ${error.message || error}`)
+    }
+  }, [convertirOrdenCompraACompra, getOrdenesCompra, fetchCompras, closeTab])
+
   const activeTabData = useMemo(() => tabs.find((t) => t.key === activeTab)?.data || null, [tabs, activeTab])
+  const activeTabInfo = useMemo(() => tabs.find((t) => t.key === activeTab) || null, [tabs, activeTab])
 
   return (
     <div className={theme.fondo}>
@@ -237,6 +406,83 @@ const ComprasManager = () => {
                     // Paginación controlada pendiente de backend
                   />
                 </>
+              ) : activeTab === ORDENES_TAB_KEY ? (
+                <>
+                  {/* Botón Nueva Orden de Compra arriba de la tabla */}
+                  <div className="mb-4 flex justify-start">
+                    <button
+                      onClick={handleNuevaOrdenCompra}
+                      className={theme.botonPrimario}
+                    >
+                      <span className="text-lg">+</span> Nueva Orden de Compra
+                    </button>
+                  </div>
+                  
+                  <OrdenCompraList
+                    ordenesCompra={ordenesCompra}
+                    loading={loadingOrdenesCompra}
+                    error={errorOrdenesCompra}
+                    onEditarOrdenCompra={handleEditarOrdenCompra}
+                    onVerOrdenCompra={handleVerOrdenCompra}
+                    onConvertirOrdenCompra={handleConvertirOrdenCompra}
+                    onEliminarOrdenCompra={handleEliminarOrdenCompra}
+                  />
+                </>
+              ) : activeTabInfo?.tipo === "orden-form" ? (
+                <OrdenCompraForm
+                  key={activeTab}
+                  onSave={(data) => handleGuardarOrdenCompra(activeTab, data, activeTabData)}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={activeTabData}
+                  readOnly={activeTab.startsWith('ver-')}
+                  proveedores={proveedores}
+                  productos={productos}
+                  sucursales={sucursales}
+                  loadingProveedores={loadingProveedores}
+                  loadingProductos={loadingProductos}
+                  errorProveedores={errorProveedores}
+                  errorProductos={errorProductos}
+                />
+              ) : activeTabInfo?.tipo === "form" ? (
+                <CompraForm
+                  key={activeTab}
+                  onSave={(data) => handleGuardarCompra(activeTab, data, activeTabData)}
+                  onCancel={() => closeTab(activeTab)}
+                  initialData={activeTabData}
+                  readOnly={false}
+                  proveedores={proveedores}
+                  productos={productos}
+                  alicuotas={alicuotas}
+                  sucursales={sucursales}
+                  loadingProveedores={loadingProveedores}
+                  loadingProductos={loadingProductos}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProveedores={errorProveedores}
+                  errorProductos={errorProductos}
+                  errorAlicuotas={errorAlicuotas}
+                />
+              ) : activeTabInfo?.tipo === "conversion-compra" ? (
+                <CompraForm
+                  key={activeTab}
+                  onSave={(data) => handleConCompraFormSave(data, activeTab)}
+                  onCancel={() => closeTab(activeTab)}
+                  // Props de conversión
+                  ordenOrigen={activeTabData?.ordenOrigen}
+                  itemsSeleccionados={activeTabData?.itemsSeleccionados}
+                  itemsSeleccionadosIds={activeTabData?.itemsSeleccionadosIds}
+                  modoConversion={true}
+                  // Props normales
+                  proveedores={proveedores}
+                  productos={productos}
+                  alicuotas={alicuotas}
+                  sucursales={sucursales}
+                  loadingProveedores={loadingProveedores}
+                  loadingProductos={loadingProductos}
+                  loadingAlicuotas={loadingAlicuotas}
+                  errorProveedores={errorProveedores}
+                  errorProductos={errorProductos}
+                  errorAlicuotas={errorAlicuotas}
+                />
               ) : (
                 <CompraForm
                   key={activeTab}
@@ -261,13 +507,35 @@ const ComprasManager = () => {
         </div>
       </div>
       
-      {/* Modal de detalle de compra */}
+      {/* Modal de detalle de compra / orden (reutilizado) */}
       {detalleModal.abierto && (
         <DetalleCompra
+          modo={detalleModal.modo}
           compra={detalleModal.compra}
-          onClose={() => setDetalleModal({ abierto: false, compra: null })}
+          orden={detalleModal.orden}
+          onClose={() => setDetalleModal({ abierto: false, modo: "compra", compra: null, orden: null })}
         />
       )}
+
+      {/* Modal de conversión de orden a compra */}
+      {conversionModal.abierto && (
+        <ConversionCompraModal
+          isOpen={conversionModal.abierto}
+          onClose={() => setConversionModal({ abierto: false, ordenCompra: null, loading: false })}
+          ordenCompra={conversionModal.ordenCompra}
+          onConvertir={handleConvertirOrdenACompra}
+          loading={conversionModal.loading}
+        />
+      )}
+
+      {/* Modal de selección de proveedor */}
+      <ProveedorSelectorModal
+        abierto={proveedorSelectorModal.abierto}
+        onCerrar={() => setProveedorSelectorModal({ abierto: false })}
+        onSeleccionar={handleProveedorSeleccionado}
+        cargando={loadingProveedores}
+        error={errorProveedores}
+      />
     </div>
   )
 }

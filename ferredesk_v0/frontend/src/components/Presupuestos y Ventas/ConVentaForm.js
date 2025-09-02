@@ -197,7 +197,7 @@ const ConVentaForm = ({
 
       // Normalizar items de stock para asegurar estructura consistente
       // NUEVO: Usar normalizarItems en lugar de normalizarItemsStock para preservar flags de conversión
-      let itemsNormalizados = normalizarItems(itemsBase, { productos, alicuotasMap });
+      let itemsNormalizados = normalizarItems(itemsBase, { alicuotasMap });
 
       // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
       if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {
@@ -234,7 +234,7 @@ const ConVentaForm = ({
         __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
     },
-    parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
+    parametrosPorDefecto: [alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
     validarBorrador: (saved) => {
       const origenTipoActual = esConversionFacturaI ? 'factura_interna' : 'presupuesto';
       const origenIdActual = esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null);
@@ -323,7 +323,7 @@ const ConVentaForm = ({
     // ItemsGrid se encarga de la normalización - no hacer nada aquí
     // const faltanProductos = formulario.items.some(it => !it.producto);
     // if (faltanProductos) {
-    //   const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
+    //   const itemsNormalizados = normalizarItems(formulario.items, { alicuotasMap, modo: 'venta' });
     //   actualizarItems(itemsNormalizados);
     //   setGridKey(Date.now());
     // }
