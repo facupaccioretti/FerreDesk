@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
@@ -84,6 +85,7 @@ const PresupuestoForm = ({
   setAutoSumarDuplicados,
   tabKey = `presupuesto-${Date.now()}` // Valor por defecto en caso de que no se pase
 }) => {
+  const theme = useFerreDeskTheme()
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
 
@@ -423,7 +425,7 @@ const PresupuestoForm = ({
   return (
     <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnter}>
       {/* Gradiente decorativo superior */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
       <div className="px-8 pt-4 pb-6">
         <h3 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-md">
@@ -640,18 +642,18 @@ const PresupuestoForm = ({
           initialItems={formulario.items}
         />
       </div>
-      <div className="mt-8 flex justify-end space-x-3">
+      <div className="mt-8 flex justify-end space-x-4">
         <button
           type="button"
           onClick={handleCancel}
-          className="px-4 py-2 bg-white text-black border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+          className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
         >
           {isReadOnly ? "Cerrar" : "Cancelar"}
         </button>
         {!isReadOnly && (
           <button
             type="submit"
-            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+            className={`px-6 py-3 rounded-xl transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${theme.botonPrimario}`}
           >
             {initialData ? "Guardar Cambios" : "Crear Presupuesto"}
           </button>
