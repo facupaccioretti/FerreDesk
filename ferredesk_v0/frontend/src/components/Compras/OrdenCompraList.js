@@ -4,7 +4,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useCallback } from "react"
 import Tabla from "../Tabla"
-import { BotonEliminar, BotonVerDetalle, BotonEditar, BotonConvertir } from "../Botones"
+import { BotonEliminar, BotonVerDetalle, BotonEditar, BotonConvertir, BotonGenerarPDF } from "../Botones"
 
 const OrdenCompraList = ({
   ordenesCompra,
@@ -14,6 +14,18 @@ const OrdenCompraList = ({
   onVerOrdenCompra,
   onConvertirOrdenCompra,
   onEliminarOrdenCompra,
+  onGenerarPDF,
+  // Props de paginación
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto,
+  // Props de ordenamiento
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
+  cargando = false,
 }) => {
 
   const formatDate = (dateString) => {
@@ -47,23 +59,15 @@ const OrdenCompraList = ({
         <div className="flex justify-end gap-1">
           <BotonVerDetalle onClick={() => onVerOrdenCompra(orden)} title="Ver detalle" />
           <BotonEditar onClick={() => onEditarOrdenCompra(orden)} title="Editar" />
+          <BotonGenerarPDF onClick={() => onGenerarPDF(orden)} title="Generar PDF" />
           <BotonConvertir onClick={() => onConvertirOrdenCompra(orden)} title="Convertir a Compra" />
           <BotonEliminar onClick={() => onEliminarOrdenCompra(orden.ord_id)} title="Eliminar" />
         </div>
       </td>
     </tr>
-  ), [onVerOrdenCompra, onEditarOrdenCompra, onConvertirOrdenCompra, onEliminarOrdenCompra])
+  ), [onVerOrdenCompra, onEditarOrdenCompra, onConvertirOrdenCompra, onEliminarOrdenCompra, onGenerarPDF])
 
   // Los errores se manejan con alertas del navegador, no se muestran en la UI
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="text-center text-gray-500">
-          <p>No se pudieron cargar las órdenes de compra</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-4">
@@ -71,9 +75,20 @@ const OrdenCompraList = ({
       <Tabla
         columnas={columnas}
         datos={ordenesCompra}
+        mostrarOrdenamiento={true}
         renderFila={renderFila}
-        loading={loading}
-        mensajeVacio="No hay órdenes de compra"
+        cargando={cargando}
+        // Paginación controlada
+        paginacionControlada={paginacionControlada}
+        paginaActual={paginaActual}
+        onPageChange={onPageChange}
+        itemsPerPage={itemsPerPage}
+        onItemsPerPageChange={onItemsPerPageChange}
+        totalRemoto={totalRemoto}
+        busquedaRemota={true}
+        // Ordenamiento
+        onOrdenamientoChange={onOrdenamientoChange}
+        ordenamientoControlado={ordenamientoControlado}
       />
     </div>
   )

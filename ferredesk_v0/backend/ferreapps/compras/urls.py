@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import orden_compra_export_views
 
 # Configurar el router para las vistas
 router = DefaultRouter()
@@ -22,4 +23,7 @@ urlpatterns = [
     
     # Endpoint de conversión de orden de compra a compra
     path('convertir-orden-compra/', views.convertir_orden_compra_a_compra, name='convertir_orden_compra_a_compra'),
+    
+    # Endpoint de exportación PDF de órdenes de compra
+    path('ordenes-compra/<int:orden_id>/export/pdf/', orden_compra_export_views.exportar_orden_compra_pdf_endpoint, name='exportar_orden_compra_pdf'),
 ]

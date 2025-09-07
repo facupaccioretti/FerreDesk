@@ -85,6 +85,30 @@ class CompraViewSet(viewsets.ModelViewSet):
         ).values('codigo_producto_proveedor')[:1]
         # Esta anotación no se adjunta directamente a related objects con prefetch; se sugiere resolver en serializer si se requiere estrictamente.
         # Mantenemos prefetch y dejamos que el serializer lea con un acceso directo si ya viene precargado.
+        
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+
+        if orden == 'id':
+            if direccion == 'asc':
+                qs = qs.order_by('comp_id')
+            else:
+                qs = qs.order_by('-comp_id')
+        elif orden == 'fecha':
+            if direccion == 'asc':
+                qs = qs.order_by('comp_fecha')
+            else:
+                qs = qs.order_by('-comp_fecha')
+        elif orden == 'numero_factura':
+            if direccion == 'asc':
+                qs = qs.order_by('comp_numero_factura')
+            else:
+                qs = qs.order_by('-comp_numero_factura')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            qs = qs.order_by('-comp_id')
+        
         return qs
     
     def get_serializer_class(self):
@@ -463,7 +487,32 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Optimizar consultas con select_related y prefetch_related"""
-        return OrdenCompra.objects.select_related('ord_idpro').prefetch_related('items', 'items__odi_idsto', 'items__odi_idpro')
+        qs = OrdenCompra.objects.select_related('ord_idpro').prefetch_related('items', 'items__odi_idsto', 'items__odi_idpro')
+        
+        # Ordenamiento
+        orden = self.request.query_params.get('orden', 'id')
+        direccion = self.request.query_params.get('direccion', 'desc')
+
+        if orden == 'id':
+            if direccion == 'asc':
+                qs = qs.order_by('ord_id')
+            else:
+                qs = qs.order_by('-ord_id')
+        elif orden == 'fecha':
+            if direccion == 'asc':
+                qs = qs.order_by('ord_fecha')
+            else:
+                qs = qs.order_by('-ord_fecha')
+        elif orden == 'numero':
+            if direccion == 'asc':
+                qs = qs.order_by('ord_numero')
+            else:
+                qs = qs.order_by('-ord_numero')
+        else:
+            # Ordenamiento por defecto: más recientes primero
+            qs = qs.order_by('-ord_id')
+        
+        return qs
     
     def get_serializer_class(self):
         """Usar serializers específicos según la acción"""
@@ -585,11 +634,13 @@ def convertir_orden_compra_a_compra(request):
             data = request.data
             orden_id = data.get('orden_origen')
             items_seleccionados = data.get('items_seleccionados', [])
+            items_nuevos = data.get('items_nuevos', [])
             compra_data = data.copy()
             compra_data.pop('orden_origen', None)
             compra_data.pop('items_seleccionados', None)
+            compra_data.pop('items_nuevos', None)
 
-            if not orden_id or not items_seleccionados:
+            if not orden_id or (not items_seleccionados and not items_nuevos):
                 raise Exception('Faltan datos de orden o ítems seleccionados.')
 
             # Obtener la orden con bloqueo
@@ -599,51 +650,135 @@ def convertir_orden_compra_a_compra(request):
             items_orden = list(orden.items.all())
             ids_items_orden = [str(item.id) for item in items_orden]
             
-            # Validar que los ítems seleccionados pertenecen a la orden
-            if not all(str(i) in ids_items_orden for i in items_seleccionados):
-                raise Exception('Algunos ítems seleccionados no pertenecen a la orden.')
-
             # Preparar datos de la compra
             compra_data['comp_estado'] = 'BORRADOR'  # Estado inicial de compra
             compra_data['comp_tipo'] = 'COMPRA'  # Tipo Compra
 
             # Copiar datos del proveedor de la orden a la compra
             if orden.ord_idpro:
-                compra_data['comp_idpro'] = orden.ord_idpro
+                compra_data['comp_idpro'] = orden.ord_idpro.id  # Pasar solo el ID, no el objeto
                 compra_data['comp_cuit'] = orden.ord_cuit or orden.ord_idpro.cuit
                 compra_data['comp_razon_social'] = orden.ord_razon_social or orden.ord_idpro.razon
                 compra_data['comp_domicilio'] = orden.ord_domicilio or orden.ord_idpro.domicilio
 
+            # Procesar items_seleccionados (items originales de la orden)
+            items_seleccionados_ids = []
+            cantidades_recibidas = {}
+            items_data = []
+            
+            for item_seleccionado in items_seleccionados:
+                # Determinar ID y cantidad según el formato
+                if isinstance(item_seleccionado, dict):
+                    # Formato nuevo: {id, cantidad_recibida}
+                    item_id = int(item_seleccionado['id'])
+                    cantidad_recibida = Decimal(str(item_seleccionado['cantidad_recibida']))  # Convertir a Decimal
+                else:
+                    # Formato viejo: solo ID, usar cantidad de la orden
+                    item_id = int(item_seleccionado)
+                    cantidad_recibida = None  # Se usará la cantidad de la orden
+                
+                items_seleccionados_ids.append(item_id)
+                if cantidad_recibida is not None:
+                    cantidades_recibidas[item_id] = cantidad_recibida
+                
+                # Buscar el item en la orden
+                item_orden = next((item for item in items_orden if item.id == item_id), None)
+                if item_orden:
+                    # Usar cantidad recibida si está disponible, sino usar cantidad de la orden
+                    if cantidad_recibida is not None:
+                        cantidad_final = cantidad_recibida  # Ya es Decimal
+                    else:
+                        cantidad_final = Decimal(str(item_orden.odi_cantidad))  # Convertir a Decimal
+                    
+                    # Preparar item para la compra
+                    item_data = {
+                        'cdi_orden': len(items_data) + 1,
+                        'cdi_idsto': item_orden.odi_idsto.id if item_orden.odi_idsto else None,
+                        'cdi_idpro': item_orden.odi_idpro.id,
+                        'cdi_cantidad': cantidad_final,
+                        'cdi_detalle1': item_orden.odi_detalle1,
+                        'cdi_detalle2': item_orden.odi_detalle2,
+                        'cdi_idaliiva': item_orden.odi_idsto.idaliiva.id if item_orden.odi_idsto and item_orden.odi_idsto.idaliiva else None,
+                    }
+                    items_data.append(item_data)
+            
+            # Procesar items_nuevos (items agregados durante la conversión)
+            for item_nuevo in items_nuevos:
+                item_data = {
+                    'cdi_orden': len(items_data) + 1,
+                    'cdi_idsto': item_nuevo.get('cdi_idsto'),
+                    'cdi_idpro': item_nuevo.get('cdi_idpro') or orden.ord_idpro.id,
+                    'cdi_cantidad': Decimal(str(item_nuevo.get('cdi_cantidad', 0))),
+                    'cdi_costo': Decimal(str(item_nuevo.get('cdi_costo', 0))),
+                    'cdi_detalle1': item_nuevo.get('cdi_detalle1', ''),
+                    'cdi_detalle2': item_nuevo.get('cdi_detalle2', ''),
+                    'cdi_idaliiva': item_nuevo.get('cdi_idaliiva'),
+                }
+                items_data.append(item_data)
+            
+            # Validar que los ítems seleccionados pertenecen a la orden (solo si hay items seleccionados)
+            if items_seleccionados_ids:
+                items_seleccionados_ids_str = [str(item_id) for item_id in items_seleccionados_ids]
+                if not all(item_id in ids_items_orden for item_id in items_seleccionados_ids_str):
+                    raise Exception('Algunos ítems seleccionados no pertenecen a la orden.')
+            
+            # Agregar items_data a compra_data
+            compra_data['items_data'] = items_data
+            
             # Crear la compra usando el serializer
-            serializer = CompraCreateSerializer(data=compra_data)
+            serializer = CompraCreateSerializer(data=compra_data, context={'es_conversion_orden_compra': True})
             serializer.is_valid(raise_exception=True)
             compra = serializer.save()
 
-            # Manejar items de la orden (similar a presupuesto)
-            ids_items_orden_int = [int(i.id) for i in items_orden]
-            items_seleccionados_int = [int(i) for i in items_seleccionados]
+            # Manejar items de la orden con lógica de cantidades
+            # Procesar cada item seleccionado
+            items_para_eliminar = []
+            items_para_actualizar = []
             
-            if set(items_seleccionados_int) == set(ids_items_orden_int):
-                # Se seleccionaron todos los items, eliminar orden
+            for item_orden in items_orden:
+                item_id = item_orden.id
+                if item_id in items_seleccionados_ids:
+                    cantidad_solicitada = Decimal(str(item_orden.odi_cantidad))  # Convertir a Decimal
+                    
+                    # Determinar cantidad recibida según el formato
+                    if item_id in cantidades_recibidas:
+                        # Formato nuevo: usar cantidad recibida específica
+                        cantidad_recibida = cantidades_recibidas[item_id]
+                        
+                        if cantidad_recibida >= cantidad_solicitada:
+                            # Recibió lo que pidió o de más → eliminar item de la orden
+                            items_para_eliminar.append(item_id)
+                        else:
+                            # Recibió de menos → actualizar cantidad en la orden
+                            cantidad_restante = cantidad_solicitada - cantidad_recibida
+                            items_para_actualizar.append({
+                                'item': item_orden,
+                                'cantidad_restante': cantidad_restante
+                            })
+                    else:
+                        # Formato viejo: se recibió la cantidad completa → eliminar item de la orden
+                        items_para_eliminar.append(item_id)
+            
+            # Eliminar items que se recibieron completos o de más
+            if items_para_eliminar:
+                OrdenCompraDetalleItem.objects.filter(id__in=items_para_eliminar).delete()
+            
+            # Actualizar items que se recibieron parcialmente
+            for item_update in items_para_actualizar:
+                item_update['item'].odi_cantidad = item_update['cantidad_restante']
+                item_update['item'].save()
+            
+            # Verificar si quedan items en la orden
+            items_restantes = OrdenCompraDetalleItem.objects.filter(odi_idor=orden)
+            
+            if not items_restantes.exists():
+                # No quedan items, eliminar la orden
                 orden.delete()
                 orden_result = None
             else:
-                # Se dejan items no seleccionados en la orden
-                items_restantes = [item for item in items_orden if int(item.id) not in items_seleccionados_int]
-                orden.items.set(items_restantes)
-                
-                # Eliminar físicamente los items seleccionados de la orden
-                ids_a_eliminar = [item.id for item in items_orden if int(item.id) in items_seleccionados_int]
-                if ids_a_eliminar:
-                    OrdenCompraDetalleItem.objects.filter(id__in=ids_a_eliminar).delete()
-                
-                # Si no quedan items, eliminar la orden
-                if not items_restantes:
-                    orden.delete()
-                    orden_result = None
-                else:
-                    orden.save()
-                    orden_result = OrdenCompraSerializer(orden).data
+                # Quedan items, mantener la orden
+                orden.save()
+                orden_result = OrdenCompraSerializer(orden).data
 
             # NO cerrar la compra automáticamente - dejar en BORRADOR para que el usuario la edite
             # La compra se cerrará cuando el usuario complete los datos y la guarde

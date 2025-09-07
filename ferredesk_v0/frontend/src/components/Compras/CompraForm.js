@@ -17,6 +17,7 @@ const CompraForm = ({
   ordenOrigen = null,           // Datos de la orden original
   itemsSeleccionados = [],      // Items seleccionados del modal
   itemsSeleccionadosIds = [],   // IDs de items seleccionados
+  cantidadesRecibidas = [],     // Cantidades recibidas del modal
   modoConversion = false,       // Flag para indicar modo conversión
   // Props existentes
   proveedores = [],
@@ -62,19 +63,26 @@ const CompraForm = ({
       initialState.comp_observacion = ordenOrigen.ord_observacion || ""
 
       // Convertir items de orden de compra a formato de compra
-      const itemsConvertidos = itemsSeleccionados.map(item => ({
-        id: Date.now() + Math.random(),
-        codigo_proveedor: item.producto_codigo || item.codigo_proveedor || "",
-        producto: item.producto || null,
-        cdi_idsto: item.odi_idsto || item.producto?.id,
-        cdi_idpro: ordenOrigen.ord_idpro,
-        cdi_detalle1: item.producto_denominacion || item.odi_detalle1 || item.producto?.deno || "",
-        cdi_detalle2: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
-        cdi_cantidad: Number(item.odi_cantidad) || 0,
-        cdi_costo: 0, // Los costos se completan en la compra
-        cdi_idaliiva: item.producto?.idaliiva || 3, // IVA del producto o 21% por defecto
-        unidad: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
-      }))
+      const itemsConvertidos = itemsSeleccionados.map(item => {
+        // Buscar la cantidad recibida para este item
+        const cantidadRecibida = cantidadesRecibidas.find(cr => cr.id === item.id)
+        const cantidad = cantidadRecibida ? cantidadRecibida.cantidad_recibida : item.odi_cantidad
+        
+        return {
+          id: Date.now() + Math.random(), // ID temporal para el grid
+          originalItemId: item.id, // Guardar ID original del item de la orden
+          codigo_proveedor: item.codigo_proveedor || "", // Usar código de proveedor desde el serializer
+          producto: item.producto || null,
+          cdi_idsto: item.odi_idsto || item.producto?.id,
+          cdi_idpro: ordenOrigen.ord_idpro,
+          cdi_detalle1: item.producto_denominacion || item.odi_detalle1 || item.producto?.deno || "",
+          cdi_detalle2: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
+          cdi_cantidad: Number(cantidad) || 0, // Usar cantidad recibida
+          cdi_costo: 0, // Los costos se completan en la compra
+          cdi_idaliiva: item.producto?.idaliiva || 3, // IVA del producto o 21% por defecto
+          unidad: item.producto_unidad || item.odi_detalle2 || item.producto?.unidad || "",
+        }
+      })
       
       initialState.items_data = itemsConvertidos
     }
@@ -362,7 +370,35 @@ const CompraForm = ({
       // Agregar datos de conversión si es necesario
       if (modoConversion && ordenOrigen) {
         payload.orden_origen = ordenOrigen.ord_id
-        payload.items_seleccionados = itemsSeleccionadosIds
+        // Enviar items con las cantidades actuales del grid (no las del modal)
+        // Separar items originales de la orden de items nuevos agregados
+        const itemsOriginales = []
+        const itemsNuevos = []
+        
+        formData.items_data.forEach(item => {
+          if (item.originalItemId) {
+            // Item original de la orden
+            itemsOriginales.push({
+              id: item.originalItemId,
+              cantidad_recibida: item.cdi_cantidad
+            })
+          } else {
+            // Item nuevo agregado durante la conversión
+            itemsNuevos.push({
+              cdi_orden: item.cdi_orden || 1,
+              cdi_idsto: item.cdi_idsto,
+              cdi_idpro: item.cdi_idpro,
+              cdi_cantidad: item.cdi_cantidad,
+              cdi_costo: item.cdi_costo,
+              cdi_detalle1: item.cdi_detalle1,
+              cdi_detalle2: item.cdi_detalle2,
+              cdi_idaliiva: item.cdi_idaliiva
+            })
+          }
+        })
+        
+        payload.items_seleccionados = itemsOriginales
+        payload.items_nuevos = itemsNuevos
       }
       
       await onSave(payload)

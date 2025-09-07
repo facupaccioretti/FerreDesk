@@ -162,7 +162,31 @@ const OrdenCompraForm = ({
     setErrors({})
 
     try {
-      await onSave(formData)
+      // Filtrar campos calculados que no deben enviarse al backend
+      const payload = {
+        ...formData,
+        items_data: formData.items_data.map(item => {
+          // Crear un nuevo objeto solo con los campos que el backend espera
+          const cleanItem = {
+            odi_orden: item.odi_orden,
+            odi_idsto: item.odi_idsto,
+            odi_idpro: item.odi_idpro,
+            odi_cantidad: item.odi_cantidad,
+            odi_detalle1: item.odi_detalle1,
+            odi_detalle2: item.odi_detalle2,
+            odi_stock_proveedor: item.odi_stock_proveedor
+          }
+          
+          // Incluir el ID si existe (para actualización inteligente)
+          if (item.id) {
+            cleanItem.id = item.id
+          }
+          
+          return cleanItem
+        })
+      }
+      
+      await onSave(payload)
     } catch (error) {
       console.error("Error al guardar orden de compra:", error)
       setErrors({ submit: error.message || "Error al guardar la orden de compra" })

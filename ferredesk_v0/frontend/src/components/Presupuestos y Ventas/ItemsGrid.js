@@ -477,7 +477,7 @@ const ItemsGridPresupuesto = forwardRef(
             }
           }
 
-          fila.precioFinal = esVacio ? "" : userInputNum
+          fila.precioFinal = esVacio ? "" : userInput
           // Guardar precio base con 4 decimales para evitar errores de redondeo
           fila.precio = esVacio ? "" : (Number.isFinite(precioBaseCalc) ? Number(precioBaseCalc.toFixed(4)) : "")
           fila.idaliiva = aliFinalId
@@ -1235,6 +1235,12 @@ const ItemsGridPresupuesto = forwardRef(
                     ? bonifParticular
                     : bonifGeneral
                   const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
+                  
+                  // Aplicar descuentos globales al precio bonificado
+                  let precioConDescuentos = precioBonificado
+                  if (descu1 > 0) precioConDescuentos *= (1 - descu1 / 100)
+                  if (descu2 > 0) precioConDescuentos *= (1 - descu2 / 100)
+                  if (descu3 > 0) precioConDescuentos *= (1 - descu3 / 100)
 
                   return (
                     <tr
@@ -1325,9 +1331,9 @@ const ItemsGridPresupuesto = forwardRef(
                           inputMode="decimal"
                           value={
                             row.precioFinal !== "" && row.precioFinal !== undefined
-                              ? Number(row.precioFinal)
+                              ? row.precioFinal
                               : (row.precio !== "" && row.precio !== undefined
-                                  ? Math.round((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100)) * 100) / 100
+                                  ? row.precio
                                   : "")
                           }
                           onChange={(e) => {
@@ -1405,7 +1411,7 @@ const ItemsGridPresupuesto = forwardRef(
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="px-3 py-2 text-emerald-600 font-semibold text-sm">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
-                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
+                            ? `$${Number((precioConDescuentos * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
                             : ""}
                         </div>
                       </td>

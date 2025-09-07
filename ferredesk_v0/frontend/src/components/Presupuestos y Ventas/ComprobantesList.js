@@ -218,7 +218,7 @@ const ComprobantesList = ({
   setPaginaActual,
   setItemsPorPagina,
 }) => {
-  return (
+  return (  
     <>
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px", tableLayout: "fixed" }}>

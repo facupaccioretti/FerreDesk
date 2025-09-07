@@ -10,44 +10,55 @@ import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
+import { normalizarItems } from './herramientasforms/normalizadorItems';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
+// Función para combinar datos iniciales con el estado por defecto, usando la misma lógica que ConVentaForm
+const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap = {}) => {
+  if (!data) return {
+    numero: '',
+    cliente: '',
+    clienteId: '',
+    plazoId: '',
+    vendedorId: '',
+    sucursalId: sucursales[0]?.id || '',
+    puntoVentaId: puntosVenta[0]?.id || '',
+    fecha: new Date().toISOString().split('T')[0],
+    estado: 'Abierto',
+    tipo: 'Presupuesto',
+    items: [],
+    bonificacionGeneral: 0,
+    total: 0,
+    descu1: 0,
+    descu2: 0,
+    descu3: 0,
+    copia: 1,
+  };
 
+  // Normalizar items usando la misma lógica que ConVentaForm
+  const itemsBase = Array.isArray(data.items) ? data.items : [];
+  const itemsNormalizados = normalizarItems(itemsBase, { modo: 'presupuesto', alicuotasMap });
 
-// Función para mapear los campos del backend a los nombres del formulario
-const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
-  if (!data) return {};
-  // LOG NUEVO: Loggear los datos crudos recibidos del backend
-  console.log('[EditarPresupuestoForm] initialData recibido:', JSON.parse(JSON.stringify(data)));
-  const mapeado = {
+  return {
     id: data.ven_id ?? data.id ?? '',
     clienteId: data.ven_idcli ?? data.clienteId ?? '',
     cuit: data.ven_cuit ?? data.cuit ?? '',
     domicilio: data.ven_domicilio ?? data.domicilio ?? '',
-    sucursalId: data.ven_sucursal ?? data.sucursalId ?? '',
-    puntoVentaId: data.ven_punto ?? data.puntoVentaId ?? '',
-    fecha: data.ven_fecha ?? data.fecha ?? '',
     plazoId: data.ven_idpla ?? data.plazoId ?? '',
     vendedorId: data.ven_idvdo ?? data.vendedorId ?? '',
+    sucursalId: data.ven_sucursal ?? data.sucursalId ?? sucursales?.[0]?.id ?? '',
+    puntoVentaId: data.ven_punto ?? data.puntoVentaId ?? puntosVenta?.[0]?.id ?? '',
+    bonificacionGeneral: data.ven_bonificacion_general ?? data.bonificacionGeneral ?? 0,
     descu1: data.ven_descu1 ?? data.descu1 ?? 0,
     descu2: data.ven_descu2 ?? data.descu2 ?? 0,
     descu3: data.ven_descu3 ?? data.descu3 ?? 0,
-    bonificacionGeneral: data.ven_bonificacion_general ?? data.bonificacionGeneral ?? 0,
-    numero: data.ven_numero ?? data.numero ?? '',
-    estado: data.ven_estado ?? data.estado ?? '',
-    tipo: data.ven_tipo ?? data.tipo ?? '',
-    comprobanteId: data.comprobante?.codigo_afip ?? data.comprobante_id ?? data.comprobanteId ?? '',
-    ven_impneto: data.ven_impneto ?? 0,
-    ven_total: data.ven_total ?? 0,
-    ven_vdocomvta: data.ven_vdocomvta ?? 0,
-    ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? normalizarItemsStock(data.items) : [],
+    fecha: data.ven_fecha ?? data.fecha ?? new Date().toISOString().split('T')[0],
+    estado: data.ven_estado ?? data.estado ?? 'Abierto',
+    tipo: data.tipo ?? 'Presupuesto',
+    items: itemsNormalizados,
+    total: 0,
   };
-  // LOG NUEVO: Loggear los datos mapeados y normalizados
-  console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
-  return mapeado;
 };
 
 // (eliminada utilidad generarChecksum no utilizada)
@@ -108,12 +119,9 @@ const EditarPresupuestoForm = ({
   } = useFormularioDraft({
     claveAlmacenamiento: (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
-    combinarConValoresPorDefecto: (data) => {
-      const base = mapearCamposPresupuesto(data, productos, alicuotasMap);
-      return base;
-    },
-    parametrosPorDefecto: [productos, alicuotasMap],
-    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
+    combinarConValoresPorDefecto: mergeWithDefaults,
+    parametrosPorDefecto: [sucursales, puntosVenta, alicuotasMap],
+    normalizarItems: (items) => items, // La normalización ya se hizo en mergeWithDefaults
     validarBorrador: (saved, datosOriginales) => {
       // Válido si pertenece al mismo presupuesto (por ID); evita depender de checksum
       const idOriginal = datosOriginales?.ven_id ?? datosOriginales?.id;

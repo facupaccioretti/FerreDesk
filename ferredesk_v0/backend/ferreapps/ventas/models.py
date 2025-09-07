@@ -100,6 +100,12 @@ class Venta(models.Model):
     class Meta:
         db_table = 'VENTA'
         unique_together = ['ven_punto', 'ven_numero', 'comprobante']
+        indexes = [
+            models.Index(fields=['ven_fecha']),
+            models.Index(fields=['ven_estado']),
+            models.Index(fields=['ven_idcli']),
+            models.Index(fields=['ven_fecha', 'ven_estado']),
+        ]
         constraints = [
             models.CheckConstraint(
                 check=models.Q(ven_numero__gt=0),
@@ -132,6 +138,9 @@ class VentaDetalleItem(models.Model):
 
     class Meta:
         db_table = 'VENTA_DETAITEM'
+        indexes = [
+            models.Index(fields=['vdi_idve', 'vdi_orden']),
+        ]
 
 class VentaDetalleMan(models.Model):
     vdm_idve = models.IntegerField(db_column='VDM_IDVE')

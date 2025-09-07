@@ -15,11 +15,13 @@ const ConversionCompraModal = ({
 }) => {
   const theme = useFerreDeskTheme()
   const [selectedItems, setSelectedItems] = useState([])
+  const [cantidadesRecibidas, setCantidadesRecibidas] = useState({})
 
   // Resetear selección cuando cambia la orden
   useEffect(() => {
     if (ordenCompra && ordenCompra.items) {
       setSelectedItems([])
+      setCantidadesRecibidas({})
     }
   }, [ordenCompra])
 
@@ -27,8 +29,22 @@ const ConversionCompraModal = ({
   const handleItemSelect = (itemId, checked) => {
     if (checked) {
       setSelectedItems(prev => [...prev, itemId])
+      // Inicializar cantidad recibida con la cantidad solicitada
+      const item = ordenCompra.items.find(i => i.id === itemId)
+      if (item) {
+        setCantidadesRecibidas(prev => ({
+          ...prev,
+          [itemId]: item.odi_cantidad
+        }))
+      }
     } else {
       setSelectedItems(prev => prev.filter(id => id !== itemId))
+      // Limpiar cantidad recibida
+      setCantidadesRecibidas(prev => {
+        const newCantidades = { ...prev }
+        delete newCantidades[itemId]
+        return newCantidades
+      })
     }
   }
 
@@ -43,9 +59,25 @@ const ConversionCompraModal = ({
   const toggleSeleccionarTodos = () => {
     if (todosSeleccionados) {
       setSelectedItems([])
+      setCantidadesRecibidas({})
     } else {
-      setSelectedItems(ordenCompra.items.map(item => item.id))
+      const todosLosIds = ordenCompra.items.map(item => item.id)
+      setSelectedItems(todosLosIds)
+      // Inicializar cantidades con las cantidades solicitadas
+      const cantidadesIniciales = {}
+      ordenCompra.items.forEach(item => {
+        cantidadesIniciales[item.id] = item.odi_cantidad
+      })
+      setCantidadesRecibidas(cantidadesIniciales)
     }
+  }
+
+  // Manejar cambio de cantidad recibida
+  const handleCantidadChange = (itemId, cantidad) => {
+    setCantidadesRecibidas(prev => ({
+      ...prev,
+      [itemId]: parseFloat(cantidad) || 0
+    }))
   }
 
 
@@ -56,9 +88,27 @@ const ConversionCompraModal = ({
       return
     }
 
+    // Validar que todas las cantidades recibidas sean válidas
+    const itemsConCantidades = selectedItems.map(itemId => {
+      const cantidad = cantidadesRecibidas[itemId]
+      if (!cantidad || cantidad <= 0) {
+        const item = ordenCompra.items.find(i => i.id === itemId)
+        alert(`La cantidad recibida para "${item?.producto_denominacion || item?.odi_detalle1}" debe ser mayor a 0`)
+        return null
+      }
+      return {
+        id: itemId,
+        cantidad_recibida: cantidad
+      }
+    }).filter(Boolean)
+
+    if (itemsConCantidades.length !== selectedItems.length) {
+      return // Hay errores de validación
+    }
+
     onConvertir({
       orden_origen: ordenCompra.ord_id,
-      items_seleccionados: selectedItems,
+      items_seleccionados: itemsConCantidades,
     })
   }
 
@@ -193,7 +243,10 @@ const ConversionCompraModal = ({
                              <span className="text-xs font-medium text-white uppercase tracking-wider">Producto</span>
                            </th>
                            <th className="px-4 py-2 text-left">
-                             <span className="text-xs font-medium text-white uppercase tracking-wider">Cantidad</span>
+                             <span className="text-xs font-medium text-white uppercase tracking-wider">Solicitada</span>
+                           </th>
+                           <th className="px-4 py-2 text-left">
+                             <span className="text-xs font-medium text-white uppercase tracking-wider">Recibida</span>
                            </th>
                            <th className="px-4 py-2 text-left">
                              <span className="text-xs font-medium text-white uppercase tracking-wider">Unidad</span>
@@ -259,6 +312,22 @@ const ConversionCompraModal = ({
                              </td>
                              <td className="px-3 py-2 text-sm text-slate-700 font-semibold text-center">
                                {item.odi_cantidad}
+                             </td>
+                             <td className="px-3 py-2 text-center">
+                               {selectedItems.includes(item.id) ? (
+                                 <input
+                                   type="number"
+                                   min="0"
+                                   step="0.01"
+                                   value={cantidadesRecibidas[item.id] || ''}
+                                   onChange={(e) => handleCantidadChange(item.id, e.target.value)}
+                                   onClick={(e) => e.stopPropagation()}
+                                   className="w-20 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                   placeholder="0.00"
+                                 />
+                               ) : (
+                                 <span className="text-slate-400 text-xs">-</span>
+                               )}
                              </td>
                              <td className="px-3 py-2 text-sm text-slate-600 text-center">
                                {item.producto_unidad || item.odi_detalle2 || '-'}

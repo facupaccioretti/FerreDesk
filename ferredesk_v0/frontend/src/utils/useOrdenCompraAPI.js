@@ -49,9 +49,25 @@ const useOrdenCompraAPI = () => {
     }, []);
 
     // Obtener lista de órdenes de compra
-    const getOrdenesCompra = useCallback(async (params = {}) => {
-        const queryParams = new URLSearchParams(params).toString();
-        const url = `/api/ordenes-compra/${queryParams ? `?${queryParams}` : ''}`;
+    const getOrdenesCompra = useCallback(async (params = {}, page = 1, pageSize = 10, orderBy = 'id', orderDirection = 'desc') => {
+        const queryParams = new URLSearchParams();
+        
+        // Agregar parámetros de paginación
+        queryParams.append('page', page.toString());
+        queryParams.append('limit', pageSize.toString());
+        
+        // Agregar parámetros de ordenamiento
+        queryParams.append('orden', orderBy);
+        queryParams.append('direccion', orderDirection);
+        
+        // Agregar otros parámetros
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `/api/ordenes-compra/?${queryParams.toString()}`;
         const data = await makeRequest(url);
         // Soportar respuesta paginada (results) o lista directa
         const lista = Array.isArray(data) ? data : (data?.results ?? []);

@@ -19,6 +19,17 @@ const ComprasList = ({
   onAnularCompra,
   onEliminarCompra,
   onRefresh,
+  // Props de paginación
+  paginacionControlada = false,
+  paginaActual,
+  onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalRemoto,
+  // Props de ordenamiento
+  onOrdenamientoChange = null,
+  ordenamientoControlado = null,
+  cargando = false,
 }) => {
 
   const formatDate = (dateString) => {
@@ -79,25 +90,28 @@ const ComprasList = ({
 
 
   // Los errores se manejan con alertas del navegador, no se muestran en la UI
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="text-center text-gray-500">
-          <p>No se pudieron cargar las compras</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <Tabla
       columnas={columnas}
       datos={compras}
       mostrarBuscador={true}
+      mostrarOrdenamiento={true}
       valorBusqueda={search}
       onCambioBusqueda={setSearch}
       renderFila={renderFila}
-      cargando={loading}
+      cargando={cargando}
+      // Paginación controlada
+      paginacionControlada={paginacionControlada}
+      paginaActual={paginaActual}
+      onPageChange={onPageChange}
+      itemsPerPage={itemsPerPage}
+      onItemsPerPageChange={onItemsPerPageChange}
+      totalRemoto={totalRemoto}
+      busquedaRemota={true}
+      // Ordenamiento
+      onOrdenamientoChange={onOrdenamientoChange}
+      ordenamientoControlado={ordenamientoControlado}
     />
   )
 }

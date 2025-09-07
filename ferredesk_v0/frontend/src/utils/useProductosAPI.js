@@ -3,7 +3,7 @@ import { getCookie } from '../utils/csrf';
 
 export function useProductosAPI() {
   const [productos, setProductos] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');

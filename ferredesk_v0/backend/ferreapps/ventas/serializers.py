@@ -362,13 +362,8 @@ class VentaSerializer(serializers.ModelSerializer):
                 if not bonif or float(bonif) == 0:
                     item['vdi_bonifica'] = bonif_general
             # -------------------------------------------------------------------------------
-            instance.items.all().delete()
-            for item_data in items_data:
-                item_data['vdi_idve'] = instance
-                # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
-                for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
-                    item_data.pop(campo_calculado, None)
-                VentaDetalleItem.objects.create(**item_data)
+            # Usar actualización inteligente en lugar de eliminar y recrear
+            self._actualizar_items_venta_inteligente(instance, items_data)
 
         # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS + COMPLETADO DE ALÍCUOTA -------
         if items_data is not None:
@@ -407,6 +402,43 @@ class VentaSerializer(serializers.ModelSerializer):
         # ----------------------------------------------------------------------------
 
         return instance
+
+    def _actualizar_items_venta_inteligente(self, instance, items_data):
+        """Actualizar items de venta de manera inteligente: actualizar existentes, crear nuevos, eliminar removidos"""
+        # Obtener items existentes
+        items_existentes = {item.id: item for item in instance.items.all()}
+        
+        # Obtener IDs de items enviados (solo los que tienen ID)
+        ids_enviados = {item.get('id') for item in items_data if item.get('id')}
+        
+        # Eliminar items que ya no están en la lista enviada
+        for item_id, item in items_existentes.items():
+            if item_id not in ids_enviados:
+                item.delete()
+        
+        # Procesar items enviados
+        for i, item_data in enumerate(items_data, 1):
+            # Limpiar campos calculados que no deben guardarse
+            campos_calculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']
+            for campo in campos_calculados:
+                item_data.pop(campo, None)
+            
+            # Establecer relación con la venta y orden
+            item_data['vdi_idve'] = instance
+            item_data['vdi_orden'] = i
+            
+            # Determinar si es actualización o creación
+            item_id = item_data.pop('id', None)
+            
+            if item_id and item_id in items_existentes:
+                # Actualizar item existente
+                item = items_existentes[item_id]
+                for field, value in item_data.items():
+                    setattr(item, field, value)
+                item.save()
+            else:
+                # Crear nuevo item
+                VentaDetalleItem.objects.create(**item_data)
 
     def validate(self, data):
         ven_punto = data.get('ven_punto', getattr(self.instance, 'ven_punto', None))

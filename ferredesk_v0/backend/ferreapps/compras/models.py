@@ -354,8 +354,8 @@ class OrdenCompra(models.Model):
     # Domicilio del proveedor (copia)
     ord_domicilio = models.CharField(max_length=100, db_column='ORD_DOMICILIO', blank=True, null=True)
     
-    # Observaciones de la orden
-    ord_observacion = models.TextField(db_column='ORD_OBSERVACION', blank=True, null=True)
+    # Observaciones de la orden (limitado a 60 caracteres)
+    ord_observacion = models.CharField(max_length=60, db_column='ORD_OBSERVACION', blank=True, null=True)
     
     # Estado de la orden (ABIERTO/CERRADO)
     ESTADO_CHOICES = [
