@@ -337,19 +337,8 @@ def exportar_orden_compra_pdf(orden_compra: Dict[str, Any], numero_pagina: int =
     except:
         ferreteria = None
     
-    # Obtener items y agregar items de prueba para testing de paginación
+    # Obtener items
     items = orden_compra.get('items', [])
-    CANTIDAD_MAXIMA_ITEMS_TEST = 200
-    if len(items) < CANTIDAD_MAXIMA_ITEMS_TEST:
-        items_faltantes = CANTIDAD_MAXIMA_ITEMS_TEST - len(items)
-        for i in range(items_faltantes):
-            item_prueba = {
-                'odi_codigo': f'TEST{i+1:03d}',
-                'odi_detalle1': f'Producto desdas Prueba {i+1}',
-                'odi_detalle2': 'u',
-                'odi_cantidad': 1
-            }
-            items.append(item_prueba)
     
     # Dividir items en páginas (como PlantillaFacturaAPDF)
     ITEMS_POR_PAGINA = 35
