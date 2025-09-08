@@ -141,7 +141,7 @@ class CargaInicialProveedorPreviaAPIView(APIView):
                 num = str(random.randint(1000, 99999))
                 candidato = f"{base_sigla}{num}"
             elif codvta_estrategia in ('sigla+codigo', 'sigla+cod'):
-                candidato = f"{base_sigla}-{cod_prov}"
+                candidato = f"{base_sigla}{cod_prov}"
             else:  # 'codigo'
                 candidato = cod_prov
             # Normalizar: quitar espacios, reemplazar por '-'
@@ -320,7 +320,7 @@ class CargaInicialProveedorImportAPIView(APIView):
                 import random
                 candidato = f"{base_sigla}{random.randint(1000, 99999)}"
             elif codvta_estrategia in ('sigla+codigo', 'sigla+cod'):
-                candidato = f"{base_sigla}-{cod_prov}"
+                candidato = f"{base_sigla}{cod_prov}"
             else:
                 candidato = cod_prov
             candidato = re.sub(r"\s+", "-", candidato)

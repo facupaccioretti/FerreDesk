@@ -228,71 +228,6 @@ export default function Navbar({ user, onLogout }) {
                 </div>
 
                 <a
-                  href="/home/notas"
-                  onClick={(e) => handleLinkClick(e, "/home/notas")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-yellow-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-4 h-4 text-yellow-400 group-hover:text-yellow-300"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                    />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Notas</span>
-                </a>
-
-                <a
-                  href="/home/notas-alertas-notificaciones"
-                  onClick={(e) => handleLinkClick(e, "/home/notas-alertas-notificaciones")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-4 h-4 text-red-400 group-hover:text-red-300"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
-                    />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Alertas</span>
-                </a>
-
-                <a
-                  href="/dashboards"
-                  onClick={(e) => handleLinkClick(e, "/dashboards")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg
-                    className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Dashboards</span>
-                </a>
-
-                <a
                   href="/home/informes"
                   onClick={(e) => handleLinkClick(e, "/home/informes")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
@@ -312,6 +247,28 @@ export default function Navbar({ user, onLogout }) {
                     />
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Informes</span>
+                </a>
+
+                <a
+                  href="/home/carga-inicial-proveedor"
+                  onClick={(e) => handleLinkClick(e, "/home/carga-inicial-proveedor")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-500/10 transition-all duration-200 text-left group cursor-pointer"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-4 h-4 text-green-400 group-hover:text-green-300"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                    />
+                  </svg>
+                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Carga Inicial</span>
                 </a>
               </div>
             )}

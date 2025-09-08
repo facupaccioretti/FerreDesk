@@ -21,7 +21,7 @@ import ConfiguracionManager from './components/ConfiguracionManager';
 import InformesManager from './components/Informes/InformesManager';
 import DashboardsManager from './components/DashboardsManager';
 import ComprasManager from './components/Compras/ComprasManager';
-import CargaInicialProveedor from './components/Proveedores/CargaInicialProveedor';
+import CargaInicialProveedor from './components/Carga Inicial/CargaInicialProveedor';
 
 // Componente principal con rutas
 export default function App() {
