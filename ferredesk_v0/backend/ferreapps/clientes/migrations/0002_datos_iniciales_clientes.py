@@ -62,7 +62,6 @@ def cargar_datos_iniciales_clientes(apps, schema_editor):
 	Cliente.objects.update_or_create(
 		id=1,
 		defaults={
-			"codigo": 1,
 			"razon": "Consumidor Final",
 			"fantasia": "Consumidor Final",
 			"domicilio": "",

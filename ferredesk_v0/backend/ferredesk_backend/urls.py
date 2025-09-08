@@ -19,8 +19,10 @@ from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import FileResponse, Http404
 from rest_framework.routers import DefaultRouter
 from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, FerreteriaAPIView
+import os
 
 router = DefaultRouter()
 router.register(r'productos/stock', StockViewSet, basename='stock')
@@ -29,8 +31,56 @@ router.register(r'productos/stockprove', StockProveViewSet, basename='stockprove
 router.register(r'productos/familias', FamiliaViewSet, basename='familia')
 router.register(r'productos/alicuotasiva', AlicuotaIVAViewSet, basename='alicuotaiva')
 
+# ===== FUNCIONES PARA MANEJAR REACT SPA =====
+
+def serve_react_app(request):
+    """Sirve la aplicación React para todas las rutas del frontend"""
+    # Si el usuario NO está autenticado y está intentando acceder al home, redirigir a la landing
+    if not request.user.is_authenticated and request.path.startswith('/home'):
+        with open(os.path.join(settings.REACT_APP_DIR, 'index.html'), 'rb') as f:
+            content = f.read()
+            # Insertar el meta tag de redirección después del <head>
+            content = content.replace(b'<head>', b'<head><meta name="x-redirect" content="/">')
+            return FileResponse(content, content_type='text/html')
+    
+    # Para todas las demás rutas, servir el index.html de React
+    index_path = os.path.join(settings.REACT_APP_DIR, 'index.html')
+    return FileResponse(open(index_path, 'rb'))
+
+def serve_static_file(request, filename):
+    """Vista para servir archivos estáticos del frontend"""
+    # Solo manejar archivos que tienen extensión (evitar conflictos con rutas del SPA)
+    if '.' not in filename:
+        raise Http404("No es un archivo estático")
+        
+    file_path = os.path.join(settings.REACT_APP_DIR, filename)
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        # Determinar el tipo de contenido basado en la extensión
+        content_type = 'text/plain'
+        if filename.endswith('.json'):
+            content_type = 'application/json'
+        elif filename.endswith('.ico'):
+            content_type = 'image/x-icon'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            content_type = 'image/jpeg'
+        elif filename.endswith('.png'):
+            content_type = 'image/png'
+        elif filename.endswith('.css'):
+            content_type = 'text/css'
+        elif filename.endswith('.js'):
+            content_type = 'application/javascript'
+        
+        return FileResponse(content, content_type=content_type)
+    else:
+        raise Http404("Archivo no encontrado")
+
 urlpatterns = [
+    # ===== ADMINISTRACIÓN DE DJANGO =====
     path('admin/', admin.site.urls),
+    
+    # ===== APIs REST (MODULARES) =====
     path('api/usuarios/', include('ferreapps.usuarios.urls')),
     path('api/clientes/', include('ferreapps.clientes.urls')),
     path('api/productos/', include('ferreapps.productos.urls')),
@@ -41,17 +91,22 @@ urlpatterns = [
     path('api/', include('ferreapps.compras.urls')),
     path('api/informes/', include('ferreapps.informes.urls')),
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
+    
+    # ===== AUTENTICACIÓN =====
+    path('api/', include('ferreapps.login.urls')),  # Solo APIs de autenticación
 ]
 
-# Configuración para servir archivos media y estáticos
-# Siempre servir archivos estáticos, independientemente de DEBUG
-# IMPORTANTE: Esto debe ir ANTES de incluir el login para que Django maneje las rutas estáticas
+# ===== ARCHIVOS ESTÁTICOS Y MEDIA =====
 if settings.STATIC_URL and settings.STATIC_ROOT:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 if settings.MEDIA_URL and settings.MEDIA_ROOT:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-# Incluir el login AL FINAL para capturar solo las rutas del frontend
+# ===== REACT SPA CATCH-ALL =====
+# IMPORTANTE: Estos deben ir AL FINAL para capturar rutas no manejadas
 urlpatterns += [
-    path('', include('ferreapps.login.urls')),
+    # Archivos específicos del frontend (solo archivos con extensión)
+    path('<str:filename>', serve_static_file, name='static_file'),
+    # CATCH-ALL: Todas las demás rutas van a React Router
+    re_path(r'^.*$', serve_react_app, name='react_spa'),
 ]
