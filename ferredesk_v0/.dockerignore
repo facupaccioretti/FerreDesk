@@ -67,11 +67,8 @@ build/
 ehthumbs.db
 Thumbs.db
 
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+# Docker - Solo excluir archivos no esenciales
+# Nota: NO excluimos Dockerfile, docker-compose.yml ni scripts de inicio
 
-# Scripts
-*.bat
-*.sh 
+# Scripts de desarrollo (mantener start.sh para contenedor)
+clean.bat 
