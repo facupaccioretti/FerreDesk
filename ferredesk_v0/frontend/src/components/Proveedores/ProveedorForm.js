@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, memo, useRef, useCallback } from "react";
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
+import useNavegacionForm from "../../hooks/useNavegacionForm";
 import CUITValidacionTooltip from "../Clientes/CUITValidacionTooltip";
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
@@ -59,6 +60,9 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const cuitInputRef = useRef(null);
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
 
   // Estados de validación local de CUIT (sin padrón)
   const [resultadoCUIT, setResultadoCUIT] = useState(null); // { es_valido: boolean, mensaje_error?: string }
@@ -188,6 +192,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
         <form
           className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>

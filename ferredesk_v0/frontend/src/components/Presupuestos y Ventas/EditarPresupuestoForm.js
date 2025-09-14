@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import useNavegacionForm from '../../hooks/useNavegacionForm';
 import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
-import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
+import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -94,6 +95,9 @@ const EditarPresupuestoForm = ({
     tipoComprobante,
     comprobanteId: initialData?.comprobante_id
   });
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
 
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
 
@@ -375,7 +379,7 @@ const EditarPresupuestoForm = ({
 
   return (
     <>
-      <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+      <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit} {...getFormProps()}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
       

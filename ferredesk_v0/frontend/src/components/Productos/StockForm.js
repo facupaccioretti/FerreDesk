@@ -7,6 +7,7 @@ import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
 
 // Importar hooks modulares
@@ -50,6 +51,9 @@ function getCookie(name) {
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKey }) => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
+  
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
   
   // Referencias
   const refContenedorDenominacion = useRef(null)
@@ -329,6 +333,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         <form
           className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-visible"
           onSubmit={handleSave}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>

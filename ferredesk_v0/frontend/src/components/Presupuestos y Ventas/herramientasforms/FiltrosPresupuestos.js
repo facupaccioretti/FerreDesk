@@ -1,12 +1,24 @@
 import React, { useState } from 'react';
 
 const tiposComprobanteUnicos = (comprobantes) => {
-  // Devuelve objetos con value (tipo original) y label (tipo transformado)
-  const tipos = Array.from(new Set(comprobantes.map(c => (c.tipo || '').toLowerCase())));
-  return tipos.filter(Boolean).map(tipo => ({
-    value: tipo, // Tipo original para enviar al backend
-    label: tipo.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) // Tipo transformado para mostrar
-  }));
+  // Tipos permitidos en el orden específico solicitado
+  const tiposPermitidos = [
+    { tipo: 'factura', label: 'Factura' },
+    { tipo: 'factura_interna', label: 'Cotización' },
+    { tipo: 'presupuesto', label: 'Presupuesto' },
+    { tipo: 'nota_credito', label: 'Nota de Crédito' }
+  ];
+  
+  // Obtener tipos únicos de los comprobantes
+  const tiposExistentes = Array.from(new Set(comprobantes.map(c => (c.tipo || '').toLowerCase())));
+  
+  // Filtrar y ordenar según el orden específico
+  return tiposPermitidos
+    .filter(tipoPermitido => tiposExistentes.includes(tipoPermitido.tipo))
+    .map(tipoPermitido => ({
+      value: tipoPermitido.tipo, // Tipo original para enviar al backend
+      label: tipoPermitido.label // Label específico para mostrar
+    }));
 };
 
 const letrasUnicasPorTipo = (comprobantes, tipo) => {

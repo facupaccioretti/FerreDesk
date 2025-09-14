@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
@@ -96,6 +97,10 @@ const VentaForm = ({
 
   // Hooks existentes movidos al inicio
   const theme = useFerreDeskTheme()
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
+
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
   
@@ -660,6 +665,7 @@ const VentaForm = ({
           className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
           onKeyDown={bloquearEnterSubmit}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>

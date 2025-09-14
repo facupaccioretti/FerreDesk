@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import useNavegacionForm from '../../hooks/useNavegacionForm';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
@@ -90,6 +91,9 @@ const NotaCreditoForm = ({
   setAutoSumarDuplicados,
   tabKey
 }) => {
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
+
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
   // Hook para consulta de estado CUIT en ARCA
@@ -298,14 +302,8 @@ const NotaCreditoForm = ({
       return;
     }
 
-    // Filtrar la fila vacía y los ítems sin cantidad antes de enviar.
-    const itemsParaGuardar = (formulario.items || []).filter(item => {
-      const tieneProducto = !!item.producto;
-      const tieneDenominacion = typeof item.denominacion === 'string' && item.denominacion.trim() !== '';
-      const tieneCantidad = (item.cantidad ?? 0) > 0;
-      
-      return (tieneProducto && tieneCantidad) || (!tieneProducto && tieneDenominacion && tieneCantidad);
-    });
+    // Obtener items usando la misma lógica que los otros formularios
+    const itemsParaGuardar = itemsGridRef.current.getItems();
 
     if (itemsParaGuardar.length === 0) {
       alert("Debe agregar al menos un ítem a la nota de crédito.");
@@ -431,7 +429,7 @@ const NotaCreditoForm = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50/30 py-6">
       <div className="px-6">
-        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}>
+        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} {...getFormProps()}>
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
           

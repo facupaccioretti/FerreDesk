@@ -1,7 +1,8 @@
 import React from "react"
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
+import AccionesMenu from "./herramientasforms/AccionesMenu"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 import Paginador from "../Paginador"
 
@@ -79,22 +80,15 @@ const EstadoBadge = ({ estado }) => {
 }
 
 /**
- * Componente para renderizar las acciones de un comprobante según su tipo y estado
- * @param {Object} props - Props del componente
- * @param {Object} props.comprobante - Datos del comprobante
- * @param {Object} props.acciones - Funciones de acciones disponibles
- * @param {boolean} props.isFetchingForConversion - Estado de carga para conversión
- * @param {number} props.fetchingPresupuestoId - ID del presupuesto siendo convertido
- * @param {Function} props.esFacturaInternaConvertible - Función para verificar si es factura interna convertible
- * @returns {JSX.Element} - Botones de acciones
+ * Función para generar los botones de acciones según el tipo de comprobante
+ * @param {Object} comprobante - Datos del comprobante
+ * @param {Object} acciones - Funciones de acciones disponibles
+ * @param {boolean} isFetchingForConversion - Estado de carga para conversión
+ * @param {number} fetchingPresupuestoId - ID del presupuesto siendo convertido
+ * @param {Function} esFacturaInternaConvertible - Función para verificar si es factura interna convertible
+ * @returns {Array} - Array de botones para el AccionesMenu
  */
-const ComprobanteAcciones = ({
-  comprobante,
-  acciones,
-  isFetchingForConversion,
-  fetchingPresupuestoId,
-  esFacturaInternaConvertible,
-}) => {
+const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible) => {
   const {
     handleImprimir,
     openVistaTab,
@@ -115,75 +109,138 @@ const ComprobanteAcciones = ({
     return esFactura && letraValida && estaCerrada;
   };
 
+  const botones = []
+
   // Presupuesto abierto
   if (comprobante.tipo === "Presupuesto" && comprobante.estado === "Abierto") {
-    return (
-      <>
-        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
-        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
-        <BotonEditar onClick={() => handleEdit(comprobante)} />
-        <BotonConvertir
-          onClick={() => handleConvertir(comprobante)}
-          disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
-          title={
-            isFetchingForConversion && fetchingPresupuestoId === comprobante.id
-              ? "Cargando..."
-              : "Convertir"
-          }
-        />
-        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
-      </>
+    botones.push(
+      { 
+        componente: BotonGenerarPDF, 
+        onClick: () => handleImprimir(comprobante),
+        titulo: "Generar PDF"
+      },
+      { 
+        componente: BotonVerDetalle, 
+        onClick: () => openVistaTab(comprobante),
+        titulo: "Ver detalle"
+      },
+      { 
+        componente: BotonEditar, 
+        onClick: () => handleEdit(comprobante),
+        titulo: "Editar"
+      },
+      { 
+        componente: BotonConvertir, 
+        onClick: () => handleConvertir(comprobante),
+        titulo: isFetchingForConversion && fetchingPresupuestoId === comprobante.id ? "Cargando..." : "Convertir",
+        disabled: isFetchingForConversion && fetchingPresupuestoId === comprobante.id
+      },
+      { 
+        componente: BotonEliminar, 
+        onClick: () => handleDelete(comprobante.id),
+        titulo: "Eliminar"
+      }
     )
   }
-
-  // Facturas cerradas que pueden tener NC (incluye facturas internas cerradas)
-  if (puedeTenerNotaCredito(comprobante)) {
-    // Detectar si es factura interna convertible
+  // Facturas cerradas que pueden tener NC
+  else if (puedeTenerNotaCredito(comprobante)) {
     const esFacturaInternaConvertibleActual = comprobante.comprobante?.tipo === 'factura_interna' && 
       esFacturaInternaConvertible(comprobante);
 
-    return (
-      <>
-        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
-        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
-        <BotonNotaCredito 
-          onClick={() => handleNotaCredito(comprobante)}
-          title="Crear Nota de Crédito"
-        />
-        {/* Botón de conversión para facturas internas */}
-        {esFacturaInternaConvertibleActual && (
-          <BotonConvertir
-            onClick={() => handleConvertirFacturaI(comprobante)}
-            disabled={isFetchingForConversion && fetchingPresupuestoId === comprobante.id}
-            title={
-              isFetchingForConversion && fetchingPresupuestoId === comprobante.id
-                ? "Cargando..."
-                : "Convertir a Factura"
-            }
-          />
-        )}
-        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
-      </>
+    botones.push(
+      { 
+        componente: BotonGenerarPDF, 
+        onClick: () => handleImprimir(comprobante),
+        titulo: "Generar PDF"
+      },
+      { 
+        componente: BotonVerDetalle, 
+        onClick: () => openVistaTab(comprobante),
+        titulo: "Ver detalle"
+      },
+      { 
+        componente: BotonNotaCredito, 
+        onClick: () => handleNotaCredito(comprobante),
+        titulo: "Crear Nota de Crédito"
+      }
     )
-  }
 
+    // Botón de conversión para facturas internas
+    if (esFacturaInternaConvertibleActual) {
+      botones.push({
+        componente: BotonConvertir,
+        onClick: () => handleConvertirFacturaI(comprobante),
+        titulo: isFetchingForConversion && fetchingPresupuestoId === comprobante.id ? "Cargando..." : "Convertir a Factura",
+        disabled: isFetchingForConversion && fetchingPresupuestoId === comprobante.id
+      })
+    }
+
+    botones.push({
+      componente: BotonEliminar,
+      onClick: () => handleDelete(comprobante.id),
+      titulo: "Eliminar"
+    })
+  }
   // Venta cerrada (sin botón NC)
-  if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
-    return (
-      <>
-        <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
-        <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
-        <BotonEliminar onClick={() => handleDelete(comprobante.id)} />
-      </>
+  else if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
+    botones.push(
+      { 
+        componente: BotonGenerarPDF, 
+        onClick: () => handleImprimir(comprobante),
+        titulo: "Generar PDF"
+      },
+      { 
+        componente: BotonVerDetalle, 
+        onClick: () => openVistaTab(comprobante),
+        titulo: "Ver detalle"
+      },
+      { 
+        componente: BotonEliminar, 
+        onClick: () => handleDelete(comprobante.id),
+        titulo: "Eliminar"
+      }
+    )
+  }
+  // Otros casos (solo ver y generar PDF)
+  else {
+    botones.push(
+      { 
+        componente: BotonVerDetalle, 
+        onClick: () => openVistaTab(comprobante),
+        titulo: "Ver detalle"
+      },
+      { 
+        componente: BotonGenerarPDF, 
+        onClick: () => handleImprimir(comprobante),
+        titulo: "Generar PDF"
+      }
     )
   }
 
-  // Otros casos (solo ver y generar PDF)
+  return botones
+}
+
+/**
+ * Componente para renderizar las acciones de un comprobante según su tipo y estado
+ * @param {Object} props - Props del componente
+ * @param {Object} props.comprobante - Datos del comprobante
+ * @param {Object} props.acciones - Funciones de acciones disponibles
+ * @param {boolean} props.isFetchingForConversion - Estado de carga para conversión
+ * @param {number} props.fetchingPresupuestoId - ID del presupuesto siendo convertido
+ * @param {Function} props.esFacturaInternaConvertible - Función para verificar si es factura interna convertible
+ * @returns {JSX.Element} - Menú de acciones con botón de 3 puntos
+ */
+const ComprobanteAcciones = ({
+  comprobante,
+  acciones,
+  isFetchingForConversion,
+  fetchingPresupuestoId,
+  esFacturaInternaConvertible,
+}) => {
+  const botones = generarBotonesComprobante(comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible)
+  
   return (
-    <>
-      <BotonVerDetalle onClick={() => openVistaTab(comprobante)} />
-      <BotonGenerarPDF onClick={() => handleImprimir(comprobante)} />
-    </>
+    <AccionesMenu botones={botones} />
   )
 }
 
@@ -222,28 +279,27 @@ const ComprobantesList = ({
     <>
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px", tableLayout: "fixed" }}>
-          <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
-            <tr>
-                             <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "18%" }}>
-                 Comprobante
-               </th>
-               <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "28%" }}>
-                 N°
-               </th>
-                              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "12%" }}>
-                  Fecha
+           <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
+             <tr>
+                              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "22%" }}>
+                  Comprobante
                 </th>
-               <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "15%" }}>
-                 Cliente
-               </th>
-                              <th className="px-3 py-3 text-right text-sm font-semibold text-slate-100" style={{ width: "10%" }}>
-                  Total
-               </th>
-                               <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "17%" }}>
-                  Acciones
+                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "32%" }}>
+                  N°
                 </th>
-            </tr>
-          </thead>
+                               <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
+                   Fecha
+                 </th>
+                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "18%" }}>
+                  Cliente
+                </th>
+                               <th className="px-3 py-3 text-right text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
+                   Total
+                </th>
+                                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "50px" }}>
+                 </th>
+             </tr>
+           </thead>
           <tbody className="bg-white divide-y divide-slate-300 leading-tight">
             {datosPagina.map((p) => {
               // Obtener datos del comprobante

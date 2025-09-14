@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import ItemsGridCompras from "./ItemsGridCompras"
 import BuscadorProductoCompras from "./BuscadorProductoCompras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 
 const OrdenCompraForm = ({
   onSave,
@@ -52,6 +53,9 @@ const OrdenCompraForm = ({
 
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
   
   const [selectedProveedor, setSelectedProveedor] = useState(null)
 
@@ -207,7 +211,7 @@ const OrdenCompraForm = ({
 
   return (
     <div className="px-6 pt-4 pb-6">
-      <form className="venta-form w-full max-w-[1000px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+      <form className="venta-form w-full max-w-[1000px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit} {...getFormProps()}>
         <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`} />
 
         {/* width constraint */}

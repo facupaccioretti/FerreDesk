@@ -5,6 +5,7 @@ import { es } from "date-fns/locale"
 import { useCallback } from "react"
 import Tabla from "../Tabla"
 import { BotonEliminar, BotonVerDetalle, BotonEditar, BotonConvertir, BotonGenerarPDF } from "../Botones"
+import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 
 const OrdenCompraList = ({
   ordenesCompra,
@@ -27,6 +28,36 @@ const OrdenCompraList = ({
   ordenamientoControlado = null,
   cargando = false,
 }) => {
+  // Función para generar los botones de acciones para órdenes de compra
+  const generarBotonesOrdenCompra = (orden) => {
+    return [
+      {
+        componente: BotonGenerarPDF,
+        onClick: () => onGenerarPDF(orden),
+        titulo: "Generar PDF"
+      },
+      {
+        componente: BotonVerDetalle,
+        onClick: () => onVerOrdenCompra(orden),
+        titulo: "Ver detalle"
+      },
+      {
+        componente: BotonEditar,
+        onClick: () => onEditarOrdenCompra(orden),
+        titulo: "Editar orden"
+      },
+      {
+        componente: BotonConvertir,
+        onClick: () => onConvertirOrdenCompra(orden),
+        titulo: "Convertir a Compra"
+      },
+      {
+        componente: BotonEliminar,
+        onClick: () => onEliminarOrdenCompra(orden.ord_id),
+        titulo: "Eliminar orden"
+      }
+    ]
+  }
 
   const formatDate = (dateString) => {
     if (!dateString) return "-"
@@ -42,7 +73,7 @@ const OrdenCompraList = ({
     { id: "fecha", titulo: "Fecha" },
     { id: "proveedor", titulo: "Proveedor" },
     { id: "items", titulo: "Items", align: "center", ancho: 90 },
-    { id: "acciones", titulo: "Acciones", align: "right", ancho: 200 },
+    { id: "acciones", titulo: "", align: "center", ancho: 50 },
   ]
 
   const renderFila = useCallback((orden, idxVisible, indiceInicio) => (
@@ -55,13 +86,9 @@ const OrdenCompraList = ({
         <div className="text-sm font-medium text-gray-900">{orden.proveedor_nombre || orden.ord_razon_social}</div>
       </td>
       <td className="px-2 py-1 text-sm text-center text-gray-500">{orden.cantidad_items || 0}</td>
-      <td className="px-2 py-1 text-right">
-        <div className="flex justify-end gap-1">
-          <BotonGenerarPDF onClick={() => onGenerarPDF(orden)} title="Generar PDF" />
-          <BotonVerDetalle onClick={() => onVerOrdenCompra(orden)} title="Ver detalle" />
-          <BotonEditar onClick={() => onEditarOrdenCompra(orden)} title="Editar" />
-          <BotonConvertir onClick={() => onConvertirOrdenCompra(orden)} title="Convertir a Compra" />
-          <BotonEliminar onClick={() => onEliminarOrdenCompra(orden.ord_id)} title="Eliminar" />
+      <td className="px-2 py-1 text-center">
+        <div className="flex items-center justify-center">
+          <AccionesMenu botones={generarBotonesOrdenCompra(orden)} />
         </div>
       </td>
     </tr>

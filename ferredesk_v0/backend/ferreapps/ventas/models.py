@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.db.models import JSONField
 
@@ -116,6 +116,31 @@ class Venta(models.Model):
                 name='ven_punto_positivo'
             )
         ]
+
+    def save(self, *args, **kwargs):
+        """
+        Sobrescribe el método save para implementar autoincremento de 5 en 5 para ven_id.
+        Solo asigna un nuevo ID si es una nueva venta (sin ven_id).
+        """
+        # Si es una nueva venta (sin ven_id), calcular el siguiente ID de 5 en 5
+        if not self.ven_id:
+            with transaction.atomic():
+                # Buscar el último ven_id en la base de datos
+                ultima_venta = Venta.objects.order_by('-ven_id').first()
+                
+                if ultima_venta:
+                    # Calcular el siguiente múltiplo de 5
+                    ultimo_id = ultima_venta.ven_id
+                    siguiente_id = ((ultimo_id // 5) + 1) * 5
+                else:
+                    # Si no hay ventas, empezar con 5
+                    siguiente_id = 5
+                
+                # Asignar el nuevo ID
+                self.ven_id = siguiente_id
+        
+        # Llamar al método save original
+        super().save(*args, **kwargs)
 
 class VentaDetalleItem(models.Model):
     vdi_idve = models.ForeignKey(

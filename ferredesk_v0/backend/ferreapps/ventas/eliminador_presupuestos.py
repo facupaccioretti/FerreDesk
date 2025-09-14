@@ -40,7 +40,7 @@ def eliminar_presupuestos_antiguos(request):
         # Filtrar presupuestos antiguos (solo presupuestos abiertos)
         presupuestos_antiguos = Venta.objects.filter(
             ven_estado='AB',  # Solo presupuestos abiertos
-            ven_fecha__lt=fecha_limite,
+            ven_fecha__lte=fecha_limite,  # Menor o igual que la fecha límite
             comprobante__codigo_afip='9997'  # Solo presupuestos (código AFIP 9997)
         )
         
@@ -106,7 +106,7 @@ def vista_previa_presupuestos_antiguos(request):
         # Filtrar presupuestos antiguos (solo presupuestos abiertos)
         presupuestos_antiguos = Venta.objects.filter(
             ven_estado='AB',  # Solo presupuestos abiertos
-            ven_fecha__lt=fecha_limite,
+            ven_fecha__lte=fecha_limite,  # Menor o igual que la fecha límite
             comprobante__codigo_afip='9997'  # Solo presupuestos
         ).select_related('comprobante', 'ven_idcli')
         
@@ -129,3 +129,4 @@ def vista_previa_presupuestos_antiguos(request):
         return Response({
             'error': f'Error interno del servidor: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

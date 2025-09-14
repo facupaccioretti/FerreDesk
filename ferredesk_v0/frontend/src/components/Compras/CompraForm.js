@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import ItemsGridCompras from "./ItemsGridCompras"
 import BuscadorProductoCompras from "./BuscadorProductoCompras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 
 // Letras permitidas para comprobantes de compras
 const LETRAS_COMPROBANTE_PERMITIDAS = ["A", "C", "X"]
@@ -102,6 +103,9 @@ const CompraForm = ({
 
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
 
   // Helper para construir el string completo
   const buildNumeroFactura = useCallback((letra, pv, numero) => {
@@ -419,7 +423,7 @@ const CompraForm = ({
 
   return (
     <div className="px-6 pt-4 pb-6">
-      <form className="venta-form w-full max-w-[1000px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+      <form className="venta-form w-full max-w-[1000px] mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit} {...getFormProps()}>
         <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`} />
 
         {/* width constraint */}
