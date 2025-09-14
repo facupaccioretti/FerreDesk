@@ -5,6 +5,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
+from django.db.models import ProtectedError
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
 from .serializers import (
     StockSerializer,
@@ -18,11 +19,11 @@ from .serializers import (
 from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
+from django.db.models import Q
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
-from django.db.models import Q
 from django.db.models.functions import Lower
 import os
 import pyexcel as pe
@@ -53,6 +54,42 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         'acti': ['exact'],
     }
     pagination_class = PaginacionPorPaginaConLimite
+
+    def get_queryset(self):
+        """
+        Aplicar búsqueda general en razón social, fantasía y CUIT.
+        """
+        queryset = super().get_queryset()
+        
+        # Búsqueda general por razón social, fantasía o CUIT
+        termino_busqueda = self.request.query_params.get('search', None)
+        if termino_busqueda:
+            queryset = queryset.filter(
+                Q(razon__icontains=termino_busqueda) |
+                Q(fantasia__icontains=termino_busqueda) |
+                Q(cuit__icontains=termino_busqueda)
+            ).distinct()
+        
+        # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
+        if 'acti' not in self.request.query_params:
+            queryset = queryset.filter(acti='S')
+        
+        return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un proveedor
+        tiene movimientos comerciales asociados.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El proveedor no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
@@ -140,6 +177,33 @@ class StockViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_update(self, serializer):
         serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un producto
+        tiene movimientos comerciales asociados.
+        """
+        instance = self.get_object()
+        
+        # Verificar si tiene ventas asociadas (VentaDetalleItem usa IntegerField)
+        from ferreapps.ventas.models import VentaDetalleItem
+        if VentaDetalleItem.objects.filter(vdi_idsto=instance.pk).exists():
+            return Response(
+                {
+                    "error": "El producto no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
+        
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El producto no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
 
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')

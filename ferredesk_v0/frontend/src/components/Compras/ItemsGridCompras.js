@@ -440,19 +440,33 @@ const ItemsGridCompras = forwardRef(
             })
         }
         
-        if (field === "cdi_cantidad") {
-          // Replicar exactamente la lógica del ItemsGrid original
-          const codigoValido = modoOrdenCompra 
-            ? rows[idx].codigo_venta 
-            : rows[idx].codigo_proveedor
+        if (field === "cdi_cantidad" || field === "odi_cantidad") {
+          // NUEVA LÓGICA: Siempre ir al siguiente renglón en el campo código
+          // Buscar el primer renglón vacío disponible o crear uno nuevo
+          let idxSiguiente = idx + 1
           
-          if (rows[idx].producto && codigoValido && rows[idx + 1] && isRowVacio(rows[idx + 1])) {
-            setTimeout(() => {
-              if (codigoRefs.current[idx + 1]) {
-                codigoRefs.current[idx + 1].focus()
-              }
-            }, 0)
+          // Si no hay siguiente renglón o está lleno, buscar el primer renglón vacío
+          if (idxSiguiente >= rows.length || !isRowVacio(rows[idxSiguiente])) {
+            idxSiguiente = rows.findIndex((row, i) => i > idx && isRowVacio(row))
           }
+          
+          // Si no hay renglón vacío, agregar uno nuevo
+          if (idxSiguiente === -1) {
+            setRows((prevRows) => {
+              const newRows = [...prevRows, getEmptyRow(modoOrdenCompra)]
+              const ensured = ensureSoloUnEditable(newRows)
+              emitirCambio(ensured)
+              return ensured
+            })
+            idxSiguiente = rows.length // El nuevo renglón será el último
+          }
+          
+          // Mover foco al campo código del siguiente renglón
+          setTimeout(() => {
+            if (codigoRefs.current[idxSiguiente]) {
+              codigoRefs.current[idxSiguiente].focus()
+            }
+          }, 0)
         }
       }
     }
@@ -504,17 +518,53 @@ const ItemsGridCompras = forwardRef(
           const newRow = toRow(item)
           setRows((prevRows) => {
             const newRows = [...prevRows]
-            // Reemplazar la última fila vacía con el nuevo item
-            const lastEmptyIndex = newRows.findIndex((r) => !isRowLleno(r))
-            if (lastEmptyIndex !== -1) {
-              newRows[lastEmptyIndex] = newRow
+            
+            // Verificar si ya existe un item con el mismo producto y proveedor
+            const targetProdId = newRow.producto?.id || (modoOrdenCompra ? newRow.odi_idsto : newRow.cdi_idsto)
+            const targetProvId = (modoOrdenCompra ? newRow.odi_idpro : newRow.cdi_idpro) || selectedProveedor?.id || null
+            
+            const idxExistente = newRows.findIndex((r) => {
+              if (!isRowLleno(r)) return false // No comparar con filas vacías
+              
+              const productoExistente = r.producto?.id || (modoOrdenCompra ? r.odi_idsto : r.cdi_idsto)
+              const proveedorExistente = (modoOrdenCompra ? r.odi_idpro : r.cdi_idpro) || selectedProveedor?.id || null
+              
+              return productoExistente === targetProdId && proveedorExistente === targetProvId
+            })
+            
+            if (idxExistente !== -1) {
+              // DUPLICADO ENCONTRADO - SUMAR CANTIDADES
+              const cantidadASumar = modoOrdenCompra 
+                ? (Number(newRow.odi_cantidad) > 0 ? Number(newRow.odi_cantidad) : 1)
+                : (Number(newRow.cdi_cantidad) > 0 ? Number(newRow.cdi_cantidad) : 1)
+              
+              const updatedRows = newRows.map((r, i) => {
+                if (i === idxExistente) {
+                  if (modoOrdenCompra) {
+                    return { ...r, odi_cantidad: Number(r.odi_cantidad) + cantidadASumar }
+                  } else {
+                    return { ...r, cdi_cantidad: Number(r.cdi_cantidad) + cantidadASumar }
+                  }
+                }
+                return r
+              })
+              
+              const ensured = ensureSoloUnEditable(updatedRows)
+              emitirCambio(ensured)
+              return ensured
             } else {
-              newRows.push(newRow)
+              // NO ES DUPLICADO - agregar como nuevo item
+              const lastEmptyIndex = newRows.findIndex((r) => !isRowLleno(r))
+              if (lastEmptyIndex !== -1) {
+                newRows[lastEmptyIndex] = newRow
+              } else {
+                newRows.push(newRow)
+              }
+              // Agregar una nueva fila vacía si es necesario
+              const ensured = ensureSoloUnEditable(newRows)
+              emitirCambio(ensured)
+              return ensured
             }
-            // Agregar una nueva fila vacía si es necesario
-            const ensured = ensureSoloUnEditable(newRows)
-            emitirCambio(ensured)
-            return ensured
           })
         },
       }),

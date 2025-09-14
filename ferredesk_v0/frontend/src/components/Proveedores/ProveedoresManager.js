@@ -121,7 +121,8 @@ const ProveedoresManager = () => {
       try {
         await deleteProveedor(id)
       } catch (err) {
-        alert(err.message || "Error al eliminar proveedor")
+        // El error ya viene parseado desde el hook con el mensaje específico
+        alert(err.message)
       }
     }
   }
@@ -221,9 +222,11 @@ const ProveedoresManager = () => {
                       Cargando proveedores...
                     </div>
                   )}
-                  {error && (
-                    <div className="text-red-600 mb-4 p-3 bg-red-50 rounded-lg border border-red-200">{error}</div>
-                  )}
+                  {error && (() => {
+                    // Mostrar error como alert nativo del navegador
+                    window.alert(`Error: ${error}`);
+                    return null;
+                  })()}
                   {/* Tabla compacta reutilizable */}
                   <Tabla
                     columnas={[

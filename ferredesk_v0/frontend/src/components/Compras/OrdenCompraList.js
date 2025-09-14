@@ -57,9 +57,9 @@ const OrdenCompraList = ({
       <td className="px-2 py-1 text-sm text-center text-gray-500">{orden.cantidad_items || 0}</td>
       <td className="px-2 py-1 text-right">
         <div className="flex justify-end gap-1">
+          <BotonGenerarPDF onClick={() => onGenerarPDF(orden)} title="Generar PDF" />
           <BotonVerDetalle onClick={() => onVerOrdenCompra(orden)} title="Ver detalle" />
           <BotonEditar onClick={() => onEditarOrdenCompra(orden)} title="Editar" />
-          <BotonGenerarPDF onClick={() => onGenerarPDF(orden)} title="Generar PDF" />
           <BotonConvertir onClick={() => onConvertirOrdenCompra(orden)} title="Convertir a Compra" />
           <BotonEliminar onClick={() => onEliminarOrdenCompra(orden.ord_id)} title="Eliminar" />
         </div>

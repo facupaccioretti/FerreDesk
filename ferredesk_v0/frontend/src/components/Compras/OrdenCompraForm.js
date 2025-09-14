@@ -37,7 +37,7 @@ const OrdenCompraForm = ({
       initialState.ord_fecha = initialData.ord_fecha || new Date().toISOString().split("T")[0]
       initialState.ord_idpro = initialData.ord_idpro !== undefined && initialData.ord_idpro !== null ? initialData.ord_idpro : initialData.proveedorSeleccionado?.id || null
       initialState.ord_cuit = initialData.ord_cuit || ""
-      initialState.ord_razon_social = initialData.ord_razon_social || initialData.proveedorSeleccionado?.razon_social || ""
+      initialState.ord_razon_social = initialData.ord_razon_social || initialData.proveedorSeleccionado?.razon || ""
       initialState.ord_domicilio = initialData.ord_domicilio || ""
       initialState.ord_observacion = initialData.ord_observacion || ""
       initialState.items_data = initialData.items || []
@@ -68,21 +68,21 @@ const OrdenCompraForm = ({
           ...prev,
           ord_idpro: proveedor.id,
           ord_cuit: proveedor.cuit || "",
-          ord_razon_social: proveedor.razon_social || "",
+          ord_razon_social: proveedor.razon|| "",
           ord_domicilio: proveedor.domicilio || "",
         }))
       } else if (initialData.ord_idpro) {
         // Caso EDICIÓN: usar datos directamente de la base de datos
         const proveedorFromDB = {
           id: initialData.ord_idpro,
-          razon_social: initialData.ord_razon_social,
+          razon: initialData.ord_razon_social,
           cuit: initialData.ord_cuit,
           domicilio: initialData.ord_domicilio
         }
         setSelectedProveedor(proveedorFromDB)
       }
     }
-  }, [initialData])
+  }, [initialData, formData.ord_idpro])
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -92,27 +92,30 @@ const OrdenCompraForm = ({
     }
   }
 
-  const handleProveedorChange = (proveedorId) => {
-    const proveedor = proveedores.find((p) => p.id === parseInt(proveedorId))
-    setSelectedProveedor(proveedor)
-    
-    setFormData((prev) => ({
-      ...prev,
-      ord_idpro: proveedorId,
-      ord_cuit: proveedor?.cuit || "",
-      ord_razon_social: proveedor?.razon || "",
-      ord_domicilio: proveedor?.domicilio || "",
-    }))
-
-    // Limpiar error del proveedor
-    if (errors.ord_idpro) {
-      setErrors((prev) => ({ ...prev, ord_idpro: null }))
-    }
-  }
 
   const handleAddItemFromBuscador = (producto) => {
-    if (itemsGridRef.current) {
-      itemsGridRef.current.addItem(producto)
+    if (!selectedProveedor?.id) {
+      console.error("No hay proveedor seleccionado")
+      return
+    }
+
+    // Crear un nuevo item con el producto seleccionado para orden de compra
+    const nuevoItem = {
+      id: Date.now() + Math.random(),
+      codigo_venta: producto.codvta || "",
+      producto: producto,
+      odi_idsto: producto.id,
+      odi_idpro: selectedProveedor.id,
+      odi_detalle1: producto.deno || producto.nombre || "",
+      odi_detalle2: producto.unidad || producto.unidadmedida || "-",
+      odi_cantidad: 1,
+      odi_stock_proveedor: producto.stockprove_id || null,
+      unidad: producto.unidad || producto.unidadmedida || "-",
+    }
+
+    // Agregar el item directamente al grid usando el método imperativo
+    if (itemsGridRef.current && itemsGridRef.current.addItem) {
+      itemsGridRef.current.addItem(nuevoItem)
     }
   }
 
@@ -283,9 +286,8 @@ const OrdenCompraForm = ({
                        name="ord_cuit"
                        type="text"
                        value={formData.ord_cuit}
-                       onChange={(e) => handleInputChange("ord_cuit", e.target.value)}
-                       className={`w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 ${theme.secundario} focus:border-orange-500`}
-                       readOnly={readOnly}
+                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-50 text-slate-700 cursor-not-allowed"
+                       readOnly
                        placeholder="CUIT del proveedor"
                      />
                    </div>
@@ -297,10 +299,9 @@ const OrdenCompraForm = ({
                        name="ord_domicilio"
                        type="text"
                        value={formData.ord_domicilio}
-                       onChange={(e) => handleInputChange("ord_domicilio", e.target.value)}
-                       className={`w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 ${theme.secundario} focus:border-orange-500`}
-                       readOnly={readOnly}
-                       placeholder="Domicilio del proveedor"
+                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-50 text-slate-700 cursor-not-allowed"
+                       readOnly
+ja de                        placeholder="Domicilio del proveedor"
                      />
                    </div>
 

@@ -44,62 +44,70 @@ export default function ProveedorSelectorModal({
     { id: "seleccion", titulo: "Sel.", ancho: "60px", align: "center" }
   ]
 
-  // Reiniciar al abrir
+  // Reiniciar al abrir y cargar proveedores iniciales
   useEffect(() => {
     if (abierto) {
       setTermino("")
       setFilaSeleccionada(null)
       setResultadosBusqueda([])
       setBuscando(false)
+      
+      // Cargar todos los proveedores inmediatamente al abrir
+      cargarProveedores("")
     }
   }, [abierto])
 
+  // Función para cargar proveedores
+  const cargarProveedores = (terminoBusqueda) => {
+    setBuscando(true)
+    const url = terminoBusqueda.length > 0 
+      ? `/api/productos/proveedores/?search=${encodeURIComponent(terminoBusqueda)}`
+      : `/api/productos/proveedores/?acti=`
+      
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Error en la respuesta de la API")
+        }
+        return res.json()
+      })
+      .then((data) => {
+        // El ViewSet de DRF usualmente pagina, así que los resultados están en `data.results`.
+        // Si no está paginado, será `data`.
+        console.log("Respuesta de la API de proveedores:", data) // Debug: ver qué devuelve la API
+        
+        let resultados = data
+        if (data && data.results) {
+          resultados = data.results
+        }
+        
+        // Asegurar que siempre sea un array
+        if (!Array.isArray(resultados)) {
+          console.warn("La API no devolvió un array:", resultados)
+          resultados = []
+        }
+        
+        setResultadosBusqueda(resultados)
+      })
+      .catch((err) => {
+        console.error("Error al buscar proveedores:", err)
+        setResultadosBusqueda([]) // Limpiar en caso de error
+      })
+      .finally(() => {
+        setBuscando(false)
+      })
+  }
+
   // Lógica de búsqueda "debounced" contra la API
   useEffect(() => {
-    setBuscando(true)
+    if (!abierto) return // No hacer búsqueda si el modal está cerrado
+    
     const timerId = setTimeout(() => {
-      // Si no hay término de búsqueda, cargar todos los proveedores
-      // Si hay término, buscar con filtro
-      const url = termino.length > 0 
-        ? `/api/productos/proveedores/?search=${encodeURIComponent(termino)}`
-        : `/api/productos/proveedores/`
-      
-      fetch(url)
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error("Error en la respuesta de la API")
-          }
-          return res.json()
-        })
-        .then((data) => {
-          // El ViewSet de DRF usualmente pagina, así que los resultados están en `data.results`.
-          // Si no está paginado, será `data`.
-          console.log("Respuesta de la API de proveedores:", data) // Debug: ver qué devuelve la API
-          
-          let resultados = data
-          if (data && data.results) {
-            resultados = data.results
-          }
-          
-          // Asegurar que siempre sea un array
-          if (!Array.isArray(resultados)) {
-            console.warn("La API no devolvió un array:", resultados)
-            resultados = []
-          }
-          
-          setResultadosBusqueda(resultados)
-        })
-        .catch((err) => {
-          console.error("Error al buscar proveedores:", err)
-          setResultadosBusqueda([]) // Limpiar en caso de error
-        })
-        .finally(() => {
-          setBuscando(false)
-        })
+      cargarProveedores(termino)
     }, termino.length > 0 ? DEBOUNCE_DELAY : 0) // Sin delay si no hay término de búsqueda
 
     return () => clearTimeout(timerId) // Limpieza del temporizador
-  }, [termino])
+  }, [termino, abierto])
 
   // Función para renderizar filas personalizadas
   const renderFila = (prov, idxVisible, indiceInicio) => {

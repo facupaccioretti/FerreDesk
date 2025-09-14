@@ -36,6 +36,15 @@ const ConversionCompraModal = ({
           ...prev,
           [itemId]: item.odi_cantidad
         }))
+        
+        // Auto-enfocar el input de cantidad después de un breve delay para que se renderice
+        setTimeout(() => {
+          const cantidadInput = document.querySelector(`input[data-item-id="${itemId}"]`)
+          if (cantidadInput) {
+            cantidadInput.focus()
+            cantidadInput.select() // Seleccionar todo el texto para que se pueda sobrescribir directamente
+          }
+        }, 100)
       }
     } else {
       setSelectedItems(prev => prev.filter(id => id !== itemId))
@@ -322,6 +331,7 @@ const ConversionCompraModal = ({
                                    value={cantidadesRecibidas[item.id] || ''}
                                    onChange={(e) => handleCantidadChange(item.id, e.target.value)}
                                    onClick={(e) => e.stopPropagation()}
+                                   data-item-id={item.id}
                                    className="w-20 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                                    placeholder="0.00"
                                  />

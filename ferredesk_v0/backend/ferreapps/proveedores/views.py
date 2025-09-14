@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, permissions, status, serializers as drf_serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.db.models import ProtectedError
 from ferreapps.productos.models import Proveedor
 from .serializers import ProveedorSerializer, HistorialImportacionProveedorSerializer
 from .models import HistorialImportacionProveedor
@@ -10,6 +11,7 @@ from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.conf import settings
 from django.db.models.functions import Lower
+from django.db.models import Q
 from django.utils import timezone
 from decimal import Decimal, ROUND_HALF_UP
 import pyexcel as pe
@@ -30,9 +32,23 @@ class ProveedorViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Aplicar filtros y ordenamiento a los proveedores.
+        Aplicar búsqueda general y ordenamiento a los proveedores.
         """
         queryset = super().get_queryset()
+        
+        # Búsqueda general por razón social, fantasía o CUIT
+        termino_busqueda = self.request.query_params.get('search', None)
+        if termino_busqueda:
+            queryset = queryset.filter(
+                Q(razon__icontains=termino_busqueda) |
+                Q(fantasia__icontains=termino_busqueda) |
+                Q(cuit__icontains=termino_busqueda)
+            ).distinct()
+        
+        # Filtro por estado activo si se especifica
+        acti_param = self.request.query_params.get('acti', None)
+        if acti_param:
+            queryset = queryset.filter(acti=acti_param)
 
         # Ordenamiento
         orden = self.request.query_params.get('orden', 'id')
@@ -58,6 +74,21 @@ class ProveedorViewSet(viewsets.ModelViewSet):
             queryset = queryset.order_by('-id')
 
         return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un proveedor
+        tiene movimientos comerciales asociados.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El proveedor no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
 
 
 class HistorialImportacionesProveedorAPIView(APIView):

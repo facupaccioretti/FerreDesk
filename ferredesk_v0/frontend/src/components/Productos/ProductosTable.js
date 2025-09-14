@@ -198,9 +198,14 @@ export default function ProductosTable({
     return "Sin asignar"
   }
 
-  const handleDeleteProducto = (id) => {
+  const handleDeleteProducto = async (id) => {
     if (window.confirm("¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer.")) {
-      deleteProducto(id)
+      try {
+        await deleteProducto(id)
+      } catch (error) {
+        // El error ya viene parseado desde el hook con el mensaje específico
+        alert(error.message)
+      }
     }
   }
 

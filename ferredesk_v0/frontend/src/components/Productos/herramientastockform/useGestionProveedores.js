@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, setFormError, updateStockProve, fetchStockProve }) => {
+const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, alert, updateStockProve, fetchStockProve }) => {
   const isEdicion = !!stock?.id
 
   // Stock prove para este stock específico - debe definirse primero
@@ -95,7 +95,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   const handleEditarCantidadProveedorSave = (proveedorId) => {
     const cantidadNum = Number.parseFloat(String(nuevaCantidadProveedor).replace(",", "."))
     if (isNaN(cantidadNum)) {
-      setFormError("Ingrese una cantidad válida")
+      alert("Ingrese una cantidad válida")
       return
     }
     
@@ -151,7 +151,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   const handleEditarCostoProveedorSave = (proveedorId) => {
     const costoNum = Number.parseFloat(String(nuevoCostoProveedor).replace(",", "."))
     if (isNaN(costoNum)) {
-      setFormError("Ingrese un costo válido")
+      alert("Ingrese un costo válido")
       return
     }
     
@@ -212,7 +212,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
       const proveedorId = id.replace('pendiente-', '')
       const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
       if (isNaN(cantidadNum)) {
-        setFormError("Ingrese una cantidad válida")
+        alert("Ingrese una cantidad válida")
         return
       }
       
@@ -246,7 +246,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     // Permitir negativos y decimales
     const cantidadNum = Number.parseFloat(String(nuevaCantidad).replace(",", "."))
     if (isNaN(cantidadNum)) {
-      setFormError("Ingrese una cantidad válida")
+      alert("Ingrese una cantidad válida")
       return
     }
     
@@ -283,7 +283,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
       const proveedorId = id.replace('pendiente-', '')
       const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
       if (isNaN(costoNum) || costoNum < 0) {
-        setFormError("Ingrese un costo válido")
+        alert("Ingrese un costo válido")
         return
       }
       
@@ -316,7 +316,7 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
     if (!sp) return
     const costoNum = Number.parseFloat(String(nuevoCosto).replace(",", "."))
     if (isNaN(costoNum) || costoNum < 0) {
-      setFormError("Ingrese un costo válido")
+      alert("Ingrese un costo válido")
       return
     }
 

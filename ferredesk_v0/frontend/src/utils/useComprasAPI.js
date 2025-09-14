@@ -32,7 +32,15 @@ export const useComprasAPI = () => {
       throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`)
     }
 
-    return response.json()
+    // Para operaciones DELETE, la respuesta puede estar vacía (status 204)
+    // Solo intentar parsear JSON si hay contenido
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      return response.json()
+    }
+    
+    // Si no hay contenido o no es JSON, devolver null para DELETE exitosos
+    return null
   }, [])
 
   // Obtener lista de compras

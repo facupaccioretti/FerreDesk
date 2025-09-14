@@ -99,8 +99,21 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
         
         const data = await response.json()
         if (!response.ok) {
-          setFormError(data.detail || "Error al guardar el producto.")
-          return { success: false, error: data.detail || "Error al guardar el producto." }
+          let errorMsg = "Error al guardar el producto."
+          // Manejo específico para errores de validación de campos anidados como codvta
+          if (data.errors && data.errors.errors && data.errors.errors.codvta && data.errors.errors.codvta.length > 0) {
+            errorMsg = data.errors.errors.codvta[0];
+          } 
+          // Manejo para errores de protección más simples
+          else if (data.error) {
+            errorMsg = data.error;
+          }
+          // Fallback para otros formatos de error de DRF
+          else {
+            errorMsg = data.detail || JSON.stringify(data);
+          }
+          alert(errorMsg)
+          return { success: false, error: errorMsg }
         }
         
         productoGuardado = { ...formToSave, id: data.producto_id }
@@ -139,8 +152,21 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
         
         const data = await response.json()
         if (!response.ok) {
-          setFormError(data.detail || "Error al actualizar el producto.")
-          return { success: false, error: data.detail || "Error al actualizar el producto." }
+          let errorMsg = "Error al actualizar el producto."
+          // Manejo específico para errores de validación de campos anidados como codvta
+          if (data.errors && data.errors.errors && data.errors.errors.codvta && data.errors.errors.codvta.length > 0) {
+            errorMsg = data.errors.errors.codvta[0];
+          } 
+          // Manejo para errores de protección más simples
+          else if (data.error) {
+            errorMsg = data.error;
+          }
+          // Fallback para otros formatos de error de DRF
+          else {
+            errorMsg = data.detail || JSON.stringify(data);
+          }
+          alert(errorMsg)
+          return { success: false, error: errorMsg }
         }
         
         productoGuardado = { ...formToSave, id: data.producto_id || stock.id }
@@ -152,8 +178,9 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
       
     } catch (error) {
       console.error("Error en guardado atómico:", error)
-      setFormError("Error al guardar el producto o sus relaciones.")
-      return { success: false, error: "Error al guardar el producto o sus relaciones." }
+      const errorMsg = "Error al guardar el producto o sus relaciones."
+      alert(errorMsg)
+      return { success: false, error: errorMsg }
     } finally {
       setIsSaving(false)
     }

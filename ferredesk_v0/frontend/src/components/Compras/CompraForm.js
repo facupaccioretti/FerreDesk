@@ -513,9 +513,8 @@ const CompraForm = ({
                       name="comp_cuit"
                       type="text"
                       value={formData.comp_cuit}
-                      onChange={(e) => handleInputChange("comp_cuit", e.target.value)}
-                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      readOnly={readOnly}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-50 text-slate-700 cursor-not-allowed"
+                      readOnly
                       placeholder="CUIT del proveedor"
                     />
                   </div>
@@ -527,9 +526,8 @@ const CompraForm = ({
                       name="comp_domicilio"
                       type="text"
                       value={formData.comp_domicilio}
-                      onChange={(e) => handleInputChange("comp_domicilio", e.target.value)}
-                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      readOnly={readOnly}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-50 text-slate-700 cursor-not-allowed"
+                      readOnly
                       placeholder="Domicilio del proveedor"
                     />
                   </div>

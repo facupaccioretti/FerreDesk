@@ -1,6 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+
+const UMBRAL_BUSQUEDA = 2 // Mínimo de caracteres para iniciar la búsqueda
+const DEBOUNCE_DELAY = 300 // Tiempo de espera en ms después de teclear
 
 function BuscadorProductoCompras({ 
   selectedProveedor, 
@@ -16,6 +19,7 @@ function BuscadorProductoCompras({
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   // Cargar productos del proveedor automáticamente en modo orden de compra
   useEffect(() => {
@@ -52,14 +56,19 @@ function BuscadorProductoCompras({
     }
   }, [selectedProveedor?.id, modoOrdenCompra])
 
-  const handleChange = async (e) => {
-    const value = e.target.value
-    setBusqueda(value)
+  const buscarProductos = useCallback(async (termino) => {
+    if (termino.length < UMBRAL_BUSQUEDA) {
+      setSugerencias([])
+      return
+    }
     
-    if (modoOrdenCompra) {
-      // En modo orden de compra, filtrar localmente los productos ya cargados
-      if (value.length >= 2) {
-        const lower = value.toLowerCase()
+    setLoading(true)
+    setError(null)
+    
+    try {
+      if (modoOrdenCompra) {
+        // En modo orden de compra, filtrar localmente los productos ya cargados
+        const lower = termino.toLowerCase()
         const sugs = productosProveedor.filter(
           p =>
             (p.codvta || '').toLowerCase().includes(lower) ||
@@ -67,63 +76,109 @@ function BuscadorProductoCompras({
             (p.codigo_proveedor || '').toLowerCase().includes(lower)
         )
         setSugerencias(sugs)
-        setShowDropdown(true)
-        setHighlighted(0)
       } else {
-        // Si no hay suficientes caracteres, no mostrar nada
-        setSugerencias([])
-        setShowDropdown(false)
-        setHighlighted(0)
-      }
-    } else {
-      // Modo normal: búsqueda por API
-      if (value.length >= 2 && selectedProveedor?.id) {
-        setLoading(true)
-        try {
-          const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
-            credentials: "include"
-          })
-          
-          if (response.ok) {
-            const productos = await response.json()
-            const lower = value.toLowerCase()
-            
-            const sugs = productos.filter(
-              p =>
-                (p.codvta || '').toLowerCase().includes(lower) ||
-                (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
-                (p.codigo_proveedor || '').toLowerCase().includes(lower)
-            )
-            
-            setSugerencias(sugs)
-            setShowDropdown(true)
-            setHighlighted(0)
-          } else {
-            setSugerencias([])
-            setShowDropdown(false)
-          }
-        } catch (error) {
-          console.error('Error al buscar productos:', error)
+        // Modo normal: búsqueda por API
+        if (!selectedProveedor?.id) {
           setSugerencias([])
-          setShowDropdown(false)
-        } finally {
-          setLoading(false)
+          return
         }
+        
+        const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
+          credentials: "include"
+        })
+        
+        if (!response.ok) throw new Error('Error en la búsqueda')
+        
+        const productos = await response.json()
+        const lower = termino.toLowerCase()
+        
+        const sugs = productos.filter(
+          p =>
+            (p.codvta || '').toLowerCase().includes(lower) ||
+            (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
+            (p.codigo_proveedor || '').toLowerCase().includes(lower)
+        )
+        
+        setSugerencias(sugs)
+      }
+    } catch (err) {
+      setError(err.message)
+      setSugerencias([])
+    } finally {
+      setLoading(false)
+    }
+  }, [modoOrdenCompra, productosProveedor, selectedProveedor?.id])
+
+  // Debounce para evitar muchas llamadas a la API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (busqueda.length >= UMBRAL_BUSQUEDA) {
+        buscarProductos(busqueda)
       } else {
         setSugerencias([])
-        setShowDropdown(false)
-        setHighlighted(0)
       }
+    }, DEBOUNCE_DELAY)
+
+    return () => clearTimeout(timer)
+  }, [busqueda, buscarProductos])
+
+  // Mostrar dropdown cuando se cargan sugerencias y el input tiene focus
+  useEffect(() => {
+    if (sugerencias.length > 0 && !disabled && !readOnly) {
+      setShowDropdown(true)
     }
+  }, [sugerencias, disabled, readOnly])
+
+  const handleChange = (e) => {
+    const value = e.target.value
+    setBusqueda(value)
+    setHighlighted(0)
   }
 
-  const handleSelect = (producto) => {
+  const handleSelect = useCallback((producto) => {
     onSelect(producto)
     setBusqueda('')
     setSugerencias([])
     setShowDropdown(false)
     setHighlighted(0)
-  }
+  }, [onSelect])
+
+  const handleKeyDown = useCallback((e) => {
+    if (disabled || readOnly) return;
+    
+    if (e.key === 'Enter') {
+      if (sugerencias.length > 0 && busqueda) {
+        handleSelect(sugerencias[highlighted])
+        e.preventDefault()
+        e.stopPropagation()
+      } else {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    } else if (e.key === 'ArrowDown') {
+      setHighlighted(h => Math.min(h + 1, sugerencias.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      setHighlighted(h => Math.max(h - 1, 0))
+    }
+  }, [disabled, readOnly, sugerencias, busqueda, highlighted, handleSelect])
+
+  const handleFocus = useCallback(() => {
+    if (sugerencias.length > 0 && !disabled && !readOnly) {
+      setShowDropdown(true)
+    }
+  }, [sugerencias.length, disabled, readOnly])
+
+  const handleBlur = useCallback(() => {
+    setTimeout(() => setShowDropdown(false), 150)
+  }, [])
+
+  const handleMouseEnter = useCallback((idx) => {
+    setHighlighted(idx)
+  }, [])
+
+  const handleMouseDown = useCallback((producto) => {
+    handleSelect(producto)
+  }, [handleSelect])
 
   useEffect(() => {
     setBusqueda('')
@@ -145,10 +200,8 @@ function BuscadorProductoCompras({
           type="text"
           value={busqueda}
           onChange={handleChange}
-          onFocus={() => { 
-            if (sugerencias.length > 0 && !isDisabled) setShowDropdown(true) 
-          }}
-          onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder={
             isDisabled 
               ? selectedProveedor?.id 
@@ -163,24 +216,7 @@ function BuscadorProductoCompras({
           }`}
           autoComplete="off"
           disabled={isDisabled}
-          onKeyDown={e => {
-            if (isDisabled) return;
-            
-            if (e.key === 'Enter') {
-              if (sugerencias.length > 0 && busqueda) {
-                handleSelect(sugerencias[highlighted])
-                e.preventDefault()
-                e.stopPropagation()
-              } else {
-                e.preventDefault()
-                e.stopPropagation()
-              }
-            } else if (e.key === 'ArrowDown') {
-              setHighlighted(h => Math.min(h + 1, sugerencias.length - 1))
-            } else if (e.key === 'ArrowUp') {
-              setHighlighted(h => Math.max(h - 1, 0))
-            }
-          }}
+          onKeyDown={handleKeyDown}
         />
         {loading && (
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
@@ -190,48 +226,33 @@ function BuscadorProductoCompras({
       </div>
       
       {showDropdown && sugerencias.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white shadow-2xl max-h-60 rounded-sm overflow-hidden focus:outline-none border border-slate-200/50 ring-1 ring-slate-200/30 text-xs">
-          <ul className="py-1 space-y-0" role="listbox">
-            {sugerencias.map((p, idx) => {
-              const isSelected = highlighted === idx
-              return (
-                <li
-                  key={p.id}
-                  className={`relative cursor-pointer select-none py-1 pl-2 pr-2 rounded-sm transition-all duration-200 ${
-                    isSelected
-                      ? "bg-gradient-to-r from-orange-100 to-orange-50 ring-1 ring-orange-200/50"
-                      : "hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/80"
-                  }`}
-                  role="option"
-                  aria-selected={isSelected}
-                  onMouseDown={() => handleSelect(p)}
-                  onMouseEnter={() => setHighlighted(idx)}
-                >
-                  <div className="flex items-center gap-1">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className={`font-bold text-xs ${isSelected ? 'text-orange-800' : 'text-slate-800'}`}>
-                          {p.codvta}
-                        </span>
-                        {p.codigo_proveedor && (
-                          <span className={`text-xs px-1 py-0.5 rounded-sm ${
-                            isSelected 
-                              ? 'bg-blue-200/50 text-blue-700' 
-                              : 'bg-blue-100/50 text-blue-600'
-                          }`}>
-                            {p.codigo_proveedor}
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-xs truncate mt-0.5 ${isSelected ? 'text-orange-700' : 'text-slate-600'}`}>
-                        {p.deno || p.nombre}
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-sm shadow-lg max-h-60 overflow-y-auto">
+          {sugerencias.map((p, idx) => {
+            const isSelected = idx === highlighted
+            return (
+              <div
+                key={p.id}
+                className={`px-3 py-2 cursor-pointer text-xs hover:bg-orange-50 ${isSelected ? 'bg-orange-100' : ''}`}
+                role="option"
+                aria-selected={isSelected}
+                onMouseDown={() => handleMouseDown(p)}
+                onMouseEnter={() => handleMouseEnter(idx)}
+              >
+                <div className="flex items-center gap-1">
+                  <span className="font-mono text-slate-600 min-w-[60px]">
+                    {modoOrdenCompra ? p.codvta : (p.codigo_proveedor || p.codvta)}
+                  </span>
+                  <span className="text-slate-800 flex-1">{p.deno || p.nombre}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {error && (
+        <div className="absolute z-50 w-full mt-1 bg-red-50 border border-red-200 rounded-sm p-2 text-xs text-red-600">
+          Error: {error}
         </div>
       )}
     </div>

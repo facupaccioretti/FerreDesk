@@ -346,11 +346,11 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     </div>
                   </div>
 
-                  {errorVistaPrevia && (
-                    <div className="my-3 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">
-                      {errorVistaPrevia}
-                    </div>
-                  )}
+                  {errorVistaPrevia && (() => {
+                    // Mostrar error como alert nativo del navegador
+                    window.alert(`Error: ${errorVistaPrevia}`);
+                    return null;
+                  })()}
 
                   {loading && file && <div className="my-3 text-blue-600">Procesando vista previa...</div>}
 
