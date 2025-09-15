@@ -727,7 +727,7 @@ const ItemsGridPresupuesto = forwardRef(
           // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
           // para que "Sumar Cantidades" no funcione con items originales
           const idxExistente = rows.findIndex(
-            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId && !r.esBloqueado && !r.idOriginal,
+            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
           )
           if (idxExistente !== -1) {
             if (autoSumarDuplicados === "sumar") {

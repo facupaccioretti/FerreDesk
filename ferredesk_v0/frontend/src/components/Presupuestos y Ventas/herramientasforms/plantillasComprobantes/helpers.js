@@ -151,6 +151,21 @@ export const esMonotributistaPorDenominacion = (denominacion = "") => {
 };
 
 /**
+ * Detecta si una denominación de condición IVA corresponde a Consumidor Final
+ * Considera las variantes: "Consumidor Final", "Consumidor final", etc.
+ * @param {string} denominacion
+ * @returns {boolean}
+ */
+export const esConsumidorFinalPorDenominacion = (denominacion = "") => {
+  if (!denominacion) return false;
+  const texto = String(denominacion).toLowerCase();
+  return (
+    texto.includes("consumidor final") ||
+    texto.includes("consumidor_final")
+  );
+};
+
+/**
  * Divide y formatea observaciones provenientes de ARCA separadas por ';'
  * - Elimina espacios extra
  * - Quita segmentos vacíos

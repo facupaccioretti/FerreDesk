@@ -7,7 +7,8 @@ import {
   calcularNetoPagina,
   calcularTraspasos,
   generarFilaTraspaso,
-  generarTablaTotales
+  generarTablaTotales,
+  esConsumidorFinalPorDenominacion
 } from "../helpers"
 
 // Registrar fuentes
@@ -560,11 +561,23 @@ const configFacturaB = {
     </View>
   ),
   generarTotales: (data, styles, formatearMoneda) => {
-    const configTotalesB = [
-      { label: "Subtotal", tipo: "neto_gravado" },
-      { label: "IVA Contenido", tipo: "iva_contenido" },
-      { label: "Total", tipo: "total" }
-    ];
+    // Determinar si es consumidor final
+    const esConsumidorFinal = esConsumidorFinalPorDenominacion(data.condicion_iva_cliente);
+    
+    // Configuración de totales según tipo de cliente
+    const configTotalesB = esConsumidorFinal 
+      ? [
+          // Para consumidor final: solo IVA Contenido y Total
+          { label: "IVA Contenido", tipo: "iva_contenido" },
+          { label: "Total", tipo: "total" }
+        ]
+      : [
+          // Para otros clientes: Subtotal, IVA Contenido y Total
+          { label: "Subtotal", tipo: "neto_gravado" },
+          { label: "IVA Contenido", tipo: "iva_contenido" },
+          { label: "Total", tipo: "total" }
+        ];
+    
     return generarTablaTotales(data, styles, formatearMoneda, configTotalesB);
   }
 };
