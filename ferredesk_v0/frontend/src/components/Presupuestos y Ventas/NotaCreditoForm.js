@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import useNavegacionForm from '../../hooks/useNavegacionForm';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
@@ -15,6 +16,7 @@ import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 import useValidacionCUIT from '../../utils/useValidacionCUIT';
 import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
+import { esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
@@ -90,6 +92,9 @@ const NotaCreditoForm = ({
   setAutoSumarDuplicados,
   tabKey
 }) => {
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
+
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
   
   // Hook para consulta de estado CUIT en ARCA
@@ -298,14 +303,8 @@ const NotaCreditoForm = ({
       return;
     }
 
-    // Filtrar la fila vacía y los ítems sin cantidad antes de enviar.
-    const itemsParaGuardar = (formulario.items || []).filter(item => {
-      const tieneProducto = !!item.producto;
-      const tieneDenominacion = typeof item.denominacion === 'string' && item.denominacion.trim() !== '';
-      const tieneCantidad = (item.cantidad ?? 0) > 0;
-      
-      return (tieneProducto && tieneCantidad) || (!tieneProducto && tieneDenominacion && tieneCantidad);
-    });
+    // Obtener items usando la misma lógica que los otros formularios
+    const itemsParaGuardar = itemsGridRef.current.getItems();
 
     if (itemsParaGuardar.length === 0) {
       alert("Debe agregar al menos un ítem a la nota de crédito.");
@@ -336,7 +335,8 @@ const NotaCreditoForm = ({
       ven_descu1: formulario.descu1 || 0,
       ven_descu2: formulario.descu2 || 0,
       ven_descu3: formulario.descu3 || 0,
-      ven_bonificacion_general: formulario.bonificacionGeneral || 0,
+      bonificacionGeneral: formulario.bonificacionGeneral || 0, // Bonificación general
+      ven_bonificacion_general: formulario.bonificacionGeneral || 0, // Bonificación general (duplicado por compatibilidad)
 
       // Campos requeridos por el modelo que no se usan en NC pero deben estar presentes
       ven_vdocomvta: 0,
@@ -421,8 +421,8 @@ const NotaCreditoForm = ({
   }, [handleChange])
 
   const setBonificacionGeneral = useCallback((value) => {
-    handleChange({ target: { name: 'bonificacionGeneral', value } })
-  }, [handleChange])
+    setFormulario(f => ({ ...f, bonificacionGeneral: value }))
+  }, [setFormulario])
   
   if (loadingAlicuotasIVA) return <p className="text-slate-600 text-center py-10">Cargando datos del formulario...</p>;
   if (errorAlicuotasIVA) return <p className="text-red-500 text-center py-10">Error al cargar datos: {errorAlicuotasIVA?.message}</p>;
@@ -430,7 +430,7 @@ const NotaCreditoForm = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50/30 py-6">
       <div className="px-6">
-        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}>
+        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} {...getFormProps()}>
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
           
@@ -505,7 +505,7 @@ const NotaCreditoForm = ({
                         valorInicial={documentoInfo.valor}
                         tipoInicial={documentoInfo.tipo}
                         onChange={handleDocumentoChange}
-                        readOnly={false}
+                        readOnly={!esDocumentoEditable(formulario.clienteId, false)}
                         className="w-full"
                       />
                     </div>

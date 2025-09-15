@@ -32,6 +32,7 @@
   import ComprobantesList from "./ComprobantesList"
 import VendedoresTab from "./VendedoresTab"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import EliminadorResiduoModal from "./EliminadorResiduoModal"
   
 
 
@@ -222,6 +223,10 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
     const [modalClienteNCAbierto, setModalClienteNCAbierto] = useState(false)
     const [clienteParaNC, setClienteParaNC] = useState(null)
     const [modalFacturasNCAbierto, setModalFacturasNCAbierto] = useState(false)
+    
+    // --- Estados para el Eliminador de Residuo ---
+    const [eliminadorModal, setEliminadorModal] = useState({ open: false })
+    const [loadingEliminador, setLoadingEliminador] = useState(false)
 
 
 
@@ -258,6 +263,74 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
     const handleGenerarLibroIva = () => {
       navigate('/home/libro-iva-ventas')
+    }
+
+    // --- Funciones para el Eliminar Presupuestos Viejos ---
+    const handleAbrirEliminador = () => {
+      setEliminadorModal({ open: true })
+    }
+
+    const handleCerrarEliminador = () => {
+      setEliminadorModal({ open: false })
+    }
+
+    const handleConfirmarEliminacion = async (diasAntiguedad) => {
+      // Confirmación adicional antes de proceder
+      const confirmacion = window.confirm(
+        `¿Está seguro de que desea eliminar todos los presupuestos con más de ${diasAntiguedad} días de antigüedad?\n\nEsta acción no se puede deshacer.`
+      )
+      
+      if (!confirmacion) return
+      
+      setLoadingEliminador(true)
+      
+      try {
+        const csrftoken = getCookie('csrftoken')
+        const response = await fetch('/api/presupuestos/eliminar-antiguos/', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken 
+          },
+          credentials: 'include',
+          body: JSON.stringify({ dias_antiguedad: diasAntiguedad })
+        })
+        
+        // Verificar si la respuesta es JSON
+        const contentType = response.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error(`Error del servidor (${response.status}): El endpoint no está disponible o hay un error de configuración`)
+        }
+        
+        if (!response.ok) {
+          let errorMessage = 'Error al eliminar presupuestos'
+          try {
+            const errorData = await response.json()
+            errorMessage = errorData.error || errorData.detail || errorMessage
+          } catch (parseError) {
+            // Si no se puede parsear como JSON, usar el mensaje genérico
+            errorMessage = `Error del servidor (${response.status}): ${response.statusText}`
+          }
+          throw new Error(errorMessage)
+        }
+        
+        const data = await response.json()
+        
+        // Mostrar resultado
+        alert(`${data.mensaje}\n\nFecha límite: ${data.fecha_limite}`)
+        
+        // Actualizar la lista de ventas
+        await fetchVentas()
+        
+        // Cerrar modal
+        setEliminadorModal({ open: false })
+        
+      } catch (err) {
+        console.error('Error completo:', err)
+        alert('Error al eliminar presupuestos: ' + err.message)
+      } finally {
+        setLoadingEliminador(false)
+      }
     }
 
 
@@ -355,30 +428,41 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
                                      {/* Presupuestos y Ventas */}
                    {activeTab === "presupuestos" && (
                      <>
-                       <div className="mb-4 flex gap-2">
+                       <div className="mb-4 flex justify-between items-center">
+                         <div className="flex gap-2">
+                           <button
+                             onClick={handleNuevo}
+                             className={theme.botonPrimario}
+                           >
+                             <span className="text-lg">+</span> Nuevo Presupuesto
+                           </button>
+                           <button
+                             onClick={handleNuevaVenta}
+                             className={theme.botonPrimario}
+                           >
+                             <span className="text-lg">+</span> Nueva Venta
+                           </button>
+                           <button
+                             onClick={handleNuevaNotaCredito}
+                             className={theme.botonPrimario}
+                           >
+                             <span className="text-lg">+</span> Nueva Nota de Crédito
+                           </button>
+                           <button
+                             onClick={handleGenerarLibroIva}
+                             className={theme.botonPrimario}
+                           >
+                             <span className="text-lg">+</span> Generar Libro IVA
+                           </button>
+                         </div>
                          <button
-                           onClick={handleNuevo}
-                           className={theme.botonPrimario}
+                           onClick={handleAbrirEliminador}
+                           className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                           title="Eliminar Presupuestos Viejos"
                          >
-                           <span className="text-lg">+</span> Nuevo Presupuesto
-                         </button>
-                         <button
-                           onClick={handleNuevaVenta}
-                           className={theme.botonPrimario}
-                         >
-                           <span className="text-lg">+</span> Nueva Venta
-                         </button>
-                         <button
-                           onClick={handleNuevaNotaCredito}
-                           className={theme.botonPrimario}
-                         >
-                           <span className="text-lg">+</span> Nueva Nota de Crédito
-                         </button>
-                         <button
-                           onClick={handleGenerarLibroIva}
-                           className={theme.botonPrimario}
-                         >
-                           <span className="text-lg">+</span> Generar Libro IVA
+                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-6">
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                           </svg>
                          </button>
                        </div>
                        <div className="mb-4">
@@ -781,6 +865,14 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
             onCerrar={() => setVistaModal({ open: false, data: null })}
           />
         )}
+
+        {/* Modal del Eliminar Presupuestos Viejos */}
+        <EliminadorResiduoModal
+          open={eliminadorModal.open}
+          onClose={handleCerrarEliminador}
+          onConfirmar={handleConfirmarEliminacion}
+          loading={loadingEliminador}
+        />
       </div>
     )
   }

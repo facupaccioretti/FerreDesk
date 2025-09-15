@@ -23,11 +23,15 @@ from ferreapps.clientes.models import Cliente, TipoIVA
 from django.db import IntegrityError
 import logging
 from rest_framework.permissions import IsAuthenticated
+from .ARCA.settings_arca import COMPROBANTES_INTERNOS
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
 from .utils import asignar_comprobante, _construir_respuesta_comprobante
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
+
+# Punto de venta fijo para comprobantes internos/no oficiales (se formatea como 0099 en UI)
+PUNTO_VENTA_INTERNO = 99
 
 # ------------------------------------------------------------
 # Utilidades internas para gestión de stock entre proveedores
@@ -399,6 +403,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         data['comprobante_id'] = comprobante["codigo_afip"]
 
+        # === PUNTO DE VENTA PARA COMPROBANTES INTERNOS ===
+        # Si el tipo de comprobante está listado como interno, usar el PV interno 0099
+        if tipo_comprobante in COMPROBANTES_INTERNOS:
+            data['ven_punto'] = PUNTO_VENTA_INTERNO
+
         # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
         # Para evitar desalineación con AFIP y colisiones de numeración, si el comprobante
         # requiere emisión ARCA, forzar a usar el punto de venta configurado en Ferretería.
@@ -691,6 +700,11 @@ def convertir_presupuesto_a_venta(request):
             # Usar asignar_comprobante para determinar el comprobante correcto
             comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
             venta_data['comprobante_id'] = comprobante['codigo_afip']
+
+            # === PUNTO DE VENTA PARA COMPROBANTES INTERNOS ===
+            # Si el tipo de comprobante está listado como interno, usar el PV interno 0099
+            if tipo_comprobante in COMPROBANTES_INTERNOS:
+                venta_data['ven_punto'] = PUNTO_VENTA_INTERNO
 
             # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
             # Igual que en el alta: ARCA decide el número final. Para evitar colisiones de la

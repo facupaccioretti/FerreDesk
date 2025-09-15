@@ -135,7 +135,7 @@ const useComprobantesCRUD = ({
         cliente: cabecera.cliente_razon,
         domicilio: cabecera.cliente_domicilio,
         condicion_iva_cliente: cabecera.cliente_condicion_iva,
-        cuit: cabecera.cliente_cuit,
+        cuit: cabecera.ven_cuit || cabecera.cliente_cuit,
         localidad: cabecera.cliente_localidad,
         provincia: cabecera.cliente_provincia,
         telefono_cliente: cabecera.cliente_telefono,

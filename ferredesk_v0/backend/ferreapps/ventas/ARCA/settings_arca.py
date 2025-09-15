@@ -79,7 +79,7 @@ COMPROBANTES_INTERNOS = [
     'presupuesto',           # Código AFIP 9997 - No fiscal
     'factura_interna',       # Código AFIP 9999 - No fiscal
     'nota_credito_interna',  # Código AFIP 9998 - No fiscal
-    'recibo',                # Código AFIP 9996 - No fiscal
+    'orden_compra',                # Código AFIP 9996 - No fiscal
     'venta'                  # Código AFIP 9995 - No fiscal
 ]
 

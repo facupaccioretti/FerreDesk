@@ -7,6 +7,7 @@ import HistorialListasModal from "../HistorialListasModal"
 import ProveedorForm from "./ProveedorForm"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { BotonEditar, BotonEliminar, BotonHistorial, BotonCargarLista } from "../Botones"
+import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 import Tabla from "../Tabla"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
@@ -121,7 +122,8 @@ const ProveedoresManager = () => {
       try {
         await deleteProveedor(id)
       } catch (err) {
-        alert(err.message || "Error al eliminar proveedor")
+        // El error ya viene parseado desde el hook con el mensaje específico
+        alert(err.message)
       }
     }
   }
@@ -139,6 +141,32 @@ const ProveedoresManager = () => {
   const handleOpenHistorialModal = (proveedor) => {
     setProveedorHistorial(proveedor)
     setShowHistorialModal(true)
+  }
+
+  // Función para generar los botones de acciones para proveedores
+  const generarBotonesProveedor = (proveedor) => {
+    return [
+      {
+        componente: BotonCargarLista,
+        onClick: () => handleOpenListaModal(proveedor),
+        titulo: "Cargar lista de precios"
+      },
+      {
+        componente: BotonHistorial,
+        onClick: () => handleOpenHistorialModal(proveedor),
+        titulo: "Ver historial de listas"
+      },
+      {
+        componente: BotonEditar,
+        onClick: () => handleEditProveedor(proveedor),
+        titulo: "Editar proveedor"
+      },
+      {
+        componente: BotonEliminar,
+        onClick: () => handleDelete(proveedor.id),
+        titulo: "Eliminar proveedor"
+      }
+    ]
   }
 
   return (
@@ -221,9 +249,11 @@ const ProveedoresManager = () => {
                       Cargando proveedores...
                     </div>
                   )}
-                  {error && (
-                    <div className="text-red-600 mb-4 p-3 bg-red-50 rounded-lg border border-red-200">{error}</div>
-                  )}
+                  {error && (() => {
+                    // Mostrar error como alert nativo del navegador
+                    window.alert(`Error: ${error}`);
+                    return null;
+                  })()}
                   {/* Tabla compacta reutilizable */}
                   <Tabla
                     columnas={[
@@ -267,38 +297,12 @@ const ProveedoresManager = () => {
                       },
                       {
                         id: "acciones",
-                        titulo: "Acciones",
+                        titulo: "",
                         align: "center",
+                        ancho: 50,
                         render: (p) => (
-                          <div className="flex gap-3 items-center justify-center">
-                            <BotonEditar
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEditProveedor(p)
-                              }}
-                              title="Editar proveedor"
-                            />
-                            <BotonEliminar
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDelete(p.id)
-                              }}
-                              title="Eliminar proveedor"
-                            />
-                            <BotonCargarLista
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleOpenListaModal(p)
-                              }}
-                              title="Cargar lista de precios"
-                            />
-                            <BotonHistorial
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleOpenHistorialModal(p)
-                              }}
-                              title="Ver historial de listas"
-                            />
+                          <div className="flex items-center justify-center">
+                            <AccionesMenu botones={generarBotonesProveedor(p)} />
                           </div>
                         ),
                       },
@@ -338,36 +342,8 @@ const ProveedoresManager = () => {
                           <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.sigla}</td>
                           {/* Acciones */}
                           <td className="px-2 py-0.5 whitespace-nowrap text-center">
-                            <div className="flex gap-3 items-center justify-center">
-                              {/* Orden deseado: Cargar lista, Historial, Editar, Borrar */}
-                              <BotonCargarLista
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleOpenListaModal(p)
-                                }}
-                                title="Cargar lista de precios"
-                              />
-                              <BotonHistorial
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleOpenHistorialModal(p)
-                                }}
-                                title="Ver historial de listas"
-                              />
-                              <BotonEditar
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleEditProveedor(p)
-                                }}
-                                title="Editar proveedor"
-                              />
-                              <BotonEliminar
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDelete(p.id)
-                                }}
-                                title="Eliminar proveedor"
-                              />
+                            <div className="flex items-center justify-center">
+                              <AccionesMenu botones={generarBotonesProveedor(p)} />
                             </div>
                           </td>
                         </tr>

@@ -102,9 +102,9 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                       <div className="text-sm font-medium text-slate-800">
                         {data.cliente || "Cliente"}
                       </div>
-                      <div className="text-xs text-slate-600">{data.domicilio || ""}</div>
-                      <div className="text-xs text-slate-600">{data.localidad || ""}</div>
-                      <div className="text-xs text-slate-600">{data.provincia || ""}</div>
+                      <div className="text-xs text-slate-600">Dirección: {data.domicilio || ""}</div>
+                      <div className="text-xs text-slate-600">Localidad: {data.localidad || ""}</div>
+                      <div className="text-xs text-slate-600">Provincia: {data.provincia || ""}</div>
                       <div className="text-xs text-slate-600">CUIT: {data.cuit || "-"}</div>
                       <div className="text-xs text-slate-600">Cond. IVA: {data.condicion_iva_cliente || "-"}</div>
                       <div className="text-xs text-slate-600">Teléfono: {data.telefono_cliente || "-"}</div>
@@ -163,7 +163,6 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                         { id: "descuento", titulo: "Desc. %", align: "center", ancho: "60px" },
                         { id: "precioBonificado", titulo: "P. Unit. Bonif.", align: "right", ancho: "80px" },
                         { id: "alicuota", titulo: "Alicuota", align: "center", ancho: "60px" },
-                        { id: "iva", titulo: "IVA", align: "right", ancho: "80px" },
                         { id: "importe", titulo: "Importe", align: "right", ancho: "100px" }
                       ]}
                       datos={items.map((item, idx) => ({
@@ -175,7 +174,6 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                           descuento: formatearDescuentosVisual(item.vdi_bonifica, data.ven_descu1, data.ven_descu2, data.ven_descu3),
                           precioBonificado: `$${formatearMoneda(item.precio_unitario_bonif_desc_sin_iva || 0)}`,
                           alicuota: item.ali_porce ? `${item.ali_porce}%` : "0%",
-                          iva: `$${formatearMoneda(item.iva_monto || 0)}`,
                           importe: `$${formatearMoneda(item.total_item || 0)}`
                         }))}
                       paginadorVisible={false}
@@ -192,7 +190,6 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig, onClose }) => {
                           <td className="px-2 py-1 text-center text-orange-600 font-medium text-xs">{fila.descuento}</td>
                           <td className="px-2 py-1 text-right text-slate-800 font-medium text-xs">{fila.precioBonificado}</td>
                           <td className="px-2 py-1 text-center text-slate-800 font-medium text-xs">{fila.alicuota}</td>
-                          <td className="px-2 py-1 text-right text-blue-600 font-medium text-xs">{fila.iva}</td>
                           <td className="px-2 py-1 text-right text-slate-900 font-bold text-xs">{fila.importe}</td>
                         </tr>
                       )}

@@ -97,7 +97,6 @@ export const useFormularioDraft = ({
           return combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
         } catch (err) {
           // Si falla parsing o validación, continuar a datos iniciales
-          console.info('[useFormularioDraft] Borrador descartado:', err.message);
         }
       }
     } catch (e) {
@@ -143,7 +142,7 @@ export const useFormularioDraft = ({
       let combinado = combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
       if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
         try {
-          combinado = { ...combinado, items: normalizarItems(combinado.items) };
+          combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
         } catch (_) {}
       }
       if (!sonFormulariosIguales(formulario, combinado)) {
@@ -166,7 +165,7 @@ export const useFormularioDraft = ({
     let combinado = combinarConValoresPorDefecto(datosIniciales || {}, ...parametrosPorDefecto);
     if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
       try {
-        combinado = { ...combinado, items: normalizarItems(combinado.items) };
+        combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
       } catch (_) {}
     }
     if (!sonFormulariosIguales(formulario, combinado)) {

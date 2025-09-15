@@ -13,6 +13,7 @@ from django.urls import path
 from . import views
 from . import libro_iva_views
 from . import libro_iva_export_views
+from . import eliminador_presupuestos
 
 router = DefaultRouter()
 router.register(r'comprobantes', ComprobanteViewSet)
@@ -41,4 +42,9 @@ urlpatterns = router.urls + [
     path('home/productos-mas-vendidos/', views.productos_mas_vendidos, name='productos_mas_vendidos'),
     path('home/ventas-por-dia/', views.ventas_por_dia, name='ventas_por_dia'),
     path('home/clientes-mas-ventas/', views.clientes_mas_ventas, name='clientes_mas_ventas'),
+    
+    # Endpoints del Eliminador de Presupuestos
+    path('presupuestos/eliminar-antiguos/', eliminador_presupuestos.eliminar_presupuestos_antiguos, name='eliminar_presupuestos_antiguos'),
+    path('presupuestos/vista-previa-antiguos/', eliminador_presupuestos.vista_previa_presupuestos_antiguos, name='vista_previa_presupuestos_antiguos'),
+    
 ] 

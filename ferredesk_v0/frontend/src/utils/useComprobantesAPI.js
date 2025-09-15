@@ -22,5 +22,17 @@ export function useComprobantesAPI() {
 
   useEffect(() => { fetchComprobantes(); }, []);
 
-  return { comprobantes, loading, error, fetchComprobantes, setComprobantes };
+  const getComprobanteByTipo = async (tipo) => {
+    try {
+      const res = await fetch(`/api/comprobantes/?tipo=${tipo}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Error al obtener comprobante');
+      const data = await res.json();
+      return Array.isArray(data) ? data[0] : (data.results && data.results[0]);
+    } catch (err) {
+      console.error('Error al obtener comprobante por tipo:', err);
+      return null;
+    }
+  };
+
+  return { comprobantes, loading, error, fetchComprobantes, setComprobantes, getComprobanteByTipo };
 }

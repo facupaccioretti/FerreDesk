@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import Compra, CompraDetalleItem
+from .models import Compra, CompraDetalleItem, OrdenCompra, OrdenCompraDetalleItem
 
 
 class CompraDetalleItemInline(admin.TabularInline):
@@ -149,6 +149,88 @@ class CompraDetalleItemAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('cdi_idca', 'cdi_idpro', 'cdi_idsto', 'cdi_idaliiva')
+
+
+# ============================================================================
+# ADMIN PARA ÓRDENES DE COMPRA
+# ============================================================================
+
+class OrdenCompraDetalleItemInline(admin.TabularInline):
+    """Inline para items de orden de compra"""
+    model = OrdenCompraDetalleItem
+    extra = 1
+    fields = ['odi_orden', 'odi_idsto', 'odi_stock_proveedor', 'odi_cantidad', 'odi_detalle1', 'odi_detalle2']
+    readonly_fields = ['odi_orden']
+
+
+@admin.register(OrdenCompra)
+class OrdenCompraAdmin(admin.ModelAdmin):
+    """Admin para el modelo OrdenCompra"""
+    list_display = [
+        'ord_id', 
+        'ord_numero', 
+        'ord_fecha', 
+        'ord_razon_social', 
+        'cantidad_items'
+    ]
+    
+    list_filter = ['ord_sucursal', 'ord_fecha']
+    
+    search_fields = ['ord_numero', 'ord_razon_social', 'ord_cuit', 'ord_observacion']
+    
+    readonly_fields = ['ord_id', 'ord_hora_creacion']
+    
+    date_hierarchy = 'ord_fecha'
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': (
+                'ord_id', 'ord_sucursal', 'ord_fecha', 'ord_hora_creacion',
+                'ord_numero'
+            )
+        }),
+        ('Proveedor', {
+            'fields': (
+                'ord_idpro', 'ord_cuit', 'ord_razon_social', 'ord_domicilio'
+            )
+        }),
+        ('Otros', {
+            'fields': ('ord_observacion',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    inlines = [OrdenCompraDetalleItemInline]
+    
+    def cantidad_items(self, obj):
+        """Muestra la cantidad de items en la orden"""
+        return obj.items.count()
+    cantidad_items.short_description = 'Items'
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('ord_idpro')
+
+
+@admin.register(OrdenCompraDetalleItem)
+class OrdenCompraDetalleItemAdmin(admin.ModelAdmin):
+    """Admin para el modelo OrdenCompraDetalleItem"""
+    list_display = [
+        'odi_idor', 
+        'odi_orden', 
+        'odi_detalle1', 
+        'odi_cantidad', 
+        'odi_detalle2',
+        'odi_idpro'
+    ]
+    
+    list_filter = ['odi_idpro']
+    
+    search_fields = ['odi_detalle1', 'odi_detalle2']
+    
+    readonly_fields = ['odi_idor']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('odi_idor', 'odi_idpro', 'odi_idsto')
 
 
 

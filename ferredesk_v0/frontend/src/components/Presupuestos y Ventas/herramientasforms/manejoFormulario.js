@@ -5,13 +5,11 @@
  */
 export const manejarCambioFormulario = (setForm) => (e) => {
   const { name, value, type } = e.target;
-  console.log(`[manejarCambioFormulario] Campo: ${name}, Valor: ${value}`);
   setForm(prevForm => {
     const newForm = {
       ...prevForm,
       [name]: type === 'number' ? parseFloat(value) || 0 : value
     };
-    console.log('[manejarCambioFormulario] Nuevo estado:', newForm);
     return newForm;
   });
 };
@@ -44,10 +42,9 @@ export const manejarCambioCliente = (setForm, clientes) => (e) => {
  * @returns {Object} Información del documento validada {tipo, valor, esValido}
  */
 export const validarDocumentoCliente = (cliente) => {
-  console.log('[validarDocumentoCliente] Cliente recibido:', cliente)
+  
   
   if (!cliente?.cuit) {
-    console.log('[validarDocumentoCliente] No hay CUIT, retornando vacío')
     return {
       tipo: 'cuit',
       valor: '',
@@ -56,17 +53,14 @@ export const validarDocumentoCliente = (cliente) => {
   }
 
   const cuitLimpio = cliente.cuit.replace(/[-\s]/g, '')
-  console.log('[validarDocumentoCliente] CUIT limpio:', cuitLimpio, 'longitud:', cuitLimpio.length)
   
   if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
-    console.log('[validarDocumentoCliente] Es CUIT válido')
     return {
       tipo: 'cuit',
       valor: cliente.cuit,
       esValido: true
     }
   } else {
-    console.log('[validarDocumentoCliente] Es DNI')
     return {
       tipo: 'dni',
       valor: cliente.cuit,
@@ -77,7 +71,6 @@ export const validarDocumentoCliente = (cliente) => {
 
 export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) => {
   if (!clienteSeleccionado) return;
-  console.log('[manejarSeleccionClienteObjeto] Cliente seleccionado:', clienteSeleccionado);
   
   // Lógica de validación del documento del cliente
   let ven_cuit = '';
@@ -117,3 +110,19 @@ export const manejarSeleccionClienteObjeto = (setForm) => (clienteSeleccionado) 
     ven_dni: ven_dni,
   }));
 }; 
+
+/**
+ * ID del cliente mostrador que permite editar manualmente el documento
+ */
+export const ID_CLIENTE_MOSTRADOR = '1';
+
+/**
+ * Determina si el documento (CUIT/DNI) es editable según el cliente y modo
+ * @param {string|number} clienteId - ID del cliente seleccionado
+ * @param {boolean} modoSoloLectura - Si el formulario está en modo solo lectura
+ * @returns {boolean} true si es editable
+ */
+export const esDocumentoEditable = (clienteId, modoSoloLectura = false) => {
+  if (modoSoloLectura) return false;
+  return String(clienteId) === ID_CLIENTE_MOSTRADOR;
+};

@@ -3,6 +3,8 @@ import React from 'react';
 import { useVentaDetalleAPI } from '../../../utils/useVentaDetalleAPI';
 import { useFerreteriaAPI } from '../../../utils/useFerreteriaAPI';
 import { mapearVentaDetalle } from './MapeoVentaDetalle';
+import { useLocalidadesAPI } from '../../../utils/useLocalidadesAPI';
+import { useProvinciasAPI } from '../../../utils/useProvinciasAPI';
 import { PlantillaFacturaA } from './plantillasComprobantes/PlantillaFacturaA';
 import { PlantillaFacturaB } from './plantillasComprobantes/PlantillaFacturaB';
 import { PlantillaFacturaC } from './plantillasComprobantes/PlantillaFacturaC';
@@ -41,6 +43,8 @@ const PresupuestoVentaVista = (props) => {
   const idVenta = data?.ven_id || data?.id;
   const { ventaCalculada, itemsCalculados, ivaDiscriminado, cargando, error } = useVentaDetalleAPI(idVenta);
   const { ferreteria: ferreteriaConfig, loading: configLoading, error: configError } = useFerreteriaAPI();
+  const { localidades } = useLocalidadesAPI();
+  const { provincias } = useProvinciasAPI();
 
   if (cargando || configLoading) return <div className="p-8 text-gray-500 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Cargando datos...</div>;
   if (error) return <div className="p-8 text-red-600 bg-white rounded-xl shadow-lg flex items-center justify-center min-h-[200px] border border-gray-100">Error: {error}</div>;
@@ -55,7 +59,9 @@ const PresupuestoVentaVista = (props) => {
         vendedores,
         plazos,
         sucursales,
-        puntosVenta
+        puntosVenta,
+        localidades,
+        provincias
       })
     : null;
 

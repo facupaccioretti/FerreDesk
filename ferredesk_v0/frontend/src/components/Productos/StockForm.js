@@ -7,6 +7,7 @@ import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
 import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
 
 // Importar hooks modulares
@@ -51,6 +52,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
   
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
+  
   // Referencias
   const refContenedorDenominacion = useRef(null)
   const referenciaCampoBusqueda = useRef(null)
@@ -74,7 +78,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const { 
     form, 
     setForm, 
-    formError, 
     setFormError, 
     handleChange, 
     updateForm, 
@@ -330,6 +333,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         <form
           className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-visible"
           onSubmit={handleSave}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
@@ -353,22 +357,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                 </h3>
               </div>
 
-              {/* Mensajes de error */}
-              {formError && (
-                <div className="mb-3 p-3 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    {formError}
-                  </div>
-                </div>
-              )}
+              {/* Los errores ahora se muestran como alertas nativas del navegador */}
             </div>
 
             {/* Header compacto con denominación */}

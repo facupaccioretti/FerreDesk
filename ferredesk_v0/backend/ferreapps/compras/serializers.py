@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Compra, CompraDetalleItem
+from .models import Compra, CompraDetalleItem, OrdenCompra, OrdenCompraDetalleItem
 from ferreapps.productos.models import Proveedor, Stock, AlicuotaIVA, StockProve
 from decimal import Decimal
 from django.db import transaction
@@ -248,12 +248,14 @@ class CompraCreateSerializer(CompraSerializer):
                     f"Error al crear item {i + 1}: {str(e)}"
                 )
 
-        # Cerrar automáticamente la compra al finalizar la carga de items
-        try:
-            compra.cerrar_compra()
-        except Exception as e:
-            # Si por algún motivo no se puede cerrar (p.ej., totales inválidos), devolver error claro
-            raise serializers.ValidationError(f"No se pudo finalizar la compra: {str(e)}")
+        # Solo cerrar automáticamente si no es una conversión de orden de compra
+        # Las conversiones de orden de compra se dejan en BORRADOR para que el usuario complete los datos
+        if not self.context.get('es_conversion_orden_compra', False):
+            try:
+                compra.cerrar_compra()
+            except Exception as e:
+                # Si por algún motivo no se puede cerrar (p.ej., totales inválidos), devolver error claro
+                raise serializers.ValidationError(f"No se pudo finalizar la compra: {str(e)}")
 
         return compra
 
@@ -350,3 +352,301 @@ class BuscadorProductoProveedorSerializer(serializers.Serializer):
     idaliiva = serializers.IntegerField(source='stock.idaliiva_id')
     acti = serializers.CharField(source='stock.acti')
     codigo_proveedor = serializers.CharField(source='codigo_producto_proveedor')
+    stockprove_id = serializers.IntegerField(source='id')  # ID del StockProve para odi_stock_proveedor
+
+
+# ============================================================================
+# SERIALIZERS PARA ÓRDENES DE COMPRA
+# ============================================================================
+
+class OrdenCompraDetalleItemSerializer(serializers.ModelSerializer):
+    """Serializer para items de detalle de orden de compra"""
+    producto_codigo = serializers.SerializerMethodField()
+    producto_denominacion = serializers.SerializerMethodField()
+    producto_unidad = serializers.SerializerMethodField()
+    producto = serializers.SerializerMethodField()
+    codigo_proveedor = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrdenCompraDetalleItem
+        fields = [
+            'id', 'odi_idor', 'odi_orden', 'odi_idsto', 'odi_idpro', 'odi_stock_proveedor', 'odi_cantidad',
+            'odi_detalle1', 'odi_detalle2', 'producto_codigo', 'producto_denominacion', 'producto_unidad', 'producto',
+            'codigo_proveedor'
+        ]
+    
+    def get_producto_codigo(self, obj):
+        if obj.odi_idsto:
+            return obj.odi_idsto.codvta
+        return None
+    
+    def get_producto_denominacion(self, obj):
+        if obj.odi_idsto:
+            return obj.odi_idsto.deno
+        return obj.odi_detalle1
+    
+    def get_producto_unidad(self, obj):
+        if obj.odi_idsto:
+            return obj.odi_idsto.unidad
+        return obj.odi_detalle2
+    
+    def get_producto(self, obj):
+        if obj.odi_idsto:
+            return {
+                'id': obj.odi_idsto.id,
+                'codvta': obj.odi_idsto.codvta,
+                'deno': obj.odi_idsto.deno,
+                'unidad': obj.odi_idsto.unidad,
+                'idaliiva': obj.odi_idsto.idaliiva.id if obj.odi_idsto.idaliiva else None
+            }
+        return None
+    
+    def get_codigo_proveedor(self, obj):
+        """Obtener el código de proveedor desde odi_stock_proveedor"""
+        if obj.odi_stock_proveedor:
+            return obj.odi_stock_proveedor.codigo_producto_proveedor
+        return None
+    
+
+
+
+class OrdenCompraSerializer(serializers.ModelSerializer):
+    """Serializer principal para órdenes de compra"""
+    items = OrdenCompraDetalleItemSerializer(many=True, read_only=True)
+    proveedor_nombre = serializers.SerializerMethodField()
+    proveedor_fantasia = serializers.SerializerMethodField()
+    cantidad_items = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrdenCompra
+        fields = [
+            'ord_id', 'ord_sucursal', 'ord_fecha', 'ord_hora_creacion', 'ord_numero',
+            'ord_idpro', 'ord_cuit', 'ord_razon_social', 'ord_domicilio', 'ord_observacion',
+            'items', 'proveedor_nombre', 'proveedor_fantasia', 'cantidad_items'
+        ]
+        read_only_fields = ['ord_id', 'ord_hora_creacion', 'ord_numero']
+    
+    def get_proveedor_nombre(self, obj):
+        if obj.ord_idpro:
+            return obj.ord_idpro.razon
+        return obj.ord_razon_social
+    
+    def get_proveedor_fantasia(self, obj):
+        if obj.ord_idpro:
+            return obj.ord_idpro.fantasia
+        return None
+    
+    def get_cantidad_items(self, obj):
+        return obj.items.count()
+
+
+class OrdenCompraCreateSerializer(OrdenCompraSerializer):
+    """Serializer específico para crear órdenes de compra"""
+    items_data = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False
+    )
+    
+    class Meta(OrdenCompraSerializer.Meta):
+        fields = OrdenCompraSerializer.Meta.fields + ['items_data']
+    
+    def validate(self, data):
+        """Validaciones específicas para creación"""
+        # Validar que tenga al menos un item
+        items_data = data.get('items_data', [])
+        if not items_data:
+            raise serializers.ValidationError("La orden debe tener al menos un item")
+        
+        # Validar que todos los items tengan cantidad positiva y stock_proveedor
+        for i, item in enumerate(items_data, 1):
+            cantidad = item.get('odi_cantidad', 0)
+            if not cantidad or cantidad <= 0:
+                raise serializers.ValidationError(f"El item {i} debe tener cantidad positiva")
+            
+            # Validar que tenga stock_proveedor (obligatorio)
+            if not item.get('odi_stock_proveedor'):
+                raise serializers.ValidationError(f"El item {i} debe tener un código de proveedor válido")
+        
+        return data
+    
+    def create(self, validated_data):
+        """Crear orden de compra con sus items"""
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items_data', [])
+        
+        with transaction.atomic():
+            # Crear la orden
+            orden = OrdenCompra.objects.create(**validated_data)
+            
+            # Crear los items
+            for i, item_data in enumerate(items_data, 1):
+                # Convertir IDs a instancias para ForeignKeys
+                if 'odi_idsto' in item_data and item_data['odi_idsto']:
+                    try:
+                        item_data['odi_idsto'] = Stock.objects.get(id=item_data['odi_idsto'])
+                    except Stock.DoesNotExist:
+                        item_data['odi_idsto'] = None
+                
+                if 'odi_idpro' in item_data and item_data['odi_idpro']:
+                    try:
+                        item_data['odi_idpro'] = Proveedor.objects.get(id=item_data['odi_idpro'])
+                    except Proveedor.DoesNotExist:
+                        raise serializers.ValidationError(f"Proveedor con ID {item_data['odi_idpro']} no encontrado")
+                
+                # Convertir ID de StockProve a instancia y validar que corresponda al producto y proveedor
+                if 'odi_stock_proveedor' in item_data and item_data['odi_stock_proveedor']:
+                    try:
+                        stockprove = StockProve.objects.get(id=item_data['odi_stock_proveedor'])
+                        # Validar que el StockProve corresponda al producto y proveedor correctos
+                        if stockprove.stock != item_data.get('odi_idsto') or stockprove.proveedor != item_data.get('odi_idpro'):
+                            raise serializers.ValidationError(
+                                f"El StockProve seleccionado no corresponde al producto y proveedor del item"
+                            )
+                        item_data['odi_stock_proveedor'] = stockprove
+                    except StockProve.DoesNotExist:
+                        raise serializers.ValidationError(f"StockProve con ID {item_data['odi_stock_proveedor']} no encontrado")
+                else:
+                    # Campo obligatorio - debe estar presente
+                    raise serializers.ValidationError("El campo odi_stock_proveedor es obligatorio para todos los items")
+                
+                item_data['odi_idor'] = orden
+                item_data['odi_orden'] = i
+                OrdenCompraDetalleItem.objects.create(**item_data)
+            
+            return orden
+
+
+class OrdenCompraUpdateSerializer(OrdenCompraSerializer):
+    """Serializer específico para actualizar órdenes de compra"""
+    items_data = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False
+    )
+    
+    class Meta(OrdenCompraSerializer.Meta):
+        fields = OrdenCompraSerializer.Meta.fields + ['items_data']
+    
+
+    
+    def update(self, instance, validated_data):
+        """Actualizar orden de compra con sus items usando la mejor práctica"""
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items_data', None)
+        
+        with transaction.atomic():
+            # Actualizar la orden
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Actualizar items si se proporcionaron
+            if items_data is not None:
+                self._actualizar_items_inteligente(instance, items_data)
+            
+            return instance
+    
+    def _actualizar_items_inteligente(self, instance, items_data):
+        """Actualizar items de manera inteligente: actualizar existentes, crear nuevos, eliminar removidos"""
+        # Obtener items existentes
+        items_existentes = {item.id: item for item in instance.items.all()}
+        
+        # Obtener IDs de items enviados (solo los que tienen ID)
+        ids_enviados = {item.get('id') for item in items_data if item.get('id')}
+        
+        # Eliminar items que ya no están en la lista enviada
+        for item_id, item in items_existentes.items():
+            if item_id not in ids_enviados:
+                item.delete()
+        
+        # Procesar items enviados
+        for i, item_data in enumerate(items_data, 1):
+            # Limpiar campos que no pertenecen al modelo OrdenCompraDetalleItem
+            campos_a_eliminar = ['producto_codigo', 'producto_denominacion', 'producto_unidad', 'producto', 'codigo_proveedor']
+            for campo in campos_a_eliminar:
+                item_data.pop(campo, None)
+            
+            # Procesar ForeignKeys
+            item_data = self._procesar_foreign_keys(item_data)
+            
+            # Establecer orden y relación con la orden
+            item_data['odi_orden'] = i
+            item_data['odi_idor'] = instance
+            
+            # Determinar si es actualización o creación
+            item_id = item_data.pop('id', None)
+            
+            if item_id and item_id in items_existentes:
+                # Actualizar item existente
+                item = items_existentes[item_id]
+                for field, value in item_data.items():
+                    setattr(item, field, value)
+                item.save()
+            else:
+                # Crear nuevo item
+                OrdenCompraDetalleItem.objects.create(**item_data)
+    
+    def _procesar_foreign_keys(self, item_data):
+        """Procesar y validar ForeignKeys en los datos del item"""
+        # Convertir ID de Stock a instancia
+        if 'odi_idsto' in item_data and item_data['odi_idsto']:
+            try:
+                item_data['odi_idsto'] = Stock.objects.get(id=item_data['odi_idsto'])
+            except Stock.DoesNotExist:
+                item_data['odi_idsto'] = None
+        
+        # Convertir ID de Proveedor a instancia
+        if 'odi_idpro' in item_data and item_data['odi_idpro']:
+            try:
+                item_data['odi_idpro'] = Proveedor.objects.get(id=item_data['odi_idpro'])
+            except Proveedor.DoesNotExist:
+                raise serializers.ValidationError(f"Proveedor con ID {item_data['odi_idpro']} no encontrado")
+        
+        # Convertir ID de StockProve a instancia y validar
+        if 'odi_stock_proveedor' in item_data and item_data['odi_stock_proveedor']:
+            try:
+                stockprove = StockProve.objects.get(id=item_data['odi_stock_proveedor'])
+                # Validar que el StockProve corresponda al producto y proveedor correctos
+                if stockprove.stock != item_data.get('odi_idsto') or stockprove.proveedor != item_data.get('odi_idpro'):
+                    raise serializers.ValidationError(
+                        f"El StockProve seleccionado no corresponde al producto y proveedor del item"
+                    )
+                item_data['odi_stock_proveedor'] = stockprove
+            except StockProve.DoesNotExist:
+                raise serializers.ValidationError(f"StockProve con ID {item_data['odi_stock_proveedor']} no encontrado")
+        else:
+            # Campo obligatorio - debe estar presente
+            raise serializers.ValidationError("El campo odi_stock_proveedor es obligatorio para todos los items")
+        
+        return item_data
+
+
+class OrdenCompraListSerializer(serializers.ModelSerializer):
+    """Serializer para listar órdenes de compra con datos resumidos"""
+    proveedor_nombre = serializers.SerializerMethodField()
+    proveedor_fantasia = serializers.SerializerMethodField()
+    cantidad_items = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrdenCompra
+        fields = [
+            'ord_id', 'ord_numero', 'ord_fecha', 'ord_hora_creacion',
+            'ord_idpro', 'ord_razon_social', 'ord_cuit', 'ord_domicilio', 'ord_observacion', 'proveedor_nombre',
+            'proveedor_fantasia', 'cantidad_items'
+        ]
+    
+    def get_proveedor_nombre(self, obj):
+        if obj.ord_idpro:
+            return obj.ord_idpro.razon
+        return obj.ord_razon_social
+    
+    def get_proveedor_fantasia(self, obj):
+        if obj.ord_idpro:
+            return obj.ord_idpro.fantasia
+        return None
+    
+    def get_cantidad_items(self, obj):
+        return obj.items.count()

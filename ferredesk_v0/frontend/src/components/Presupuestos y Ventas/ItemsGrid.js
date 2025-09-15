@@ -110,49 +110,46 @@ const ItemsGridPresupuesto = forwardRef(
               bonificacion: item.vdi_bonifica || item.bonificacion || 0,
               idaliiva: item.vdi_idaliiva || item.idaliiva || 3,
               producto: null,
+              proveedorId: item.proveedorId ?? null,
             }
           }
-          // Ítem de stock: crear stub de producto más completo para bloquear edición
-          const idaliivaStub = item.vdi_idaliiva ?? item.idaliiva ?? 3
-          const margenStub = item.vdi_margen ?? item.margen ?? 0
+          // Ítem de stock: preservar producto existente; si falta, crear stub desde IDs disponibles
+          const idaliivaStub = item.vdi_idaliiva ?? item.idaliiva ?? (item.producto?.idaliiva?.id ?? item.producto?.idaliiva ?? 3)
+          const margenStub = item.vdi_margen ?? item.margen ?? (item.producto?.margen ?? 0)
+          const vdiId = item.vdi_idsto ?? item.idSto ?? item.idsto ?? item.producto?.id ?? null
+          const productoFinal = item.producto
+            ? item.producto
+            : {
+                id: vdiId,
+                idaliiva: idaliivaStub,
+                margen: margenStub,
+                codvta: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
+                codigo: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
+                deno: item.denominacion || item.vdi_detalle1 || '',
+                nombre: item.denominacion || item.vdi_detalle1 || '',
+                unidad: item.unidad || item.vdi_detalle2 || '-',
+                unidadmedida: item.unidad || item.vdi_detalle2 || '-',
+                stock_proveedores: [],
+                proveedor_habitual: null,
+              }
           return {
             ...item,
-            producto: {
-              id: item.vdi_idsto,
-              idaliiva: idaliivaStub,
-              margen: margenStub,
-              // Agregar campos básicos necesarios para que el sistema reconozca el producto como cargado
-              codvta: item.codigo || '',
-              codigo: item.codigo || '',
-              deno: item.denominacion || item.vdi_detalle1 || '',
-              nombre: item.denominacion || item.vdi_detalle1 || '',
-              unidad: item.unidad || item.vdi_detalle2 || '-',
-              unidadmedida: item.unidad || item.vdi_detalle2 || '-',
-              // Agregar campos adicionales para asegurar que se reconozca como producto completo
-              stock_proveedores: [],
-              proveedor_habitual: null,
-            },
-            codigo: item.codigo || '',
-            denominacion: item.denominacion || item.vdi_detalle1 || '',
-            unidad: item.unidad || item.vdi_detalle2 || '-',
+            vdi_idsto: vdiId,
+            producto: productoFinal,
+            codigo: item.codigo ?? item.vdi_codigo ?? productoFinal.codvta ?? productoFinal.codigo ?? (vdiId != null ? String(vdiId) : ''),
+            denominacion: item.denominacion || item.vdi_detalle1 || productoFinal.deno || productoFinal.nombre || '',
+            unidad: item.unidad || item.vdi_detalle2 || productoFinal.unidad || productoFinal.unidadmedida || '-',
             cantidad: item.vdi_cantidad ?? item.cantidad ?? 1,
             precio: item.vdi_precio_unitario_final ?? item.precio ?? '',
             precioFinal: item.vdi_precio_unitario_final ?? item.precioFinal ?? '',
             bonificacion: item.vdi_bonifica ?? item.bonificacion ?? 0,
             idaliiva: idaliivaStub,
-            vdi_costo: item.vdi_costo ?? item.costo ?? null,
+            vdi_costo: item.vdi_costo ?? item.costo ?? item.producto?.costo ?? null,
+            proveedorId: item.proveedorId ?? item.vdi_idpro ?? item.producto?.proveedor_habitual?.id ?? null,
           }
         })
 
-        // Log para debuggear qué items están llegando
-        console.log(`[ItemsGrid] Items iniciales recibidos:`, initialItems.map(item => ({
-          id: item.id,
-          codigo: item.codigo,
-          denominacion: item.denominacion,
-          vdi_detalle1: item.vdi_detalle1,
-          vdi_idsto: item.vdi_idsto,
-          tieneProducto: !!item.producto
-        })));
+        
 
         // Verificar si ya existe un renglón vacío; si no, añadir uno para permitir nuevas cargas
         const hayVacio = baseRows.some(
@@ -171,11 +168,11 @@ const ItemsGridPresupuesto = forwardRef(
           baseRows = [...baseRows, getEmptyRow()];
         }
         
-        console.log(`[ItemsGrid] Inicializando con ${baseRows.length} filas (${initialItems.length} items iniciales + renglón vacío)`);
+        
         return baseRows;
       }
       
-      console.log(`[ItemsGrid] Inicializando con 1 fila vacía (sin items iniciales)`);
+      
       return [getEmptyRow()];
     })
     const [stockNegativo, setStockNegativo] = useState(false)
@@ -183,6 +180,8 @@ const ItemsGridPresupuesto = forwardRef(
     const cantidadRefs = useRef([])
     const bonificacionRefs = useRef([])
     const didAutoFocusRef = useRef(false)
+    // Flag para evitar doble procesamiento entre Enter/Tab y Blur
+    const procesandoCodigoRef = useRef(false)
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
@@ -199,6 +198,8 @@ const ItemsGridPresupuesto = forwardRef(
             setRows((rows) =>
               rows.map((row, i) => (i === idxExistente ? { ...row, cantidad: Number(row.cantidad) + cantidad } : row)),
             )
+            // Después de sumar en duplicado, mover el foco a la cantidad del ítem afectado
+            setIdxCantidadFoco(idxExistente)
             return
           }
           if (autoSumarDuplicados === "eliminar") {
@@ -234,6 +235,7 @@ const ItemsGridPresupuesto = forwardRef(
               const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
 
               const nuevoItem = {
+                id: Date.now() + Math.random(),
                 ...lastRow,
                 codigo: producto.codvta || producto.codigo || "",
                 denominacion: producto.deno || producto.nombre || "",
@@ -248,7 +250,10 @@ const ItemsGridPresupuesto = forwardRef(
                 idaliiva: aliIdTmp,
                 proveedorId: producto.proveedor_habitual?.id || null,
               }
-              return [...prevRows.slice(0, idxExistente), nuevoItem, ...prevRows.slice(idxExistente)]
+              const nuevaLista = [...prevRows.slice(0, idxExistente), nuevoItem, ...prevRows.slice(idxExistente)]
+              // Nuevo ítem duplicado insertado en idxExistente → foco en cantidad de ese índice
+              setIdxCantidadFoco(idxExistente)
+              return nuevaLista
             })
             return
           }
@@ -276,6 +281,7 @@ const ItemsGridPresupuesto = forwardRef(
           const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
 
           const nuevoItem = {
+            id: Date.now() + Math.random(),
             ...lastRow,
             codigo: producto.codvta || producto.codigo || "",
             denominacion: producto.deno || producto.nombre || "",
@@ -291,9 +297,17 @@ const ItemsGridPresupuesto = forwardRef(
             proveedorId: producto.proveedor_habitual?.id || null,
           }
           if (!lastRow.producto && !lastRow.codigo) {
-            return [...prevRows.slice(0, -1), nuevoItem, getEmptyRow()]
+            const indiceInsertado = prevRows.length - 1
+            const result = [...prevRows.slice(0, -1), nuevoItem, getEmptyRow()]
+            // Foco en cantidad del renglón donde se insertó el nuevo ítem
+            setIdxCantidadFoco(indiceInsertado)
+            return result
           } else {
-            return [...prevRows, nuevoItem, getEmptyRow()]
+            const indiceInsertado = prevRows.length
+            const result = [...prevRows, nuevoItem, getEmptyRow()]
+            // Foco en cantidad del nuevo renglón agregado
+            setIdxCantidadFoco(indiceInsertado)
+            return result
           }
         })
       },
@@ -436,7 +450,6 @@ const ItemsGridPresupuesto = forwardRef(
               : {}),
           }
           const updatedRows = ensureSoloUnEditablePreservandoIndice(newRows, idx)
-          onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "precio") {
           const userInput = value
@@ -477,14 +490,13 @@ const ItemsGridPresupuesto = forwardRef(
             }
           }
 
-          fila.precioFinal = esVacio ? "" : userInputNum
+          fila.precioFinal = esVacio ? "" : userInput
           // Guardar precio base con 4 decimales para evitar errores de redondeo
           fila.precio = esVacio ? "" : (Number.isFinite(precioBaseCalc) ? Number(precioBaseCalc.toFixed(4)) : "")
           fila.idaliiva = aliFinalId
 
           newRows[idx] = fila
           const updatedRows = ensureSoloUnEditable(newRows)
-          onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "bonificacion") {
           newRows[idx] = {
@@ -492,7 +504,6 @@ const ItemsGridPresupuesto = forwardRef(
             [field]: value,
           }
           const updatedRows = ensureSoloUnEditable(newRows)
-          onRowsChange?.(updatedRows)
           return updatedRows
         } else if (field === "denominacion") {
           newRows[idx] = {
@@ -500,7 +511,6 @@ const ItemsGridPresupuesto = forwardRef(
             denominacion: value,
           }
           const updatedRows = ensureSoloUnEditable(newRows)
-          onRowsChange?.(updatedRows)
           return updatedRows
         }
         return newRows
@@ -532,16 +542,17 @@ const ItemsGridPresupuesto = forwardRef(
               const cantidad = Number.parseFloat(row.cantidad) || 0;
               const bonif = Number.parseFloat(row.bonificacion) || 0;
 
-              if (row.producto) {
+              const esStock = !!(row.producto || row.vdi_idsto)
+              if (esStock) {
                 // --- LÓGICA PARA ÍTEM DE STOCK ---
-                const idaliiva = row.producto.idaliiva?.id ?? row.producto.idaliiva ?? row.idaliiva ?? 3;
-                const margen = row.margen ?? row.vdi_margen ?? row.producto.margen ?? 0;
+                const idStock = row.producto?.id ?? row.vdi_idsto
+                const idaliiva = row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? row.idaliiva ?? 3
+                const margen = row.margen ?? row.vdi_margen ?? row.producto?.margen ?? 0
                 
                 return {
                   vdi_orden: idx + 1,
-                  vdi_idsto: row.producto.id,
-                  // NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                  // vdi_idpro: row.proveedorId,
+                  vdi_idsto: idStock,
+                  // vdi_idpro: row.proveedorId, // el backend puede inferir proveedor
                   vdi_cantidad: cantidad,
                   vdi_costo: row.vdi_costo ?? 0,
                   vdi_margen: margen,
@@ -550,8 +561,8 @@ const ItemsGridPresupuesto = forwardRef(
                   vdi_detalle1: row.denominacion || "",
                   vdi_detalle2: row.unidad || "",
                   vdi_idaliiva: idaliiva,
-                  codigo: row.codigo || String(row.producto.id),
-                  producto: row.producto,
+                  codigo: row.codigo || String(idStock),
+                  producto: row.producto ?? null,
                   proveedorId: row.proveedorId,
                 };
               } else {
@@ -640,7 +651,6 @@ const ItemsGridPresupuesto = forwardRef(
       
       setRows((rows) => {
         const newRows = rows.filter((_, i) => i !== idx);
-        onRowsChange?.(newRows);
 
         // Si después de eliminar, no queda ninguna fila "llena" (ni de stock ni genérica),
         // entonces reiniciamos la grilla a un único renglón vacío.
@@ -667,7 +677,6 @@ const ItemsGridPresupuesto = forwardRef(
           rowToDuplicate,
           ...prevRows.slice(idx + 1),
         ];
-        onRowsChange?.(newRows);
         return newRows;
       });
     };
@@ -695,6 +704,9 @@ const ItemsGridPresupuesto = forwardRef(
       if (e.key === "Enter" || (e.key === "Tab" && field === "bonificacion")) {
         const row = rows[idx]
         if (field === "codigo" && row.codigo) {
+          if (procesandoCodigoRef.current) return
+          procesandoCodigoRef.current = true
+          try {
           // Búsqueda remota por código
           const prod = await buscarProductoPorCodigo(row.codigo)
           if (!prod) {
@@ -715,7 +727,7 @@ const ItemsGridPresupuesto = forwardRef(
           // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
           // para que "Sumar Cantidades" no funcione con items originales
           const idxExistente = rows.findIndex(
-            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && r.proveedorId === proveedorId && !r.esBloqueado && !r.idOriginal,
+            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
           )
           if (idxExistente !== -1) {
             if (autoSumarDuplicados === "sumar") {
@@ -762,14 +774,7 @@ const ItemsGridPresupuesto = forwardRef(
                   idaliiva: aliId,
                   proveedorId: proveedorId,
                 }
-                console.log('[ItemsGrid] ENTER presionado - Ítem DUPLICADO cargado:', {
-                  codigo: itemCargado.codigo,
-                  denominacion: itemCargado.denominacion,
-                  precio: itemCargado.precio,
-                  precioFinal: itemCargado.precioFinal,
-                  cantidad: itemCargado.cantidad,
-                  producto: prod.id
-                })
+                
                 newRows[idx] = itemCargado
                 if (newRows.every(isRowLleno)) {
                   newRows.push(getEmptyRow())
@@ -813,15 +818,7 @@ const ItemsGridPresupuesto = forwardRef(
               idaliiva: aliId,
               proveedorId: proveedorId,
             }
-            console.log('[ItemsGrid] ENTER presionado - Ítem NUEVO cargado:', {
-              codigo: itemCargado.codigo,
-              denominacion: itemCargado.denominacion,
-              precio: itemCargado.precio,
-              precioFinal: itemCargado.precioFinal,
-              cantidad: itemCargado.cantidad,
-              producto: prod.id,
-              proveedorId: itemCargado.proveedorId
-            })
+            
             newRows[idx] = itemCargado
             if (newRows.every(isRowLleno)) {
               newRows.push(getEmptyRow())
@@ -830,6 +827,10 @@ const ItemsGridPresupuesto = forwardRef(
           })
           // Mover foco a cantidad después de cargar el producto
           setIdxCantidadFoco(idx)
+          } finally {
+            // Liberar el flag para permitir futuros procesos
+            procesandoCodigoRef.current = false
+          }
         }
         if (field === "cantidad") {
           if (rows[idx].producto && rows[idx].codigo) {
@@ -867,6 +868,8 @@ const ItemsGridPresupuesto = forwardRef(
 
     // Nuevo: al salir del campo código, intentar cargar el producto igual que con Enter
     const handleCodigoBlur = async (idx) => {
+      // Evitar reprocesar si ya se manejó por Enter/Tab
+      if (procesandoCodigoRef.current) return
       const input = codigoRefs.current[idx]
       if (input && input.setCustomValidity) {
         input.setCustomValidity("")
@@ -1235,6 +1238,12 @@ const ItemsGridPresupuesto = forwardRef(
                     ? bonifParticular
                     : bonifGeneral
                   const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
+                  
+                  // Aplicar descuentos globales al precio bonificado
+                  let precioConDescuentos = precioBonificado
+                  if (descu1 > 0) precioConDescuentos *= (1 - descu1 / 100)
+                  if (descu2 > 0) precioConDescuentos *= (1 - descu2 / 100)
+                  if (descu3 > 0) precioConDescuentos *= (1 - descu3 / 100)
 
                   return (
                     <tr
@@ -1325,9 +1334,9 @@ const ItemsGridPresupuesto = forwardRef(
                           inputMode="decimal"
                           value={
                             row.precioFinal !== "" && row.precioFinal !== undefined
-                              ? Number(row.precioFinal)
+                              ? row.precioFinal
                               : (row.precio !== "" && row.precio !== undefined
-                                  ? Math.round((parseFloat(row.precio) * (1 + (aliMap[row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0] || 0) / 100)) * 100) / 100
+                                  ? row.precio
                                   : "")
                           }
                           onChange={(e) => {
@@ -1405,7 +1414,7 @@ const ItemsGridPresupuesto = forwardRef(
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="px-3 py-2 text-emerald-600 font-semibold text-sm">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
-                            ? `$${Number((precioBonificado * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
+                            ? `$${Number((precioConDescuentos * (Number.parseFloat(row.cantidad) || 0)).toFixed(2)).toLocaleString()}`
                             : ""}
                         </div>
                       </td>

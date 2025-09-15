@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const ConversionModal = ({
   open,
@@ -15,6 +16,7 @@ const ConversionModal = ({
   sucursales,
   puntosVenta,
 }) => {
+  const theme = useFerreDeskTheme()
   const [selectedItems, setSelectedItems] = useState([])
 
   // Detectar tipo de conversión
@@ -111,7 +113,7 @@ const ConversionModal = ({
             >
               <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all border border-slate-200/50">
                 {/* Header compacto */}
-                <div className="px-5 py-4 border-b border-slate-200/80 bg-gradient-to-r from-slate-50 to-slate-100/50">
+                <div className={`px-5 py-4 border-b border-slate-200/80 bg-gradient-to-r ${theme.primario}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center shadow-lg">
@@ -124,13 +126,13 @@ const ConversionModal = ({
                           />
                         </svg>
                       </div>
-                      <Dialog.Title as="h2" className="text-xl font-bold text-slate-800">
+                      <Dialog.Title as="h2" className="text-xl font-bold text-white">
                         {titulo}
                       </Dialog.Title>
                     </div>
                     <button
                       onClick={onClose}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200"
                     >
                       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -190,7 +192,7 @@ const ConversionModal = ({
 
                   <div className="rounded-xl border border-slate-200/80 shadow-sm overflow-hidden max-h-80 overflow-y-auto">
                     <table className="min-w-full">
-                      <thead className="bg-gradient-to-r from-slate-100 to-slate-50 sticky top-0">
+                      <thead className={`bg-gradient-to-r ${theme.primario} sticky top-0`}>
                         <tr>
                           <th className="px-4 py-2">
                             <span
@@ -210,25 +212,25 @@ const ConversionModal = ({
                               )}
                             </span>
                           </th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-12">
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-12">
                             #
                           </th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-20">
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-20">
                             Código
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide">
                             Detalle
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-20">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-20">
                             Cant.
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-24">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-24">
                             P. Unit.
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-20">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-20">
                             Bonif.
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-24">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-white uppercase tracking-wide w-24">
                             Total
                           </th>
                         </tr>

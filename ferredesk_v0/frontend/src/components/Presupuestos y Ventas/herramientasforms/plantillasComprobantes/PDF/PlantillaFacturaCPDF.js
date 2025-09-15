@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 1, // Reducido de 2 a 1
     fontSize: 8, // Aumentado 35% de 6 a 8
-    textAlign: "center",
+    textAlign: "left",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
@@ -788,15 +788,7 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
         // Determinar si mostrar traspaso a página siguiente
         const mostrarTraspasoSiguiente = !esUltimaPagina;
         
-        // Logs de depuración
-        console.log(`Página ${indexPagina + 1}:`, {
-          itemsEnPagina: itemsPagina.length,
-          netoPagina,
-          netoTraspasado,
-          netoAcumuladoParaSiguiente,
-          mostrarTraspasoSiguiente,
-          esUltimaPagina
-        });
+        
         
         return generarPaginaComprobante(
           configFacturaC, //  Configuración específica de Factura A

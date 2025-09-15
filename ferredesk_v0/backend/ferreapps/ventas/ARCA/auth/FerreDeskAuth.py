@@ -61,10 +61,6 @@ class FerreDeskAuth:
         """Valida que la configuración inicial sea correcta"""
         errores = []
         
-        # Validar que ARCA esté habilitado
-        if not self.ferreteria.arca_habilitado:
-            raise Exception("ARCA no está habilitado para esta ferretería")
-        
         # Validar certificados usando el modelo Ferreteria
         if not self.ferreteria.certificado_arca:
             errores.append("Certificado ARCA no cargado en la ferretería")

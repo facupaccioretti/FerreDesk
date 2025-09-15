@@ -6,6 +6,7 @@ import FilterableSelect from "./FilterableSelect"
 import useValidacionCUIT from "../../utils/useValidacionCUIT"
 import CUITValidacionTooltip from "./CUITValidacionTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 import MaestroModal from "./MaestrosModales"
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
@@ -110,8 +111,10 @@ const ClienteForm = ({
   }, [initialData?.id, tabKey])
   const claveAnteriorRef = useRef(claveBorradorCliente)
   const estaRecargandoRef = useRef(false)
-  const formRef = useRef(null)
   const cuitInputRef = useRef(null)
+  
+  // Hook para navegación entre campos con Enter
+  const { formRef, getFormProps } = useNavegacionForm()
 
   // Detectar recarga/navegación para no limpiar el borrador en ese caso
   useEffect(() => {
@@ -782,7 +785,7 @@ const ClienteForm = ({
           <form
             className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
             onSubmit={handleSubmit}
-            ref={formRef}
+            {...getFormProps()}
           >
             {/* Gradiente decorativo superior */}
             <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>

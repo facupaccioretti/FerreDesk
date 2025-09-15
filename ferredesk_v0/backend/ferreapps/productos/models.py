@@ -449,6 +449,10 @@ class Stock(models.Model):
 
     class Meta:
         db_table = 'STOCK'
+        indexes = [
+            models.Index(fields=['acti']),
+            models.Index(fields=['proveedor_habitual']),
+        ]
 
 class StockProve(models.Model):
     stock = models.ForeignKey(Stock, on_delete=models.CASCADE, db_column='STP_IDSTO', related_name='stock_proveedores')
@@ -463,6 +467,10 @@ class StockProve(models.Model):
     class Meta:
         db_table = 'STOCKPROVE'
         unique_together = (('stock', 'proveedor'),)
+        indexes = [
+            models.Index(fields=['stock', 'proveedor']),
+            models.Index(fields=['proveedor']),
+        ]
         # NOTA: La unicidad (proveedor, codigo_producto_proveedor) solo se valida en el serializer si el código no está vacío.
 
 class Familia(models.Model):

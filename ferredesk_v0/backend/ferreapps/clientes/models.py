@@ -141,3 +141,8 @@ class Cliente(models.Model):
 
     class Meta:
         db_table = 'CLIENTES'
+        indexes = [
+            models.Index(fields=['activo']),
+            models.Index(fields=['cuit']),
+            models.Index(fields=['razon']),
+        ]

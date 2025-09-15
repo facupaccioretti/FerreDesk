@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start", // Alinear al tope en lugar de centrar
   },
   headerDescripcion: {
-    flex: 2,
+    flex: 2.5,
     padding: 0, // Eliminado completamente el padding
     fontSize: 7, // Aumentado de 6 a 7
     fontWeight: "bold",
@@ -277,14 +277,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     justifyContent: "flex-start", // Alinear al tope en lugar de centrar
   },
-  headerIVA: {
-    flex: 1,
-    padding: 0, // Eliminado completamente el padding
-    fontSize: 7, // Aumentado de 6 a 7
-    fontWeight: "bold",
-    textAlign: "center",
-    justifyContent: "flex-start", // Alinear al tope en lugar de centrar
-  },
   headerImporte: {
     flex: 1,
     padding: 0, // Eliminado completamente el padding
@@ -302,11 +294,11 @@ const styles = StyleSheet.create({
     flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
     fontSize: 6.5, // Aumentado de 6 a 6.5
-    textAlign: "center",
+    textAlign: "left",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
-    flex: 2.4, // Aumentado de 2 a 2.4 (20% más espaciosa)
+    flex: 2.9, // Aumentado para aprovechar el espacio de la columna IVA eliminada
     padding: 1, // Reducido de 2 a 1
     fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "left",
@@ -345,13 +337,6 @@ const styles = StyleSheet.create({
     padding: 1, // Reducido de 2 a 1
     fontSize: 6.5, // Aumentado de 6 a 6.5
     textAlign: "center",
-    justifyContent: "center", // Centrar verticalmente
-  },
-  colIVA: {
-    flex: 1,
-    padding: 1, // Reducido de 2 a 1
-    fontSize: 6.5, // Aumentado de 6 a 6.5
-    textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
   colImporte: {
@@ -550,11 +535,11 @@ const generarPieFiscalA = (data, styles, numeroPagina = 1, totalPaginas = 1) => 
           <Text style={styles.leyendaAfip}>
             Esta Administración Federal no se responsabiliza por los datos ingresados en detalle de la operación
           </Text>
-          {esMonotributistaPorDenominacion(data.condicion_iva_cliente) && (
-            <Text style={styles.leyendaAfip}>
-              El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618
-            </Text>
-          )}
+                     {esMonotributistaPorDenominacion(data.condicion_iva_cliente) && (
+             <Text style={[styles.leyendaAfip, { textAlign: 'left' }]}>
+               El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618
+             </Text>
+           )}
         </View>
         <View style={styles.pieDerecha}>
           <View style={styles.campoAfip}>
@@ -586,7 +571,7 @@ const configFacturaA = {
     mostrarTraspasoSiguiente = false
   ) => (
     <View style={styles.itemsContainer}>
-      {/* Encabezados con 9 columnas */}
+      {/* Encabezados con 8 columnas */}
       <View style={styles.itemsHeader}>
         <Text style={styles.headerCodigo}>Código</Text>
         <Text style={styles.headerDescripcion}>Descripción</Text>
@@ -595,14 +580,13 @@ const configFacturaA = {
         <Text style={styles.headerDescuento}>Desc. %</Text>
         <Text style={styles.headerPrecioBonificado}>P. Unit. Bonif.</Text>
         <Text style={styles.headerAlicuota}>Alicuota</Text>
-        <Text style={styles.headerIVA}>IVA</Text>
         <Text style={styles.headerImporte}>Importe</Text>
       </View>
 
       {/* Fila de traspasado de página anterior (si existe) */}
       {netoTraspasado !== null && generarFilaTraspaso(netoTraspasado, styles, formatearMoneda, true)}
 
-      {/* Datos con 9 columnas */}
+      {/* Datos con 8 columnas */}
       {itemsPagina && itemsPagina.length > 0 ? (
         itemsPagina.map((item, index) => (
           <View key={index} style={styles.itemRow}>
@@ -615,7 +599,6 @@ const configFacturaA = {
             </Text>
             <Text style={styles.colPrecioBonificado}>{formatearMoneda(item.precio_unitario_bonif_desc_sin_iva)}</Text>
             <Text style={styles.colAlicuota}>{item.ali_porce ? `${item.ali_porce}%` : "0%"}</Text>
-            <Text style={styles.colIVA}>{formatearMoneda(item.iva_monto)}</Text>
             <Text style={styles.colImporte}>{formatearMoneda(item.total_item)}</Text>
           </View>
         ))
@@ -683,15 +666,7 @@ const PlantillaFacturaAPDF = ({ data, ferreteriaConfig }) => {
         // Determinar si mostrar traspaso a página siguiente
         const mostrarTraspasoSiguiente = !esUltimaPagina;
         
-        // Logs de depuración
-        console.log(`Página ${indexPagina + 1}:`, {
-          itemsEnPagina: itemsPagina.length,
-          netoPagina,
-          netoTraspasado,
-          netoAcumuladoParaSiguiente,
-          mostrarTraspasoSiguiente,
-          esUltimaPagina
-        });
+        
         
         return generarPaginaComprobante(
           configFacturaA, //  Configuración específica de Factura A

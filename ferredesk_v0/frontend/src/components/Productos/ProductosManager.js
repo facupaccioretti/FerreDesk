@@ -118,6 +118,8 @@ const ProductosManager = () => {
       }
       closeTab(key)
     } catch (err) {
+      // Mostrar el error como alerta nativa del navegador
+      alert(err.message)
       throw err
     }
   }
@@ -238,9 +240,9 @@ const ProductosManager = () => {
       } else if (activeTab === "inactivos") {
         filtros.acti = "N";
       }
-      // Búsqueda remota por denominación
+      // Búsqueda remota por código de venta y denominación
       if ((searchProductos || '').trim()) {
-        filtros['deno__icontains'] = searchProductos.trim();
+        filtros['search'] = searchProductos.trim();
       }
       fetchProductos(filtros, pagina, itemsPorPagina, 'id', ordenamiento);
     }, 200);

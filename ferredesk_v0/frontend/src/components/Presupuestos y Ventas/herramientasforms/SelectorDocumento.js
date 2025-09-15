@@ -85,26 +85,26 @@ const SelectorDocumento = ({
     <div className={`w-full ${className}`}>
       {/* Radio buttons como título del campo */}
       <div className="flex items-center gap-3 mb-0.5">
-        <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+        <label className={`flex items-center gap-1 text-xs font-semibold ${readOnly ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'}`}>
           <input
             type="radio"
             name="tipoDocumento"
             checked={esCUIT}
             onChange={() => handleTipoChange(TIPOS_DOCUMENTO.CUIT)}
             disabled={readOnly}
-            className="w-2 h-2 text-orange-600 border-slate-300 focus:ring-orange-500"
+            className={`w-2 h-2 border-slate-300 ${readOnly ? 'opacity-60 cursor-not-allowed' : 'text-orange-600 focus:ring-orange-500'}`}
           />
           CUIT {esObligatorioHook && <span className="text-orange-600">*</span>}
         </label>
         
-        <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+        <label className={`flex items-center gap-1 text-xs font-semibold ${readOnly ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'}`}>
           <input
             type="radio"
             name="tipoDocumento"
             checked={esDNI}
             onChange={() => handleTipoChange(TIPOS_DOCUMENTO.DNI)}
             disabled={readOnly}
-            className="w-2 h-2 text-orange-600 border-slate-300 focus:ring-orange-500"
+            className={`w-2 h-2 border-slate-300 ${readOnly ? 'opacity-60 cursor-not-allowed' : 'text-orange-600 focus:ring-orange-500'}`}
           />
           DNI {esObligatorioHook && <span className="text-orange-600">*</span>}
         </label>
@@ -117,9 +117,13 @@ const SelectorDocumento = ({
         onChange={handleValorChange}
         onKeyDown={handleKeyDown}
         placeholder={esCUIT ? 'XX-XXXXXXXX-X' : 'XX.XXX.XXX'}
-        className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+        className={`w-full border rounded-none px-2 py-1 text-xs h-8 transition-all duration-200 ${readOnly
+          ? 'bg-slate-100 text-slate-600 cursor-not-allowed border-slate-200 focus:ring-0 focus:border-slate-200'
+          : 'bg-white border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500'}`}
         required={esObligatorioHook}
-        readOnly={readOnly}
+        disabled={readOnly}
+        aria-disabled={readOnly}
+        tabIndex={readOnly ? -1 : 0}
         aria-label={`Campo de ${esCUIT ? 'CUIT' : 'DNI'}`}
         aria-invalid={tieneError}
         aria-describedby={tieneError ? 'error-documento' : undefined}
