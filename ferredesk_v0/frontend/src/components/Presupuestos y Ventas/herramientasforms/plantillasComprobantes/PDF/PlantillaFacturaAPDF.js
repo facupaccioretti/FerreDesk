@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
     fontSize: 6.5, // Aumentado de 6 a 6.5
-    textAlign: "center",
+    textAlign: "left",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
