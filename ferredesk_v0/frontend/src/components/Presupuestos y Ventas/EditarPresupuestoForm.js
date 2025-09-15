@@ -6,7 +6,7 @@ import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
@@ -42,6 +42,8 @@ const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap
 
   return {
     id: data.ven_id ?? data.id ?? '',
+    // Solo para visualización. La numeración la controla el backend.
+    numero: data.ven_numero ?? data.numero ?? '',
     clienteId: data.ven_idcli ?? data.clienteId ?? '',
     cuit: data.ven_cuit ?? data.cuit ?? '',
     domicilio: data.ven_domicilio ?? data.domicilio ?? '',
@@ -88,13 +90,7 @@ const EditarPresupuestoForm = ({
   errorFamilias,
   errorProveedores
 }) => {
-  console.log('[EditarPresupuestoForm] Props recibidas:', {
-    initialData,
-    comprobantes,
-    tiposComprobante,
-    tipoComprobante,
-    comprobanteId: initialData?.comprobante_id
-  });
+  
 
   // Hook para navegación entre campos con Enter
   const { getFormProps } = useNavegacionForm();
@@ -287,7 +283,6 @@ const EditarPresupuestoForm = ({
     
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
-    console.log('[handleClienteSelect] Documento validado:', documentoValidado)
     setDocumentoInfo(documentoValidado)
   };
 
@@ -305,23 +300,23 @@ const EditarPresupuestoForm = ({
     if (!itemsGridRef.current) return;
     try {
       const itemsToSave = itemsGridRef.current.getItems();
-      console.log('[EditarPresupuestoForm/handleSubmit] Items recibidos desde la grilla:', JSON.parse(JSON.stringify(itemsToSave)));
-      console.log('[EditarPresupuestoForm/handleSubmit] Formulario actual:', formulario);
       
+      // Se mantiene la búsqueda por compatibilidad aunque el backend decide, pero no se usa la variable 
+      // eslint-disable-next-line no-unused-vars
       const comprobanteSeleccionado = comprobantes.find(c => String(c.id) === String(formulario.comprobanteId))
         || comprobantes.find(c => String(c.codigo_afip) === String(formulario.comprobanteId))
         || comprobantes.find(c => c.codigo_afip === '9997'); // Fallback Presupuesto
-      const comprobanteCodigoAfip = comprobanteSeleccionado ? comprobanteSeleccionado.codigo_afip : '9997';
+      // Código AFIP determinado (no utilizado aquí, el backend decide)
+      // const codigoAfipSeleccionado = comprobanteSeleccionado ? comprobanteSeleccionado.codigo_afip : '9997';
 
-      console.log('[EditarPresupuestoForm/handleSubmit] ComprobanteId:', formulario.comprobanteId, '-> Código AFIP:', comprobanteCodigoAfip);
+      
       
       let payload = {
         ven_id: parseInt(formulario.id),
         ven_estado: formulario.estado || 'AB',
         ven_tipo: formulario.tipo || 'Presupuesto',
         tipo_comprobante: 'presupuesto',
-        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
-        ven_numero: Number.parseInt(formulario.numero, 10) || 1,
+        // No enviar comprobante_id ni ven_numero: la numeración la define el backend
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,
         ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
@@ -341,7 +336,7 @@ const EditarPresupuestoForm = ({
         // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         update_atomic: true
       };
-      console.log('[EditarPresupuestoForm/handleSubmit] Payload final:', payload);
+      
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
       await onSave(payload);
@@ -370,7 +365,7 @@ const EditarPresupuestoForm = ({
   // LOG NUEVO: Loggear los items que se pasan al grid
   useEffect(() => {
     if (formulario && Array.isArray(formulario.items)) {
-      console.log('[EditarPresupuestoForm] Items pasados al grid:', JSON.parse(JSON.stringify(formulario.items)));
+      // log eliminado
     }
   }, [formulario]);
 
@@ -442,7 +437,7 @@ const EditarPresupuestoForm = ({
                 valorInicial={documentoInfo.valor}
                 tipoInicial={documentoInfo.tipo}
                 onChange={handleDocumentoChange}
-                readOnly={isReadOnly}
+                readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                 className="w-full"
               />
             </div>

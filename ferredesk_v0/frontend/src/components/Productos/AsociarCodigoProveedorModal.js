@@ -55,14 +55,12 @@ const AsociarCodigoProveedorModal = ({
 
   useEffect(() => {
     if (selectedProveedor) {
-      console.log('[Modal] Fetching códigos para proveedor', selectedProveedor)
       setLoading(true)
       fetch(`/api/productos/proveedor/${selectedProveedor}/codigos-lista/`, {
         credentials: "include",
       })
         .then((res) => res.json())
         .then((data) => {
-          console.log('[Modal] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
           setProductosConDenominacion(data.productos || [])
           setLoading(false)
         })
@@ -83,7 +81,6 @@ const AsociarCodigoProveedorModal = ({
   // Consultar costo sugerido al cambiar proveedor o código
   useEffect(() => {
     if (selectedProveedor && codigoProveedor) {
-      console.log('[Modal] Consultando costo sugerido', { proveedor: selectedProveedor, codigo: codigoProveedor })
       setCargandoCosto(true)
       fetch(
         `/api/productos/precio-producto-proveedor/?proveedor_id=${selectedProveedor}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,

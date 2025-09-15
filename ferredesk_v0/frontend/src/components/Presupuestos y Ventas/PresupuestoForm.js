@@ -6,7 +6,7 @@ import useNavegacionForm from "../../hooks/useNavegacionForm"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
@@ -343,7 +343,6 @@ const PresupuestoForm = ({
     
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
-    console.log('[handleClienteSelect] Documento validado:', documentoValidado)
     setDocumentoInfo(documentoValidado)
   }
 
@@ -502,7 +501,7 @@ const PresupuestoForm = ({
                 valorInicial={documentoInfo.valor}
                 tipoInicial={documentoInfo.tipo}
                 onChange={handleDocumentoChange}
-                readOnly={isReadOnly}
+                readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                 className="w-full"
               />
             </div>

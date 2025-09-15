@@ -3,7 +3,7 @@ import useNavegacionForm from '../../hooks/useNavegacionForm';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -829,7 +829,7 @@ const ConVentaForm = ({
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}
                       onChange={handleDocumentoChange}
-                      readOnly={isReadOnly}
+                      readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                       className="w-full"
                     />
                   </div>
@@ -952,7 +952,7 @@ const ConVentaForm = ({
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
-                initialItems={formulario.items}
+                initialItems={normalizarItems(formulario.items || [], { modo: 'venta', alicuotasMap })}
               />
             </div>
 

@@ -122,13 +122,11 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
   }, []);
 
   const fetchComprobanteFiscal = useCallback(async () => {
-    console.log('[useComprobanteFiscal] Disparado con:', { tipoComprobante, cliente });
     setLoading(true);
     // Solo limpiar errores previos, mantener el estado anterior hasta completar
     setError(null);
 
     if (!tipoComprobante || !cliente) {
-      console.log('[useComprobanteFiscal] Faltan datos para disparar lógica fiscal.');
       setLoading(false);
       return;
     }
@@ -136,10 +134,6 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
     const situacion_iva_cliente = cliente.iva_nombre || cliente.iva?.nombre;
 
     // 
-    console.log('[useComprobanteFiscal] Cliente completo:', cliente);
-    console.log('[useComprobanteFiscal] Cliente.iva:', cliente.iva);
-    console.log('[useComprobanteFiscal] Cliente.iva_nombre:', cliente.iva_nombre);
-    console.log('[useComprobanteFiscal] Situación IVA cliente (final):', situacion_iva_cliente);
 
     // Validaciones estrictas
     if (situacion_iva_cliente === undefined || situacion_iva_cliente === null || situacion_iva_cliente === '') {
@@ -156,7 +150,7 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
       situacion_iva_cliente
     };
 
-    console.log('[useComprobanteFiscal] Enviando payload al backend:', payload);
+    
     try {
       const csrftoken = getCookie('csrftoken');
       const res = await fetch('/api/comprobantes/asignar/', {
@@ -174,14 +168,10 @@ export function useComprobanteFiscal({ tipoComprobante, cliente }) {
         return;
       }
       const data = await res.json();
-      console.log('[useComprobanteFiscal] Respuesta del backend:', data);
       
       const letraComprobante = data.letra || '';
       
       // 
-      console.log('[useComprobanteFiscal] Letra asignada:', letraComprobante);
-      console.log('[useComprobanteFiscal] Código AFIP:', data.codigo_afip);
-      console.log('[useComprobanteFiscal] Comprobante completo:', data);
       
       setLetra(letraComprobante);
       setCodigoAfip(data.codigo_afip || '');

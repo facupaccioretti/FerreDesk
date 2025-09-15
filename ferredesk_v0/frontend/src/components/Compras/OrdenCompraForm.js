@@ -60,7 +60,7 @@ const OrdenCompraForm = ({
   const [selectedProveedor, setSelectedProveedor] = useState(null)
 
   useEffect(() => {
-    console.log("PROVEEDOR - initialData:", initialData?.ord_idpro, "formData:", formData.ord_idpro)
+    
     
     if (initialData) {
       if (initialData.proveedorSeleccionado) {
@@ -161,9 +161,7 @@ const OrdenCompraForm = ({
       return
     }
 
-    console.log("=== DATOS A ENVIAR ===")
-    console.log("formData:", formData)
-    console.log("initialData:", initialData)
+    
 
     setIsSubmitting(true)
     setErrors({})

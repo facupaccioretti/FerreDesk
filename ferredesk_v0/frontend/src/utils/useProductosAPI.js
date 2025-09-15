@@ -70,7 +70,7 @@ export function useProductosAPI() {
     try {
       // Usar el endpoint correcto para editar productos con relaciones
       const url = `/api/productos/editar-producto-con-relaciones/`;
-      console.log('Actualizando producto:', url, { producto: updated, stock_proveedores: updated.stock_proveedores || [] });
+      
       
       const res = await fetch(url, {
         method: 'PUT',

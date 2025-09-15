@@ -16,6 +16,7 @@ import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 import useValidacionCUIT from '../../utils/useValidacionCUIT';
 import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
+import { esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
@@ -504,7 +505,7 @@ const NotaCreditoForm = ({
                         valorInicial={documentoInfo.valor}
                         tipoInicial={documentoInfo.tipo}
                         onChange={handleDocumentoChange}
-                        readOnly={false}
+                        readOnly={!esDocumentoEditable(formulario.clienteId, false)}
                         className="w-full"
                       />
                     </div>

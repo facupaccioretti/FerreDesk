@@ -21,27 +21,18 @@ export const CANTIDAD_MAXIMA_ITEMS = 25;
  */
 export const convertirBytesABase64 = (bytes) => {
   if (!bytes) {
-    console.log('DEBUG QR - No hay bytes para convertir');
     return null;
   }
   
-  console.log('DEBUG QR - Iniciando conversión:', {
-    tipoBytes: typeof bytes,
-    esArrayBuffer: bytes instanceof ArrayBuffer,
-    esUint8Array: bytes instanceof Uint8Array,
-    esString: typeof bytes === 'string',
-    longitud: bytes.length
-  });
+  
   
   try {
     // Si ya es un string (base64 del backend), devolverlo directamente
     if (typeof bytes === 'string') {
-      console.log('DEBUG QR - Ya es base64 del backend, longitud:', bytes.length);
       // Verificar que sea base64 válido
       if (bytes.length > 100 && /^[A-Za-z0-9+/]*={0,2}$/.test(bytes)) {
         return bytes;
       } else {
-        console.log('DEBUG QR - String no parece ser base64 válido');
         return null;
       }
     }
@@ -49,25 +40,16 @@ export const convertirBytesABase64 = (bytes) => {
     // Si bytes es un ArrayBuffer, convertirlo a Uint8Array
     const uint8Array = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
     
-    console.log('DEBUG QR - Uint8Array creado:', {
-      longitud: uint8Array.length,
-      primerosBytes: Array.from(uint8Array.slice(0, 10))
-    });
+    
     
     // Convertir a string y luego a base64
     const binaryString = String.fromCharCode.apply(null, uint8Array);
     
-    console.log('DEBUG QR - Binary string creado:', {
-      longitud: binaryString.length,
-      primerosCaracteres: binaryString.substring(0, 20)
-    });
+    
     
     const resultado = btoa(binaryString);
     
-    console.log('DEBUG QR - Base64 generado:', {
-      longitud: resultado.length,
-      primerosCaracteres: resultado.substring(0, 20)
-    });
+    
     
     return resultado;
   } catch (error) {
@@ -224,11 +206,7 @@ export const dividirItemsEnPaginas = (items, itemsPorPagina = CANTIDAD_MAXIMA_IT
  */
 export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
   // Debug: Verificar URL del logo
-  console.log('DEBUG LOGO URL:', {
-    logo_empresa: ferreteriaConfig?.logo_empresa,
-    tieneLogo: !!ferreteriaConfig?.logo_empresa,
-    urlCompleta: ferreteriaConfig?.logo_empresa ? `${window.location.origin}${ferreteriaConfig.logo_empresa}` : null
-  });
+  
 
   // Determinar si es comprobante informal (presupuesto o factura interna)
   const comprobante = data.comprobante || {};
@@ -326,7 +304,7 @@ export const generarInfoClienteComun = (data, styles, mostrarSiempre) => (
       </Text>
     </View>
     <View style={styles.clienteDerecha}>
-      {mostrarSiempre(data.cuit, "CUIT", styles)}
+      {mostrarSiempre(data.cuit, "CUIT/DNI", styles)}
       {mostrarSiempre(data.localidad, "Localidad", styles)}
       {mostrarSiempre(data.provincia, "Provincia", styles)}
       {mostrarSiempre(data.telefono_cliente, "Teléfono", styles)}
@@ -405,22 +383,12 @@ export const generarTablaItemsComun = (
  */
 export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
   // Debug: Verificar datos del QR
-  console.log('DEBUG QR - Datos recibidos:', {
-    tieneVenQr: !!data.ven_qr,
-    tipoVenQr: typeof data.ven_qr,
-    longitudVenQr: data.ven_qr ? data.ven_qr.length : null,
-    esArrayBuffer: data.ven_qr instanceof ArrayBuffer,
-    esUint8Array: data.ven_qr instanceof Uint8Array,
-    datosCompletos: data
-  });
+  
   
   // Convertir QR a base64 si existe
   const qrBase64 = data.ven_qr ? convertirBytesABase64(data.ven_qr) : null;
   
-  console.log('DEBUG QR - Resultado conversión:', {
-    qrBase64: qrBase64 ? `${qrBase64.substring(0, 50)}...` : null,
-    longitudBase64: qrBase64 ? qrBase64.length : null
-  });
+  
   
   return (
     <View style={styles.pieFiscal}>
@@ -554,7 +522,7 @@ export const generarFilaTraspaso = (neto, styles, formatearMoneda, esTraspasado 
     ? `Neto Acumulado de Pagina/s Anterior/es $${formatearMoneda(neto)}`
     : `Neto Acumulado a Pagina Siguiente $${formatearMoneda(neto)}`;
   
-  console.log('Generando fila de traspaso:', { neto, texto, esTraspasado });
+  
   
   return (
     <View style={styles.filaTraspaso}>

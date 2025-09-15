@@ -18,6 +18,7 @@ export const BotonEditar = ({ onClick, title = 'Editar', ...props }) => (
 
 export const BotonEliminar = ({ onClick, title = 'Eliminar', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-red-500 hover:text-red-700"
@@ -31,6 +32,7 @@ export const BotonEliminar = ({ onClick, title = 'Eliminar', ...props }) => (
 
 export const BotonExpandir = ({ expanded, onClick, title = 'Ver más', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className={`flex items-center justify-center w-6 h-6 mr-2 text-gray-700 transition-transform duration-200 ${expanded ? 'rotate-90' : 'rotate-0'}`}
@@ -45,6 +47,7 @@ export const BotonExpandir = ({ expanded, onClick, title = 'Ver más', ...props 
 
 export const BotonHistorial = ({ onClick, title = 'Historial', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-gray-800 hover:text-black"
@@ -60,6 +63,7 @@ export const BotonHistorial = ({ onClick, title = 'Historial', ...props }) => (
 
 export const BotonCargarLista = ({ onClick, title = 'Cargar Lista', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-green-600 hover:text-green-800"
@@ -77,6 +81,7 @@ export const BotonCargarLista = ({ onClick, title = 'Cargar Lista', ...props }) 
 
 export const BotonConvertir = ({ onClick, title = 'Convertir', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-purple-600 hover:text-purple-800"
@@ -90,6 +95,7 @@ export const BotonConvertir = ({ onClick, title = 'Convertir', ...props }) => (
 
 export const BotonNotaCredito = ({ onClick, title = 'Nota de Crédito', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-blue-600 hover:text-blue-800"
@@ -104,6 +110,7 @@ export const BotonNotaCredito = ({ onClick, title = 'Nota de Crédito', ...props
 
 export const BotonVinculado = ({ onClick, title = 'Ver presupuesto vinculado', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-blue-700 hover:text-blue-900"
@@ -117,6 +124,7 @@ export const BotonVinculado = ({ onClick, title = 'Ver presupuesto vinculado', .
 
 export const BotonImprimir = ({ onClick, title = 'Imprimir', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-blue-700 hover:text-blue-900"
@@ -130,6 +138,7 @@ export const BotonImprimir = ({ onClick, title = 'Imprimir', ...props }) => (
 
 export const BotonDescargar = ({ onClick, title = 'Descargar', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-green-700 hover:text-green-900"
@@ -143,6 +152,7 @@ export const BotonDescargar = ({ onClick, title = 'Descargar', ...props }) => (
 
 export const BotonVerDetalle = ({ onClick, title = 'Ver detalle', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-gray-700 hover:text-black"
@@ -172,6 +182,7 @@ export const BotonDuplicar = ({ onClick, title = 'Duplicar fila', ...props }) =>
 
 export const BotonGenerarPDF = ({ onClick, title = 'Generar PDF', ...props }) => (
   <button
+    type="button"
     onClick={onClick}
     title={title}
     className="transition-colors px-1 py-1 text-red-600 hover:text-red-800"

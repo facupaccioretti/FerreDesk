@@ -613,15 +613,7 @@ const PlantillaFacturaBPDF = ({ data, ferreteriaConfig }) => {
         // Determinar si mostrar traspaso a página siguiente
         const mostrarTraspasoSiguiente = !esUltimaPagina;
         
-        // Logs de depuración
-        console.log(`Página ${indexPagina + 1}:`, {
-          itemsEnPagina: itemsPagina.length,
-          netoPagina,
-          netoTraspasado,
-          netoAcumuladoParaSiguiente,
-          mostrarTraspasoSiguiente,
-          esUltimaPagina
-        });
+        
         
         return generarPaginaComprobante(
           configFacturaB, //  Configuración específica de Factura A

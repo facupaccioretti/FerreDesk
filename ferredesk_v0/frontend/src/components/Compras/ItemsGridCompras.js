@@ -551,18 +551,25 @@ const ItemsGridCompras = forwardRef(
               
               const ensured = ensureSoloUnEditable(updatedRows)
               emitirCambio(ensured)
+              // Mover foco a cantidad del ítem existente actualizado
+              setIdxCantidadFoco(idxExistente)
               return ensured
             } else {
               // NO ES DUPLICADO - agregar como nuevo item
               const lastEmptyIndex = newRows.findIndex((r) => !isRowLleno(r))
+              let indiceInsertado
               if (lastEmptyIndex !== -1) {
                 newRows[lastEmptyIndex] = newRow
+                indiceInsertado = lastEmptyIndex
               } else {
                 newRows.push(newRow)
+                indiceInsertado = newRows.length - 1
               }
               // Agregar una nueva fila vacía si es necesario
               const ensured = ensureSoloUnEditable(newRows)
               emitirCambio(ensured)
+              // Foco en cantidad del renglón insertado
+              setIdxCantidadFoco(indiceInsertado)
               return ensured
             }
           })

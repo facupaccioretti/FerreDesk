@@ -66,10 +66,10 @@ export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicu
 
     // Ítem de stock: tiene vdi_idsto o producto, crear producto stub si no existe
     let producto = item.producto;
-    if (!producto && tieneIdStock) {
+    if ((!producto || !producto.id) && tieneIdStock) {
       // Crear producto stub con los datos disponibles del item
       producto = {
-        id: tieneIdStock,
+        id: Number(item.vdi_idsto || item.idSto || item.idsto || tieneIdStock),
         codvta: item.vdi_codigo ?? item.codigo ?? String(tieneIdStock),
         codigo: item.vdi_codigo ?? item.codigo ?? String(tieneIdStock),
         deno: item.denominacion ?? item.vdi_detalle1 ?? '',

@@ -34,14 +34,12 @@ const useAsociacionCodigos = ({
   // useEffect para cargar códigos del proveedor seleccionado
   useEffect(() => {
     if (selectedProveedor) {
-      console.log('[useAsociacionCodigos] Fetching códigos para proveedor', selectedProveedor)
       setLoadingCodigos(true)
       fetch(`/api/productos/proveedor/${selectedProveedor}/codigos-lista/`, {
         credentials: "include",
       })
         .then((res) => res.json())
         .then((data) => {
-          console.log('[useAsociacionCodigos] Respuesta códigos', { proveedor: selectedProveedor, total: (data.codigos || []).length })
           setProductosConDenominacion(data.productos || [])
           setLoadingCodigos(false)
         })
@@ -67,7 +65,6 @@ const useAsociacionCodigos = ({
   // Consultar costo sugerido al cambiar proveedor o código
   useEffect(() => {
     if (selectedProveedor && codigoProveedor) {
-      console.log('[useAsociacionCodigos] Consultando costo sugerido', { proveedor: selectedProveedor, codigo: codigoProveedor })
       setCargandoCostoAsociar(true)
       fetch(
         `/api/productos/precio-producto-proveedor/?proveedor_id=${selectedProveedor}&codigo_producto=${encodeURIComponent(codigoProveedor)}`,
@@ -96,13 +93,6 @@ const useAsociacionCodigos = ({
 
   // Handler para asociar código de proveedor
   const handleAsociarCodigoPendiente = async ({ proveedor_id, codigo_producto_proveedor, costo }) => {
-    console.log("[handleAsociarCodigoPendiente] INICIO", {
-      proveedor_id,
-      codigo_producto_proveedor,
-      costo,
-      isEdicion,
-      form,
-    })
     if (!isEdicion) {
       // Validar duplicados en pendientes
       const codigoYaUsado = (codigosPendientes || []).some(
@@ -110,7 +100,6 @@ const useAsociacionCodigos = ({
           c.codigo_producto_proveedor === codigo_producto_proveedor && String(c.proveedor_id) !== String(proveedor_id),
       )
       if (codigoYaUsado) {
-        console.log("[handleAsociarCodigoPendiente] Código ya usado en pendientes")
         return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
       }
       // Producto nuevo (incluye caso con ID temporal): NO llamar backend, persistir en estado local
@@ -177,7 +166,7 @@ const useAsociacionCodigos = ({
     if (!isEdicion && form.id) {
       return { ok: true }
     }
-    console.log("[handleAsociarCodigoPendiente] Fallback error")
+    
     return { ok: false, error: "No se pudo asociar el código." }
   }
 

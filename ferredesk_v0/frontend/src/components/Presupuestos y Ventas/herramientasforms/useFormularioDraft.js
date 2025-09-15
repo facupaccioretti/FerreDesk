@@ -97,7 +97,6 @@ export const useFormularioDraft = ({
           return combinarConValoresPorDefecto(parsedData, ...parametrosPorDefecto);
         } catch (err) {
           // Si falla parsing o validación, continuar a datos iniciales
-          console.info('[useFormularioDraft] Borrador descartado:', err.message);
         }
       }
     } catch (e) {

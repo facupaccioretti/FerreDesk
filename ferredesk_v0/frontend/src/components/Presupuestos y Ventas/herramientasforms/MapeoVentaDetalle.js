@@ -9,7 +9,9 @@ export function mapearVentaDetalle({
   vendedores = [],
   plazos = [],
   sucursales = [],
-  puntosVenta = []
+  puntosVenta = [],
+  localidades = [],
+  provincias = []
 }) {
   if (!ventaCalculada) return null;
 
@@ -48,6 +50,38 @@ export function mapearVentaDetalle({
   // Buscar cliente completo
   const clienteCompleto = clientes.find(c => c.id === ventaCalculada.ven_idcli);
 
+  // Helpers para obtener nombres legibles de localidad y provincia evitando mostrar IDs
+  const obtenerNombreLocalidad = (valorLocalidad) => {
+    // Si viene un objeto con nombre
+    if (valorLocalidad && typeof valorLocalidad === 'object') {
+      return valorLocalidad.nombre || valorLocalidad.LOC_DENO || valorLocalidad.deno || '';
+    }
+    // Si viene una cadena ya legible
+    if (typeof valorLocalidad === 'string') {
+      return valorLocalidad;
+    }
+    // Si viene un ID numérico, buscar en catálogo
+    if (typeof valorLocalidad === 'number') {
+      const encontrado = localidades.find(l => l.id === valorLocalidad);
+      return encontrado?.nombre || '';
+    }
+    return '';
+  };
+
+  const obtenerNombreProvincia = (valorProvincia) => {
+    if (valorProvincia && typeof valorProvincia === 'object') {
+      return valorProvincia.nombre || valorProvincia.PRV_DENO || valorProvincia.deno || '';
+    }
+    if (typeof valorProvincia === 'string') {
+      return valorProvincia;
+    }
+    if (typeof valorProvincia === 'number') {
+      const encontrado = provincias.find(p => p.id === valorProvincia);
+      return encontrado?.nombre || '';
+    }
+    return '';
+  };
+
   // Mapear campos de cabecera
   const datos = {
     ...ventaCalculada,
@@ -66,9 +100,9 @@ export function mapearVentaDetalle({
     puntoVenta: puntosVenta.find(pv => pv.id === ventaCalculada.ven_punto)?.nombre || ventaCalculada.ven_punto || '-',
     plazo: plazos.find(p => p.id === ventaCalculada.ven_idpla)?.nombre || ventaCalculada.ven_idpla || '-',
     domicilio: clienteCompleto?.domicilio || ventaCalculada.ven_domicilio || '',
-    localidad: clienteCompleto?.localidad || '',
-    provincia: clienteCompleto?.provincia || '',
-    cuit: clienteCompleto?.cuit || ventaCalculada.ven_cuit || '',
+    localidad: obtenerNombreLocalidad(clienteCompleto?.localidad),
+    provincia: obtenerNombreProvincia(clienteCompleto?.provincia),
+    cuit: ventaCalculada.ven_cuit || clienteCompleto?.cuit || '',
     condicion_iva_cliente: clienteCompleto?.condicion_iva || ventaCalculada.cliente_condicion_iva || '',
     telefono_cliente: clienteCompleto?.telefono || '',
     items: itemsCalculados || [],    
