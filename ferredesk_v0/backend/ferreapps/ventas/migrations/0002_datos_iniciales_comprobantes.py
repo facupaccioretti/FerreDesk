@@ -17,6 +17,7 @@ def cargar_comprobantes(apps, schema_editor):
 		{"codigo_afip": "004", "nombre": "Recibo A", "descripcion": "", "letra": "A", "tipo": "recibo", "activo": True},
 		{"codigo_afip": "009", "nombre": "Recibo B", "descripcion": "", "letra": "B", "tipo": "recibo", "activo": True},
 		{"codigo_afip": "015", "nombre": "Recibo C", "descripcion": "", "letra": "C", "tipo": "recibo", "activo": True},
+		{"codigo_afip": "9996", "nombre": "Orden de Compra", "descripcion": "", "letra": "O", "tipo": "orden_compra", "activo": True},
 		{"codigo_afip": "9997", "nombre": "Presupuesto", "descripcion": "", "letra": "P", "tipo": "presupuesto", "activo": True},
 		{"codigo_afip": "9998", "nombre": "Nota de Credito", "descripcion": "", "letra": "I", "tipo": "nota_credito_interna", "activo": True},
 		{"codigo_afip": "9999", "nombre": "Factura I", "descripcion": "", "letra": "I", "tipo": "factura_interna", "activo": True},
@@ -40,7 +41,7 @@ def revertir_comprobantes(apps, schema_editor):
 	Comprobante.objects.filter(codigo_afip__in=[
 		"001", "002", "003", "006", "007", "008",
 		"011", "012", "013", "004", "009", "015",
-		"9997", "9998", "9999"
+		"9996", "9997", "9998", "9999"
 	]).delete()
 
 
