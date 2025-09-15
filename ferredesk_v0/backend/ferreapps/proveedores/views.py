@@ -150,8 +150,24 @@ class CargaInicialProveedorPreviaAPIView(APIView):
         def normalizar_codigo_proveedor(texto: str) -> str:
             if texto is None:
                 return ''
-            s = str(texto).strip()
-            # Colapsar espacios internos
+
+            # Convertir tipos numéricos a cadena sin ".0" si el valor es entero
+            if isinstance(texto, int):
+                s = str(texto)
+            elif isinstance(texto, float):
+                s = str(int(texto)) if float(texto).is_integer() else str(texto)
+            elif isinstance(texto, Decimal):
+                s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
+            else:
+                s = str(texto)
+
+            s = s.strip()
+
+            # Si es dígitos seguidos de ".0..." (p. ej. "77110624.0"), recortar a la parte entera
+            if re.fullmatch(r'\d+\.0+', s):
+                s = s.split('.', 1)[0]
+
+            # Colapsar espacios internos y truncar
             s = re.sub(r"\s+", " ", s)
             return s[:100]
 
@@ -363,12 +379,30 @@ class CargaInicialProveedorImportAPIView(APIView):
                 candidato = f"{base_sigla}0001"
             return candidato
 
+        def normalizar_codigo_proveedor(texto: str) -> str:
+            if texto is None:
+                return ''
+            if isinstance(texto, int):
+                s = str(texto)
+            elif isinstance(texto, float):
+                s = str(int(texto)) if float(texto).is_integer() else str(texto)
+            elif isinstance(texto, Decimal):
+                s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
+            else:
+                s = str(texto)
+            s = s.strip()
+            if re.fullmatch(r'\d+\.0+', s):
+                s = s.split('.', 1)[0]
+            s = re.sub(r"\s+", " ", s)
+            return s[:100]
+
         resultados = []
         creados = 0
         saltados = 0
 
         for fila in filas:
-            codigo_proveedor = (fila.get('codigo_proveedor') or '').strip()
+            codigo_proveedor_raw = fila.get('codigo_proveedor')
+            codigo_proveedor = normalizar_codigo_proveedor(codigo_proveedor_raw)
             denominacion = normalizar_denominacion(fila.get('denominacion'))
             costo_raw = fila.get('costo')
             codvta_propuesto = (fila.get('codvta') or fila.get('codvta_propuesto') or '').strip()
