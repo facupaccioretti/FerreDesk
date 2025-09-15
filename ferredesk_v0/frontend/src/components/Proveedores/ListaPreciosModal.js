@@ -31,6 +31,8 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const [advertenciaNombreArchivo, setAdvertenciaNombreArchivo] = useState('');
   const [nombreArchivoSeleccionado, setNombreArchivoSeleccionado] = useState('');
   const [importando, setImportando] = useState(false);
+  // Evitar múltiples alerts por el mismo mensaje de error de vista previa
+  const ultimoErrorAlertadoRef = useRef('');
 
   // Normaliza cadenas: sin acentos, en minúsculas y sólo alfanumérico/espacios
   const normalizarCadena = (texto) => {
@@ -177,6 +179,19 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       fetch('/api/productos/proveedores/', { credentials: 'include' });
     }
   }, [open]);
+
+  // Mostrar alert solo una vez por mensaje y suprimir el error específico solicitado
+  useEffect(() => {
+    const MENSAJE_SUPRIMIR = 'No se pudo extraer una vista previa. Verifique las columnas y la fila de inicio.';
+    if (
+      errorVistaPrevia &&
+      errorVistaPrevia !== MENSAJE_SUPRIMIR &&
+      ultimoErrorAlertadoRef.current !== errorVistaPrevia
+    ) {
+      window.alert(`Error: ${errorVistaPrevia}`);
+      ultimoErrorAlertadoRef.current = errorVistaPrevia;
+    }
+  }, [errorVistaPrevia]);
 
   // Al abrir el modal, limpiar archivo y vista previa para evitar datos residuales
   useEffect(() => {
@@ -346,11 +361,7 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     </div>
                   </div>
 
-                  {errorVistaPrevia && (() => {
-                    // Mostrar error como alert nativo del navegador
-                    window.alert(`Error: ${errorVistaPrevia}`);
-                    return null;
-                  })()}
+                  {/* Alert de errores manejado por useEffect para evitar múltiples prompts */}
 
                   {loading && file && <div className="my-3 text-blue-600">Procesando vista previa...</div>}
 

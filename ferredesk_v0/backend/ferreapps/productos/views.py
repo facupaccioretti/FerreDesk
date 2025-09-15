@@ -282,6 +282,27 @@ class UploadListaPreciosProveedor(APIView):
             col_codigo_idx = ord(col_codigo) - 65
             col_precio_idx = ord(col_precio) - 65
             col_denominacion_idx = ord(col_denominacion) - 65
+            # Definir largo máximo permitido para denominación según el modelo
+            max_len_denominacion = (
+                PrecioProveedorExcel._meta.get_field('denominacion').max_length or 200
+            )
+            # Normalizador de código proveedor (idéntico a carga inicial por proveedor)
+            def normalizar_codigo_proveedor(texto):
+                if texto is None:
+                    return ''
+                if isinstance(texto, int):
+                    s = str(texto)
+                elif isinstance(texto, float):
+                    s = str(int(texto)) if float(texto).is_integer() else str(texto)
+                elif isinstance(texto, Decimal):
+                    s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
+                else:
+                    s = str(texto)
+                s = s.strip()
+                if re.fullmatch(r'\d+\.0+', s):
+                    s = s.split('.', 1)[0]
+                s = re.sub(r"\s+", " ", s)
+                return s[:100]
             for i, row in enumerate(sheet.rows()):
                 if i + 1 < fila_inicio:
                     continue
@@ -295,9 +316,12 @@ class UploadListaPreciosProveedor(APIView):
                     try:
                         precio_float = float(str(precio).replace(',', '.').replace('$', '').strip())
                         denominacion_str = str(denominacion).strip() if denominacion is not None else ''
+                        if denominacion_str and max_len_denominacion:
+                            denominacion_str = denominacion_str[:max_len_denominacion]
+                        codigo_norm = normalizar_codigo_proveedor(codigo)
                         to_create.append(PrecioProveedorExcel(
                             proveedor=proveedor,
-                            codigo_producto_excel=str(codigo).strip(),
+                            codigo_producto_excel=codigo_norm,
                             precio=precio_float,
                             denominacion=denominacion_str,
                             nombre_archivo=excel_file.name
@@ -322,7 +346,7 @@ class UploadListaPreciosProveedor(APIView):
             for item_excel in to_create:
                 actualizados = StockProve.objects.filter(
                     proveedor=proveedor,
-                    codigo_producto_proveedor=str(item_excel.codigo_producto_excel).strip()
+                    codigo_producto_proveedor=normalizar_codigo_proveedor(item_excel.codigo_producto_excel)
                 ).update(costo=item_excel.precio, fecha_actualizacion=now)
                 registros_actualizados += int(actualizados)
 
