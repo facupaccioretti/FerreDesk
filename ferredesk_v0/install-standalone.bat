@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 echo ========================================
 echo    INSTALADOR FERREDESK v2.0
-echo    Descarga e instalacion automatica
+echo    Descarga automatica desde GitHub
 echo ========================================
 echo.
 
@@ -165,19 +165,20 @@ if exist "ferredesk_v0" (
         echo ℹ️  Usando código existente
     )
 ) else (
-    REM Descargar código desde GitLab
+    REM Descargar código desde GitHub
     echo.
-    echo 📥 Descargando FerreDesk desde GitLab...
+    echo 📥 Descargando FerreDesk desde GitHub...
     echo    Esto puede tomar unos minutos...
     
-    REM Descargar desde GitLab - reemplaza esta URL con tu repositorio real
-    git clone https://gitlab.com/TU_USUARIO/ferredesk.git ferredesk_v0
+    REM Descargar desde GitHub
+    git clone https://github.com/facupaccioretti/FerreDesk.git ferredesk_temp
     
-    REM Si el repositorio es privado, podrías necesitar autenticación:
-    REM git clone https://oauth2:TOKEN@gitlab.com/TU_USUARIO/ferredesk.git ferredesk_v0
+    REM Mover solo el contenido de ferredesk_v0 al directorio correcto
+    move ferredesk_temp\ferredesk_v0 ferredesk_v0
+    rmdir /s /q ferredesk_temp
     
     if %errorlevel% neq 0 (
-        echo ❌ Error al descargar el código desde GitLab
+        echo ❌ Error al descargar el código desde GitHub
         echo.
         echo 💡 Posibles soluciones:
         echo    • Verifica tu conexión a internet

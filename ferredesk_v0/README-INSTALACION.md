@@ -180,3 +180,4 @@ Una vez completada la instalación, FerreDesk estará listo para gestionar tu fe
 - ✅ **Dashboard de indicadores**
 
 **¡Disfruta usando FerreDesk!** 🚀
+
