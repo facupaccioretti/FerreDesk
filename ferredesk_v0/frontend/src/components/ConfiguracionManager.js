@@ -346,6 +346,21 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
 
         <div className="flex items-center border-b border-slate-100 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
+            Modo ARCA
+          </label>
+          <select
+            value={config.modo_arca || "HOM"}
+            onChange={(e) => onConfigChange("modo_arca", e.target.value)}
+            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            disabled={loading}
+          >
+            <option value="HOM">Homologación (Pruebas)</option>
+            <option value="PROD">Producción</option>
+          </select>
+        </div>
+
+        <div className="flex items-center border-b border-slate-100 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
             Certificado ARCA (.pem) <span className="text-red-500">*</span>
           </label>
           <div className="w-2/3">

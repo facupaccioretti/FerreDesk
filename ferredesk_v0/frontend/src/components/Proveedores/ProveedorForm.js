@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, memo, useRef, useCallback } from "react";
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
+import useNavegacionForm from "../../hooks/useNavegacionForm";
 import CUITValidacionTooltip from "../Clientes/CUITValidacionTooltip";
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
@@ -59,6 +60,9 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const cuitInputRef = useRef(null);
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
 
   // Estados de validación local de CUIT (sin padrón)
   const [resultadoCUIT, setResultadoCUIT] = useState(null); // { es_valido: boolean, mensaje_error?: string }
@@ -188,6 +192,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
         <form
           className="w-full bg-white rounded-2xl shadow-md border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
@@ -212,21 +217,11 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
               </div>
 
               {/* Mensajes de error */}
-              {(error || formError) && (
-                <div className="mb-3 p-3 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    {error || formError}
-                  </div>
-                </div>
-              )}
+              {(error || formError) && (() => {
+                // Mostrar error como alert nativo del navegador
+                window.alert(`Error: ${error || formError}`);
+                return null;
+              })()}
             </div>
 
             {/* Header compacto con nombre y código */}

@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import useNavegacionForm from "../../hooks/useNavegacionForm"
 import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente } from "./herramientasforms/manejoFormulario"
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
 // import { normalizarItems } from "./herramientasforms/normalizadorItems" // Ya no se usa
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
@@ -96,6 +97,10 @@ const VentaForm = ({
 
   // Hooks existentes movidos al inicio
   const theme = useFerreDeskTheme()
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm()
+
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI()
   
@@ -194,11 +199,7 @@ const VentaForm = ({
   // LOG DE DIAGNÓSTICO: ¿Cuándo se arma stockProveedores y qué trae?
   // ------------------------------------------------------------
   useEffect(() => {
-    console.debug("[VentaForm] stockProveedores listo", {
-      loadingProductos,
-      loadingProveedores,
-      keys: Object.keys(stockProveedores || {}).length,
-    })
+    
   }, [loadingProductos, loadingProveedores, stockProveedores])
 
   // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
@@ -449,14 +450,12 @@ const VentaForm = ({
     limpiarEstadosARCAStatus()
   }
   const onSeleccionarDesdeModal = (cli) => {
-    console.log('[onSeleccionarDesdeModal] Cliente seleccionado:', cli)
     
     // Usar la función estándar para autocompletar todos los campos del cliente
     handleClienteSelect(cli)
     
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(cli)
-    console.log('[onSeleccionarDesdeModal] Documento validado:', documentoValidado)
     setDocumentoInfo(documentoValidado)
     
     // Marcar que ya no es carga inicial
@@ -660,6 +659,7 @@ const VentaForm = ({
           className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden"
           onSubmit={handleSubmit}
           onKeyDown={bloquearEnterSubmit}
+          {...getFormProps()}
         >
           {/* Gradiente decorativo superior */}
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
@@ -802,7 +802,7 @@ const VentaForm = ({
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}
                       onChange={handleDocumentoChange}
-                      readOnly={isReadOnly}
+                      readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                       className="w-full"
                     />
                   </div>

@@ -96,9 +96,9 @@ export const useArcaEstado = () => {
    */
   const obtenerMensajePersonalizado = useCallback((tipoComprobante) => {
     const mensajes = {
-      'factura': 'Esperando autorización de AFIP para la factura fiscal...',
-      'nota_credito': 'Esperando autorización de AFIP para la nota de crédito...',
-      'default': 'Esperando respuesta de AFIP para obtener el CAE...'
+      'factura': 'Esperando autorización...',
+      'nota_credito': 'Esperando autorización...',
+      'default': 'Esperando respuesta para obtener el CAE...'
     };
     
     return mensajes[tipoComprobante?.toLowerCase()] || mensajes.default;

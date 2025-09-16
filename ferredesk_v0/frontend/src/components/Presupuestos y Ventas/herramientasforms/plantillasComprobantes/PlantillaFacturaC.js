@@ -111,9 +111,9 @@ const PlantillaFacturaC = ({ data, ferreteriaConfig, onClose }) => {
                       <div className="text-sm font-medium text-slate-800">
                         {data.cliente || "Cliente"}
                       </div>
-                      <div className="text-xs text-slate-600">{data.domicilio || ""}</div>
-                      <div className="text-xs text-slate-600">{data.localidad || ""}</div>
-                      <div className="text-xs text-slate-600">{data.provincia || ""}</div>
+                      <div className="text-xs text-slate-600">Dirección: {data.domicilio || ""}</div>
+                      <div className="text-xs text-slate-600">Localidad: {data.localidad || ""}</div>
+                      <div className="text-xs text-slate-600">Provincia: {data.provincia || ""}</div>
                       <div className="text-xs text-slate-600">DNI/CUIT: {data.cuit || "-"}</div>
                       <div className="text-xs text-slate-600">Cond. IVA: {data.condicion_iva_cliente || "-"}</div>
                       <div className="text-xs text-slate-600">Teléfono: {data.telefono_cliente || "-"}</div>

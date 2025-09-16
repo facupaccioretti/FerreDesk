@@ -511,6 +511,32 @@ class ProcesarCuitArcaAPIView(APIView):
                 if isinstance(mensajes, str) and mensajes.strip():
                     return True
 
+            # NUEVO: Considerar error de monotributo si hay mensajes concretos
+            error_monotributo = getattr(datos_arca, 'errorMonotributo', None)
+            if error_monotributo is not None:
+                mensajes = getattr(error_monotributo, 'error', None)
+
+                # Lista de mensajes no vacía
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return True
+
+                # Mensaje único en string no vacío
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return True
+
+            # NUEVO: Considerar error de régimen general si hay mensajes concretos
+            error_regimen = getattr(datos_arca, 'errorRegimenGeneral', None)
+            if error_regimen is not None:
+                mensajes = getattr(error_regimen, 'error', None)
+
+                # Lista de mensajes no vacía
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return True
+
+                # Mensaje único en string no vacío
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return True
+
             # Sin datos en los bloques principales se considera error
             tiene_datos = any([
                 getattr(datos_arca, 'datosGenerales', None),
@@ -524,9 +550,36 @@ class ProcesarCuitArcaAPIView(APIView):
     def _extraer_mensaje_error_arca(self, datos_arca, cuit: str | None = None) -> str:
         """Extrae un mensaje de error amigable desde la estructura de ARCA si existe."""
         try:
+            # Verificar errorConstancia
             error_constancia = getattr(datos_arca, 'errorConstancia', None)
             if error_constancia is not None:
                 mensajes = getattr(error_constancia, 'error', None)
+
+                # Lista de mensajes
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return ", ".join(str(m) for m in mensajes)
+
+                # Mensaje único
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return mensajes.strip()
+
+            # NUEVO: Verificar errorMonotributo
+            error_monotributo = getattr(datos_arca, 'errorMonotributo', None)
+            if error_monotributo is not None:
+                mensajes = getattr(error_monotributo, 'error', None)
+
+                # Lista de mensajes
+                if isinstance(mensajes, list) and len(mensajes) > 0:
+                    return ", ".join(str(m) for m in mensajes)
+
+                # Mensaje único
+                if isinstance(mensajes, str) and mensajes.strip():
+                    return mensajes.strip()
+
+            # NUEVO: Verificar errorRegimenGeneral
+            error_regimen = getattr(datos_arca, 'errorRegimenGeneral', None)
+            if error_regimen is not None:
+                mensajes = getattr(error_regimen, 'error', None)
 
                 # Lista de mensajes
                 if isinstance(mensajes, list) and len(mensajes) > 0:

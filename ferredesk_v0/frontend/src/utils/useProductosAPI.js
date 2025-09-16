@@ -3,7 +3,7 @@ import { getCookie } from '../utils/csrf';
 
 export function useProductosAPI() {
   const [productos, setProductos] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');
@@ -70,7 +70,7 @@ export function useProductosAPI() {
     try {
       // Usar el endpoint correcto para editar productos con relaciones
       const url = `/api/productos/editar-producto-con-relaciones/`;
-      console.log('Actualizando producto:', url, { producto: updated, stock_proveedores: updated.stock_proveedores || [] });
+      
       
       const res = await fetch(url, {
         method: 'PUT',
@@ -82,12 +82,26 @@ export function useProductosAPI() {
         })
       });
       if (!res.ok) {
-        let msg = 'Error al editar producto';
+        let errorMsg = 'Error al editar producto';
         try {
           const data = await res.json();
-          msg = data.detail || JSON.stringify(data);
-        } catch {}
-        throw new Error(msg);
+          // Manejo específico para errores de validación de campos anidados como codvta
+          if (data.errors && data.errors.errors && data.errors.errors.codvta && data.errors.errors.codvta.length > 0) {
+            errorMsg = data.errors.errors.codvta[0];
+          } 
+          // Manejo para errores de protección más simples
+          else if (data.error) {
+            errorMsg = data.error;
+          }
+          // Fallback para otros formatos de error de DRF
+          else {
+            errorMsg = data.detail || JSON.stringify(data);
+          }
+        } catch (e) {
+          // Si la respuesta no es JSON o está vacía
+          errorMsg = res.statusText || 'Ocurrió un error desconocido.';
+        }
+        throw new Error(errorMsg);
       }
       await fetchProductos();
     } catch (err) {
@@ -104,10 +118,23 @@ export function useProductosAPI() {
         headers: { 'X-CSRFToken': csrftoken },
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Error al eliminar producto');
+      if (!res.ok) {
+        let errorMsg = 'Error al eliminar producto';
+        try {
+          const data = await res.json();
+          // Manejo específico para el error de restricción de movimientos comerciales
+          if (data.error && data.error.includes('movimientos comerciales')) {
+            errorMsg = data.error;
+          } else {
+            errorMsg = data.detail || data.error || JSON.stringify(data);
+          }
+        } catch (e) {}
+        throw new Error(errorMsg);
+      }
       await fetchProductos();
     } catch (err) {
       setError(err.message);
+      throw err;
     }
   }, [csrftoken, fetchProductos]);
 

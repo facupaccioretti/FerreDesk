@@ -78,7 +78,6 @@ export default function ClienteSelectorModal({
         .then((data) => {
           // El ViewSet de DRF usualmente pagina, así que los resultados están en `data.results`.
           // Si no está paginado, será `data`.
-          console.log("Respuesta de la API:", data) // Debug: ver qué devuelve la API
           
           let resultados = data
           if (data && data.results) {

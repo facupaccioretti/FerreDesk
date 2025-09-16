@@ -2,6 +2,7 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from django.db.models import Sum, F, DecimalField
 from django.db.models.functions import Coalesce
+from django.conf import settings
 
 class Compra(models.Model):
     """
@@ -269,7 +270,7 @@ class CompraDetalleItem(models.Model):
     )
     
     # Denominación del producto
-    cdi_detalle1 = models.CharField(max_length=40, db_column='CDI_DETALLE1')
+    cdi_detalle1 = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='CDI_DETALLE1')
     
     # Unidad de medida
     cdi_detalle2 = models.CharField(max_length=40, db_column='CDI_DETALLE2', blank=True, null=True)
@@ -311,6 +312,173 @@ class CompraDetalleItem(models.Model):
             stock_prove.cantidad += self.cdi_cantidad
             stock_prove.fecultcan = self.cdi_idca.comp_fecha
             stock_prove.save()
+
+
+class OrdenCompra(models.Model):
+    """
+    Modelo principal que almacena las cabeceras de las órdenes de compra (documento interno para pedidos).
+    """
+    # Clave primaria autoincremental
+    ord_id = models.AutoField(primary_key=True, db_column='ORD_ID')
+    
+    # Sucursal donde se realiza la orden
+    ord_sucursal = models.SmallIntegerField(db_column='ORD_SUCURSAL')
+    
+    # Fecha de la orden
+    ord_fecha = models.DateField(db_column='ORD_FECHA')
+    
+    # Hora de creación automática
+    ord_hora_creacion = models.TimeField(auto_now_add=True, db_column='ORD_HORA_CREACION')
+    
+    # Número de orden interno (formato: O-0001-00000009)
+    ord_numero = models.CharField(
+        max_length=50, 
+        db_column='ORD_NUMERO',
+        help_text='Número de orden interno (formato: O-0001-00000009)'
+    )
+    
+    # Relación con el proveedor (tabla PROVEEDORES)
+    ord_idpro = models.ForeignKey(
+        'productos.Proveedor',
+        on_delete=models.PROTECT,
+        db_column='ORD_IDPRO',
+        related_name='ordenes_compra'
+    )
+    
+    # CUIT del proveedor (copia para consulta rápida)
+    ord_cuit = models.CharField(max_length=20, db_column='ORD_CUIT', blank=True, null=True)
+    
+    # Razón social del proveedor (copia)
+    ord_razon_social = models.CharField(max_length=100, db_column='ORD_RAZON_SOCIAL', blank=True, null=True)
+    
+    # Domicilio del proveedor (copia)
+    ord_domicilio = models.CharField(max_length=100, db_column='ORD_DOMICILIO', blank=True, null=True)
+    
+    # Observaciones de la orden (limitado a 60 caracteres)
+    ord_observacion = models.CharField(max_length=60, db_column='ORD_OBSERVACION', blank=True, null=True)
+    
+    # Estado de la orden (ABIERTO/CERRADO)
+    ESTADO_CHOICES = [
+        ('ABIERTO', 'Abierto'),
+        ('CERRADO', 'Cerrado'),
+    ]
+    ord_estado = models.CharField(
+        max_length=10,
+        choices=ESTADO_CHOICES,
+        default='ABIERTO',
+        db_column='ORD_ESTADO'
+    )
+
+    class Meta:
+        db_table = 'ORDENES_COMPRA'
+        verbose_name = 'Orden de Compra'
+        verbose_name_plural = 'Órdenes de Compra'
+        # Índices para optimizar consultas frecuentes (siguiendo patrón de Compra)
+        indexes = [
+            models.Index(fields=['ord_fecha']),
+            models.Index(fields=['ord_idpro']),
+            models.Index(fields=['ord_numero']),
+        ]
+        # Restricción única: número de orden único por proveedor
+        unique_together = [['ord_numero', 'ord_idpro']]
+
+    def __str__(self):
+        return f"Orden {self.ord_id} - {self.ord_numero} - {self.ord_razon_social}"
+
+    def save(self, *args, **kwargs):
+        # Copiar datos del proveedor si no están seteados
+        if self.ord_idpro and not self.ord_cuit:
+            self.ord_cuit = self.ord_idpro.cuit
+        if self.ord_idpro and not self.ord_razon_social:
+            self.ord_razon_social = self.ord_idpro.razon
+        if self.ord_idpro and not self.ord_domicilio:
+            self.ord_domicilio = self.ord_idpro.domicilio
+        
+        # Generar número automáticamente si no está seteo
+        if not self.ord_numero:
+            from django.db import transaction
+            with transaction.atomic():
+                # Buscar la última orden de compra
+                ultima_orden = OrdenCompra.objects.order_by('-ord_id').first()
+                siguiente_numero = 1 if not ultima_orden else int(ultima_orden.ord_id) + 1
+                self.ord_numero = f"O-0001-{siguiente_numero:08d}"
+        
+        super().save(*args, **kwargs)
+
+
+class OrdenCompraDetalleItem(models.Model):
+    """
+    Detalle de los productos en cada orden de compra.
+    """
+    # Clave foránea a la orden de compra
+    odi_idor = models.ForeignKey(
+        OrdenCompra,
+        on_delete=models.CASCADE,
+        db_column='ODI_IDOR',
+        related_name='items'
+    )
+    
+    # Orden del item en la orden
+    odi_orden = models.SmallIntegerField(db_column='ODI_ORDEN')
+    
+    # ID del producto en STOCK (puede ser null para genéricos)
+    odi_idsto = models.ForeignKey(
+        'productos.Stock',
+        on_delete=models.PROTECT,
+        db_column='ODI_IDSTO',
+        related_name='ordenes_compra_items',
+        null=True,
+        blank=True
+    )
+    
+    # ID del proveedor
+    odi_idpro = models.ForeignKey(
+        'productos.Proveedor',
+        on_delete=models.PROTECT,
+        db_column='ODI_IDPRO',
+        related_name='ordenes_compra_items'
+    )
+    
+    # Relación con StockProve para obtener código de proveedor y otros datos
+    odi_stock_proveedor = models.ForeignKey(
+        'productos.StockProve',
+        on_delete=models.PROTECT,
+        db_column='ODI_STOCK_PROVEEDOR',
+        related_name='ordenes_compra_items',
+        help_text='Relación con StockProve para obtener código de proveedor',
+        null=False,  # NO puede ser NULL
+        blank=False  # NO puede estar vacío en formularios
+    )
+    
+    # Cantidad solicitada
+    odi_cantidad = models.DecimalField(
+        max_digits=9, 
+        decimal_places=2, 
+        db_column='ODI_CANTIDAD',
+        validators=[MinValueValidator(0.01)]
+    )
+    
+    # Denominación del producto
+    odi_detalle1 = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='ODI_DETALLE1')
+    
+    # Unidad de medida
+    odi_detalle2 = models.CharField(max_length=40, db_column='ODI_DETALLE2', blank=True, null=True)
+
+    class Meta:
+        db_table = 'ORDEN_COMPRA_DETAITEM'
+        verbose_name = 'Item de Orden de Compra'
+        verbose_name_plural = 'Items de Orden de Compra'
+        # Índices para optimizar consultas (siguiendo patrón de CompraDetalleItem)
+        indexes = [
+            models.Index(fields=['odi_idor']),
+            models.Index(fields=['odi_idsto']),
+            models.Index(fields=['odi_idpro']),
+        ]
+        # Orden por defecto
+        ordering = ['odi_orden']
+
+    def __str__(self):
+        return f"Item {self.odi_orden} - {self.odi_detalle1} - Cant: {self.odi_cantidad}"
 
 
 

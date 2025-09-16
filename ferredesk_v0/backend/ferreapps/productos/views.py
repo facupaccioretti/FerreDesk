@@ -5,6 +5,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
+from django.db.models import ProtectedError
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
 from .serializers import (
     StockSerializer,
@@ -18,11 +19,11 @@ from .serializers import (
 from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
+from django.db.models import Q
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
-from django.db.models import Q
 from django.db.models.functions import Lower
 import os
 import pyexcel as pe
@@ -53,6 +54,42 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         'acti': ['exact'],
     }
     pagination_class = PaginacionPorPaginaConLimite
+
+    def get_queryset(self):
+        """
+        Aplicar búsqueda general en razón social, fantasía y CUIT.
+        """
+        queryset = super().get_queryset()
+        
+        # Búsqueda general por razón social, fantasía o CUIT
+        termino_busqueda = self.request.query_params.get('search', None)
+        if termino_busqueda:
+            queryset = queryset.filter(
+                Q(razon__icontains=termino_busqueda) |
+                Q(fantasia__icontains=termino_busqueda) |
+                Q(cuit__icontains=termino_busqueda)
+            ).distinct()
+        
+        # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
+        if 'acti' not in self.request.query_params:
+            queryset = queryset.filter(acti='S')
+        
+        return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un proveedor
+        tiene movimientos comerciales asociados.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El proveedor no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
@@ -141,6 +178,33 @@ class StockViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método destroy para manejar ProtectedError cuando un producto
+        tiene movimientos comerciales asociados.
+        """
+        instance = self.get_object()
+        
+        # Verificar si tiene ventas asociadas (VentaDetalleItem usa IntegerField)
+        from ferreapps.ventas.models import VentaDetalleItem
+        if VentaDetalleItem.objects.filter(vdi_idsto=instance.pk).exists():
+            return Response(
+                {
+                    "error": "El producto no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
+        
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": "El producto no puede ser eliminado porque posee movimientos comerciales en el sistema."
+                },
+                status=400
+            )
+
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')
 class StockProveViewSet(viewsets.ModelViewSet):
@@ -218,6 +282,27 @@ class UploadListaPreciosProveedor(APIView):
             col_codigo_idx = ord(col_codigo) - 65
             col_precio_idx = ord(col_precio) - 65
             col_denominacion_idx = ord(col_denominacion) - 65
+            # Definir largo máximo permitido para denominación según el modelo
+            max_len_denominacion = (
+                PrecioProveedorExcel._meta.get_field('denominacion').max_length or 200
+            )
+            # Normalizador de código proveedor (idéntico a carga inicial por proveedor)
+            def normalizar_codigo_proveedor(texto):
+                if texto is None:
+                    return ''
+                if isinstance(texto, int):
+                    s = str(texto)
+                elif isinstance(texto, float):
+                    s = str(int(texto)) if float(texto).is_integer() else str(texto)
+                elif isinstance(texto, Decimal):
+                    s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
+                else:
+                    s = str(texto)
+                s = s.strip()
+                if re.fullmatch(r'\d+\.0+', s):
+                    s = s.split('.', 1)[0]
+                s = re.sub(r"\s+", " ", s)
+                return s[:100]
             for i, row in enumerate(sheet.rows()):
                 if i + 1 < fila_inicio:
                     continue
@@ -231,9 +316,12 @@ class UploadListaPreciosProveedor(APIView):
                     try:
                         precio_float = float(str(precio).replace(',', '.').replace('$', '').strip())
                         denominacion_str = str(denominacion).strip() if denominacion is not None else ''
+                        if denominacion_str and max_len_denominacion:
+                            denominacion_str = denominacion_str[:max_len_denominacion]
+                        codigo_norm = normalizar_codigo_proveedor(codigo)
                         to_create.append(PrecioProveedorExcel(
                             proveedor=proveedor,
-                            codigo_producto_excel=str(codigo).strip(),
+                            codigo_producto_excel=codigo_norm,
                             precio=precio_float,
                             denominacion=denominacion_str,
                             nombre_archivo=excel_file.name
@@ -258,7 +346,7 @@ class UploadListaPreciosProveedor(APIView):
             for item_excel in to_create:
                 actualizados = StockProve.objects.filter(
                     proveedor=proveedor,
-                    codigo_producto_proveedor=str(item_excel.codigo_producto_excel).strip()
+                    codigo_producto_proveedor=normalizar_codigo_proveedor(item_excel.codigo_producto_excel)
                 ).update(costo=item_excel.precio, fecha_actualizacion=now)
                 registros_actualizados += int(actualizados)
 

@@ -1,11 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import orden_compra_export_views
 
 # Configurar el router para las vistas
 router = DefaultRouter()
 router.register(r'compras', views.CompraViewSet, basename='compra')
 router.register(r'items', views.CompraDetalleItemViewSet, basename='compra-item')
+router.register(r'ordenes-compra', views.OrdenCompraViewSet, basename='orden-compra')
+router.register(r'ordenes-compra-items', views.OrdenCompraDetalleItemViewSet, basename='orden-compra-item')
 
 # URLs específicas para endpoints adicionales
 urlpatterns = [
@@ -17,4 +20,10 @@ urlpatterns = [
     path('compras/proveedores/<int:proveedor_id>/productos/', views.productos_por_proveedor, name='productos-por-proveedor'),
     path('compras/productos/buscar-codigo/', views.buscar_producto_por_codigo_proveedor, name='buscar-producto-codigo'),
     path('compras/alicuotas-iva/', views.alicuotas_iva, name='alicuotas-iva'),
+    
+    # Endpoint de conversión de orden de compra a compra
+    path('convertir-orden-compra/', views.convertir_orden_compra_a_compra, name='convertir_orden_compra_a_compra'),
+    
+    # Endpoint de exportación PDF de órdenes de compra
+    path('ordenes-compra/<int:orden_id>/export/pdf/', orden_compra_export_views.exportar_orden_compra_pdf_endpoint, name='exportar_orden_compra_pdf'),
 ]

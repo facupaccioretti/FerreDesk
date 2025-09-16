@@ -164,6 +164,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'ferreapps.compras': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
     },
 }
 

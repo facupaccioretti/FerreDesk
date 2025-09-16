@@ -34,16 +34,13 @@ export function useVentasAPI() {
     setError(null);
     try {
       let ventaMapped = { ...venta };
-      console.log('[addVenta] Ítems antes de mapear:', venta.items);
+      
       ventaMapped.items = Array.isArray(venta.items) ? venta.items.map((item, idx) => {
-        console.log('[addVenta] Ítem recibido para mapear:', item, 'idx:', idx);
         return mapearCamposItem(item, idx);
       }) : [];
-      console.log('[addVenta] Payload mapeado a enviar:', ventaMapped);
+      
       if (!ventaMapped.items || !Array.isArray(ventaMapped.items) || ventaMapped.items.length === 0) {
         console.error('[useVentasAPI] ERROR: El campo items está vacío o ausente en el payload mapeado');
-      } else {
-        console.log('[useVentasAPI] Primer ítem del array items:', ventaMapped.items[0]);
       }
       const csrftoken = getCookie('csrftoken');
       const res = await fetch('/api/ventas/', {

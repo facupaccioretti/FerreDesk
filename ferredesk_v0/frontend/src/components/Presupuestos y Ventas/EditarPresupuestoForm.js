@@ -1,53 +1,67 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import useNavegacionForm from '../../hooks/useNavegacionForm';
 import BuscadorProducto from '../BuscadorProducto';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
-import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
+import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
+import { normalizarItems } from './herramientasforms/normalizadorItems';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
+// Función para combinar datos iniciales con el estado por defecto, usando la misma lógica que ConVentaForm
+const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap = {}) => {
+  if (!data) return {
+    numero: '',
+    cliente: '',
+    clienteId: '',
+    plazoId: '',
+    vendedorId: '',
+    sucursalId: sucursales[0]?.id || '',
+    puntoVentaId: puntosVenta[0]?.id || '',
+    fecha: new Date().toISOString().split('T')[0],
+    estado: 'Abierto',
+    tipo: 'Presupuesto',
+    items: [],
+    bonificacionGeneral: 0,
+    total: 0,
+    descu1: 0,
+    descu2: 0,
+    descu3: 0,
+    copia: 1,
+  };
 
+  // Normalizar items usando la misma lógica que ConVentaForm
+  const itemsBase = Array.isArray(data.items) ? data.items : [];
+  const itemsNormalizados = normalizarItems(itemsBase, { modo: 'presupuesto', alicuotasMap });
 
-// Función para mapear los campos del backend a los nombres del formulario
-const mapearCamposPresupuesto = (data, productos, alicuotasMap) => {
-  if (!data) return {};
-  // LOG NUEVO: Loggear los datos crudos recibidos del backend
-  console.log('[EditarPresupuestoForm] initialData recibido:', JSON.parse(JSON.stringify(data)));
-  const mapeado = {
+  return {
     id: data.ven_id ?? data.id ?? '',
+    // Solo para visualización. La numeración la controla el backend.
+    numero: data.ven_numero ?? data.numero ?? '',
     clienteId: data.ven_idcli ?? data.clienteId ?? '',
     cuit: data.ven_cuit ?? data.cuit ?? '',
     domicilio: data.ven_domicilio ?? data.domicilio ?? '',
-    sucursalId: data.ven_sucursal ?? data.sucursalId ?? '',
-    puntoVentaId: data.ven_punto ?? data.puntoVentaId ?? '',
-    fecha: data.ven_fecha ?? data.fecha ?? '',
     plazoId: data.ven_idpla ?? data.plazoId ?? '',
     vendedorId: data.ven_idvdo ?? data.vendedorId ?? '',
+    sucursalId: data.ven_sucursal ?? data.sucursalId ?? sucursales?.[0]?.id ?? '',
+    puntoVentaId: data.ven_punto ?? data.puntoVentaId ?? puntosVenta?.[0]?.id ?? '',
+    bonificacionGeneral: data.ven_bonificacion_general ?? data.bonificacionGeneral ?? 0,
     descu1: data.ven_descu1 ?? data.descu1 ?? 0,
     descu2: data.ven_descu2 ?? data.descu2 ?? 0,
     descu3: data.ven_descu3 ?? data.descu3 ?? 0,
-    bonificacionGeneral: data.ven_bonificacion_general ?? data.bonificacionGeneral ?? 0,
-    numero: data.ven_numero ?? data.numero ?? '',
-    estado: data.ven_estado ?? data.estado ?? '',
-    tipo: data.ven_tipo ?? data.tipo ?? '',
-    comprobanteId: data.comprobante?.codigo_afip ?? data.comprobante_id ?? data.comprobanteId ?? '',
-    ven_impneto: data.ven_impneto ?? 0,
-    ven_total: data.ven_total ?? 0,
-    ven_vdocomvta: data.ven_vdocomvta ?? 0,
-    ven_vdocomcob: data.ven_vdocomcob ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    items: Array.isArray(data.items) ? normalizarItemsStock(data.items) : [],
+    fecha: data.ven_fecha ?? data.fecha ?? new Date().toISOString().split('T')[0],
+    estado: data.ven_estado ?? data.estado ?? 'Abierto',
+    tipo: data.tipo ?? 'Presupuesto',
+    items: itemsNormalizados,
+    total: 0,
   };
-  // LOG NUEVO: Loggear los datos mapeados y normalizados
-  console.log('[EditarPresupuestoForm] Datos mapeados y normalizados:', JSON.parse(JSON.stringify(mapeado)));
-  return mapeado;
 };
 
 // (eliminada utilidad generarChecksum no utilizada)
@@ -76,13 +90,10 @@ const EditarPresupuestoForm = ({
   errorFamilias,
   errorProveedores
 }) => {
-  console.log('[EditarPresupuestoForm] Props recibidas:', {
-    initialData,
-    comprobantes,
-    tiposComprobante,
-    tipoComprobante,
-    comprobanteId: initialData?.comprobante_id
-  });
+  
+
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
 
   const { alicuotas, loading: loadingAlicuotas, error: errorAlicuotas } = useAlicuotasIVAAPI();
 
@@ -108,12 +119,9 @@ const EditarPresupuestoForm = ({
   } = useFormularioDraft({
     claveAlmacenamiento: (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
-    combinarConValoresPorDefecto: (data) => {
-      const base = mapearCamposPresupuesto(data, productos, alicuotasMap);
-      return base;
-    },
-    parametrosPorDefecto: [productos, alicuotasMap],
-    normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
+    combinarConValoresPorDefecto: mergeWithDefaults,
+    parametrosPorDefecto: [sucursales, puntosVenta, alicuotasMap],
+    normalizarItems: (items) => items, // La normalización ya se hizo en mergeWithDefaults
     validarBorrador: (saved, datosOriginales) => {
       // Válido si pertenece al mismo presupuesto (por ID); evita depender de checksum
       const idOriginal = datosOriginales?.ven_id ?? datosOriginales?.id;
@@ -152,6 +160,54 @@ const EditarPresupuestoForm = ({
       cuit: nuevaInfo.valor
     }));
   };
+
+  // Sincronizar documentoInfo cuando cambie formulario.cuit
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    } else {
+      setDocumentoInfo({
+        tipo: 'cuit',
+        valor: '',
+        esValido: false
+      })
+    }
+  }, [formulario.cuit])
+
+  // Inicializar documentoInfo cuando se cargue el formulario
+  useEffect(() => {
+    if (formulario.cuit) {
+      const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
+      
+      if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
+        setDocumentoInfo({
+          tipo: 'cuit',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      } else {
+        setDocumentoInfo({
+          tipo: 'dni',
+          valor: formulario.cuit,
+          esValido: true
+        })
+      }
+    }
+  }, [formulario.cuit]) // Agregar formulario.cuit como dependencia
 
   // Handler para cambios en la grilla memorizado para evitar renders infinitos
   const handleRowsChange = useCallback((rowsActualizados) => {
@@ -221,7 +277,14 @@ const EditarPresupuestoForm = ({
   const cerrarSelector = () => setSelectorAbierto(false);
 
   // Callback para aplicar cliente al formulario
-  const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario);
+  const handleClienteSelect = (clienteSeleccionado) => {
+    // Usar la función estándar para autocompletar todos los campos del cliente
+    manejarSeleccionClienteObjeto(setFormulario)(clienteSeleccionado)
+    
+    // Usar la función centralizada para validar y actualizar el documento
+    const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
+    setDocumentoInfo(documentoValidado)
+  };
 
   // Previene envíos involuntarios con Enter
   const bloquearEnterSubmit = (e) => {
@@ -237,23 +300,23 @@ const EditarPresupuestoForm = ({
     if (!itemsGridRef.current) return;
     try {
       const itemsToSave = itemsGridRef.current.getItems();
-      console.log('[EditarPresupuestoForm/handleSubmit] Items recibidos desde la grilla:', JSON.parse(JSON.stringify(itemsToSave)));
-      console.log('[EditarPresupuestoForm/handleSubmit] Formulario actual:', formulario);
       
+      // Se mantiene la búsqueda por compatibilidad aunque el backend decide, pero no se usa la variable 
+      // eslint-disable-next-line no-unused-vars
       const comprobanteSeleccionado = comprobantes.find(c => String(c.id) === String(formulario.comprobanteId))
         || comprobantes.find(c => String(c.codigo_afip) === String(formulario.comprobanteId))
         || comprobantes.find(c => c.codigo_afip === '9997'); // Fallback Presupuesto
-      const comprobanteCodigoAfip = comprobanteSeleccionado ? comprobanteSeleccionado.codigo_afip : '9997';
+      // Código AFIP determinado (no utilizado aquí, el backend decide)
+      // const codigoAfipSeleccionado = comprobanteSeleccionado ? comprobanteSeleccionado.codigo_afip : '9997';
 
-      console.log('[EditarPresupuestoForm/handleSubmit] ComprobanteId:', formulario.comprobanteId, '-> Código AFIP:', comprobanteCodigoAfip);
+      
       
       let payload = {
         ven_id: parseInt(formulario.id),
         ven_estado: formulario.estado || 'AB',
         ven_tipo: formulario.tipo || 'Presupuesto',
         tipo_comprobante: 'presupuesto',
-        // NO enviar comprobante_id - el backend determinará el código AFIP usando lógica fiscal
-        ven_numero: Number.parseInt(formulario.numero, 10) || 1,
+        // No enviar comprobante_id ni ven_numero: la numeración la define el backend
         ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
         ven_fecha: formulario.fecha,
         ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
@@ -273,7 +336,7 @@ const EditarPresupuestoForm = ({
         // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         update_atomic: true
       };
-      console.log('[EditarPresupuestoForm/handleSubmit] Payload final:', payload);
+      
       if (formulario.cuit) payload.ven_cuit = formulario.cuit;
       if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio;
       await onSave(payload);
@@ -302,7 +365,7 @@ const EditarPresupuestoForm = ({
   // LOG NUEVO: Loggear los items que se pasan al grid
   useEffect(() => {
     if (formulario && Array.isArray(formulario.items)) {
-      console.log('[EditarPresupuestoForm] Items pasados al grid:', JSON.parse(JSON.stringify(formulario.items)));
+      // log eliminado
     }
   }, [formulario]);
 
@@ -311,7 +374,7 @@ const EditarPresupuestoForm = ({
 
   return (
     <>
-      <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+      <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit} {...getFormProps()}>
       {/* Gradiente decorativo superior */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
       
@@ -374,7 +437,7 @@ const EditarPresupuestoForm = ({
                 valorInicial={documentoInfo.valor}
                 tipoInicial={documentoInfo.tipo}
                 onChange={handleDocumentoChange}
-                readOnly={isReadOnly}
+                readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                 className="w-full"
               />
             </div>

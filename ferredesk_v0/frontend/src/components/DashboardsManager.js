@@ -1,12 +1,10 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 import ProductosMasVendidos from './Dashboards/ProductosMasVendidos';
 import VentasPorDia from './Dashboards/VentasPorDia';
 import ClientesMasVentas from './Dashboards/ClientesMasVentas';
 
 const DashboardsManager = () => {
-  const navigate = useNavigate();
   const [selectedDashboard, setSelectedDashboard] = useState(null);
   const [user, setUser] = useState(null);
 
@@ -22,8 +20,8 @@ const DashboardsManager = () => {
       })
   }, []);
 
-  // Tipos de dashboards disponibles
-  const dashboardTypes = [
+  // Tipos de dashboards disponibles (memoizado para no recrear en cada render)
+  const dashboardTypes = useMemo(() => [
     {
       id: 'productos-mas-vendidos',
       label: 'Productos Más Vendidos',
@@ -111,11 +109,10 @@ const DashboardsManager = () => {
       borderColor: "border-cyan-300/50",
       hoverGradient: "hover:from-cyan-100 hover:to-cyan-200/60"
     }
-  ];
+  ], []);
 
   const handleDashboardSelect = useCallback((dashboard) => {
     setSelectedDashboard(dashboard);
-    console.log('Dashboard seleccionado:', dashboard);
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -175,7 +172,7 @@ const DashboardsManager = () => {
   // Memoizo la lista de tarjetas para que no se regenere en cada render
   const tarjetasUI = useMemo(
     () => dashboardTypes.map((card) => <TarjetaDashboard key={card.id} card={card} onClick={handleDashboardSelect} />),
-    [handleDashboardSelect],
+    [handleDashboardSelect, dashboardTypes],
   )
 
   return (

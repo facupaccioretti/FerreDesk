@@ -80,6 +80,35 @@ class StockSerializer(serializers.ModelSerializer):
         vista = VistaStockProducto.objects.filter(id=obj.id).values_list('stock_total', flat=True).first()
         return vista if vista is not None else 0
 
+    def validate_codvta(self, value):
+        """
+        Valida que no se pueda modificar el código de venta si el producto tiene movimientos comerciales.
+        """
+        # Solo validar si estamos editando un producto existente
+        if self.instance and self.instance.pk:
+            # Verificar si tiene ventas asociadas (IntegerField)
+            from ferreapps.ventas.models import VentaDetalleItem
+            if VentaDetalleItem.objects.filter(vdi_idsto=self.instance.pk).exists():
+                raise serializers.ValidationError(
+                    "No se puede modificar el código de venta de un producto que tiene ventas asociadas."
+                )
+            
+            # Verificar si tiene compras asociadas (ForeignKey)
+            from ferreapps.compras.models import CompraDetalleItem
+            if CompraDetalleItem.objects.filter(cdi_idsto=self.instance.pk).exists():
+                raise serializers.ValidationError(
+                    "No se puede modificar el código de venta de un producto que tiene compras asociadas."
+                )
+            
+            # Verificar si tiene órdenes de compra asociadas (ForeignKey)
+            from ferreapps.compras.models import OrdenCompraDetalleItem
+            if OrdenCompraDetalleItem.objects.filter(odi_idsto=self.instance.pk).exists():
+                raise serializers.ValidationError(
+                    "No se puede modificar el código de venta de un producto que tiene movimientos asociados."
+                )
+        
+        return value
+
 class FerreteriaSerializer(serializers.ModelSerializer):
     # Campo escribible para permitir subir archivo vía PATCH
     logo_empresa = serializers.ImageField(required=False, allow_null=True)

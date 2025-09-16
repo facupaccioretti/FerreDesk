@@ -49,7 +49,6 @@ function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        console.log('Login exitoso:', data);
         // Redirigir al dashboard después del login exitoso
         window.location.href = '/home/';
       } else {

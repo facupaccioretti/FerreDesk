@@ -101,10 +101,23 @@ export function useProveedoresAPI() {
         headers: { 'X-CSRFToken': csrftoken },
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Error al eliminar proveedor');
+      if (!res.ok) {
+        let errorMsg = 'Error al eliminar proveedor';
+        try {
+          const data = await res.json();
+          // Manejo específico para el error de restricción de movimientos comerciales
+          if (data.error && data.error.includes('movimientos comerciales')) {
+            errorMsg = data.error;
+          } else {
+            errorMsg = data.detail || data.error || JSON.stringify(data);
+          }
+        } catch (e) {}
+        throw new Error(errorMsg);
+      }
       await fetchProveedores();
     } catch (err) {
       setError(err.message);
+      throw err;
     }
   };
 

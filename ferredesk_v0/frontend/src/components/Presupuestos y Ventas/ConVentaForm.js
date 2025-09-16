@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import useNavegacionForm from '../../hooks/useNavegacionForm';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import ComprobanteDropdown from '../ComprobanteDropdown';
-import { manejarCambioFormulario, manejarSeleccionClienteObjeto } from './herramientasforms/manejoFormulario';
+import { manejarCambioFormulario, manejarSeleccionClienteObjeto, esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { mapearCamposItem } from './herramientasforms/mapeoItems';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
@@ -52,6 +53,9 @@ const ConVentaForm = ({
   setAutoSumarDuplicados,
   tabKey
 }) => {
+  // Hook para navegación entre campos con Enter
+  const { getFormProps } = useNavegacionForm();
+
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
@@ -197,7 +201,7 @@ const ConVentaForm = ({
 
       // Normalizar items de stock para asegurar estructura consistente
       // NUEVO: Usar normalizarItems en lugar de normalizarItemsStock para preservar flags de conversión
-      let itemsNormalizados = normalizarItems(itemsBase, { productos, alicuotasMap });
+      let itemsNormalizados = normalizarItems(itemsBase, { alicuotasMap });
 
       // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
       if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {
@@ -234,7 +238,7 @@ const ConVentaForm = ({
         __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
       };
     },
-    parametrosPorDefecto: [productos, alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
+    parametrosPorDefecto: [alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
     validarBorrador: (saved) => {
       const origenTipoActual = esConversionFacturaI ? 'factura_interna' : 'presupuesto';
       const origenIdActual = esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null);
@@ -323,7 +327,7 @@ const ConVentaForm = ({
     // ItemsGrid se encarga de la normalización - no hacer nada aquí
     // const faltanProductos = formulario.items.some(it => !it.producto);
     // if (faltanProductos) {
-    //   const itemsNormalizados = normalizarItems(formulario.items, { productos, alicuotasMap, modo: 'venta' });
+    //   const itemsNormalizados = normalizarItems(formulario.items, { alicuotasMap, modo: 'venta' });
     //   actualizarItems(itemsNormalizados);
     //   setGridKey(Date.now());
     // }
@@ -708,7 +712,7 @@ const ConVentaForm = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 py-6">
       <div className="px-6">
-        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit}>
+        <form className="venta-form w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 relative overflow-hidden" onSubmit={handleSubmit} onKeyDown={bloquearEnterSubmit} {...getFormProps()}>
           {/* Gradiente decorativo superior */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600"></div>
 
@@ -825,7 +829,7 @@ const ConVentaForm = ({
                       valorInicial={documentoInfo.valor}
                       tipoInicial={documentoInfo.tipo}
                       onChange={handleDocumentoChange}
-                      readOnly={isReadOnly}
+                      readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
                       className="w-full"
                     />
                   </div>
@@ -948,7 +952,7 @@ const ConVentaForm = ({
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
-                initialItems={formulario.items}
+                initialItems={normalizarItems(formulario.items || [], { modo: 'venta', alicuotasMap })}
               />
             </div>
 

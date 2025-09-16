@@ -66,20 +66,24 @@ const formatearFecha = (fechaStr) => {
   }
 }
 
-export default function DetalleCompra({ compra, onClose }) {
-  const [detalle, setDetalle] = useState(() => compra || null)
+export default function DetalleCompra({ modo = "compra", compra, orden, onClose }) {
+  const [detalle, setDetalle] = useState(() => (modo === "compra" ? (compra || null) : (orden || null)))
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState("")
 
   const compraId = compra?.comp_id
+  const ordenId = orden?.ord_id
 
   useEffect(() => {
     const cargarDetalle = async () => {
-      if (!compraId) return
+      const esCompra = modo === "compra"
+      const id = esCompra ? compraId : ordenId
+      if (!id) return
       setCargando(true)
       setError("")
       try {
-        const resp = await fetch(`/api/compras/${compraId}/`, { credentials: "include" })
+        const url = esCompra ? `/api/compras/${id}/` : `/api/ordenes-compra/${id}/`
+        const resp = await fetch(url, { credentials: "include" })
         if (!resp.ok) {
           let msg = `Error ${resp.status}`
           try {
@@ -91,7 +95,7 @@ export default function DetalleCompra({ compra, onClose }) {
         const data = await resp.json()
         setDetalle(data)
       } catch (e) {
-        setError(e.message || "No se pudo cargar el detalle de la compra")
+        setError(e.message || (modo === "compra" ? "No se pudo cargar el detalle de la compra" : "No se pudo cargar el detalle de la orden"))
       } finally {
         setCargando(false)
       }
@@ -99,13 +103,18 @@ export default function DetalleCompra({ compra, onClose }) {
 
     cargarDetalle()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compraId])
+  }, [modo, compraId, ordenId])
 
   const items = useMemo(() => (Array.isArray(detalle?.items) ? detalle.items : []), [detalle])
 
-  const titulo = `Detalle de Compra`
-  const numero = detalle?.comp_numero_factura || compra?.comp_numero_factura || "-"
-  const fecha = detalle?.comp_fecha || compra?.comp_fecha || null
+  const esCompra = modo === "compra"
+  const titulo = esCompra ? `Detalle de Compra` : `Detalle de Orden de Compra`
+  const numero = esCompra
+    ? (detalle?.comp_numero_factura || compra?.comp_numero_factura || "-")
+    : (detalle?.ord_numero || orden?.ord_numero || "-")
+  const fecha = esCompra
+    ? (detalle?.comp_fecha || compra?.comp_fecha || null)
+    : (detalle?.ord_fecha || orden?.ord_fecha || null)
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
@@ -158,11 +167,11 @@ export default function DetalleCompra({ compra, onClose }) {
                </div>
               <div className="space-y-1">
                 <div className="text-sm font-medium text-slate-800">
-                  {detalle?.proveedor_nombre || detalle?.comp_razon_social || "-"}
+                  {detalle?.proveedor_nombre || detalle?.comp_razon_social || detalle?.ord_razon_social || "-"}
                 </div>
-                <div className="text-xs text-slate-600">CUIT: {detalle?.comp_cuit || "-"}</div>
-                {detalle?.comp_domicilio && (
-                  <div className="text-xs text-slate-600">Domicilio: {detalle.comp_domicilio}</div>
+                <div className="text-xs text-slate-600">CUIT: {detalle?.comp_cuit || detalle?.ord_cuit || "-"}</div>
+                {(detalle?.comp_domicilio || detalle?.ord_domicilio) && (
+                  <div className="text-xs text-slate-600">Domicilio: {detalle?.comp_domicilio || detalle?.ord_domicilio}</div>
                 )}
               </div>
             </div>
@@ -184,7 +193,8 @@ export default function DetalleCompra({ compra, onClose }) {
               </div>
             </div>
 
-            {/* Totales */}
+            {/* Totales (solo compras) */}
+            {esCompra && (
             <div className="bg-white rounded-lg border border-slate-200 p-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-6 h-6 rounded bg-emerald-100 flex items-center justify-center">
@@ -228,6 +238,7 @@ export default function DetalleCompra({ compra, onClose }) {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Tabla de ítems */}
@@ -235,7 +246,7 @@ export default function DetalleCompra({ compra, onClose }) {
             <div className="bg-slate-800 px-4 py-3">
               <h4 className="text-sm font-semibold text-white flex items-center gap-2">
                 <IconCubo />
-                Ítems de la Compra
+                {esCompra ? 'Ítems de la Compra' : 'Ítems de la Orden'}
               </h4>
             </div>
             <div className="max-h-80 overflow-auto">
@@ -267,16 +278,30 @@ export default function DetalleCompra({ compra, onClose }) {
                     </tr>
                   ) : (
                     items.map((it, idx) => {
-                      const cantidad = Number(it.cdi_cantidad) || 0
-                      const codigoMostrar = it.codigo_proveedor || ""
-                      return (
-                        <tr key={it.cdi_orden || idx} className="hover:bg-slate-50">
-                          <td className="px-3 py-2 text-slate-600 font-medium">{it.cdi_orden || idx + 1}</td>
-                          <td className="px-3 py-2 text-slate-800 font-mono text-xs">{codigoMostrar}</td>
-                          <td className="px-3 py-2 text-slate-800">{it.cdi_detalle1 || ""}</td>
-                          <td className="px-3 py-2 text-right text-slate-800 font-medium">{cantidad}</td>
-                        </tr>
-                      )
+                      if (esCompra) {
+                        const cantidad = Number(it.cdi_cantidad) || 0
+                        const codigoMostrar = it.codigo_proveedor || ""
+                        return (
+                          <tr key={it.cdi_orden || idx} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-slate-600 font-medium">{it.cdi_orden || idx + 1}</td>
+                            <td className="px-3 py-2 text-slate-800 font-mono text-xs">{codigoMostrar}</td>
+                            <td className="px-3 py-2 text-slate-800">{it.cdi_detalle1 || ""}</td>
+                            <td className="px-3 py-2 text-right text-slate-800 font-medium">{cantidad}</td>
+                          </tr>
+                        )
+                      } else {
+                        const cantidad = Number(it.odi_cantidad) || 0
+                        const codigoMostrar = it.producto_codigo || ""
+                        const denom = it.producto_denominacion || it.odi_detalle1 || ""
+                        return (
+                          <tr key={it.odi_orden || idx} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-slate-600 font-medium">{it.odi_orden || idx + 1}</td>
+                            <td className="px-3 py-2 text-slate-800 font-mono text-xs">{codigoMostrar}</td>
+                            <td className="px-3 py-2 text-slate-800">{denom}</td>
+                            <td className="px-3 py-2 text-right text-slate-800 font-medium">{cantidad}</td>
+                          </tr>
+                        )
+                      }
                     })
                   )}
                 </tbody>
