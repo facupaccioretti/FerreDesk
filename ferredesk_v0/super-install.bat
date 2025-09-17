@@ -1,6 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM ========================================
+REM    CONFIGURACION Y DEBUG
+REM ========================================
+REM Activar (1) o desactivar (0) modo debug detallado
+set "MODO_DEBUG=1"
+REM Ruta de archivo log para debug (en el mismo directorio del script)
+set "RUTA_LOG_DEBUG=%~dp0super-install-debug.log"
+REM Tiempo total para esperar que Docker inicie (segundos)
+set "TIEMPO_ESPERA_DOCKER=120"
+REM Intervalo entre reintentos de chequeo de Docker (segundos)
+set "INTERVALO_ESPERA=5"
+
+if "%MODO_DEBUG%"=="1" (
+    echo [DEBUG] Inicio de ejecucion %date% %time% >> "%RUTA_LOG_DEBUG%"
+)
+
 echo ========================================
 echo    SUPER INSTALADOR FERREDESK v2.0
 echo    Instalacion completa desde GitHub
@@ -19,38 +35,33 @@ if %errorlevel% neq 0 (
 )
 
 echo [OK] Ejecutandose con permisos de administrador
+if "%MODO_DEBUG%"=="1" call :debug "Permisos de administrador verificados"
 
-REM Verificar si Chocolatey está instalado (gestor de paquetes para Windows)
-choco --version >nul 2>nul
-if %errorlevel% neq 0 (
+REM Instalar Chocolatey usando el script de PowerShell externo
+powershell -ExecutionPolicy Bypass -File "%~dp0install_choco.ps1"
+set "CHOCO_RESULT=%errorlevel%"
+
+REM ERRORLEVEL 3010 significa: instalacion exitosa, se necesita reinicio.
+if %CHOCO_RESULT% equ 3010 (
     echo.
-    echo [INFO] Instalando Chocolatey (gestor de paquetes)...
-    echo    Esto es necesario para instalar Git y Docker automaticamente
+    echo [INFO] REINICIO DEL SCRIPT REQUERIDO
+    echo    Chocolatey se ha instalado. Para continuar, cierra esta ventana
+    echo    y vuelve a ejecutar 'super-install.bat' como administrador.
     echo.
-    
-    REM Instalar Chocolatey
-    powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
-    
-    if %errorlevel% neq 0 (
-        echo [ERROR] Error al instalar Chocolatey
-        echo.
-        echo [INFO] Instalacion manual requerida:
-        echo    1. Ve a https://chocolatey.org/install
-        echo    2. Sigue las instrucciones de instalacion
-        echo    3. Ejecuta este script nuevamente
-        echo.
-        pause
-        exit /b 1
-    )
-    
-    echo [OK] Chocolatey instalado exitosamente
-    
-    REM Recargar variables de entorno
-    call refreshenv
-) else (
-    echo [OK] Chocolatey ya esta instalado
-    choco --version
+    pause
+    exit /b 0
 )
+
+REM Cualquier otro ERRORLEVEL mayor o igual a 1 es un error.
+if %CHOCO_RESULT% geq 1 (
+    echo.
+    echo [ERROR] El script de instalacion de Chocolatey fallo. Revisa los mensajes anteriores.
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Si llegamos aqui, CHOCO_RESULT es 0, significa que ya estaba instalado.
 
 echo.
 echo ========================================
@@ -60,12 +71,14 @@ echo ========================================
 REM Verificar e instalar Git
 echo.
 echo [INFO] Verificando Git...
-git --version >nul 2>nul
-if %errorlevel% neq 0 (
+where git >nul 2>nul
+if ERRORLEVEL 1 (
     echo [INFO] Instalando Git...
     choco install git -y
     
-    if %errorlevel% neq 0 (
+    REM Verificar si Git se instalo correctamente, ignorando el errorlevel de choco
+    where git >nul 2>nul
+    if ERRORLEVEL 1 (
         echo [ERROR] Error al instalar Git
         echo.
         echo [INFO] Instalacion manual:
@@ -78,38 +91,26 @@ if %errorlevel% neq 0 (
     echo [OK] Git instalado exitosamente
     
     REM Recargar variables de entorno
-    call refreshenv
+    call :refreshenv_safe
 ) else (
     echo [OK] Git ya esta instalado
     git --version
+    if "%MODO_DEBUG%"=="1" call :debug "Git detectado"
 )
 
 REM Verificar e instalar Docker Desktop
 echo.
 echo [INFO] Verificando Docker Desktop...
-docker --version >nul 2>nul
-if %errorlevel% neq 0 (
+where docker >nul 2>nul
+if ERRORLEVEL 1 (
     echo [INFO] Instalando Docker Desktop...
     echo    NOTA: Docker Desktop requiere reinicio del sistema
     
-    choco install docker-desktop -y
-    
-    if %errorlevel% neq 0 (
-        echo [ERROR] Error al instalar Docker Desktop
-        echo.
-        echo [INFO] Instalacion manual:
-        echo    1. Ve a https://www.docker.com/products/docker-desktop/
-        echo    2. Descarga Docker Desktop for Windows
-        echo    3. Instala y reinicia el sistema
-        echo    4. Ejecuta este script nuevamente
-        echo.
-        pause
-        exit /b 1
-    )
+    choco install docker-desktop -y --force
     
     echo [OK] Docker Desktop instalado exitosamente
     echo.
-    echo [WARNING]  REINICIO REQUERIDO
+    echo [WARNING]  REINICIO DEL SISTEMA REQUERIDO
     echo.
     echo [INFO] Pasos siguientes:
     echo    1. Reinicia tu computadora
@@ -121,47 +122,20 @@ if %errorlevel% neq 0 (
 ) else (
     echo [OK] Docker Desktop ya esta instalado
     docker --version
+    if "%MODO_DEBUG%"=="1" call :debug "Docker Desktop detectado"
 )
 
 REM Verificar si Docker está ejecutándose
 echo.
 echo [INFO] Verificando que Docker este ejecutandose...
-docker info >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [WARNING]  Docker no esta ejecutandose
-    echo.
-    echo [INFO] Intentando iniciar Docker Desktop...
-    
-    REM Intentar iniciar Docker Desktop
-    start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    
-    echo [INFO] Esperando a que Docker Desktop inicie (esto puede tomar 1-2 minutos)...
-    
-    REM Esperar hasta 2 minutos a que Docker inicie
-    set /a timeout=120
-    :wait_docker
-    timeout /t 5 /nobreak >nul
-    docker info >nul 2>nul
-    if %errorlevel% equ 0 goto docker_ready
-    
-    set /a timeout-=5
-    if %timeout% gtr 0 goto wait_docker
-    
-    echo [ERROR] Docker no pudo iniciarse automaticamente
-    echo.
-    echo [INFO] Pasos manuales:
-    echo    1. Abre Docker Desktop manualmente
-    echo    2. Espera a que aparezca "Docker Desktop is running"
-    echo    3. Ejecuta este script nuevamente
-    echo.
-    pause
-    exit /b 1
-    
-    :docker_ready
-    echo [OK] Docker Desktop esta ejecutandose
-) else (
-    echo [OK] Docker Desktop esta ejecutandose correctamente
-)
+echo.
+echo [IMPORTANTE] Asegurate de que Docker Desktop este iniciado y funcionando
+echo    correctamente antes de continuar.
+echo.
+echo    Busca el icono de la ballena en tu barra de tareas. Si no esta,
+echo    inicia Docker Desktop manualmente desde el menu de inicio.
+echo.
+pause
 
 echo.
 echo ========================================
@@ -279,6 +253,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+if "%MODO_DEBUG%"=="1" call :debug "docker-compose up finalizo - errorlevel=%errorlevel%"
 
 echo.
 echo [INFO] Esperando a que los servicios esten listos...
@@ -288,11 +263,13 @@ REM Verificar que los servicios están funcionando
 echo.
 echo [INFO] Verificando estado de los servicios...
 docker-compose ps
+if "%MODO_DEBUG%"=="1" call :debug "docker-compose ps ejecutado - errorlevel=%errorlevel%"
 
 REM Verificar que la aplicación responde
 echo.
 echo [INFO] Verificando que la aplicacion web responda...
 powershell -Command "try { Invoke-WebRequest -Uri http://localhost:8000 -Method Head -TimeoutSec 10 | Out-Null; Write-Host '[OK] Aplicacion web respondiendo correctamente' } catch { Write-Host '[WARNING]  La aplicacion puede necesitar unos minutos mas para estar lista' }"
+if "%MODO_DEBUG%"=="1" call :debug "Chequeo HTTP a http://localhost:8000 ejecutado"
 
 echo.
 echo ========================================
@@ -322,3 +299,30 @@ echo.
 echo [INFO] ¡Disfruta usando FerreDesk!
 echo.
 pause
+
+goto :eof
+
+:debug
+if "%MODO_DEBUG%"=="1" (
+    echo [DEBUG] %~1
+    >> "%RUTA_LOG_DEBUG%" echo [DEBUG] %date% %time% - %~1
+)
+exit /b 0
+
+:refreshenv_safe
+call :debug "Intentando recargar variables de entorno con refreshenv"
+where refreshenv >nul 2>nul
+if %errorlevel% equ 0 (
+    call refreshenv
+    if %errorlevel% neq 0 (
+        echo [WARNING]  refreshenv retorno %errorlevel%, continuando...
+        call :debug "refreshenv retorno %errorlevel%"
+    ) else (
+        echo [OK] Variables de entorno recargadas
+        call :debug "refreshenv OK"
+    )
+) else (
+    echo [WARNING]  refreshenv no esta disponible en esta sesion, continuando...
+    call :debug "refreshenv no encontrado en PATH"
+)
+exit /b 0
