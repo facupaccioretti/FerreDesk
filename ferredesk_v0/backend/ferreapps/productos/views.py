@@ -735,8 +735,66 @@ class FerreteriaAPIView(APIView):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
-            return Response({'detail': 'No existe ferretería configurada.'}, status=404)
+            # Devolver esqueleto para configuración inicial sin romper la UI
+            configuracion_inicial = {
+                'no_configurada': True,
+                'nombre': '',
+                'direccion': '',
+                'telefono': '',
+                'email': None,
+                'situacion_iva': 'RI',
+                'punto_venta_arca': '',
+                'cuit_cuil': '',
+                'razon_social': '',
+                'ingresos_brutos': '',
+                'inicio_actividad': None,
+                'logo_empresa': None,
+                'certificado_arca': None,
+                'clave_privada_arca': None,
+                'modo_arca': 'HOM',
+                'arca_habilitado': False,
+                'arca_configurado': False,
+                'arca_ultima_validacion': None,
+                'arca_error_configuracion': None,
+                'permitir_stock_negativo': False,
+            }
+            return Response(configuracion_inicial, status=200)
         return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
+
+    def post(self, request):
+        """Crea la primera ferretería si aún no existe. Solo para usuarios staff."""
+        if not request.user.is_authenticated:
+            return Response({'detail': 'No autenticado.'}, status=401)
+        if not request.user.is_staff:
+            return Response({'detail': 'No tiene permisos para crear.'}, status=403)
+
+        # Verificar unicidad: solo una instancia permitida
+        if Ferreteria.objects.exists():
+            return Response({'detail': 'Ya existe una ferretería configurada.'}, status=400)
+
+        # Manejar archivos subidos y normalizar datos
+        data = request.data.copy()
+
+        if 'logo_empresa' in request.FILES:
+            data['logo_empresa'] = request.FILES['logo_empresa']
+        if 'certificado_arca' in request.FILES:
+            data['certificado_arca'] = request.FILES['certificado_arca']
+        if 'clave_privada_arca' in request.FILES:
+            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
+
+        # Remover claves no soportadas por el modelo (compatibilidad UI legacy)
+        for legacy_key in [
+            'margen_ganancia_por_defecto', 'comprobante_por_defecto',
+            'notificaciones_email', 'notificaciones_stock_bajo',
+            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes'
+        ]:
+            data.pop(legacy_key, None)
+
+        serializer = FerreteriaSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            instancia = serializer.save()
+            return Response(FerreteriaSerializer(instancia, context={'request': request}).data, status=201)
+        return Response(serializer.errors, status=400)
 
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()

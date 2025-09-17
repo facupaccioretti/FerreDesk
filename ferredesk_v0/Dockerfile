@@ -6,7 +6,9 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     curl \
     netcat-traditional \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
 
 # Instalar Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
@@ -38,7 +40,8 @@ RUN mkdir -p data media staticfiles
 EXPOSE 8000
 
 # Script de inicio
-COPY scripts/start.sh /start.sh
-RUN chmod +x /start.sh
+COPY scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+RUN sed -i 's/\r$//g' /app/start.sh
 
-CMD ["/start.sh"] 
+CMD ["/app/start.sh"] 

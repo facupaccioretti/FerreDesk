@@ -32,14 +32,17 @@ services:
       - ALLOWED_HOSTS=localhost,127.0.0.1
       - CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
       - CSRF_TRUSTED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+      - ARCA_TIMEOUT_CONNECTION=60
+      - ARCA_TIMEOUT_READ=120
     volumes:
-      - ./backend:/app
       - ./data:/app/data
       - ./media:/app/media
       - ./staticfiles:/app/staticfiles
-      - ./frontend:/app/frontend
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     restart: unless-stopped
 
 volumes:

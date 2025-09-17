@@ -208,89 +208,10 @@ class Ferreteria(models.Model):
         # Guardar primero para obtener el ID
         super().save(*args, **kwargs)
         
-        # Renombrar archivos si son nuevos
-        if certificado_nuevo or clave_privada_nueva:
-            self._renombrar_archivos_estandar()
+        # Los archivos ARCA se normalizan via señal post_save en ventas/signals.py
         if logo_nuevo:
             self._normalizar_logo_empresa()
     
-    def _renombrar_archivos_estandar(self):
-        """
-        Renombra los archivos ARCA a nombres estándar con reemplazo directo.
-        """
-        import os
-        import shutil
-        from django.conf import settings
-        
-        # Crear directorios si no existen
-        base_dir = os.path.join(settings.MEDIA_ROOT, 'arca', f'ferreteria_{self.id}')
-        certificados_dir = os.path.join(base_dir, 'certificados')
-        claves_dir = os.path.join(base_dir, 'claves_privadas')
-        
-        os.makedirs(certificados_dir, exist_ok=True)
-        os.makedirs(claves_dir, exist_ok=True)
-        
-        # Procesar certificado
-        if self.certificado_arca and os.path.exists(self.certificado_arca.path):
-            destino_certificado = os.path.join(certificados_dir, 'certificado.pem')
-            
-            # ELIMINAR archivo anterior si existe (reemplazo directo)
-            if os.path.exists(destino_certificado):
-                os.remove(destino_certificado)
-                print(f"Archivo anterior eliminado: {destino_certificado}")
-            
-            # Mover archivo nuevo a nombre estándar
-            shutil.move(self.certificado_arca.path, destino_certificado)
-            
-            # Actualizar referencia en el modelo
-            self.certificado_arca.name = f'arca/ferreteria_{self.id}/certificados/certificado.pem'
-            
-            # LIMPIAR cualquier archivo duplicado restante
-            for archivo in os.listdir(certificados_dir):
-                if archivo != 'certificado.pem':
-                    archivo_path = os.path.join(certificados_dir, archivo)
-                    os.remove(archivo_path)
-                    print(f"Archivo duplicado eliminado: {archivo}")
-            
-            print(f"✅ Certificado reemplazado: {destino_certificado}")
-        
-        # Procesar clave privada
-        if self.clave_privada_arca and os.path.exists(self.clave_privada_arca.path):
-            destino_clave = os.path.join(claves_dir, 'clave_privada.pem')
-            
-            # ELIMINAR archivo anterior si existe (reemplazo directo)
-            if os.path.exists(destino_clave):
-                os.remove(destino_clave)
-                print(f"Archivo anterior eliminado: {destino_clave}")
-            
-            # Mover archivo nuevo a nombre estándar
-            shutil.move(self.clave_privada_arca.path, destino_clave)
-            
-            # Actualizar referencia en el modelo
-            self.clave_privada_arca.name = f'arca/ferreteria_{self.id}/claves_privadas/clave_privada.pem'
-            
-            # LIMPIAR cualquier archivo duplicado restante
-            for archivo in os.listdir(claves_dir):
-                if archivo != 'clave_privada.pem':
-                    archivo_path = os.path.join(claves_dir, archivo)
-                    os.remove(archivo_path)
-                    print(f"Archivo duplicado eliminado: {archivo}")
-            
-            print(f"✅ Clave privada reemplazada: {destino_clave}")
-        
-        # Guardar cambios en la BD (sin llamar save() para evitar bucle)
-        from django.db import connection
-        with connection.cursor() as cursor:
-            if self.certificado_arca:
-                cursor.execute(
-                    "UPDATE productos_ferreteria SET certificado_arca = %s WHERE id = %s",
-                    [self.certificado_arca.name, self.id]
-                )
-            if self.clave_privada_arca:
-                cursor.execute(
-                    "UPDATE productos_ferreteria SET clave_privada_arca = %s WHERE id = %s",
-                    [self.clave_privada_arca.name, self.id]
-                )
 
     def _normalizar_logo_empresa(self):
         """

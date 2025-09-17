@@ -429,6 +429,7 @@ const ConfiguracionManager = () => {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("negocio")
   const [feedback, setFeedback] = useState("")
+  const [esNueva, setEsNueva] = useState(false)
 
   // --------- Estado y lógica de Maestros (Clientes) movido desde ClientesManager ---------
   const { barrios, setBarrios, fetchBarrios } = useBarriosAPI()
@@ -559,6 +560,9 @@ const ConfiguracionManager = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data) {
+          if (data.no_configurada === true) {
+            setEsNueva(true)
+          }
           setConfig(data)
         }
       })
@@ -594,7 +598,8 @@ const ConfiguracionManager = () => {
       Object.keys(config).forEach(key => {
         if (key !== 'logo_empresa_file' && key !== 'logo_empresa' && 
             key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
-            key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca') {
+            key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca' &&
+            key !== 'no_configurada') {
           if (config[key] !== null && config[key] !== undefined) {
             formData.append(key, config[key])
           }
@@ -615,8 +620,9 @@ const ConfiguracionManager = () => {
         formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
       
+      const esCreacion = esNueva || config?.no_configurada === true
       const res = await fetch("/api/ferreteria/", {
-        method: "PATCH",
+        method: esCreacion ? "POST" : "PATCH",
         headers: {
           "X-CSRFToken": csrftoken,
           // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
@@ -629,6 +635,7 @@ const ConfiguracionManager = () => {
       
       const data = await res.json()
       setConfig(data)
+      setEsNueva(false)
       setFeedback("Configuración guardada correctamente")
       
       // Limpiar feedback después de 3 segundos

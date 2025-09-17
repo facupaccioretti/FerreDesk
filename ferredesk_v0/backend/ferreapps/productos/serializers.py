@@ -112,13 +112,34 @@ class StockSerializer(serializers.ModelSerializer):
 class FerreteriaSerializer(serializers.ModelSerializer):
     # Campo escribible para permitir subir archivo vía PATCH
     logo_empresa = serializers.ImageField(required=False, allow_null=True)
+    # Aceptar archivos para escritura, pero no exponerlos en la respuesta
+    certificado_arca = serializers.FileField(required=False, allow_null=True, write_only=True)
+    clave_privada_arca = serializers.FileField(required=False, allow_null=True, write_only=True)
+    # Exponer flags booleanos de presencia
+    tiene_certificado_arca = serializers.SerializerMethodField()
+    tiene_clave_privada_arca = serializers.SerializerMethodField()
     
     class Meta:
         model = Ferreteria
         fields = '__all__'
 
+    def get_tiene_certificado_arca(self, instance):
+        try:
+            return bool(getattr(instance, 'certificado_arca', None) and getattr(instance.certificado_arca, 'name', None))
+        except Exception:
+            return False
+
+    def get_tiene_clave_privada_arca(self, instance):
+        try:
+            return bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
+        except Exception:
+            return False
+
     def to_representation(self, instance):
-        """Mantener compatibilidad: devolver 'logo_empresa' como URL absoluta si existe."""
+        """Mantener compatibilidad y robustez con archivos faltantes.
+        - 'logo_empresa': URL absoluta si existe
+        - 'certificado_arca' y 'clave_privada_arca': exponer como booleanos indicando presencia
+        """
         rep = super().to_representation(instance)
         try:
             if instance.logo_empresa:
@@ -128,6 +149,19 @@ class FerreteriaSerializer(serializers.ModelSerializer):
                 rep['logo_empresa'] = None
         except Exception:
             rep['logo_empresa'] = None
+        # Exponer flags ARCA como booleanos seguros (no intentar leer rutas)
+        try:
+            rep['tiene_certificado_arca'] = bool(getattr(instance, 'certificado_arca', None) and getattr(instance.certificado_arca, 'name', None))
+        except Exception:
+            rep['tiene_certificado_arca'] = False
+        try:
+            rep['tiene_clave_privada_arca'] = bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
+        except Exception:
+            rep['tiene_clave_privada_arca'] = False
+
+        # Compatibilidad hacia atrás con claves usadas por el frontend actual
+        rep['certificado_arca'] = rep.get('tiene_certificado_arca', False)
+        rep['clave_privada_arca'] = rep.get('tiene_clave_privada_arca', False)
         return rep
 
 class VistaStockProductoSerializer(serializers.ModelSerializer):
