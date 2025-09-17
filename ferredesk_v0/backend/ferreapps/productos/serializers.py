@@ -86,6 +86,10 @@ class StockSerializer(serializers.ModelSerializer):
         """
         # Solo validar si estamos editando un producto existente
         if self.instance and self.instance.pk:
+            # Si el valor no cambia, no disparar validaciones de movimientos
+            valor_actual = getattr(self.instance, 'codvta', None)
+            if valor_actual == value:
+                return value
             # Verificar si tiene ventas asociadas (IntegerField)
             from ferreapps.ventas.models import VentaDetalleItem
             if VentaDetalleItem.objects.filter(vdi_idsto=self.instance.pk).exists():

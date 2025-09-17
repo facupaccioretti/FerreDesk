@@ -248,14 +248,9 @@ class CompraCreateSerializer(CompraSerializer):
                     f"Error al crear item {i + 1}: {str(e)}"
                 )
 
-        # Solo cerrar automáticamente si no es una conversión de orden de compra
-        # Las conversiones de orden de compra se dejan en BORRADOR para que el usuario complete los datos
-        if not self.context.get('es_conversion_orden_compra', False):
-            try:
-                compra.cerrar_compra()
-            except Exception as e:
-                # Si por algún motivo no se puede cerrar (p.ej., totales inválidos), devolver error claro
-                raise serializers.ValidationError(f"No se pudo finalizar la compra: {str(e)}")
+        # Las compras nuevas se crean en BORRADOR y no se cierran automáticamente
+        # Solo se cierran cuando el usuario lo haga explícitamente desde la interfaz
+        # Esto evita que se sume stock automáticamente al crear la compra
 
         return compra
 

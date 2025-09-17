@@ -153,6 +153,11 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
 
   const handleSubmit = async e => {
     e.preventDefault();
+    // Confirmación de guardado
+    const confirmar = window.confirm("¿Desea guardar los cambios del proveedor?");
+    if (!confirmar) {
+      return;
+    }
     if (!form.razon.trim() || !form.fantasia.trim() || !form.domicilio.trim() || !form.impsalcta || !form.fecsalcta || !form.sigla.trim()) {
       setError("Todos los campos obligatorios deben estar completos");
       return;
@@ -240,7 +245,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>}
               >
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
-                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true }} value={form.razon} onChange={handleChange} />
+                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData, title: !!initialData ? 'La Razón Social no es editable' : undefined }} value={form.razon} onChange={handleChange} />
                 <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true }} value={form.fantasia} onChange={handleChange} />
                 <FilaEditable etiqueta="Estado">
                   <select
@@ -328,7 +333,11 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
             <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={() => {
+                  const confirmar = window.confirm("¿Desea cancelar y descartar los cambios?");
+                  if (!confirmar) return;
+                  onCancel();
+                }}
                 className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium shadow-sm hover:shadow-md"
               >
                 Cancelar

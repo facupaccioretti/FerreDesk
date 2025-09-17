@@ -99,7 +99,6 @@ const ClienteForm = ({
   setLocalidades,
   setProvincias,
   setTransportes,
-  setVendedores,
   setPlazos,
   setCategorias,
   tiposIVA,
@@ -494,20 +493,6 @@ const ClienteForm = ({
           body = { nombre: currentForm.nombre, localidad: currentForm.localidad, activo: currentForm.activo || "S" }
           setList = setTransportes
           break
-        case "vendedor":
-          url = "/api/clientes/vendedores/"
-          body = {
-            nombre: currentForm.nombre,
-            dni: currentForm.dni,
-            comivta: currentForm.comivta,
-            liquivta: currentForm.liquivta,
-            comicob: currentForm.comicob,
-            liquicob: currentForm.liquicob,
-            localidad: currentForm.localidad,
-            activo: currentForm.activo || "S",
-          }
-          setList = setVendedores
-          break
         case "plazo":
           url = "/api/clientes/plazos/"
           body = { nombre: currentForm.nombre, activo: currentForm.activo || "S" }
@@ -730,6 +715,11 @@ const ClienteForm = ({
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    // Confirmación nativa antes de guardar
+    const confirmar = window.confirm('¿Desea guardar los cambios del cliente?')
+    if (!confirmar) {
+      return
+    }
     if (
       !form.razon ||
       !form.domicilio
@@ -955,7 +945,7 @@ const ClienteForm = ({
                   titulo="Comercial"
                   icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2" /></svg>}
                 >
-                  <FilaEditable etiqueta="Vendedor" onAdd={() => openAddModal('vendedor')}>
+                  <FilaEditable etiqueta="Vendedor">
                     <FilterableSelect compact={true} label={null} name="vendedor" options={vendedores} value={form.vendedor} onChange={handleChange} placeholder="Buscar vendedor..." />
                   </FilaEditable>
                   <FilaEditable etiqueta="Categoría" onAdd={() => openAddModal('categoria')}>
@@ -984,8 +974,10 @@ const ClienteForm = ({
               <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => { 
-                    try { 
+                  onClick={() => {
+                    const confirmar = window.confirm('¿Desea cancelar y descartar los cambios?')
+                    if (!confirmar) return
+                    try {
                       localStorage.removeItem(claveBorradorCliente)
                       if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
                         localStorage.removeItem(claveAnteriorRef.current)

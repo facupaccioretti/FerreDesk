@@ -86,6 +86,11 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
 
   const handleSubmit = e => {
     e.preventDefault();
+    // Confirmación nativa antes de guardar
+    const confirmar = window.confirm('¿Desea guardar los cambios del vendedor?');
+    if (!confirmar) {
+      return;
+    }
     const dataToSave = {
         ...form,
         comivta: parseFloat(form.comivta) || 0,
@@ -209,7 +214,11 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
             <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={() => {
+                  const confirmar = window.confirm('¿Desea cancelar y descartar los cambios?');
+                  if (!confirmar) return;
+                  onCancel();
+                }}
                 className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium shadow-sm hover:shadow-md"
               >
                 Cancelar

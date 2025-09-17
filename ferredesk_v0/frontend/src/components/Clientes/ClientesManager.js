@@ -84,7 +84,7 @@ const ClientesManager = () => {
     return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
 
-  const [editCliente, setEditCliente] = useState(null)
+  
   const [expandedClientId, setExpandedClientId] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
@@ -118,7 +118,6 @@ const ClientesManager = () => {
   // -------- Navegación de sub-pestañas --------
   const openTab = (key, label, cliente = null) => {
     if (key.startsWith("nuevo")) clearError()
-    setEditCliente(cliente)
     setTabs((prev) => {
       if (prev.find((t) => t.key === key)) return prev
       return [...prev, { key, label, closable: true, cliente }]
@@ -129,21 +128,22 @@ const ClientesManager = () => {
   const closeTab = (key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
     if (activeTab === key) setActiveTab("lista")
-    setEditCliente(null)
     if (String(key).startsWith("nuevo")) clearError()
   }
 
   // Guardar cliente (alta / edición)
   const handleSaveCliente = async (data, tabKeyParam) => {
+    const keyActual = tabKeyParam || activeTab || "nuevo"
+    const tab = tabs.find((t) => t.key === keyActual)
+    const clienteEnEdicion = tab?.cliente
     let exito = false
-    if (editCliente) {
-      exito = await updateCliente(editCliente.id, data)
+    if (clienteEnEdicion?.id) {
+      exito = await updateCliente(clienteEnEdicion.id, data)
     } else {
       exito = await addCliente(data)
     }
     if (exito) {
-      const keyToClose = tabKeyParam || activeTab || "nuevo"
-      closeTab(keyToClose)
+      closeTab(keyActual)
     }
   }
 
@@ -170,7 +170,7 @@ const ClientesManager = () => {
   const { localidades, setLocalidades } = useLocalidadesAPI()
   const { provincias, setProvincias } = useProvinciasAPI()
   const { transportes, setTransportes } = useTransportesAPI()
-  const { vendedores, setVendedores } = useVendedoresAPI()
+  const { vendedores } = useVendedoresAPI()
   const { plazos, setPlazos } = usePlazosAPI()
   const { categorias, setCategorias } = useCategoriasAPI()
   const { tiposIVA } = useTiposIVAAPI()
@@ -346,7 +346,6 @@ const ClientesManager = () => {
                         setLocalidades={setLocalidades}
                         setProvincias={setProvincias}
                         setTransportes={setTransportes}
-                        setVendedores={setVendedores}
                         setPlazos={setPlazos}
                         setCategorias={setCategorias}
                         tiposIVA={tiposIVA}

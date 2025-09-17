@@ -150,6 +150,11 @@ const OrdenCompraForm = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    // Confirmación nativa antes de guardar
+    const confirmar = window.confirm('¿Desea guardar la orden de compra?')
+    if (!confirmar) {
+      return
+    }
     
     if (!validateForm()) {
       return
@@ -383,7 +388,11 @@ ja de                        placeholder="Domicilio del proveedor"
             <div className="mt-3 flex justify-end space-x-3">
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={() => {
+                  const confirmar = window.confirm('¿Desea cancelar y descartar los cambios?')
+                  if (!confirmar) return
+                  onCancel()
+                }}
                 className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm"
               >
                 Cancelar

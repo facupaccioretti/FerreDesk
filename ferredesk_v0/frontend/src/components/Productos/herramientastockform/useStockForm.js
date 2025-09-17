@@ -47,6 +47,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
       idfam2: null,
       idfam3: null,
       idaliiva: "",
+      acti: "S", // Estado por defecto: Activo para productos nuevos
       id: undefined,
     }
   })

@@ -1,12 +1,3 @@
+EditarCliente : Cuando se recarga la pagina, y se guarda ocurre :{"razon":["cliente with this razon already exists."],"cuit":["cliente with this cuit already exists."]}. 
 
- 
-Revision General
-
-Revisar todas funcionalidades de forms <- re importante
-
-Nota Credito A Y B genericos no muestra alicuotas correctamente
-
-  Bonif general no anda correctamente. 
-
-
-Informe stock bajo que no haga scroll infinito
+Convertir a venta: Se consulta al padron, pero requiere que se cambie de cliente o actualice por algun motivo.

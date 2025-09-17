@@ -252,6 +252,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   // Función de guardado usando el hook modular
   const handleSave = async (e) => {
     e.preventDefault()
+    // Confirmación nativa antes de guardar
+    const confirmar = window.confirm('¿Desea guardar los cambios del producto?')
+    if (!confirmar) {
+      return
+    }
     
     // Validar el formulario antes de guardar
     if (!esValido) {
@@ -1111,7 +1116,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
             <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
               <button
                 type="button"
-                onClick={handleCancel}
+                onClick={() => {
+                  const confirmar = window.confirm('¿Desea cancelar y descartar los cambios?')
+                  if (!confirmar) return
+                  handleCancel()
+                }}
                 className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium shadow-sm hover:shadow-md"
               >
                 Cancelar

@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from django.db.models import Sum, F, DecimalField
 from django.db.models.functions import Coalesce
 from django.conf import settings
+from django.utils import timezone
 
 class Compra(models.Model):
     """
@@ -216,7 +217,7 @@ class Compra(models.Model):
             raise ValueError("La compra ya está anulada")
         
         self.comp_estado = 'ANULADA'
-        self.comp_fecha_anulacion = models.DateField.today()
+        self.comp_fecha_anulacion = timezone.now().date()
         self.save()
 
 
