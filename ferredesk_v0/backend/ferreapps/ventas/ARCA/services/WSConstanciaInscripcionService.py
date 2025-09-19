@@ -14,11 +14,24 @@ from zeep import Client, exceptions
 from zeep.transports import Transport
 from zeep.helpers import serialize_object
 from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.ssl_ import create_urllib3_context
 
 from ..auth.FerreDeskAuth import FerreDeskAuth
 from ..utils.ConfigManager import ConfigManager
 
 logger = logging.getLogger('ferredesk_arca.constancia_inscripcion_service')
+
+
+class SSLContextAdapter(HTTPAdapter):
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        if self.ssl_context is not None:
+            pool_kwargs['ssl_context'] = self.ssl_context
+        return super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
 
 
 class WSConstanciaInscripcionService:
@@ -59,9 +72,19 @@ class WSConstanciaInscripcionService:
         Returns:
             Cliente SOAP configurado
         """
-        # Configurar sesión HTTP con timeouts
+        ssl_context = create_urllib3_context()
+        ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+        try:
+            import ssl as _ssl
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = _ssl.CERT_NONE
+        except Exception:
+            pass
         session = Session()
         session.timeout = self.constancia_config['timeout']
+        session.mount('https://', SSLContextAdapter(ssl_context=ssl_context))
+        # Desactivar verificación de certificado solo para AFIP (mitigación puntual)
+        session.verify = False
         
         # Configurar transporte
         transport = Transport(session=session)

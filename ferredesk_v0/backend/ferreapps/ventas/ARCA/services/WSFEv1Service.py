@@ -13,11 +13,24 @@ from typing import Dict, Any, Optional
 from zeep import Client, exceptions
 from zeep.transports import Transport
 from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.ssl_ import create_urllib3_context
 
 from ..auth.FerreDeskAuth import FerreDeskAuth
 from ..utils.ConfigManager import ConfigManager
 
 logger = logging.getLogger('ferredesk_arca.wsfev1_service')
+
+
+class SSLContextAdapter(HTTPAdapter):
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        if self.ssl_context is not None:
+            pool_kwargs['ssl_context'] = self.ssl_context
+        return super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
 
 
 class WSFEv1Service:
@@ -58,9 +71,21 @@ class WSFEv1Service:
         Returns:
             Cliente SOAP configurado
         """
-        # Configurar sesión HTTP con timeouts
+        # Configurar sesión HTTP con timeouts y contexto SSL compatible con AFIP
+        ssl_context = create_urllib3_context()
+        ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+        # Desactivar verificación de hostname si no se verifica el certificado
+        try:
+            import ssl as _ssl
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = _ssl.CERT_NONE
+        except Exception:
+            pass
         session = Session()
         session.timeout = self.wsfev1_config['timeout']
+        session.mount('https://', SSLContextAdapter(ssl_context=ssl_context))
+        # Desactivar verificación de certificado solo para AFIP (mitigación puntual)
+        session.verify = False
         
         # Configurar transporte
         transport = Transport(session=session)
@@ -73,7 +98,7 @@ class WSFEv1Service:
         
         logger.debug(f"Cliente SOAP inicializado para {self.wsfev1_config['url']}")
         return client
-    
+
     def send_request(self, method: str, data: Dict[str, Any]) -> Any:
         """
         Envía una solicitud al servicio web de AFIP.
@@ -92,16 +117,10 @@ class WSFEv1Service:
         logger.info(f"URL: {self.wsfev1_config['url']}")
         
         try:
-            # Crear cliente SOAP
-            client = Client(self.wsfev1_config['url'])
-            
-            # Log del cliente SOAP
-            logger.info(f"CLIENTE SOAP CREADO:")
-            logger.info(f"   • WSDL URL: {self.wsfev1_config['url']}")
-            logger.info(f"   • Servicios disponibles: {list(client.service.__dict__.keys())}")
+            # Usar el cliente ya inicializado con el transporte SSL personalizado
+            client = self.client
             
             # Preparar datos de la solicitud - enviar solo los parámetros esperados
-            # No incluir el nombre del método como parámetro
             request_data = data.copy()
             
             # Log de la solicitud SOAP
@@ -127,7 +146,6 @@ class WSFEv1Service:
             logger.info(f"SOLICITUD SOAP COMPLETADA EXITOSAMENTE")
             logger.info("=" * 80)
             
-            # Devolver la respuesta SOAP original (como hace arca_arg)
             return response
             
         except Exception as e:
@@ -139,7 +157,6 @@ class WSFEv1Service:
             logger.error(f"   • Error: {str(e)}")
             logger.error(f"   • Tipo de error: {type(e).__name__}")
             
-            # Log adicional para errores SOAP
             if hasattr(e, 'document'):
                 logger.error(f"   • Documento SOAP: {e.document}")
             if hasattr(e, 'code'):

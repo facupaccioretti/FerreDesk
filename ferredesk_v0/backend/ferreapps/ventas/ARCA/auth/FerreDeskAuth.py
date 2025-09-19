@@ -19,8 +19,23 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs7
 from .TokenManager import LoginTicket
 from ..utils.ConfigManager import ConfigManager
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.ssl_ import create_urllib3_context
+from zeep.transports import Transport
 
 logger = logging.getLogger('ferredesk_arca.auth')
+
+
+class SSLContextAdapter(HTTPAdapter):
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        if self.ssl_context is not None:
+            pool_kwargs['ssl_context'] = self.ssl_context
+        return super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
 
 
 class FerreDeskAuth:
@@ -207,8 +222,20 @@ class FerreDeskAuth:
             # Firmar el TRA
             signed_cms = self.sign_tra(tra)
             
-            # Enviar solicitud al servicio WSAA
-            client = Client(self.wsaa_config['url'])
+            # Enviar solicitud al servicio WSAA con contexto SSL compatible
+            ssl_context = create_urllib3_context()
+            ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+            try:
+                import ssl as _ssl
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = _ssl.CERT_NONE
+            except Exception:
+                pass
+            session = Session()
+            session.mount('https://', SSLContextAdapter(ssl_context=ssl_context))
+            session.verify = False
+            transport = Transport(session=session)
+            client = Client(self.wsaa_config['url'], transport=transport)
             response = client.service.loginCms(signed_cms)
             
             # Crear LoginTicket
