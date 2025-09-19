@@ -17,6 +17,36 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def _limpiar_archivos_anteriores(directorio: str, archivo_actual: str) -> None:
+    """
+    Limpia archivos anteriores en un directorio, manteniendo solo el archivo actual.
+    
+    Args:
+        directorio: Directorio donde limpiar archivos
+        archivo_actual: Nombre del archivo actual a mantener
+    """
+    try:
+        if not os.path.exists(directorio):
+            return
+            
+        # Obtener solo el nombre del archivo (sin ruta completa)
+        nombre_archivo_actual = os.path.basename(archivo_actual)
+        
+        # Limpiar archivos que no sean el actual
+        for archivo in os.listdir(directorio):
+            if archivo != nombre_archivo_actual:
+                archivo_path = os.path.join(directorio, archivo)
+                # Solo eliminar archivos (no directorios)
+                if os.path.isfile(archivo_path):
+                    try:
+                        os.remove(archivo_path)
+                        logger.info(f"🗑️ Archivo anterior eliminado: {archivo}")
+                    except Exception as e:
+                        logger.warning(f"No se pudo eliminar archivo anterior {archivo}: {e}")
+    except Exception as e:
+        logger.error(f"Error limpiando archivos anteriores en {directorio}: {e}")
+
+
 def _normalizar_archivo_en_carpeta(directorio_destino: str, nombre_estandar: str) -> bool:
     """
     Normaliza archivos en una carpeta tomando el .pem más reciente como fuente
@@ -95,32 +125,18 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
         os.makedirs(certificados_dir, exist_ok=True)
         os.makedirs(claves_dir, exist_ok=True)
         
-        # Procesar certificado por carpeta (no depender de instance.certificado_arca.path)
-        if _normalizar_archivo_en_carpeta(certificados_dir, 'certificado.pem'):
-            instance.certificado_arca.name = f'arca/ferreteria_{instance.id}/certificados/certificado.pem'
-            logger.info(f"✅ Certificado normalizado: {os.path.join(certificados_dir, 'certificado.pem')}")
+        # Limpiar archivos anteriores de certificados
+        if instance.certificado_arca:
+            _limpiar_archivos_anteriores(certificados_dir, instance.certificado_arca.name)
+            logger.info(f"✅ Certificado procesado: {instance.certificado_arca.name}")
         
-        # Procesar clave privada por carpeta (no depender de instance.clave_privada_arca.path)
-        if _normalizar_archivo_en_carpeta(claves_dir, 'clave_privada.pem'):
-            instance.clave_privada_arca.name = f'arca/ferreteria_{instance.id}/claves_privadas/clave_privada.pem'
-            logger.info(f"✅ Clave privada normalizada: {os.path.join(claves_dir, 'clave_privada.pem')}")
+        # Limpiar archivos anteriores de claves privadas
+        if instance.clave_privada_arca:
+            _limpiar_archivos_anteriores(claves_dir, instance.clave_privada_arca.name)
+            logger.info(f"✅ Clave privada procesada: {instance.clave_privada_arca.name}")
         
-        # Guardar cambios en la BD (sin llamar save() para evitar bucle)
-        from django.db import connection
-        with connection.cursor() as cursor:
-            if instance.certificado_arca:
-                cursor.execute(
-                    "UPDATE productos_ferreteria SET certificado_arca = %s WHERE id = %s",
-                    [instance.certificado_arca.name, instance.id]
-                )
-            if instance.clave_privada_arca:
-                cursor.execute(
-                    "UPDATE productos_ferreteria SET clave_privada_arca = %s WHERE id = %s",
-                    [instance.clave_privada_arca.name, instance.id]
-                )
-        
-        logger.info(f"Archivos ARCA normalizados exitosamente para ferretería {instance.id}")
+        logger.info(f"✅ Archivos ARCA procesados exitosamente para ferretería {instance.id}")
         
     except Exception as e:
-        logger.error(f"Error normalizando archivos ARCA para ferretería {instance.id}: {e}")
+        logger.error(f"Error procesando archivos ARCA para ferretería {instance.id}: {e}")
         # No re-lanzar la excepción para no romper el save() original

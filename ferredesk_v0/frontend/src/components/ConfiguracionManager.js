@@ -407,7 +407,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
             )}
             <input
               type="file"
-              accept=".pem"
+              accept="*"
               onChange={(e) => handleFileChange("certificado_arca_file", e.target.files[0])}
               className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
               disabled={loading}
@@ -430,7 +430,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
             )}
             <input
               type="file"
-              accept=".pem"
+              accept="*"
               onChange={(e) => handleFileChange("clave_privada_arca_file", e.target.files[0])}
               className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
               disabled={loading}

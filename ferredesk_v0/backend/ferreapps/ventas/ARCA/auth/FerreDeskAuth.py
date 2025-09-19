@@ -101,29 +101,34 @@ class FerreDeskAuth:
     def _obtener_certificados_temporales(self) -> tuple[str, str]:
         """
         Obtiene los certificados del modelo Ferreteria y los guarda temporalmente.
+        Usa directamente los archivos subidos sin normalización de nombres.
         
         Returns:
             Tupla (ruta_certificado_temporal, ruta_clave_privada_temporal)
         """
-        # Crear archivos temporales
+        # Crear archivos temporales con extensiones apropiadas
         cert_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pem')
         key_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pem')
         
         try:
-            # Escribir certificado
+            # Escribir certificado directamente desde el archivo subido
             cert_temp.write(self.ferreteria.certificado_arca.read())
             cert_temp.flush()
+            cert_temp.close()
             
-            # Escribir clave privada
+            # Escribir clave privada directamente desde el archivo subido
             key_temp.write(self.ferreteria.clave_privada_arca.read())
             key_temp.flush()
+            key_temp.close()
             
             return cert_temp.name, key_temp.name
             
         except Exception as e:
             # Limpiar archivos temporales en caso de error
-            os.unlink(cert_temp.name)
-            os.unlink(key_temp.name)
+            if os.path.exists(cert_temp.name):
+                os.unlink(cert_temp.name)
+            if os.path.exists(key_temp.name):
+                os.unlink(key_temp.name)
             raise Exception(f"Error obteniendo certificados: {e}")
     
     def create_tra(self, expiration_time: datetime.datetime) -> bytes:
@@ -161,24 +166,32 @@ class FerreDeskAuth:
         Returns:
             TRA firmado y codificado en Base64
         """
-        cert_temp_path = None
-        key_temp_path = None
-        
         try:
-            # Obtener certificados temporales
-            cert_temp_path, key_temp_path = self._obtener_certificados_temporales()
-            
-            # Cargar la clave privada
-            with open(key_temp_path, 'rb') as key_file:
-                private_key = serialization.load_pem_private_key(
-                    key_file.read(),
-                    password=None
-                )
-            
-            # Cargar el certificado
-            with open(cert_temp_path, 'rb') as cert_file:
-                cert = x509.load_pem_x509_certificate(cert_file.read())
-            
+            # Leer bytes directamente desde los FileField del modelo
+            cert_file = self.ferreteria.certificado_arca
+            key_file = self.ferreteria.clave_privada_arca
+
+            # Asegurar posición de lectura al inicio
+            try:
+                cert_file.seek(0)
+            except Exception:
+                pass
+            try:
+                key_file.seek(0)
+            except Exception:
+                pass
+
+            cert_bytes = cert_file.read()
+            key_bytes = key_file.read()
+
+            # Cargar clave privada y certificado desde memoria
+            private_key = serialization.load_pem_private_key(
+                key_bytes,
+                password=None
+            )
+
+            cert = x509.load_pem_x509_certificate(cert_bytes)
+
             # Crear la firma PKCS#7 en formato DER
             signed_data = pkcs7.PKCS7SignatureBuilder().set_data(
                 tra_xml
@@ -190,22 +203,16 @@ class FerreDeskAuth:
                 serialization.Encoding.DER,
                 [pkcs7.PKCS7Options.NoCapabilities]
             )
-            
+
             # Codificar en Base64
             signed_b64 = base64.b64encode(signed_data).decode('utf-8')
-            
+
             logger.debug("TRA firmado exitosamente")
             return signed_b64
-            
+
         except Exception as e:
             logger.error(f"Error firmando TRA: {e}")
             raise
-        finally:
-            # Limpiar archivos temporales
-            if cert_temp_path and os.path.exists(cert_temp_path):
-                os.unlink(cert_temp_path)
-            if key_temp_path and os.path.exists(key_temp_path):
-                os.unlink(key_temp_path)
     
     def request_new_ta(self) -> LoginTicket:
         """
