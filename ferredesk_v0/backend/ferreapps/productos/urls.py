@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from .views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, UploadListaPreciosProveedor, PrecioProductoProveedorAPIView, HistorialListasProveedorAPIView, asociar_codigo_proveedor, codigos_lista_proveedor, obtener_nuevo_id_temporal, crear_producto_con_relaciones, FerreteriaAPIView, editar_producto_con_relaciones, VistaStockProductoViewSet, servir_logo_arca, servir_logo_empresa, BuscarDenominacionesSimilaresAPIView
+from .views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, UploadListaPreciosProveedor, PrecioProductoProveedorAPIView, HistorialListasProveedorAPIView, asociar_codigo_proveedor, codigos_lista_proveedor, obtener_nuevo_id_temporal, crear_producto_con_relaciones, FerreteriaAPIView, editar_producto_con_relaciones, VistaStockProductoViewSet, servir_logo_arca, servir_logo_empresa, BuscarDenominacionesSimilaresAPIView, subir_logo_arca
 from django.urls import path
 
 router = DefaultRouter()
@@ -21,6 +21,7 @@ urlpatterns = router.urls + [
     path('ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     path('editar-producto-con-relaciones/', editar_producto_con_relaciones, name='editar_producto_con_relaciones'),
     path('servir-logo-arca/', servir_logo_arca, name='servir-logo-arca'),
+    path('subir-logo-arca/', subir_logo_arca, name='subir-logo-arca'),
     path('servir-logo-empresa/', servir_logo_empresa, name='servir-logo-empresa'),
     path('buscar-denominaciones-similares/', BuscarDenominacionesSimilaresAPIView.as_view(), name='buscar-denominaciones-similares'),
 ] 

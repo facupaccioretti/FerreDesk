@@ -337,14 +337,14 @@ const PresupuestoForm = ({
   // Reemplazar handleChange por manejarCambioFormulario
   const handleChange = manejarCambioFormulario(setFormulario)
 
-  const handleClienteSelect = (clienteSeleccionado) => {
+  const handleClienteSelect = useCallback((clienteSeleccionado) => {
     // Usar la función estándar para autocompletar todos los campos del cliente
     manejarSeleccionClienteObjeto(setFormulario)(clienteSeleccionado)
     
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
     setDocumentoInfo(documentoValidado)
-  }
+  }, [setFormulario])
 
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
   const setDescu1 = useCallback((value) => {
@@ -379,16 +379,11 @@ const PresupuestoForm = ({
     if (!formulario.clienteId && clientesConDefecto.length > 0) {
       const mostrador = clientesConDefecto.find(c => String(c.id) === '1')
       if (mostrador) {
-        setFormulario(prev => ({
-          ...prev,
-          clienteId: mostrador.id,
-          cuit: mostrador.cuit || '',
-          domicilio: mostrador.domicilio || '',
-          plazoId: mostrador.plazoId || mostrador.plazo || '',
-        }))
+        // Igualar flujo a VentaForm: usar el manejador centralizado
+        handleClienteSelect(mostrador)
       }
     }
-  }, [clientesConDefecto, formulario.clienteId, setFormulario])
+  }, [clientesConDefecto, formulario.clienteId, handleClienteSelect])
 
   // ------------------------------------------------------------
   // Garantizar que autoSumarDuplicados tenga un valor por defecto

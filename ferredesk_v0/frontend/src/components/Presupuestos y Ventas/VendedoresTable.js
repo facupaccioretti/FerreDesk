@@ -2,7 +2,8 @@ import React from 'react';
 import Tabla from '../Tabla';
 
 const VendedoresTable = ({ vendedores, onEdit, onDelete, search, setSearch }) => {
-  const filtered = vendedores.filter(
+  const visibles = (vendedores || []).filter((v) => String(v.id) !== '1');
+  const filtered = visibles.filter(
     (v) =>
       v.nombre.toLowerCase().includes(search.toLowerCase()) ||
       (v.dni || '').toLowerCase().includes(search.toLowerCase())

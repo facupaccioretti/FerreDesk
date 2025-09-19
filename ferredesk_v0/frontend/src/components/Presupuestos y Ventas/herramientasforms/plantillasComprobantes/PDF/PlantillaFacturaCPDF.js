@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 1, // Reducido de 2 a 1
     fontSize: 8, // Aumentado 35% de 6 a 8
-    textAlign: "left",
+    textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
@@ -698,20 +698,16 @@ const configFacturaC = {
     return (
       <View style={styles.pieFiscal}>
         <View style={styles.pieFilaHorizontal}>
-          {qrBase64 ? (
+          {qrBase64 && (
             <Image 
               src={`data:image/png;base64,${qrBase64}`}
               style={styles.qrPlaceholder}
             />
-          ) : (
-            <View style={styles.qrPlaceholder}>
-              <Text style={styles.qrTexto}>[QR CODE]</Text>
-            </View>
           )}
           {/* Logo ARCA */}
           <View style={styles.arcaPlaceholder}>
             <Image 
-              src="/api/productos/servir-logo-arca/"
+              src={`/api/productos/servir-logo-arca/?v=${Date.now()}`}
               style={{ width: 60, height: 50, objectFit: "contain", resizeMode: "contain" }}
             />
           </View>

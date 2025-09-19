@@ -58,7 +58,7 @@ class Vendedor(models.Model):
     liquivta = models.CharField(max_length=1, db_column='VDO_LIQUIVTA')
     comicob = models.DecimalField(max_digits=4, decimal_places=2, db_column='VDO_COMICOB')
     liquicob = models.CharField(max_length=1, db_column='VDO_LIQUICOB')
-    localidad = models.ForeignKey(Localidad, on_delete=models.PROTECT, db_column='VDO_IDLOC')
+    localidad = models.ForeignKey(Localidad, on_delete=models.PROTECT, db_column='VDO_IDLOC', blank=True, null=True)
     activo = models.CharField(max_length=1, db_column='VDO_ACTI')
 
     class Meta:

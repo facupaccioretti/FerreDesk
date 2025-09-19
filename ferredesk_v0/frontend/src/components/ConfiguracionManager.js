@@ -320,6 +320,39 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
           </div>
         )}
 
+        {/* Logo ARCA */}
+        <div className="flex items-center border-b border-slate-100 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
+            Logo ARCA
+          </label>
+          <div className="w-2/3">
+            {config.logo_arca && (
+              <div className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
+                <img
+                  src={config.logo_arca}
+                  alt="Logo ARCA actual"
+                  className="w-8 h-8 object-contain rounded"
+                />
+                <span className="text-xs text-slate-600">Logo ARCA cargado</span>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files && e.target.files[0]
+                if (file) {
+                  onConfigChange('logo_arca_file', file)
+                  onConfigChange('logo_arca', URL.createObjectURL(file))
+                }
+              }}
+              className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+              disabled={loading}
+            />
+            <p className="mt-1 text-[11px] text-slate-500">Se guardará como media/logos/logo-arca.jpg</p>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
@@ -636,6 +669,22 @@ const ConfiguracionManager = () => {
       const data = await res.json()
       setConfig(data)
       setEsNueva(false)
+      // Subir logo ARCA si fue seleccionado (va por endpoint dedicado)
+      if (config.logo_arca_file) {
+        const fd = new FormData()
+        fd.append('logo_arca', config.logo_arca_file)
+        const r2 = await fetch('/api/productos/subir-logo-arca/', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrftoken },
+          credentials: 'include',
+          body: fd,
+        })
+        if (!r2.ok) {
+          const errText = await r2.text().catch(() => '')
+          throw new Error('Error al subir logo ARCA: ' + errText)
+        }
+      }
+
       setFeedback("Configuración guardada correctamente")
       
       // Limpiar feedback después de 3 segundos

@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     flex: 0.95, // Reducido de 1 a 0.95 (5% menos espaciosa)
     padding: 1, // Reducido de 2 a 1
     fontSize: 6.5, // Aumentado de 6 a 6.5
-    textAlign: "left",
+    textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {
@@ -514,19 +514,15 @@ const generarPieFiscalA = (data, styles, numeroPagina = 1, totalPaginas = 1) => 
   return (
     <View style={styles.pieFiscal}>
       <View style={styles.pieFilaHorizontal}>
-        {qrBase64 ? (
-          <Image 
-            src={`data:image/png;base64,${qrBase64}`}
-            style={styles.qrPlaceholder}
-          />
-        ) : (
-          <View style={styles.qrPlaceholder}>
-            <Text style={styles.qrTexto}>[QR CODE]</Text>
-          </View>
-        )}
+    {qrBase64 && (
+      <Image 
+        src={`data:image/png;base64,${qrBase64}`}
+        style={styles.qrPlaceholder}
+      />
+    )}
         <View style={styles.arcaPlaceholder}>
           <Image 
-            src="/api/productos/servir-logo-arca/"
+            src={`/api/productos/servir-logo-arca/?v=${Date.now()}`}
             style={{ width: 60, height: 50, objectFit: "contain", resizeMode: "contain" }}
           />
         </View>

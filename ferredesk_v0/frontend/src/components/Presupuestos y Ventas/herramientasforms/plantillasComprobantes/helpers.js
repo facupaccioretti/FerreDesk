@@ -408,21 +408,17 @@ export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPagin
   return (
     <View style={styles.pieFiscal}>
       <View style={styles.pieFilaHorizontal}>
-        {/* QR Real o Placeholder */}
-        {qrBase64 ? (
+        {/* QR: mostrar solo si existe, sin placeholder */}
+        {qrBase64 && (
           <Image 
             src={`data:image/png;base64,${qrBase64}`}
             style={styles.qrPlaceholder}
           />
-        ) : (
-          <View style={styles.qrPlaceholder}>
-            <Text style={styles.qrTexto}>[QR CODE]</Text>
-          </View>
         )}
         {/* Logo ARCA */}
         <View style={styles.arcaPlaceholder}>
           <Image 
-            src="/api/productos/servir-logo-arca/"
+            src={`/api/productos/servir-logo-arca/?v=${Date.now()}`}
             style={{
               width: 60,
               height: 50,

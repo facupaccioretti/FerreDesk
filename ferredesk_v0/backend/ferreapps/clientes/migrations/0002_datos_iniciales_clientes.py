@@ -7,6 +7,7 @@ def cargar_datos_iniciales_clientes(apps, schema_editor):
 	TipoIVA = apps.get_model('clientes', 'TipoIVA')
 	Plazo = apps.get_model('clientes', 'Plazo')
 	Cliente = apps.get_model('clientes', 'Cliente')
+	Vendedor = apps.get_model('clientes', 'Vendedor')
 
 	# TIPOSIVA (IDs fijos)
 	TIPOS = [
@@ -56,9 +57,27 @@ def cargar_datos_iniciales_clientes(apps, schema_editor):
 		},
 	)
 
+	# VENDEDORES (Vendedor Mostrador)
+	Vendedor.objects.update_or_create(
+		id=1,
+		defaults={
+			"nombre": "Mostrador",
+			"domicilio": "",
+			"dni": "0",
+			"tel": "",
+			"comivta": Decimal('0.00'),
+			"liquivta": "N",
+			"comicob": Decimal('0.00'),
+			"liquicob": "N",
+			"localidad": None,
+			"activo": "S",
+		},
+	)
+
 	# CLIENTES (Consumidor Final) según doc
 	consumidor_final_tipo = TipoIVA.objects.get(id=5)
 	plazo_contado = Plazo.objects.get(id=1)
+	vendedor_mostrador = Vendedor.objects.get(id=1)
 	Cliente.objects.update_or_create(
 		id=1,
 		defaults={
@@ -87,7 +106,7 @@ def cargar_datos_iniciales_clientes(apps, schema_editor):
 			"provincia": None,
 			"plazo": plazo_contado,
 			"iva": consumidor_final_tipo,
-			"vendedor": None,
+			"vendedor": vendedor_mostrador,
 			"transporte": None,
 			"categoria": None,
 			"activo": "A",
@@ -100,8 +119,10 @@ def revertir_datos_iniciales_clientes(apps, schema_editor):
 	TipoIVA = apps.get_model('clientes', 'TipoIVA')
 	Plazo = apps.get_model('clientes', 'Plazo')
 	Cliente = apps.get_model('clientes', 'Cliente')
+	Vendedor = apps.get_model('clientes', 'Vendedor')
 
 	Cliente.objects.filter(id=1).delete()
+	Vendedor.objects.filter(id=1).delete()
 	Plazo.objects.filter(id=1).delete()
 	TipoIVA.objects.filter(id__in=[1, 4, 5, 6, 13, 16]).delete()
 

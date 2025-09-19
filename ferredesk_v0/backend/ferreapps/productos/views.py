@@ -37,6 +37,7 @@ import mimetypes
 import base64
 import re
 from difflib import SequenceMatcher
+from pathlib import Path
 
 # Create your views here.
 
@@ -862,7 +863,10 @@ def servir_logo_arca(request):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',
-                'Cache-Control': 'public, max-age=31536000'
+                # Desactivar caché para evitar logos viejos en PDFs
+                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         )
         return response
@@ -870,6 +874,36 @@ def servir_logo_arca(request):
         print(f'ERROR: Error al servir logo: {str(e)}')
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
 
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
+def subir_logo_arca(request):
+    """
+    Sube el logo de ARCA a media/logos/logo-arca.jpg (sobrescribe si existe).
+    Requiere usuario autenticado con permisos (staff recomendado a nivel URL/permiso).
+    """
+    try:
+        if not request.user.is_staff:
+            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
+
+        archivo = request.FILES.get('logo_arca')
+        if not archivo:
+            return Response({'detail': 'No se envió archivo logo_arca.'}, status=400)
+
+        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
+        os.makedirs(logos_dir, exist_ok=True)
+        destino_path = os.path.join(logos_dir, 'logo-arca.jpg')
+
+        # Guardar siempre como .jpg (el contenido puede venir en png/webp, pero se guarda como binario tal cual)
+        # Si quisieras convertir a JPG real, habría que usar PIL, pero aquí solo escribimos bytes.
+        with open(destino_path, 'wb') as f:
+            for chunk in archivo.chunks():
+                f.write(chunk)
+
+        return Response({'detail': 'Logo ARCA subido correctamente.', 'path': destino_path}, status=200)
+    except Exception as e:
+        return Response({'detail': f'Error al subir logo ARCA: {str(e)}'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])

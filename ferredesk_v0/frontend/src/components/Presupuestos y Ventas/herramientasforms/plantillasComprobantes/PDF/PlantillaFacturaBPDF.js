@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 1, // Reducido de 2 a 1
     fontSize: 8, // Aumentado 35% de 6 a 8
-    textAlign: "left",
+    textAlign: "center",
     justifyContent: "center", // Centrar verticalmente
   },
   colDescripcion: {

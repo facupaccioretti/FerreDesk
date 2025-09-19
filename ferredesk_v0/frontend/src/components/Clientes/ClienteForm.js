@@ -23,6 +23,9 @@ const LONGITUD_CUIT_COMPLETO = 11
 // Nombre exacto de la condición de IVA para Consumidor Final
 const NOMBRE_CONSUMIDOR_FINAL = "Consumidor Final"
 
+// ID fijo del vendedor por defecto "Mostrador"
+const ID_VENDEDOR_MOSTRADOR = 1
+
 
 // Chip de estado (memoizado)
 const ChipEstado = memo(({ activo }) => (
@@ -153,7 +156,8 @@ const ClienteForm = ({
       provincia: initialData?.provincia || "",
       iva: initialData?.iva || "",
       transporte: initialData?.transporte || "",
-      vendedor: initialData?.vendedor || "",
+      // Vendedor por defecto: Mostrador (ID 1) en alta de cliente
+      vendedor: initialData?.vendedor ?? ID_VENDEDOR_MOSTRADOR,
       plazo: initialData?.plazo || "",
       categoria: initialData?.categoria || "",
       activo: initialData?.activo || "A",
@@ -163,6 +167,16 @@ const ClienteForm = ({
       descu3: initialData?.descu3 || "",
     }
   })
+
+  // Si es nuevo cliente y aún no hay vendedor seleccionado, setear Mostrador cuando lleguen los datos
+  useEffect(() => {
+    if (!initialData && (!form.vendedor || String(form.vendedor).trim() === "")) {
+      const existeMostrador = Array.isArray(vendedores) && vendedores.some(v => String(v.id) === String(ID_VENDEDOR_MOSTRADOR))
+      if (existeMostrador) {
+        setForm((prev) => ({ ...prev, vendedor: ID_VENDEDOR_MOSTRADOR }))
+      }
+    }
+  }, [initialData, vendedores])
 
   useEffect(() => {
     try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) {}
