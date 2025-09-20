@@ -176,8 +176,14 @@ if exist "ferredesk_v0" (
     REM Descargar desde GitHub
     git clone https://github.com/facupaccioretti/FerreDesk.git ferredesk_temp
     
-    REM Mover solo el contenido de ferredesk_v0 al directorio correcto
-    move ferredesk_temp\ferredesk_v0 ferredesk_v0
+    REM Crear directorio ferredesk_v0 si no existe
+    if not exist "ferredesk_v0" mkdir ferredesk_v0
+    
+    REM Copiar todo el contenido manteniendo el .git
+    xcopy ferredesk_temp\ferredesk_v0\* ferredesk_v0\ /E /H /Y /Q
+    if exist "ferredesk_temp\ferredesk_v0\.git" (
+        xcopy ferredesk_temp\ferredesk_v0\.git ferredesk_v0\.git\ /E /H /Y /Q
+    )
     rmdir /s /q ferredesk_temp
     
     if %errorlevel% neq 0 (
@@ -290,6 +296,7 @@ echo    • Iniciar: start.bat o docker-compose up -d
 echo    • Detener: docker-compose down
 echo    • Ver logs: docker-compose logs -f
 echo    • Reiniciar: docker-compose restart
+echo    • Actualizar codigo: update.bat
 echo    • Limpiar todo: clean.bat
 echo.
 echo [INFO] Si tienes problemas:

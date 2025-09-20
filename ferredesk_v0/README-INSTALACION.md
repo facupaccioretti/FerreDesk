@@ -1,5 +1,4 @@
-# 🚀 GUÍA DE INSTALACIÓN FERREDESK
-
+# GUIAAAA
 ## 📋 Opciones de Instalación
 
 FerreDesk ofrece múltiples opciones de instalación según tus necesidades:
