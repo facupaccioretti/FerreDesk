@@ -1,4 +1,4 @@
-# pipipipipi
+# Joder macho
 ## 📋 Opciones de Instalación
 
 FerreDesk ofrece múltiples opciones de instalación según tus necesidades:
