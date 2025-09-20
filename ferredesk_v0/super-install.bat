@@ -181,8 +181,8 @@ if exist "ferredesk_v0" (
     
     REM Copiar todo el contenido manteniendo el .git
     xcopy ferredesk_temp\ferredesk_v0\* ferredesk_v0\ /E /H /Y /Q
-    if exist "ferredesk_temp\ferredesk_v0\.git" (
-        xcopy ferredesk_temp\ferredesk_v0\.git ferredesk_v0\.git\ /E /H /Y /Q
+    if exist "ferredesk_temp\.git" (
+        xcopy ferredesk_temp\.git ferredesk_v0\.git\ /E /H /Y /Q
     )
     rmdir /s /q ferredesk_temp
     
