@@ -1,4 +1,4 @@
-# 🚀 FerreDesk - Instalador Docker
+# 🚀 FerreDesk - Instalador con Docker
 
 ## 📋 Descripción
 FerreDesk es un sistema de gestión integral para ferreterías que incluye:
