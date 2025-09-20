@@ -26,23 +26,29 @@ if not exist "docker-compose.yml" (
     exit /b 1
 )
 
-REM Verificar si es un repositorio git
+REM Detectar ubicacion de .git (local o en carpeta padre)
+set "GIT_ROOT=."
 if not exist ".git" (
-    echo ❌ Error: Este directorio no es un repositorio git
-    echo.
-    echo 💡 Esto significa que fue instalado con una versión anterior del instalador
-    echo 🔄 Para habilitar actualizaciones automáticas:
-    echo    1. Haz backup de tus datos importantes
-    echo    2. Ejecuta clean.bat
-    echo    3. Ejecuta super-install.bat (versión actualizada)
-    echo.
-    pause
-    exit /b 1
+    if exist "..\.git" (
+        set "GIT_ROOT=.."
+        echo ℹ️  Repositorio git detectado en carpeta padre
+    ) else (
+        echo ❌ Error: No se encontro repositorio git ni en este directorio ni en el padre
+        echo.
+        echo 💡 Ejecuta este script dentro de ferredesk_v0 o desde la carpeta padre FerreDesk
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 echo ✅ Docker está ejecutándose
-echo ✅ Directorio git detectado
+echo ✅ Directorio git: %GIT_ROOT%
 echo.
+
+REM Resolver ruta absoluta del repo y marcarlo como seguro para este usuario
+for %%I in ("%GIT_ROOT%") do set "GIT_ROOT_ABS=%%~fI"
+git config --global --add safe.directory "%GIT_ROOT_ABS%" >nul 2>&1
 
 REM Hacer backup del archivo .env
 if exist ".env" (
@@ -54,13 +60,13 @@ if exist ".env" (
 REM Mostrar estado actual
 echo.
 echo 📊 Estado actual:
-git log --oneline -1
+git -C "%GIT_ROOT_ABS%" log --oneline -1
 echo.
 
 REM Actualizar código desde GitHub
 echo.
 echo 🔄 Actualizando código desde GitHub...
-git fetch origin
+git -C "%GIT_ROOT_ABS%" fetch origin
 if %errorlevel% neq 0 (
     echo ❌ Error al conectar con GitHub
     echo.
@@ -70,18 +76,18 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM Verificar si hay actualizaciones disponibles
-git status -uno | findstr "Your branch is up to date" >nul
-if %errorlevel% equ 0 (
+REM Verificar si hay actualizaciones disponibles (agnóstico de idioma)
+for /f %%c in ('git -C "%GIT_ROOT_ABS%" rev-list --count HEAD..origin/main') do set COMMITS_PENDIENTES=%%c
+if "%COMMITS_PENDIENTES%"=="0" (
     echo ✅ Ya tienes la versión más reciente
     echo.
     pause
     exit /b 0
 )
 
-echo ⚠️  Actualizaciones disponibles
+echo ⚠️  Actualizaciones disponibles: %COMMITS_PENDIENTES% commit(s)
 echo.
-git log --oneline HEAD..origin/main
+git -C "%GIT_ROOT_ABS%" log --oneline HEAD..origin/main
 echo.
 
 set /p confirm="¿Quieres actualizar ahora? (S/N): "
@@ -104,7 +110,7 @@ if %errorlevel% neq 0 (
 REM Aplicar actualizaciones
 echo.
 echo 📥 Aplicando actualizaciones...
-git reset --hard origin/main
+git -C "%GIT_ROOT_ABS%" reset --hard origin/main
 if %errorlevel% neq 0 (
     echo ❌ Error al aplicar actualizaciones
     echo.
@@ -169,7 +175,7 @@ echo.
 echo ✅ FerreDesk se ha actualizado exitosamente
 echo.
 echo 📊 Nueva versión:
-git log --oneline -1
+git -C "%GIT_ROOT_ABS%" log --oneline -1
 echo.
 echo 🌐 Accede a FerreDesk en: http://localhost:8000
 echo.

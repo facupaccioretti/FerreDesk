@@ -151,43 +151,30 @@ if not exist "FerreDesk" (
 
 cd FerreDesk
 
-REM Verificar si ya existe el proyecto
-if exist "ferredesk_v0" (
-    echo [WARNING]  El directorio ferredesk_v0 ya existe.
-    set /p update="¿Quieres actualizar el codigo existente? (S/N): "
-    if /i "!update!"=="S" (
-        echo [INFO] Actualizando codigo existente...
-        cd ferredesk_v0
-        git pull origin main
-        if %errorlevel% neq 0 (
-            echo [ERROR] Error al actualizar. Intentando resetear...
-            git reset --hard origin/main
-        )
-        cd ..
-    ) else (
-        echo [INFO]  Usando codigo existente
+REM Clonar o actualizar TODO el repositorio en esta carpeta
+if exist ".git" (
+    echo [INFO] Repositorio detectado. Actualizando desde origin/main...
+    git fetch origin
+    if %errorlevel% neq 0 (
+        echo [ERROR] Error al conectar con GitHub
+        echo.
+        pause
+        exit /b 1
+    )
+    git reset --hard origin/main
+    if %errorlevel% neq 0 (
+        echo [ERROR] Error al actualizar a origin/main
+        echo.
+        pause
+        exit /b 1
     )
 ) else (
-    REM Descargar código desde GitHub
     echo.
-    echo [INFO] Descargando FerreDesk desde GitHub...
+    echo [INFO] Descargando FerreDesk completo desde GitHub...
     echo    Esto puede tomar unos minutos...
-    
-    REM Descargar desde GitHub
-    git clone https://github.com/facupaccioretti/FerreDesk.git ferredesk_temp
-    
-    REM Crear directorio ferredesk_v0 si no existe
-    if not exist "ferredesk_v0" mkdir ferredesk_v0
-    
-    REM Copiar todo el contenido manteniendo el .git
-    xcopy ferredesk_temp\ferredesk_v0\* ferredesk_v0\ /E /H /Y /Q
-    if exist "ferredesk_temp\.git" (
-        xcopy ferredesk_temp\.git ferredesk_v0\.git\ /E /H /Y /Q
-    )
-    rmdir /s /q ferredesk_temp
-    
+    git clone https://github.com/facupaccioretti/FerreDesk.git .
     if %errorlevel% neq 0 (
-        echo [ERROR] Error al descargar el codigo desde GitHub
+        echo [ERROR] Error al clonar el repositorio
         echo.
         echo [INFO] Posibles soluciones:
         echo    • Verifica tu conexion a internet
@@ -197,9 +184,15 @@ if exist "ferredesk_v0" (
         pause
         exit /b 1
     )
-    
-    echo [OK] Codigo descargado exitosamente
 )
+
+if not exist "ferredesk_v0" (
+    echo [ERROR] No se encontro la carpeta 'ferredesk_v0' dentro del repositorio
+    echo.
+    pause
+    exit /b 1
+)
+echo [OK] Codigo listo
 
 REM Navegar al directorio del proyecto
 cd ferredesk_v0
