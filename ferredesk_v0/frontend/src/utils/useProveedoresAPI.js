@@ -8,10 +8,22 @@ export function useProveedoresAPI() {
   const [total, setTotal] = useState(0);
   const csrftoken = getCookie('csrftoken');
   const lastQueryKeyRef = useRef('');
+  
+  // Almacenar parámetros actuales para refrescar con los mismos filtros
+  const [parametrosActuales, setParametrosActuales] = useState({
+    page: 1,
+    limit: 10,
+    filtros: {},
+    orden: 'id',
+    direccion: 'desc'
+  });
 
-  const fetchProveedores = useCallback(async (page = 1, limit = 10, filtros = {}, orden = 'id', direccion = 'desc') => {
+  const fetchProveedores = useCallback(async (page = 1, limit = 10, filtros = {}, orden = 'id', direccion = 'desc', forzar = false) => {
     setError(null);
     try {
+      // Actualizar parámetros actuales para futuras operaciones CRUD
+      setParametrosActuales({ page, limit, filtros, orden, direccion });
+      
       const params = new URLSearchParams();
       Object.entries(filtros || {}).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') params.append(k, v);
@@ -23,7 +35,7 @@ export function useProveedoresAPI() {
       const query = params.toString();
       const url = query ? `/api/productos/proveedores/?${query}` : '/api/productos/proveedores/';
       const key = `GET ${url}`;
-      if (lastQueryKeyRef.current === key) {
+      if (!forzar && lastQueryKeyRef.current === key) {
         return; // Evitar fetch redundante idéntico
       }
       lastQueryKeyRef.current = key;
@@ -60,7 +72,15 @@ export function useProveedoresAPI() {
         } catch {}
         throw new Error(msg);
       }
-      await fetchProveedores();
+      // Refrescar con los parámetros actuales para mantener filtros y paginación
+      await fetchProveedores(
+        parametrosActuales.page, 
+        parametrosActuales.limit, 
+        parametrosActuales.filtros, 
+        parametrosActuales.orden, 
+        parametrosActuales.direccion,
+        true
+      );
     } catch (err) {
       setError(err.message);
       throw err;
@@ -86,7 +106,15 @@ export function useProveedoresAPI() {
         } catch {}
         throw new Error(msg);
       }
-      await fetchProveedores();
+      // Refrescar con los parámetros actuales para mantener filtros y paginación
+      await fetchProveedores(
+        parametrosActuales.page, 
+        parametrosActuales.limit, 
+        parametrosActuales.filtros, 
+        parametrosActuales.orden, 
+        parametrosActuales.direccion,
+        true
+      );
     } catch (err) {
       setError(err.message);
       throw err;
@@ -114,7 +142,15 @@ export function useProveedoresAPI() {
         } catch (e) {}
         throw new Error(errorMsg);
       }
-      await fetchProveedores();
+      // Refrescar con los parámetros actuales para mantener filtros y paginación
+      await fetchProveedores(
+        parametrosActuales.page, 
+        parametrosActuales.limit, 
+        parametrosActuales.filtros, 
+        parametrosActuales.orden, 
+        parametrosActuales.direccion,
+        true
+      );
     } catch (err) {
       setError(err.message);
       throw err;

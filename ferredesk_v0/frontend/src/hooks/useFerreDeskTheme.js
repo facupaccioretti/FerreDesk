@@ -6,6 +6,7 @@ export const useFerreDeskTheme = () => {
     // Colores principales
     primario: "from-slate-800 to-slate-700",
     secundario: "ring-orange-500/20",
+    azulSecundario: "text-blue-400",
     
     // Iconos
     iconoNaranja: "text-orange-600",
@@ -27,6 +28,7 @@ export const useFerreDeskTheme = () => {
     // Botones
     botonPrimario: "bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-lg px-4 py-2 transition-all duration-300 shadow-lg hover:shadow-xl text-sm font-semibold",
     botonSecundario: "bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg px-4 py-2 transition-all duration-300",
+    botonManager: "bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white rounded-lg px-4 py-2 transition-all duration-300 shadow-lg hover:shadow-xl text-sm font-semibold",
     
     // Tabs
     tabActiva: "bg-gradient-to-r from-orange-600 to-orange-700 border border-b-0 border-orange-600 font-semibold text-white shadow-sm",
