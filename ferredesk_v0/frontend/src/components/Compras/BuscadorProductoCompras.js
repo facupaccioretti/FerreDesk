@@ -5,6 +5,37 @@ import { useState, useEffect, useCallback } from "react"
 const UMBRAL_BUSQUEDA = 2 // Mínimo de caracteres para iniciar la búsqueda
 const DEBOUNCE_DELAY = 300 // Tiempo de espera en ms después de teclear
 
+// Función para búsqueda por comodines en productos
+const filtrarProductosConComodines = (productos, terminoBusqueda) => {
+  if (!terminoBusqueda || !terminoBusqueda.trim()) {
+    return productos
+  }
+
+  // Dividir el término en palabras individuales
+  const palabras = terminoBusqueda.toLowerCase().trim().split(/\s+/)
+  
+  if (palabras.length === 0) {
+    return productos
+  }
+
+  // Si solo hay una palabra, usar búsqueda tradicional para mantener compatibilidad
+  if (palabras.length === 1) {
+    const lower = palabras[0]
+    return productos.filter(
+      p =>
+        (p.codvta || '').toLowerCase().includes(lower) ||
+        (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
+        (p.codigo_proveedor || '').toLowerCase().includes(lower)
+    )
+  }
+
+  // Búsqueda por comodines: TODAS las palabras deben estar presentes
+  return productos.filter(p => {
+    const textoCompleto = `${p.codvta || ''} ${p.deno || p.nombre || ''} ${p.codigo_proveedor || ''}`.toLowerCase()
+    return palabras.every(palabra => textoCompleto.includes(palabra))
+  })
+}
+
 function BuscadorProductoCompras({ 
   selectedProveedor, 
   onSelect, 
@@ -68,13 +99,7 @@ function BuscadorProductoCompras({
     try {
       if (modoOrdenCompra) {
         // En modo orden de compra, filtrar localmente los productos ya cargados
-        const lower = termino.toLowerCase()
-        const sugs = productosProveedor.filter(
-          p =>
-            (p.codvta || '').toLowerCase().includes(lower) ||
-            (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
-            (p.codigo_proveedor || '').toLowerCase().includes(lower)
-        )
+        const sugs = filtrarProductosConComodines(productosProveedor, termino)
         setSugerencias(sugs)
       } else {
         // Modo normal: búsqueda por API
@@ -90,14 +115,7 @@ function BuscadorProductoCompras({
         if (!response.ok) throw new Error('Error en la búsqueda')
         
         const productos = await response.json()
-        const lower = termino.toLowerCase()
-        
-        const sugs = productos.filter(
-          p =>
-            (p.codvta || '').toLowerCase().includes(lower) ||
-            (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
-            (p.codigo_proveedor || '').toLowerCase().includes(lower)
-        )
+        const sugs = filtrarProductosConComodines(productos, termino)
         
         setSugerencias(sugs)
       }

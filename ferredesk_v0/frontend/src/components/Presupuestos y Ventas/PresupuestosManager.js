@@ -838,7 +838,10 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
             setModalFacturasNCAbierto(false)
             // Abrir pestaña con formulario de Nota de Crédito
             const newKey = `nota-credito-${Date.now()}`
-            const label = `Nueva N. Crédito`
+            // Determinar si todas las facturas seleccionadas son internas (letra I o tipo factura_interna)
+            const todasInternas = Array.isArray(facturas) && facturas.length > 0 && facturas.every(f => (f.comprobante?.tipo === 'factura_interna') || (f.comprobante?.letra === 'I'))
+            const numeroEtiqueta = facturas?.[0]?.numero_formateado || ''
+            const label = todasInternas ? `Modif. Contenido - ${numeroEtiqueta}` : `Nueva N. Crédito - ${numeroEtiqueta}`
             const data = {
                   cliente: clienteParaNC,
                   facturas: facturas,

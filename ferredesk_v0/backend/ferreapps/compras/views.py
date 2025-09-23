@@ -356,6 +356,11 @@ def productos_por_proveedor(request, proveedor_id):
                 stock__codvta__iexact=codigo_venta_limpio
             )
         
+        # NUEVA FUNCIONALIDAD: Búsqueda por comodines en productos por proveedor
+        termino_busqueda = request.query_params.get('search', None)
+        if termino_busqueda:
+            stock_prove_list = _busqueda_por_comodines_proveedor(stock_prove_list, termino_busqueda)
+        
         # Ordenar por denominación del stock
         stock_prove_list = stock_prove_list.order_by('stock__deno')
         
@@ -441,6 +446,33 @@ def alicuotas_iva(request):
             {'detail': 'Error interno del servidor'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+def _busqueda_por_comodines_proveedor(stock_prove_queryset, termino_busqueda):
+    """
+    Implementa búsqueda por comodines para productos por proveedor.
+    Ejemplo: 'marti madera' encuentra 'Martillo Gigante De Madera'
+    """
+    from django.db.models import Q
+    
+    # Dividir el término en palabras individuales
+    palabras = [palabra.strip() for palabra in termino_busqueda.split() if palabra.strip()]
+    
+    if not palabras:
+        return stock_prove_queryset
+    
+    # Crear query que requiere que TODAS las palabras estén presentes
+    query = Q()
+    for palabra in palabras:
+        # Cada palabra debe estar en código de venta, denominación O código de proveedor
+        palabra_query = (
+            Q(stock__codvta__icontains=palabra) | 
+            Q(stock__deno__icontains=palabra) |
+            Q(codigo_producto_proveedor__icontains=palabra)
+        )
+        query &= palabra_query
+    
+    return stock_prove_queryset.filter(query).distinct()
 
 
 # ============================================================================
