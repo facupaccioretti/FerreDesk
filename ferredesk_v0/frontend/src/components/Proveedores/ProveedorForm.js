@@ -1,9 +1,10 @@
 "use client"
 
-import React, { useState, useEffect, memo, useRef, useCallback } from "react";
+import React, { useState, useEffect, memo, useRef, useCallback, useMemo } from "react";
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
 import useNavegacionForm from "../../hooks/useNavegacionForm";
 import CUITValidacionTooltip from "../Clientes/CUITValidacionTooltip";
+import useValidacionCUITProveedores from "../../utils/useValidacionCUITProveedores";
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
 
@@ -64,12 +65,35 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   // Hook para navegación entre campos con Enter
   const { getFormProps } = useNavegacionForm();
 
-  // Estados de validación local de CUIT (sin padrón)
-  const [resultadoCUIT, setResultadoCUIT] = useState(null); // { es_valido: boolean, mensaje_error?: string }
-  const [errorCUIT, setErrorCUIT] = useState(null);
-  const [mostrarTooltipCUIT, setMostrarTooltipCUIT] = useState(false);
+  // Hook para validación de CUIT con padrón ARCA
+  const { 
+    resultado, 
+    isLoading: isLoadingCUIT, 
+    error: errorCUIT, 
+    mostrarTooltip, 
+    handleCUITBlur, 
+    limpiarResultado, 
+    toggleTooltip,
+    // Estados y funciones de ARCA
+    datosARCA,
+    errorARCA,
+    limpiarEstadosARCA
+  } = useValidacionCUITProveedores()
+
+  // Estado para trackear campos autocompletados por ARCA
+  const [camposAutocompletados, setCamposAutocompletados] = useState({
+    razon: false,
+    fantasia: false,
+    domicilio: false,
+    cpostal: false,
+    localidad: false
+  })
 
   const LONGITUD_CUIT_COMPLETO = 11;
+
+  // Ref para conocer el CUIT actual dentro de efectos sin agregar dependencias
+  const cuitActualRef = useRef(form.cuit)
+  useEffect(() => { cuitActualRef.current = form.cuit }, [form.cuit])
 
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
@@ -80,71 +104,105 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
 
   const limpiarSoloNumeros = useCallback((valor) => String(valor || '').replace(/\D/g, ''), []);
 
-  const calcularDigitoVerificadorCUIT = useCallback((cuitNumerico) => {
-    // Requiere 11 dígitos
-    if (!/^\d{11}$/.test(cuitNumerico)) {
-      return { es_valido: false, mensaje_error: "El CUIT debe tener exactamente 11 dígitos." };
-    }
-    const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-    const digitos = cuitNumerico.split('').map(d => parseInt(d, 10));
-    const verificadorInformado = digitos[10];
-    let suma = 0;
-    for (let i = 0; i < 10; i += 1) {
-      suma += digitos[i] * pesos[i];
-    }
-    const resto = suma % 11;
-    let verificadorCalculado = 11 - resto;
-    if (verificadorCalculado === 11) verificadorCalculado = 0;
-    if (verificadorCalculado === 10) verificadorCalculado = 9;
+  // Función para autocompletar campos con datos de ARCA
+  const autocompletarCampos = useCallback((datos) => {
+    if (!datos) return
+    
+    setForm(prev => {
+      const nuevosDatos = { ...prev }
+      const nuevosCamposAutocompletados = { ...camposAutocompletados }
+      
+      // Campos de texto simple (autocompletado directo - SIEMPRE sobreescribir)
+      if (datos.razon) {
+        nuevosDatos.razon = datos.razon
+        nuevosCamposAutocompletados.razon = true
+      }
+      if (datos.fantasia) {
+        nuevosDatos.fantasia = datos.fantasia
+        nuevosCamposAutocompletados.fantasia = true
+      }
+      if (datos.domicilio) {
+        nuevosDatos.domicilio = datos.domicilio
+        nuevosCamposAutocompletados.domicilio = true
+      }
+      if (datos.cpostal) {
+        nuevosDatos.cpostal = datos.cpostal
+        nuevosCamposAutocompletados.cpostal = true
+      }
+      if (datos.localidad) {
+        nuevosDatos.localidad = datos.localidad
+        nuevosCamposAutocompletados.localidad = true
+      }
+      
+      // Actualizar el estado de campos autocompletados
+      setCamposAutocompletados(nuevosCamposAutocompletados)
+      
+      return nuevosDatos
+    })
+  }, [camposAutocompletados, setForm, setCamposAutocompletados])
 
-    if (verificadorCalculado !== verificadorInformado) {
-      return { es_valido: false, mensaje_error: "El dígito verificador del CUIT no coincide." };
-    }
-    return { es_valido: true };
-  }, []);
+  // Mantener una referencia estable a la función de autocompletado para evitar dependencias en efectos
+  const autocompletarCamposRef = useRef(autocompletarCampos)
+  useEffect(() => { autocompletarCamposRef.current = autocompletarCampos }, [autocompletarCampos])
 
-  const validarCUITLocal = useCallback((valor) => {
-    const cuitLimpio = limpiarSoloNumeros(valor);
-    if (!cuitLimpio) {
-      setResultadoCUIT(null);
-      setErrorCUIT(null);
-      return;
+  // Efecto para autocompletar cuando llegan datos de ARCA
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (datosARCA && !errorARCA) {
+      const lenCuit = String(cuitActualRef.current || '').length
+      if (lenCuit !== LONGITUD_CUIT_COMPLETO) {
+        return
+      }
+      autocompletarCamposRef.current(datosARCA)
+      
+      // Limpiar el mensaje de éxito después de 3 segundos
+      const timer = setTimeout(() => {
+        limpiarEstadosARCA()
+      }, 3000)
+      
+      return () => clearTimeout(timer)
     }
-    const res = calcularDigitoVerificadorCUIT(cuitLimpio);
-    setResultadoCUIT(res);
-    setErrorCUIT(res.es_valido ? null : (res.mensaje_error || "CUIT inválido"));
-    if (cuitInputRef.current) {
-      try {
-        cuitInputRef.current.setCustomValidity(res.es_valido ? "" : (res.mensaje_error || "CUIT inválido"));
-      } catch (_) {}
-    }
-  }, [calcularDigitoVerificadorCUIT, limpiarSoloNumeros]);
-
-  const handleCUITBlur = useCallback((valor) => {
-    validarCUITLocal(valor);
-  }, [validarCUITLocal]);
-
-  const handleCUITKeyDown = useCallback((e) => {
-    if (e.key === 'Enter') {
-      validarCUITLocal(e.target.value);
-    }
-  }, [validarCUITLocal]);
-
-  const toggleTooltipCUIT = useCallback(() => {
-    setMostrarTooltipCUIT(prev => !prev);
-  }, []);
+  }, [datosARCA, errorARCA, limpiarEstadosARCA])
 
   const handleChange = e => {
     const { name, value } = e.target;
     if (name === 'cuit') {
       // Solo números y hasta 11 dígitos
       const soloNumeros = limpiarSoloNumeros(value).slice(0, LONGITUD_CUIT_COMPLETO);
-      setForm({ ...form, cuit: soloNumeros });
-      // Al cambiar, limpiar validación previa hasta blur/enter
-      setResultadoCUIT(null);
-      setErrorCUIT(null);
+      
+      // Si el CUIT tenía longitud completa y el usuario modifica/borra un dígito,
+      // limpiar Razón Social, Fantasía y Domicilio SIEMPRE (hayan sido autocompletados o no).
+      setForm(prev => {
+        const cuitPrevio = prev.cuit || ""
+        const teniaCuitCompleto = cuitPrevio.length === LONGITUD_CUIT_COMPLETO
+        const seModificoElCuit = soloNumeros !== cuitPrevio
+        const nuevoEstado = { ...prev, cuit: soloNumeros }
+        if (teniaCuitCompleto && seModificoElCuit) {
+          nuevoEstado.razon = ""
+          nuevoEstado.fantasia = ""
+          nuevoEstado.domicilio = ""
+          nuevoEstado.cpostal = ""
+          nuevoEstado.localidad = ""
+        }
+        return nuevoEstado
+      })
+      
+      // Reiniciar flags de autocompletado tras el cambio de CUIT
+      setCamposAutocompletados({
+        razon: false,
+        fantasia: false,
+        domicilio: false,
+        cpostal: false,
+        localidad: false
+      })
+      
+      // Limpiar estados/datos de ARCA para que no vuelvan a autocompletar inmediatamente
+      limpiarEstadosARCA()
+      // Limpiar resultado de validación del CUIT para evitar usar un estado viejo
+      limpiarResultado()
+      // Quitar mensaje nativo si lo había
       if (cuitInputRef.current) {
-        try { cuitInputRef.current.setCustomValidity(""); } catch (_) {}
+        try { cuitInputRef.current.setCustomValidity("") } catch (_) {}
       }
       return;
     }
@@ -171,16 +229,18 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
       }
       return;
     }
-    const resCUIT = calcularDigitoVerificadorCUIT(cuitLimpio);
-    if (!resCUIT.es_valido) {
-      setError(resCUIT.mensaje_error || "El CUIT ingresado es inválido.");
+    
+    // Si ingresaron 11 dígitos de CUIT y el verificador es inválido, no permitir guardar
+    const cuitTieneOnce = String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO
+    if (cuitTieneOnce && resultado && resultado.es_valido === false) {
+      // Mostrar mensaje nativo en el input de CUIT
       if (cuitInputRef.current) {
-        try { cuitInputRef.current.setCustomValidity(resCUIT.mensaje_error || "El CUIT ingresado es inválido."); cuitInputRef.current.reportValidity(); } catch (_) {}
+        try {
+          cuitInputRef.current.setCustomValidity("El CUIT ingresado es inválido.")
+          cuitInputRef.current.reportValidity()
+        } catch (_) {}
       }
-      setResultadoCUIT(resCUIT);
-      setErrorCUIT(resCUIT.mensaje_error || "CUIT inválido");
-      setMostrarTooltipCUIT(true);
-      return;
+      return
     }
     setError("");
     setSaving(true);
@@ -244,9 +304,68 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 titulo="Información Básica"
                 icono={<svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>}
               >
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-slate-700">CUIT</span>
+                  </div>
+                  <div className="min-w-[180px] text-right">
+                    <div className="relative h-[34px]">
+                      <input
+                        name="cuit"
+                        value={form.cuit}
+                        onChange={handleChange}
+                        onBlur={(e) => { if (!initialData) { handleCUITBlur(e.target.value) } }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !initialData) { handleCUITBlur(e.target.value) } }}
+                        maxLength={LONGITUD_CUIT_COMPLETO}
+                        className={`${getInputClasses(theme)} h-full pr-8 text-right`}
+                        ref={cuitInputRef}
+                        disabled={!!initialData}
+                        required
+                      />
+                      <div className="absolute top-0 right-2 h-full flex items-center">
+                        {((resultado && !isLoadingCUIT && !errorCUIT) || (errorARCA && errorARCA.trim() !== '')) ? (
+                          <button
+                            type="button"
+                            onClick={toggleTooltip}
+                            className={`transition-colors ${((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
+                            title={((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'Error en CUIT/ARCA' : 'CUIT válido'}
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              {((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? (
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              ) : (
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              )}
+                            </svg>
+                          </button>
+                        ) : (<div className="w-4 h-4"></div>)}
+                      </div>
+                      {(resultado || (errorARCA && errorARCA.trim() !== '')) && (
+                        <CUITValidacionTooltip
+                          resultado={resultado}
+                          onIgnorar={limpiarResultado}
+                          isLoading={isLoadingCUIT}
+                          error={errorCUIT}
+                          mostrarTooltip={mostrarTooltip}
+                          onToggle={toggleTooltip}
+                          errorARCA={errorARCA}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
-                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData, title: !!initialData ? 'La Razón Social no es editable' : undefined }} value={form.razon} onChange={handleChange} />
-                <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true }} value={form.fantasia} onChange={handleChange} />
+                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData || camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: !!initialData ? 'La Razón Social no es editable' : (camposAutocompletados.razon ? 'Campo autocompletado por ARCA' : undefined) }} value={form.razon} onChange={handleChange} />
+                <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true, disabled: camposAutocompletados.fantasia || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: camposAutocompletados.fantasia ? 'Campo autocompletado por ARCA' : undefined }} value={form.fantasia} onChange={handleChange} />
+              </SeccionLista>
+
+              {/* Tarjeta Información de Contacto */}
+              <SeccionLista
+                titulo="Información de Contacto y Estado"
+                icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>}
+              >
+                <FilaEditable etiqueta="Domicilio *" inputProps={{ name: "domicilio", required: true, disabled: camposAutocompletados.domicilio || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: camposAutocompletados.domicilio ? 'Campo autocompletado por ARCA' : undefined }} value={form.domicilio} onChange={handleChange} />
+                <FilaEditable etiqueta="Teléfono" inputProps={{ name: "tel1" }} value={form.tel1} onChange={handleChange} />
                 <FilaEditable etiqueta="Estado">
                   <select
                     name="acti"
@@ -258,65 +377,6 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                     <option value="N">Inactivo</option>
                   </select>
                 </FilaEditable>
-              </SeccionLista>
-
-              {/* Tarjeta Información de Contacto */}
-              <SeccionLista
-                titulo="Información de Contacto"
-                icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>}
-              >
-                <FilaEditable etiqueta="Domicilio *" inputProps={{ name: "domicilio", required: true }} value={form.domicilio} onChange={handleChange} />
-                <FilaEditable etiqueta="Teléfono" inputProps={{ name: "tel1" }} value={form.tel1} onChange={handleChange} />
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-slate-700">CUIT</span>
-                  </div>
-                  <div className="min-w-[180px] text-right">
-                    <div className="relative h-[34px]">
-                      <input
-                        name="cuit"
-                        value={form.cuit}
-                        onChange={handleChange}
-                        onBlur={(e) => handleCUITBlur(e.target.value)}
-                        onKeyDown={handleCUITKeyDown}
-                        maxLength={LONGITUD_CUIT_COMPLETO}
-                        className={`${getInputClasses(theme)} h-full pr-8 text-right`}
-                        ref={cuitInputRef}
-                        disabled={!!initialData}
-                        required
-                      />
-                      <div className="absolute top-0 right-2 h-full flex items-center">
-                        {resultadoCUIT && (
-                          <button
-                            type="button"
-                            onClick={toggleTooltipCUIT}
-                            className={`transition-colors ${resultadoCUIT.es_valido ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'}`}
-                            title={resultadoCUIT.es_valido ? 'CUIT válido' : 'CUIT inválido'}
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              {resultadoCUIT.es_valido ? (
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                              ) : (
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                              )}
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                      {resultadoCUIT && (
-                        <CUITValidacionTooltip
-                          resultado={resultadoCUIT}
-                          onIgnorar={() => { setResultadoCUIT(null); setErrorCUIT(null); setMostrarTooltipCUIT(false); }}
-                          isLoading={false}
-                          error={errorCUIT}
-                          mostrarTooltip={mostrarTooltipCUIT}
-                          onToggle={toggleTooltipCUIT}
-                          errorARCA={null}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
               </SeccionLista>
 
               {/* Tarjeta Información Financiera */}

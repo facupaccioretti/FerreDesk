@@ -161,7 +161,9 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
       { 
         componente: BotonNotaCredito, 
         onClick: () => handleNotaCredito(comprobante),
-        titulo: "Crear Nota de Crédito"
+        titulo: comprobante.comprobante?.tipo === 'factura_interna'
+          ? "Crear Modificación de Contenido"
+          : "Crear Nota de Crédito"
       }
     )
 
@@ -344,7 +346,7 @@ const ComprobantesList = ({
                       {tieneNotasCredito && (
                         <ComprobanteAsociadoTooltip
                           documentos={notasCreditoAsociadas}
-                          titulo="Notas de Crédito Asociadas"
+                          titulo="Comprobantes Asociados"
                         />
                       )}
                       {/* Renderizar tooltip si la NC anula facturas */}

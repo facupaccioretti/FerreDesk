@@ -472,7 +472,8 @@ const useComprobantesCRUD = ({
     
     // Crear tab de nota de crédito con datos pre-seleccionados
     const newKey = `nota-credito-${Date.now()}`;
-    const label = `N. Crédito - ${factura.numero_formateado}`;
+    const esInterna = factura.comprobante?.tipo === 'factura_interna' || factura.comprobante?.letra === 'I';
+    const label = esInterna ? `Modif. Contenido - ${factura.numero_formateado}` : `N. Crédito - ${factura.numero_formateado}`;
     const data = {
       cliente: cliente,
       facturas: [factura]

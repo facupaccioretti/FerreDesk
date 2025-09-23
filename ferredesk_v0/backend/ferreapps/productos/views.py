@@ -124,10 +124,16 @@ class StockViewSet(viewsets.ModelViewSet):
             # Búsqueda general por código o denominación (para otros casos)
             termino_busqueda = self.request.query_params.get('search', None)
             if termino_busqueda:
-                queryset = queryset.filter(
-                    Q(codvta__icontains=termino_busqueda) |
-                    Q(deno__icontains=termino_busqueda)
-                ).distinct()
+                # NUEVA FUNCIONALIDAD: Búsqueda por comodines
+                # Si el término contiene espacios, usar búsqueda por comodines
+                if ' ' in termino_busqueda.strip():
+                    queryset = self._busqueda_por_comodines(queryset, termino_busqueda)
+                else:
+                    # Búsqueda tradicional para términos simples
+                    queryset = queryset.filter(
+                        Q(codvta__icontains=termino_busqueda) |
+                        Q(deno__icontains=termino_busqueda)
+                    ).distinct()
 
         # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
         if 'acti' not in self.request.query_params:
@@ -157,6 +163,26 @@ class StockViewSet(viewsets.ModelViewSet):
             queryset = queryset.order_by('-id')
         
         return queryset
+
+    def _busqueda_por_comodines(self, queryset, termino_busqueda):
+        """
+        Implementa búsqueda por comodines usando Django Q Objects.
+        Ejemplo: 'marti madera' encuentra 'Martillo Gigante De Madera'
+        """
+        # Dividir el término en palabras individuales
+        palabras = [palabra.strip() for palabra in termino_busqueda.split() if palabra.strip()]
+        
+        if not palabras:
+            return queryset
+        
+        # Crear query que requiere que TODAS las palabras estén presentes
+        query = Q()
+        for palabra in palabras:
+            # Cada palabra debe estar en código de venta O denominación
+            palabra_query = Q(codvta__icontains=palabra) | Q(deno__icontains=palabra)
+            query &= palabra_query
+        
+        return queryset.filter(query).distinct()
 
     def retrieve(self, request, *args, **kwargs):
         """Detalle optimizado: prefetch de relaciones necesarias para un único producto.
