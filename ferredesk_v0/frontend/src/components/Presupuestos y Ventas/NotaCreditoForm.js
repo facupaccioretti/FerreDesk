@@ -224,6 +224,10 @@ const NotaCreditoForm = ({
     return comprobantes.find(c => c.tipo === tipoNotaCredito && (letraNotaCredito ? c.letra === letraNotaCredito : true));
   }, [comprobantes, tipoNotaCredito, letraNotaCredito]);
   
+  // Determinar textos dinámicos según sea interna o fiscal
+  const esInterna = tipoNotaCredito === 'nota_credito_interna' || letraNotaCredito === 'I' || comprobanteNC?.letra === 'I';
+  const tituloForm = esInterna ? 'Nueva Modificación de Contenido' : 'Nueva Nota de Crédito';
+  const tituloSubmit = esInterna ? 'Crear Modificación de Contenido' : 'Crear Nota de Crédito';
 
   const codigoAfipNC = comprobanteNC?.codigo_afip || '';
   const letraNC = comprobanteNC?.letra || 'X';
@@ -472,7 +476,7 @@ const NotaCreditoForm = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              Nueva Nota de Crédito
+              {tituloForm}
             </h3>
           </div>
 
@@ -555,7 +559,7 @@ const NotaCreditoForm = ({
                       >
                         <option value="">Seleccionar...</option>
                         <option value="nota_credito">Nota de Crédito</option>
-                        <option value="nota_credito_interna">Nota de Crédito</option>
+                        <option value="nota_credito_interna">Modificación de Contenido</option>
                       </select>
                     </div>
 
@@ -574,7 +578,7 @@ const NotaCreditoForm = ({
 
                 {/* Columna 5-6: Facturas Asociadas (ocupa 2 filas) */}
                 <div className="col-span-2 row-span-2">
-                  <label className="block text-[12px] font-semibold text-slate-700 mb-1">Facturas Asociadas</label>
+                  <label className="block text-[12px] font-semibold text-slate-700 mb-1">{esInterna ? 'Cotizaciones asociadas' : 'Facturas Asociadas'}</label>
                   <div className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-32 bg-slate-50 overflow-y-auto">
                     {(formulario.facturasAsociadas || []).map(factura => (
                       <div key={factura.id || factura.ven_id} className="text-xs font-semibold bg-slate-200 rounded px-1 py-0.5 mb-1">
@@ -653,7 +657,7 @@ const NotaCreditoForm = ({
               type="submit"
               className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
-              Crear Nota de Crédito
+              {tituloSubmit}
             </button>
           </div>
         </div>

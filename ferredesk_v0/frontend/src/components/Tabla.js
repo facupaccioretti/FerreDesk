@@ -14,6 +14,34 @@ const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
 // Nota: la variante compacta se calcula dentro del componente para acceder a props
 
 // -----------------------------------------------------------------------------
+// Función para búsqueda por comodines
+// -----------------------------------------------------------------------------
+const filtrarConComodines = (datos, terminoBusqueda) => {
+  if (!terminoBusqueda || !terminoBusqueda.trim()) {
+    return datos
+  }
+
+  // Dividir el término en palabras individuales
+  const palabras = terminoBusqueda.toLowerCase().trim().split(/\s+/)
+  
+  if (palabras.length === 0) {
+    return datos
+  }
+
+  // Si solo hay una palabra, usar búsqueda tradicional para mantener compatibilidad
+  if (palabras.length === 1) {
+    const termino = palabras[0]
+    return datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
+  }
+
+  // Búsqueda por comodines: TODAS las palabras deben estar presentes
+  return datos.filter((fila) => {
+    const textoCompleto = JSON.stringify(fila).toLowerCase()
+    return palabras.every(palabra => textoCompleto.includes(palabra))
+  })
+}
+
+// -----------------------------------------------------------------------------
 // Tabla genérica con estética FerreDesk
 // -----------------------------------------------------------------------------
 const Tabla = ({
@@ -66,8 +94,7 @@ const Tabla = ({
 
     // Si la búsqueda es remota, no filtramos localmente
     if (!busquedaRemota && valorBusqueda) {
-      const termino = valorBusqueda.toLowerCase()
-      datosProcesados = datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
+      datosProcesados = filtrarConComodines(datos, valorBusqueda)
     }
 
     // En modo controlado no ordenamos localmente (lo debe hacer el servidor si aplica)

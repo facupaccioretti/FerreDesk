@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Importar estilos del sistema de diseño FerreDesk
 import './styles/design-tokens.css';
@@ -135,8 +135,8 @@ export default function App() {
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        {/* Ruta catch-all para URLs no encontradas - redirige a la landing */}
-        <Route path="*" element={<Landing />} />
+        {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

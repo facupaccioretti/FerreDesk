@@ -19,8 +19,8 @@ def cargar_comprobantes(apps, schema_editor):
 		{"codigo_afip": "015", "nombre": "Recibo C", "descripcion": "", "letra": "C", "tipo": "recibo", "activo": True},
 		{"codigo_afip": "9996", "nombre": "Orden de Compra", "descripcion": "", "letra": "O", "tipo": "orden_compra", "activo": True},
 		{"codigo_afip": "9997", "nombre": "Presupuesto", "descripcion": "", "letra": "P", "tipo": "presupuesto", "activo": True},
-		{"codigo_afip": "9998", "nombre": "Nota de Credito", "descripcion": "", "letra": "I", "tipo": "nota_credito_interna", "activo": True},
-		{"codigo_afip": "9999", "nombre": "Factura I", "descripcion": "", "letra": "I", "tipo": "factura_interna", "activo": True},
+		{"codigo_afip": "9998", "nombre": "Modificación de Contenido", "descripcion": "", "letra": "I", "tipo": "nota_credito_interna", "activo": True},
+		{"codigo_afip": "9999", "nombre": "Cotización", "descripcion": "", "letra": "I", "tipo": "factura_interna", "activo": True},
 	]
 
 	for c in COMPROBANTES:

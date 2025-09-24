@@ -17,6 +17,13 @@ from decimal import Decimal, ROUND_HALF_UP
 import pyexcel as pe
 import os
 import re
+import logging
+
+# Importar algoritmo de validación de CUIT
+from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
+
+# Logger para el procesamiento de ARCA
+logger = logging.getLogger('ferredesk_arca.procesar_cuit_arca_proveedores')
 
 # Modelos y serializers de productos reutilizados
 from ferreapps.productos.models import Stock, StockProve, ProductoTempID
@@ -536,3 +543,490 @@ class CargaInicialProveedorImportAPIView(APIView):
             },
             'resultados': resultados[:2000],
         }, status=201 if creados > 0 else 200)
+
+
+# ============================================================================
+# ENDPOINTS PARA VALIDACIÓN DE CUIT Y CONSULTA AL PADRÓN ARCA
+# ============================================================================
+
+class ValidarCUITProveedorAPIView(APIView):
+    """
+    API endpoint para validar CUITs usando el algoritmo de dígito verificador.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Valida un CUIT usando el algoritmo de dígito verificador.
+        
+        Parámetros:
+        - cuit: El CUIT a validar
+        
+        Retorna:
+        - es_valido: Boolean indicando si el CUIT es válido
+        - mensaje_error: Mensaje de error si el CUIT es inválido
+        """
+        cuit = request.GET.get('cuit', '').strip()
+        
+        if not cuit:
+            return Response({
+                'es_valido': False,
+                'mensaje_error': 'CUIT no proporcionado'
+            })
+        
+        # Usar el algoritmo de validación
+        resultado = validar_cuit(cuit)
+        
+        return Response(resultado)
+
+
+class ProcesarCuitArcaProveedorAPIView(APIView):
+    """
+    API endpoint para consultar datos de un proveedor en ARCA usando su CUIT.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Consulta datos de un proveedor en ARCA usando su CUIT.
+        
+        Parámetros:
+        - cuit: El CUIT a consultar
+        - mode: Modo de consulta ('status' para validación fiscal liviana, sin modo para autocompletado)
+        
+        Retorna:
+        - datos_procesados: Diccionario con los datos mapeados para el formulario de proveedor
+        - estado_cuit: Para mode=status, información del estado del CUIT
+        - error: Mensaje de error si algo falla
+        """
+        cuit = request.GET.get('cuit', '').strip()
+        mode = request.GET.get('mode', '').strip()
+        
+        # Validación de entrada (no llamar a AFIP si el CUIT no es válido)
+        if not cuit:
+            return Response({
+                'ok': False,
+                'source': 'backend',
+                'type': 'validation',
+                'code': 'CUIT_FALTANTE',
+                'message': 'CUIT no proporcionado',
+                'retryable': False,
+                'data': None,
+            }, status=400)
+        if not cuit.isdigit() or len(cuit) != 11:
+            return Response({
+                'ok': False,
+                'source': 'backend',
+                'type': 'validation',
+                'code': 'CUIT_FORMATO_INVALIDO',
+                'message': 'El formato del CUIT es inválido',
+                'retryable': False,
+                'data': None,
+            }, status=400)
+        
+        try:
+            # Importar las dependencias necesarias
+            from ferreapps.ventas.ARCA import FerreDeskARCA
+            from ferreapps.productos.models import Ferreteria
+            
+            # Obtener la ferretería configurada
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                return Response({
+                    'error': 'No se encontró ferretería configurada'
+                }, status=500)
+            
+            # Crear instancia de FerreDeskARCA y consultar ARCA
+            arca = FerreDeskARCA(ferreteria)
+            datos_arca = arca.consultar_padron(cuit)
+            logger.info("Respuesta ARCA recibida. Iniciando procesamiento de datos para mapeo de proveedor.")
+            
+            # Log de datos ARCA recibidos (para debug del IVA)
+            logger.info("DATOS ARCA RECIBIDOS:")
+            logger.info("-" * 40)
+            logger.info(str(datos_arca))
+
+            # Si ARCA devolvió error de negocio (errorConstancia / sin datos), responder según el modo
+            if self._tiene_error_arca(datos_arca):
+                mensaje_error = self._extraer_mensaje_error_arca(datos_arca, cuit)
+                codigo_error = self._extraer_codigo_error_arca(datos_arca) or 'AFIP_BUSINESS_ERROR'
+                try:
+                    logger.warning("ARCA devolvió error para CUIT %s: %s", cuit, mensaje_error)
+                except Exception:
+                    pass
+                
+                # Si es mode=status, devolver respuesta simplificada con estado observado
+                if mode == 'status':
+                    return Response({
+                        'estado': 'observado',
+                        'mensajes': [mensaje_error]
+                    })
+                
+                # Modo normal: devolver envelope completo
+                return Response({
+                    'ok': False,
+                    'source': 'afip',
+                    'type': 'business',
+                    'code': codigo_error,
+                    'message': mensaje_error,
+                    'retryable': False,
+                    'data': None,
+                })
+            
+            # Si es mode=status, solo devolver estado e información mínima
+            if mode == 'status':
+                estado_contribuyente = ''
+                try:
+                    if hasattr(datos_arca, 'datosGenerales') and datos_arca.datosGenerales:
+                        estado_contribuyente = getattr(datos_arca.datosGenerales, 'estadoClave', '')
+                except Exception:
+                    pass
+                
+                return Response({
+                    'estado': 'ok',
+                    'mensajes': [],
+                    'estado_contribuyente': estado_contribuyente
+                })
+            
+            # Modo normal: procesar los datos de ARCA y mapearlos a campos del proveedor
+            datos_procesados = self._procesar_datos_arca(datos_arca)
+            # Log de salida procesada (enfocado en IVA y básicos)
+            try:
+                logger.info(
+                    "Datos procesados ARCA → proveedor: cuit=%s, razon=%s, provincia=%s, localidad=%s, condicion_iva=%s",
+                    datos_procesados.get('cuit'),
+                    datos_procesados.get('razon'),
+                    datos_procesados.get('provincia'),
+                    datos_procesados.get('localidad'),
+                    datos_procesados.get('condicion_iva'),
+                )
+            except Exception:
+                pass
+            
+            return Response(datos_procesados)
+            
+        except Exception as e:
+            # Mapear Faults SOAP / fallas técnicas según el modo
+            texto_error = str(e) or 'Falla técnica consultando AFIP'
+            # Intentar extraer un código identificable (ORA-xxxxx, ID AT, TIMEOUT, WSAA, etc.)
+            codigo = self._extraer_codigo_fault(texto_error)
+            
+            # Si es mode=status, devolver respuesta simplificada
+            if mode == 'status':
+                return Response({
+                    'estado': 'error',
+                    'mensajes': ['Error interno de AFIP consultando padrón']
+                }, status=503)
+            
+            # Modo normal: devolver envelope completo
+            headers = {'Retry-After': '60'}
+            return Response({
+                'ok': False,
+                'source': 'afip',
+                'type': 'fault',
+                'code': codigo,
+                'message': 'Error interno de AFIP consultando padrón',
+                'retryable': True,
+                'data': None,
+            }, status=503, headers=headers)
+    
+    def _procesar_datos_arca(self, datos_arca):
+        """
+        Procesa los datos recibidos de ARCA y los mapea a los campos del modelo Proveedor.
+        
+        Args:
+            datos_arca: Respuesta del servicio de constancia de inscripción de ARCA
+            
+        Returns:
+            Diccionario con los datos mapeados para el formulario de proveedor
+        """
+        if not datos_arca:
+            return {'error': 'No se encontraron datos en ARCA'}
+
+        # Si ARCA vino con error, salir temprano con el mensaje
+        if self._tiene_error_arca(datos_arca):
+            return {'error': self._extraer_mensaje_error_arca(datos_arca)}
+        
+        # Inicializar diccionario de datos procesados
+        datos_procesados = {
+            'cuit': '',
+            'razon': '',
+            'fantasia': '',
+            'domicilio': '',
+            'cpostal': '',
+            'provincia': '',
+            'localidad': '',
+            'condicion_iva': '',
+            'estado_contribuyente': '',
+            'mensaje': 'Datos obtenidos exitosamente de ARCA'
+        }
+        
+        try:
+            # La respuesta de ARCA es directamente el objeto personaReturn
+            # Según la estructura mostrada, los datos están en datosGenerales
+            if hasattr(datos_arca, 'datosGenerales') and datos_arca.datosGenerales:
+                datos_gen = datos_arca.datosGenerales
+                
+                # CUIT - está en idPersona dentro de datosGenerales
+                cuit = getattr(datos_gen, 'idPersona', '')
+                if cuit:
+                    datos_procesados['cuit'] = str(cuit)
+                
+                # Estado del contribuyente
+                estado = getattr(datos_gen, 'estadoClave', '')
+                datos_procesados['estado_contribuyente'] = estado
+                
+                # Razón social (para empresas)
+                if hasattr(datos_gen, 'razonSocial'):
+                    razon_social = getattr(datos_gen, 'razonSocial', '')
+                    if razon_social and razon_social != 'N/A':
+                        datos_procesados['razon'] = razon_social
+                        datos_procesados['fantasia'] = razon_social
+                
+                # Nombre y apellido (para personas físicas)
+                if hasattr(datos_gen, 'apellido') and hasattr(datos_gen, 'nombre'):
+                    apellido = getattr(datos_gen, 'apellido', '')
+                    nombre = getattr(datos_gen, 'nombre', '')
+                    if apellido or nombre:
+                        nombre_completo = f"{apellido} {nombre}".strip()
+                        if not datos_procesados['razon']:  # Solo si no hay razón social
+                            datos_procesados['razon'] = nombre_completo
+                            datos_procesados['fantasia'] = nombre_completo
+                
+                # Procesar domicilio fiscal - está anidado dentro de datosGenerales
+                if hasattr(datos_gen, 'domicilioFiscal') and datos_gen.domicilioFiscal:
+                    domicilio = datos_gen.domicilioFiscal
+                    
+                    # Dirección
+                    direccion = getattr(domicilio, 'direccion', '')
+                    if direccion and direccion != 'N/A':
+                        datos_procesados['domicilio'] = direccion
+                    
+                    # Código postal
+                    cod_postal = getattr(domicilio, 'codPostal', '')
+                    if cod_postal and cod_postal != 'N/A':
+                        datos_procesados['cpostal'] = str(cod_postal)
+                    
+                    # Provincia
+                    desc_provincia = getattr(domicilio, 'descripcionProvincia', '')
+                    if desc_provincia and desc_provincia != 'N/A':
+                        datos_procesados['provincia'] = desc_provincia
+                    
+                    # Localidad
+                    desc_localidad = getattr(domicilio, 'localidad', '')
+                    if desc_localidad and desc_localidad != 'N/A':
+                        datos_procesados['localidad'] = desc_localidad
+            
+            # Detectar condición de IVA usando helper por período más reciente
+            condicion_iva_detectada, impuesto_origen = self._detectar_condicion_iva_mas_reciente(datos_arca)
+            if condicion_iva_detectada:
+                datos_procesados['condicion_iva'] = condicion_iva_detectada
+                try:
+                    logger.info(
+                        "IVA seleccionado por período: descripcion=%s, id=%s, estado=%s, periodo=%s, origen=%s",
+                        impuesto_origen.get('descripcionImpuesto'),
+                        impuesto_origen.get('idImpuesto'),
+                        impuesto_origen.get('estadoImpuesto'),
+                        impuesto_origen.get('periodo'),
+                        impuesto_origen.get('origen'),
+                    )
+                except Exception:
+                    pass
+            
+            return datos_procesados
+            
+        except Exception as e:
+            logger.error("Error procesando datos de ARCA para proveedor: %s", str(e))
+            return {'error': f'Error procesando datos de ARCA: {str(e)}'}
+    
+    def _tiene_error_arca(self, datos_arca):
+        """
+        Verifica si la respuesta de ARCA contiene un error.
+        """
+        if not datos_arca:
+            return True
+        
+        # Verificar si hay errorConstancia
+        if hasattr(datos_arca, 'errorConstancia') and datos_arca.errorConstancia:
+            return True
+        
+        # Verificar si no hay datosGenerales
+        if not hasattr(datos_arca, 'datosGenerales') or not datos_arca.datosGenerales:
+            return True
+        
+        return False
+    
+    def _extraer_mensaje_error_arca(self, datos_arca, cuit=''):
+        """
+        Extrae el mensaje de error de la respuesta de ARCA.
+        """
+        if not datos_arca:
+            return 'No se encontraron datos en ARCA'
+        
+        # Verificar errorConstancia
+        if hasattr(datos_arca, 'errorConstancia') and datos_arca.errorConstancia:
+            error_constancia = datos_arca.errorConstancia
+            if hasattr(error_constancia, 'mensaje') and error_constancia.mensaje:
+                return error_constancia.mensaje
+            if hasattr(error_constancia, 'codigo') and error_constancia.codigo:
+                return f'Error AFIP {error_constancia.codigo}'
+        
+        # Si no hay datosGenerales
+        if not hasattr(datos_arca, 'datosGenerales') or not datos_arca.datosGenerales:
+            return f'El CUIT {cuit} no se encuentra en el padrón de AFIP'
+        
+        return 'Error desconocido consultando ARCA'
+    
+    def _extraer_codigo_error_arca(self, datos_arca):
+        """
+        Extrae el código de error de la respuesta de ARCA.
+        """
+        if not datos_arca:
+            return None
+        
+        if hasattr(datos_arca, 'errorConstancia') and datos_arca.errorConstancia:
+            error_constancia = datos_arca.errorConstancia
+            if hasattr(error_constancia, 'codigo'):
+                return error_constancia.codigo
+        
+        return None
+    
+    def _extraer_codigo_fault(self, texto_error):
+        """
+        Extrae un código identificable de un fault SOAP.
+        """
+        if not texto_error:
+            return 'UNKNOWN_FAULT'
+        
+        # Buscar patrones comunes
+        import re
+        
+        # ORA-xxxxx (Oracle)
+        ora_match = re.search(r'ORA-(\d+)', texto_error)
+        if ora_match:
+            return f'ORA-{ora_match.group(1)}'
+        
+        # ID AT (AFIP)
+        id_at_match = re.search(r'ID AT (\d+)', texto_error)
+        if id_at_match:
+            return f'ID_AT_{id_at_match.group(1)}'
+        
+        # TIMEOUT
+        if 'timeout' in texto_error.lower():
+            return 'TIMEOUT'
+        
+        # WSAA
+        if 'wsaa' in texto_error.lower():
+            return 'WSAA_ERROR'
+        
+        # SOAP
+        if 'soap' in texto_error.lower():
+            return 'SOAP_FAULT'
+        
+        return 'UNKNOWN_FAULT'
+    
+    def _detectar_condicion_iva_mas_reciente(self, datos_arca):
+        """
+        Detecta la condición de IVA más reciente de los datos de ARCA.
+        """
+        # Constantes para detección de condición de IVA
+        DESCRIPCIONES_IVA_RELEVANTES = {
+            'MONOTRIBUTO',
+            'IVA',
+            'IVA EXENTO',
+            'MONOTRIBUTO SOCIAL',
+            'MONOTRIBUTO TRABAJADOR',
+        }
+        
+        ESTADO_IMPUESTO_ACTIVO = 'AC'
+        
+        if not datos_arca or not hasattr(datos_arca, 'datosGenerales') or not datos_arca.datosGenerales:
+            return None, None
+        
+        datos_gen = datos_arca.datosGenerales
+        
+        # Verificar si hay actividades
+        if not hasattr(datos_gen, 'actividades') or not datos_gen.actividades:
+            return None, None
+        
+        actividades = datos_gen.actividades
+        if not hasattr(actividades, 'actividad') or not actividades.actividad:
+            return None, None
+        
+        # Obtener lista de actividades
+        lista_actividades = actividades.actividad
+        if not isinstance(lista_actividades, list):
+            lista_actividades = [lista_actividades]
+        
+        # Buscar impuestos relevantes en las actividades
+        impuestos_relevantes = []
+        
+        for actividad in lista_actividades:
+            if not hasattr(actividad, 'impuestos') or not actividad.impuestos:
+                continue
+            
+            impuestos = actividad.impuestos
+            if not hasattr(impuestos, 'impuesto') or not impuestos.impuesto:
+                continue
+            
+            # Obtener lista de impuestos
+            lista_impuestos = impuestos.impuesto
+            if not isinstance(lista_impuestos, list):
+                lista_impuestos = [lista_impuestos]
+            
+            for impuesto in lista_impuestos:
+                descripcion = getattr(impuesto, 'descripcionImpuesto', '')
+                estado = getattr(impuesto, 'estadoImpuesto', '')
+                periodo = getattr(impuesto, 'periodo', '')
+                id_impuesto = getattr(impuesto, 'idImpuesto', '')
+                
+                if (descripcion.upper() in DESCRIPCIONES_IVA_RELEVANTES and 
+                    estado == ESTADO_IMPUESTO_ACTIVO):
+                    
+                    impuestos_relevantes.append({
+                        'descripcionImpuesto': descripcion,
+                        'estadoImpuesto': estado,
+                        'periodo': periodo,
+                        'idImpuesto': id_impuesto,
+                        'origen': 'actividad'
+                    })
+        
+        # Si no se encontraron impuestos en actividades, buscar en datos generales
+        if not impuestos_relevantes:
+            if hasattr(datos_gen, 'impuestos') and datos_gen.impuestos:
+                impuestos = datos_gen.impuestos
+                if hasattr(impuestos, 'impuesto') and impuestos.impuesto:
+                    lista_impuestos = impuestos.impuesto
+                    if not isinstance(lista_impuestos, list):
+                        lista_impuestos = [lista_impuestos]
+                    
+                    for impuesto in lista_impuestos:
+                        descripcion = getattr(impuesto, 'descripcionImpuesto', '')
+                        estado = getattr(impuesto, 'estadoImpuesto', '')
+                        periodo = getattr(impuesto, 'periodo', '')
+                        id_impuesto = getattr(impuesto, 'idImpuesto', '')
+                        
+                        if (descripcion.upper() in DESCRIPCIONES_IVA_RELEVANTES and 
+                            estado == ESTADO_IMPUESTO_ACTIVO):
+                            
+                            impuestos_relevantes.append({
+                                'descripcionImpuesto': descripcion,
+                                'estadoImpuesto': estado,
+                                'periodo': periodo,
+                                'idImpuesto': id_impuesto,
+                                'origen': 'general'
+                            })
+        
+        # Seleccionar el impuesto más reciente
+        if impuestos_relevantes:
+            # Ordenar por período descendente (más reciente primero)
+            impuestos_ordenados = sorted(
+                impuestos_relevantes,
+                key=lambda x: x.get('periodo', ''),
+                reverse=True
+            )
+            
+            impuesto_seleccionado = impuestos_ordenados[0]
+            return impuesto_seleccionado['descripcionImpuesto'], impuesto_seleccionado
+        
+        return None, None
