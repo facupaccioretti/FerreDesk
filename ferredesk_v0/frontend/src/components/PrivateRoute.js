@@ -19,7 +19,7 @@ export default function PrivateRoute({ children }) {
       .catch(() => {
         setIsAuth(false);
         setLoading(false);
-        navigate("/login");
+        navigate("/login/");
       });
   }, [navigate]);
 

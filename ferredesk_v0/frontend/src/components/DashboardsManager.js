@@ -117,7 +117,7 @@ const DashboardsManager = () => {
 
   const handleLogout = useCallback(() => {
     setUser(null)
-    window.location.href = "/login"
+    window.location.href = "/login/"
   }, []);
 
   // Componente de tarjeta individual

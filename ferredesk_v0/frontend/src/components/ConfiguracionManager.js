@@ -699,7 +699,7 @@ const ConfiguracionManager = () => {
 
   const handleLogout = useCallback(() => {
     setUser(null)
-    window.location.href = "/login"
+    window.location.href = "/login/"
   }, [])
 
   const tabs = [

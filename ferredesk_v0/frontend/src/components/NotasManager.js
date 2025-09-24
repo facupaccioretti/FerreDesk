@@ -118,7 +118,7 @@ const NotasManager = () => {
 
   const handleLogout = () => {
     setUser(null)
-    window.location.href = "/login"
+    window.location.href = "/login/"
   }
 
   const handleOpenDialog = (nota = null) => {

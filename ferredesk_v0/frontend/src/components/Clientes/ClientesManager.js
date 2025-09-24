@@ -111,7 +111,7 @@ const ClientesManager = () => {
 
   const handleLogout = () => {
     fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
-      window.location.href = "/login"
+      window.location.href = "/login/"
     })
   }
 

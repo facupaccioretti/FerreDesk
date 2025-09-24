@@ -146,7 +146,7 @@ const ComprasManager = () => {
 
   const handleLogout = () => {
     setUser(null)
-    window.location.href = "/login"
+    window.location.href = "/login/"
   }
 
   useEffect(() => {

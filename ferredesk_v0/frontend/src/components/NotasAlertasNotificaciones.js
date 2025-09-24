@@ -26,7 +26,7 @@ const NotasAlertasNotificaciones = () => {
 
     const handleLogout = () => {
         setUser(null);
-        window.location.href = "/login";
+        window.location.href = "/login/";
     };
 
     const cards = [

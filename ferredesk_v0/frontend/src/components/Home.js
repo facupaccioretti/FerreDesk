@@ -117,7 +117,7 @@ const Home = () => {
 
   useEffect(() => { document.title = "Panel Principal FerreDesk" }, [])
   useEffect(() => { fetch("/api/user/", { credentials: "include" }).then((res) => res.json()).then((data) => { if (data.status === "success") setUser(data.user) }) }, [])
-  const handleLogout = useCallback(() => { setUser(null); window.location.href = "/login" }, [])
+  const handleLogout = useCallback(() => { setUser(null); window.location.href = "/login/" }, [])
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">
       <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, rgba(71, 85, 105, 0.15) 1px, transparent 0)`, backgroundSize: "20px 20px" }}></div>

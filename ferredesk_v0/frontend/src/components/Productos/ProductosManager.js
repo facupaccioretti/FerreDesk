@@ -168,7 +168,7 @@ const ProductosManager = () => {
   const handleLogout = () => {
     // Aquí tu lógica real de logout (borrar token, limpiar storage, redirigir, etc)
     setUser(null)
-    window.location.href = "/login" // o la ruta de tu login
+    window.location.href = "/login/" // o la ruta de tu login
   }
 
   // Función global para refrescar el producto editado desde la API y actualizar el estado de edición

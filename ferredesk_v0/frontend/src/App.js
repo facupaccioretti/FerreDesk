@@ -135,6 +135,8 @@ export default function App() {
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        {/* Ruta catch-all para URLs no encontradas - redirige a la landing */}
+        <Route path="*" element={<Landing />} />
       </Routes>
     </Router>
   );
