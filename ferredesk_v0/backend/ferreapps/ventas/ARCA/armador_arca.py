@@ -219,19 +219,20 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
     
     # Factura B, C y Notas de Crédito B, C y Notas de Débito B, C (6, 8, 11, 13, 7, 12) - Sin IVA discriminado
     elif tipo_cbte in [6, 8, 11, 13, 7, 12]:
-        # Lógica específica para Factura C (tipo 11) - Monotributista
-        if tipo_cbte == 11:  # Factura C
+        # Lógica específica para Factura C (tipo 11) y Nota de Crédito C (tipo 13) - Monotributista
+        if tipo_cbte in [11, 13]:  # Factura C y Nota de Crédito C
             datos_comprobante.update({
-                'ImpNeto': float(venta_calculada.ven_total),  # Para Factura C, el total es el neto
-                'ImpIVA': 0.0,  # CORREGIDO: Factura C no discrimina IVA
+                'ImpNeto': float(venta_calculada.ven_total),  # Para tipo C, el total es el neto
+                'ImpIVA': 0.0,  # CORREGIDO: Tipo C no discrimina IVA
                 'ImpTotal': float(venta_calculada.ven_total)  # CORREGIDO: Total igual al neto
             })
-            logger.info(f"LÓGICA FACTURA C APLICADA:")
+            tipo_nombre = "FACTURA C" if tipo_cbte == 11 else "NOTA DE CRÉDITO C"
+            logger.info(f"LÓGICA {tipo_nombre} APLICADA:")
             logger.info(f"   • ImpNeto: {venta_calculada.ven_total} (total de la venta)")
             logger.info(f"   • ImpIVA: 0.0 (no discrimina IVA)")
             logger.info(f"   • ImpTotal: {venta_calculada.ven_total} (igual al neto)")
             logger.info(f"   • NO se incluye objeto IVA")
-        else:  # Factura B y otros
+        else:  # Factura B, Nota de Crédito B, Nota de Débito B, Nota de Débito C
             datos_comprobante.update({
                 'ImpNeto': float(venta_calculada.ven_impneto),  # CORREGIDO: Usar ven_impneto como Factura A
                 'ImpIVA': float(venta_calculada.iva_global),    # CORREGIDO: Usar iva_global de la vista
@@ -242,7 +243,7 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
             if alicuotas_venta and alicuotas_venta.exists() and float(venta_calculada.ven_total) > 0:
                 alicuotas_afip = _construir_alicuotas_afip(alicuotas_venta)
                 datos_comprobante['Iva'] = {'AlicIva': alicuotas_afip}
-                logger.info(f"Objeto IVA agregado para Factura B con ImpNeto > 0")
+                logger.info(f"Objeto IVA agregado para comprobante tipo {tipo_cbte} con ImpNeto > 0")
                 logger.info(f"ImpIVA desde vista: {venta_calculada.iva_global}")
                 logger.info(f"ImpNeto desde vista: {venta_calculada.ven_impneto}")
                 logger.info(f"ImpTotal calculado: {venta_calculada.ven_impneto + venta_calculada.iva_global}")

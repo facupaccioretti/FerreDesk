@@ -22,6 +22,7 @@ import InformesManager from './components/Informes/InformesManager';
 import DashboardsManager from './components/DashboardsManager';
 import ComprasManager from './components/Compras/ComprasManager';
 import CargaInicialProveedor from './components/Carga Inicial/CargaInicialProveedor';
+import CuentaCorrienteManager from './components/CuentaCorriente/CuentaCorrienteManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -130,6 +131,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <InformesManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/home/cuenta-corriente"
+          element={
+            <PrivateRoute>
+              <CuentaCorrienteManager />
             </PrivateRoute>
           }
         />

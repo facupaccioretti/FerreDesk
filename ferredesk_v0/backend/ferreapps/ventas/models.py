@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from django.conf import settings
 from django.db.models import JSONField
+from decimal import Decimal
 
 # Create your models here.
 
@@ -141,6 +142,34 @@ class Venta(models.Model):
         
         # Llamar al método save original
         super().save(*args, **kwargs)
+
+    def calcular_saldo_pendiente(self):
+        """
+        Calcula el saldo pendiente de pago de esta venta.
+        Para facturas: total - imputaciones recibidas
+        Para recibos/créditos: 0 (no tienen saldo pendiente)
+        """
+        from django.db.models import Sum
+        
+        # Si es un recibo o crédito, no tiene saldo pendiente
+        if (self.comprobante and 
+            self.comprobante.tipo in ['recibo', 'credito']):
+            return Decimal('0.00')
+        
+        # Si es una factura, calcular total - imputaciones
+        if self.comprobante and self.comprobante.tipo == 'factura':
+            # Obtener el total de la venta (usar ven_total del modelo calculado si está disponible)
+            total_factura = self.ven_total if hasattr(self, 'ven_total') else Decimal('0.00')
+            
+            # Calcular total de imputaciones recibidas
+            imputaciones_recibidas = self.imputaciones_recibidas.aggregate(
+                total=Sum('imp_monto')
+            )['total'] or Decimal('0.00')
+            
+            saldo_pendiente = total_factura - imputaciones_recibidas
+            return max(saldo_pendiente, Decimal('0.00'))
+        
+        return Decimal('0.00')
 
 class VentaDetalleItem(models.Model):
     vdi_idve = models.ForeignKey(
