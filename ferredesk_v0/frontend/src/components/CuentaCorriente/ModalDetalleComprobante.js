@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Tabs, Tab
@@ -18,7 +18,7 @@ function LabelValor({ label, value }) {
 
 export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
   const { getDetalleComprobante } = useCuentaCorrienteAPI()
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const [tab, setTab] = useState(0)
@@ -43,7 +43,7 @@ export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
     }
     cargar()
     return () => { activo = false }
-  }, [open, venId, getDetalleComprobante])
+  }, [open, venId, getDetalleComprobante, setLoading])
 
   const cab = data?.cabecera || {
     numero_formateado: itemBase?.numero_formateado,

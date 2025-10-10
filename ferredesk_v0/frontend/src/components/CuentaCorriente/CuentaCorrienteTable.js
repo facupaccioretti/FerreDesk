@@ -3,7 +3,6 @@
 import React from "react"
 import Tabla from "../Tabla"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
-import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onAnularRecibo, onModificarPagos, theme, saldoTotal }) => {
 

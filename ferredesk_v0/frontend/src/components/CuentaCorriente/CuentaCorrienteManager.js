@@ -13,11 +13,11 @@ const CuentaCorrienteManager = () => {
     // Default: 30 días atrás
     const fecha = new Date()
     fecha.setDate(fecha.getDate() - 30)
-    return fecha.toISOString().split('T')[0]
+    return fecha.toLocaleDateString('en-CA') // Formato YYYY-MM-DD en zona horaria local
   })
   const [fechaHasta, setFechaHasta] = useState(() => {
     // Default: hoy
-    return new Date().toISOString().split('T')[0]
+    return new Date().toLocaleDateString('en-CA') // Formato YYYY-MM-DD en zona horaria local
   })
   const [completo, setCompleto] = useState(false)
 

@@ -104,10 +104,22 @@ def cuenta_corriente_cliente(request, cliente_id):
         
         # Agregar filtros de fecha
         if fecha_desde:
-            queryset = queryset.filter(ven_fecha__gte=fecha_desde)
+            from datetime import datetime
+            try:
+                # Parsear fecha en formato YYYY-MM-DD y asegurar que se interprete como fecha local
+                fecha_desde_parsed = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                queryset = queryset.filter(ven_fecha__gte=fecha_desde_parsed)
+            except ValueError:
+                pass  # Si no se puede parsear, ignorar el filtro
         
         if fecha_hasta:
-            queryset = queryset.filter(ven_fecha__lte=fecha_hasta)
+            from datetime import datetime
+            try:
+                # Parsear fecha en formato YYYY-MM-DD y asegurar que se interprete como fecha local
+                fecha_hasta_parsed = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                queryset = queryset.filter(ven_fecha__lte=fecha_hasta_parsed)
+            except ValueError:
+                pass  # Si no se puede parsear, ignorar el filtro
         
         # Agregar filtro de completo
         if not completo:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -43,12 +43,27 @@ export default function ImputarExistenteModal({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const cargarFacturasPendientesHandler = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const facturas = await cargarFacturasPendientes(clienteId);
+            setFacturasPendientes(facturas || []);
+        } catch (err) {
+            console.error('Error cargando facturas pendientes:', err);
+            setError('Error al cargar las facturas pendientes');
+            setFacturasPendientes([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [clienteId, cargarFacturasPendientes]);
+
     // Cargar facturas pendientes cuando se abre el modal
     useEffect(() => {
         if (open && clienteId) {
             cargarFacturasPendientesHandler();
         }
-    }, [open, clienteId]);
+    }, [open, clienteId, cargarFacturasPendientesHandler]);
 
     // Inicializar imputaciones cuando cambian las facturas
     useEffect(() => {
@@ -62,21 +77,6 @@ export default function ImputarExistenteModal({
             );
         }
     }, [facturasPendientes]);
-
-    const cargarFacturasPendientesHandler = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const facturas = await cargarFacturasPendientes(clienteId);
-            setFacturasPendientes(facturas || []);
-        } catch (err) {
-            console.error('Error cargando facturas pendientes:', err);
-            setError('Error al cargar las facturas pendientes');
-            setFacturasPendientes([]);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // Calcular monto total de imputaciones
     const montoImputaciones = imputaciones.reduce(

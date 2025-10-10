@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
 
@@ -38,13 +38,25 @@ const NuevoReciboModal = ({
   // Calcular monto total de imputaciones
   const montoImputaciones = imputaciones.reduce((total, imp) => total + (imp.monto || 0), 0)
 
+  const cargarFacturasPendientes = useCallback(async () => {
+    try {
+      console.log('Cargando facturas pendientes para cliente:', modal.clienteId)
+      const response = await getFacturasPendientes(modal.clienteId)
+      console.log('Respuesta de facturas pendientes:', response)
+      setFacturasPendientes(response.facturas || [])
+    } catch (err) {
+      console.error('Error al cargar facturas pendientes:', err)
+      setError('Error al cargar facturas pendientes')
+    }
+  }, [modal.clienteId, getFacturasPendientes])
+
   // Cargar facturas pendientes cuando se abre el modal
   // (solo si NO es recibo de excedente)
   useEffect(() => {
     if (modal.abierto && modal.clienteId && !esReciboExcedente) {
       cargarFacturasPendientes()
     }
-  }, [modal.abierto, modal.clienteId, esReciboExcedente])
+  }, [modal.abierto, modal.clienteId, esReciboExcedente, cargarFacturasPendientes])
 
   // Inicializar imputaciones cuando se cargan las facturas
   useEffect(() => {
@@ -71,18 +83,6 @@ const NuevoReciboModal = ({
     }
   }, [montoImputaciones, esReciboExcedente])
 
-  const cargarFacturasPendientes = async () => {
-    try {
-      console.log('Cargando facturas pendientes para cliente:', modal.clienteId)
-      const response = await getFacturasPendientes(modal.clienteId)
-      console.log('Respuesta de facturas pendientes:', response)
-      setFacturasPendientes(response.facturas || [])
-    } catch (err) {
-      console.error('Error al cargar facturas pendientes:', err)
-      setError('Error al cargar facturas pendientes')
-    }
-  }
-
   const handleImputacionChange = (facturaId, monto) => {
     setImputaciones(prev => prev.map(imp => 
       imp.factura_id === facturaId 
@@ -92,12 +92,7 @@ const NuevoReciboModal = ({
   }
 
   const handlePaso1Aceptar = () => {
-    // Validar que haya al menos una imputación
-    if (montoImputaciones === 0) {
-      setError('Debe imputar al menos un monto')
-      return
-    }
-    
+    // Permitir continuar sin imputaciones (recibo sin imputar)
     // Pasar a la segunda parte
     setPaso(2)
     setError('')
@@ -125,9 +120,9 @@ const NuevoReciboModal = ({
         return
       }
 
-      // Monto mínimo de $500
-      if (formData.rec_monto_total < 500) {
-        setError('El monto del recibo debe ser mínimo $500')
+      // Monto mínimo de $0
+      if (formData.rec_monto_total < 0) {
+        setError('El monto del recibo no puede ser negativo')
         return
       }
     }
@@ -239,10 +234,12 @@ const NuevoReciboModal = ({
             <>
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-slate-800 mb-2">
-                  Paso 1: Seleccionar Facturas e Imputaciones
+                  Paso 1: Seleccionar Facturas e Imputaciones (Opcional)
                 </h3>
                 <p className="text-sm text-slate-600">
-                  Seleccione las facturas y escriba los montos a imputar en la columna "Pago Actual"
+                  Seleccione las facturas y escriba los montos a imputar en la columna "Pago Actual". 
+                  <br />
+                  <strong>Puede omitir este paso para crear un recibo sin imputaciones.</strong>
                 </p>
               </div>
 
@@ -264,8 +261,11 @@ const NuevoReciboModal = ({
                     <h3 className="text-lg font-semibold text-slate-700 mb-2">
                       No hay facturas pendientes
                     </h3>
-                    <p className="text-slate-500 max-w-md mx-auto">
+                    <p className="text-slate-500 max-w-md mx-auto mb-4">
                       Este cliente no tiene facturas o cotizaciones sin imputar o parcialmente imputadas.
+                    </p>
+                    <p className="text-slate-600 max-w-md mx-auto font-medium">
+                      Puede crear un recibo sin imputaciones que quedará como saldo disponible para futuras facturas.
                     </p>
                   </div>
                 ) : (
@@ -445,15 +445,15 @@ const NuevoReciboModal = ({
                     <input
                       type="number"
                       step="0.01"
-                      min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 500)}
-                      value={montoFijo || formData.rec_monto_total}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
+                      min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 0)}
+                      value={esReciboExcedente ? (montoFijo ? Number(montoFijo).toFixed(2) : '') : formData.rec_monto_total}
+                      onChange={esReciboExcedente ? undefined : (e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
                       disabled={esReciboExcedente}
                       className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${esReciboExcedente ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     />
                     {!esReciboExcedente && (
                       <p className="text-xs text-slate-500 mt-1">
-                        Mínimo: ${Math.max(montoImputaciones, 500).toLocaleString('es-AR')}
+                        Mínimo: ${Math.max(montoImputaciones, 0).toLocaleString('es-AR')}
                       </p>
                     )}
                     {esReciboExcedente && (
@@ -538,8 +538,7 @@ const NuevoReciboModal = ({
             {paso === 1 ? (
               <button
                 onClick={handlePaso1Aceptar}
-                disabled={montoImputaciones === 0}
-                className={`${theme.botonPrimario} disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2`}
+                className={`${theme.botonPrimario} flex items-center space-x-2`}
               >
                 <span>Continuar →</span>
               </button>
@@ -550,7 +549,9 @@ const NuevoReciboModal = ({
                   loading ||
                   !formData.rec_pv?.trim() ||
                   !formData.rec_numero?.trim() ||
-                  formData.rec_monto_total < Math.max(montoImputaciones, 500)
+                  (esReciboExcedente 
+                    ? (montoFijo || 0) < 0 
+                    : formData.rec_monto_total < Math.max(montoImputaciones, 0))
                 }
                 className={`${theme.botonPrimario} disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2`}
               >

@@ -25,7 +25,6 @@ const CuentaCorrienteList = ({
     loading,
     error,
     getCuentaCorrienteCliente,
-    getFacturasPendientes,
     anularRecibo,
     modificarImputaciones
   } = useCuentaCorrienteAPI()

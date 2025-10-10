@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import useCuentaCorrienteAPI from '../../utils/useCuentaCorrienteAPI';
 
 const ModalModificarImputaciones = ({ 
@@ -13,13 +13,7 @@ const ModalModificarImputaciones = ({
     const [error, setError] = useState(null);
     const { getDetalleComprobante } = useCuentaCorrienteAPI();
 
-    useEffect(() => {
-        if (isOpen && comprobante) {
-            cargarImputaciones();
-        }
-    }, [isOpen, comprobante]);
-
-    const cargarImputaciones = async () => {
+    const cargarImputaciones = useCallback(async () => {
         if (!comprobante) return;
         
         setLoadingImputaciones(true);
@@ -101,7 +95,13 @@ const ModalModificarImputaciones = ({
         } finally {
             setLoadingImputaciones(false);
         }
-    };
+    }, [comprobante, getDetalleComprobante]);
+
+    useEffect(() => {
+        if (isOpen && comprobante) {
+            cargarImputaciones();
+        }
+    }, [isOpen, comprobante, cargarImputaciones]);
 
     const handleMontoChange = (index, nuevoMonto) => {
         const nuevasImputaciones = [...imputaciones];
