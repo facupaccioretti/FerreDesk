@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useFerreDeskTheme } from '../../../hooks/useFerreDeskTheme'
 import { IconFactura, IconCredito, IconPresupuesto } from '../../ComprobanteIcono'
 
-const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCredito, onNuevaModificacionContenido }) => {
+const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCredito, onNuevaModificacionContenido, onNuevaNotaDebito, onNuevaExtensionContenido }) => {
   const theme = useFerreDeskTheme()
   const [mostrarOpciones, setMostrarOpciones] = useState(false)
   const dropdownRef = useRef(null)
@@ -30,6 +30,24 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconPresupuesto />,
       onClick: () => {
         onNuevoPresupuesto()
+        setMostrarOpciones(false)
+      }
+    },
+    {
+      id: 'nota_debito',
+      label: 'Nota de Débito',
+      icon: <IconCredito />,
+      onClick: () => {
+        onNuevaNotaDebito && onNuevaNotaDebito()
+        setMostrarOpciones(false)
+      }
+    },
+    {
+      id: 'extension_contenido',
+      label: 'Extensión Contenido',
+      icon: <IconCredito />,
+      onClick: () => {
+        onNuevaExtensionContenido && onNuevaExtensionContenido()
         setMostrarOpciones(false)
       }
     },

@@ -23,6 +23,7 @@
   import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
   import FacturaSelectorModal from "./herramientasforms/FacturaSelectorModal"
   import NotaCreditoForm from "./NotaCreditoForm"
+  import NotaDebitoForm from "./NotaDebitoForm"
   import { useGeneradorPDF } from "./herramientasforms/plantillasComprobantes/PDF/useGeneradorPDF"
   import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
   import useTabsManager from "./hooks/useTabsManager"
@@ -224,6 +225,11 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
     const [clienteParaNC, setClienteParaNC] = useState(null)
     const [modalFacturasNCAbierto, setModalFacturasNCAbierto] = useState(false)
     const [esModificacionContenido, setEsModificacionContenido] = useState(false)
+    // Estados ND
+    const [modalClienteNDAbierto, setModalClienteNDAbierto] = useState(false)
+    const [clienteParaND, setClienteParaND] = useState(null)
+    const [modalFacturasNDAbierto, setModalFacturasNDAbierto] = useState(false)
+    const [esExtensionContenido, setEsExtensionContenido] = useState(false)
     
     // --- Estados para el Eliminador de Residuo ---
     const [eliminadorModal, setEliminadorModal] = useState({ open: false })
@@ -260,6 +266,29 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
       // Reiniciar estados relacionados
       setClienteParaNC(null)
       setModalClienteNCAbierto(true)
+    }
+
+    const handleNuevaNotaDebito = () => {
+      const tiposND = ['nota_debito', 'nota_debito_interna']
+      const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
+      if (comprobantesND.length === 0) {
+        alert('No hay comprobantes de Nota de Débito configurados en el sistema.')
+        return
+      }
+      setClienteParaND(null)
+      setModalClienteNDAbierto(true)
+    }
+
+    const handleNuevaExtensionContenido = () => {
+      const tiposND = ['nota_debito_interna']
+      const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
+      if (comprobantesND.length === 0) {
+        alert('No hay comprobantes de Extensión de Contenido (9994) configurados en el sistema.')
+        return
+      }
+      setEsExtensionContenido(true)
+      setClienteParaND(null)
+      setModalClienteNDAbierto(true)
     }
 
     const handleNuevaModificacionContenido = () => {
@@ -466,6 +495,8 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                            onNuevaVenta={handleNuevaVenta}
                            onNuevaNotaCredito={handleNuevaNotaCredito}
                            onNuevaModificacionContenido={handleNuevaModificacionContenido}
+                           onNuevaNotaDebito={handleNuevaNotaDebito}
+                           onNuevaExtensionContenido={handleNuevaExtensionContenido}
                            onEliminarPresupuestosViejos={handleAbrirEliminador}
                          />
                        </div>
@@ -514,7 +545,8 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                                     {(activeTab.startsWith("nuevo-") ||
                   activeTab.startsWith("editar") ||
                   activeTab.startsWith("nueva-venta-") ||
-                  activeTab.startsWith("nota-credito-")) &&
+                  activeTab.startsWith("nota-credito-") ||
+                  activeTab.startsWith("nota-debito-")) &&
                     !activeTab.startsWith("nuevo-vendedor") &&
                     !activeTab.startsWith("editar-vendedor") &&
                     (activeTab.startsWith("nueva-venta-") ? (
@@ -649,6 +681,46 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                         loadingProveedores={loadingProveedores}
                         autoSumarDuplicados={autoSumarDuplicados}
                         setAutoSumarDuplicados={setAutoSumarDuplicados}
+                        tabKey={activeTab}
+                      />
+                    ) : activeTab.startsWith("nota-debito-") ? (
+                      <NotaDebitoForm
+                        key={activeTab}
+                        onSave={async (payload) => {
+                          try {
+                            const csrftoken = getCookie("csrftoken")
+                            const response = await fetch("/api/ventas/", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "X-CSRFToken": csrftoken,
+                              },
+                              credentials: "include",
+                              body: JSON.stringify(payload),
+                            })
+                            const data = await response.json()
+                            if (!response.ok) {
+                              let msg = 'No se pudo guardar la Nota de Débito'
+                              try { msg = data.detail || msg } catch {}
+                              throw new Error(msg)
+                            }
+                            await fetchVentas()
+                            if (!data?.arca_emitido) {
+                              closeTab(activeTab)
+                            }
+                            return data
+                          } catch (err) {
+                            throw err
+                          }
+                        }}
+                        onCancel={() => closeTab(activeTab)}
+                        clienteSeleccionado={tabs.find((t) => t.key === activeTab)?.data?.cliente}
+                        facturasAsociadas={tabs.find((t) => t.key === activeTab)?.data?.facturas}
+                        comprobantes={comprobantes}
+                        plazos={plazos}
+                        vendedores={vendedores}
+                        sucursales={[{ id: 1, nombre: 'Casa Central' }]}
+                        puntosVenta={[{ id: 1, nombre: 'PV 1' }]}
                         tabKey={activeTab}
                       />
                     ) : (
@@ -813,6 +885,18 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
           }}
         />
 
+        {/* Modal para seleccionar cliente al crear Nota de Débito */}
+        <ClienteSelectorModal
+          abierto={modalClienteNDAbierto}
+          onCerrar={() => setModalClienteNDAbierto(false)}
+          clientes={clientes}
+          onSeleccionar={(cli) => {
+            setClienteParaND(cli)
+            setModalClienteNDAbierto(false)
+            setModalFacturasNDAbierto(true)
+          }}
+        />
+
         {/* Modal selección de facturas */}
         <FacturaSelectorModal
           abierto={modalFacturasNCAbierto}
@@ -836,6 +920,27 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                   facturas: facturas,
             }
             updateTabData(newKey, label, data, "nota-credito")
+          }}
+        />
+
+        {/* Modal selección de facturas para ND */}
+        <FacturaSelectorModal
+          abierto={modalFacturasNDAbierto}
+          cliente={clienteParaND}
+          soloFacturasInternas={esExtensionContenido}
+          onCerrar={() => {
+            setModalFacturasNDAbierto(false)
+            setEsExtensionContenido(false)
+          }}
+          onSeleccionar={(facturas) => {
+            setModalFacturasNDAbierto(false)
+            setEsExtensionContenido(false)
+            const newKey = `nota-debito-${Date.now()}`
+            const todasInternas = Array.isArray(facturas) && facturas.length > 0 && facturas.every(f => (f.comprobante?.tipo === 'factura_interna') || (f.comprobante?.letra === 'I'))
+            const numeroEtiqueta = facturas?.[0]?.numero_formateado || ''
+            const label = todasInternas ? `Extensión Contenido - ${numeroEtiqueta}` : `Nueva N. Débito - ${numeroEtiqueta}`
+            const data = { cliente: clienteParaND, facturas }
+            updateTabData(newKey, label, data, 'nota-debito')
           }}
         />
 

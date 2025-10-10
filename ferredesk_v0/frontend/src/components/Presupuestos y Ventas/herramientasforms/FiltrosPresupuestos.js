@@ -50,6 +50,8 @@ const FiltrosPresupuestos = ({
   onNuevaVenta,
   onNuevaNotaCredito,
   onNuevaModificacionContenido,
+  onNuevaNotaDebito,
+  onNuevaExtensionContenido,
   onEliminarPresupuestosViejos
 }) => {
   const tipos = tiposComprobanteUnicos(comprobantes);
@@ -292,6 +294,8 @@ const FiltrosPresupuestos = ({
                   onNuevaVenta={onNuevaVenta}
                   onNuevaNotaCredito={onNuevaNotaCredito}
                   onNuevaModificacionContenido={onNuevaModificacionContenido}
+                  onNuevaNotaDebito={onNuevaNotaDebito}
+                  onNuevaExtensionContenido={onNuevaExtensionContenido}
                 />
           <button
             onClick={onEliminarPresupuestosViejos}

@@ -84,9 +84,10 @@ export const useArcaEstado = () => {
    * @returns {boolean} - True si requiere emisión ARCA
    */
   const requiereEmisionArca = useCallback((tipoComprobante) => {
-    // Solo las facturas fiscales y notas de crédito fiscales requieren emisión ARCA
-    const tiposQueRequierenArca = ['factura', 'nota_credito'];
-    return tiposQueRequierenArca.includes(tipoComprobante?.toLowerCase());
+    // Requieren emisión ARCA: facturas y notas fiscales A/B/C. Internos (9999, 9998, 9994) no.
+    const t = (tipoComprobante || '').toLowerCase();
+    if (['factura_interna', 'nota_credito_interna', 'nota_debito_interna', 'presupuesto', 'venta'].includes(t)) return false;
+    return ['factura', 'nota_credito', 'nota_debito'].includes(t);
   }, []);
 
   /**
@@ -98,6 +99,7 @@ export const useArcaEstado = () => {
     const mensajes = {
       'factura': 'Esperando autorización...',
       'nota_credito': 'Esperando autorización...',
+      'nota_debito': 'Esperando autorización...',
       'default': 'Esperando respuesta para obtener el CAE...'
     };
     

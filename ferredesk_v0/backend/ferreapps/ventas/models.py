@@ -93,6 +93,7 @@ class Venta(models.Model):
     comprobantes_asociados = models.ManyToManyField(
         'self',
         through='ComprobanteAsociacion',
+        through_fields=('nota_credito', 'factura_afectada'),
         symmetrical=False,
         # Este related_name permite, desde una factura, encontrar fácilmente las NCs que la afectan.
         related_name='notas_de_credito_que_la_afectan'
@@ -363,6 +364,15 @@ class ComprobanteAsociacion(models.Model):
         # Desde una NC, se puede acceder a las facturas que anula.
         related_name='facturas_anuladas'
     )
+    # La Nota de Débito que se está creando (opcional).
+    # Se agrega para asociar ND con facturas a las que incrementa.
+    nota_debito = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        related_name='facturas_incrementadas',
+        null=True,
+        blank=True
+    )
     # La Factura que está siendo anulada por la Nota de Crédito.
     factura_afectada = models.ForeignKey(
         'Venta',
@@ -373,7 +383,8 @@ class ComprobanteAsociacion(models.Model):
 
     class Meta:
         db_table = 'VENTA_COMPROBANTE_ASOCIACION'
-        # Se actualiza la restricción de unicidad con los nuevos nombres de campo.
+        # Mantener unicidad para asociaciones de Nota de Crédito; para ND se puede agregar
+        # una restricción similar vía migración futura si se requiere a nivel de DB.
         unique_together = ('nota_credito', 'factura_afectada')
         verbose_name = 'Asociación de Comprobante'
         verbose_name_plural = 'Asociaciones de Comprobantes'
@@ -381,6 +392,10 @@ class ComprobanteAsociacion(models.Model):
     def __str__(self):
         # Usamos try-except para evitar errores si los objetos relacionados aún no están guardados
         try:
-            return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+            if self.nota_credito_id:
+                return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+            if self.nota_debito_id:
+                return f"ND {self.nota_debito.ven_numero} incrementa Factura {self.factura_afectada.ven_numero}"
+            return "Asociación sin origen"
         except Exception:
-            return f"Asociación pendiente de guardado"
+            return "Asociación pendiente de guardado"

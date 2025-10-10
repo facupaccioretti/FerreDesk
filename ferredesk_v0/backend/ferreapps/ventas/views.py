@@ -306,7 +306,10 @@ class VentaViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         items = data.get('items', [])
-        if not items:
+        tipo_comprobante = data.get('tipo_comprobante')
+        # Para Notas de Débito y su equivalente interno permitimos items vacíos;
+        # el serializer generará el ítem genérico en base a los campos específicos.
+        if not items and tipo_comprobante not in ['nota_debito', 'nota_debito_interna']:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
         # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
@@ -325,9 +328,9 @@ class VentaViewSet(viewsets.ModelViewSet):
         # Usar configuración de la ferretería, con posibilidad de override desde el frontend
         permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
         
-        tipo_comprobante = data.get('tipo_comprobante')
         es_presupuesto = (tipo_comprobante == 'presupuesto')
         es_nota_credito = (tipo_comprobante == 'nota_credito')
+        es_nota_debito = (tipo_comprobante == 'nota_debito')
         errores_stock = []
         stock_actualizado = []
         if not es_presupuesto:
@@ -349,6 +352,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                     
                 if es_nota_credito:
                     # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
+                    try:
+                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                    except StockProve.DoesNotExist:
+                        cod = _obtener_codigo_venta(id_stock)
+                        errores_stock.append(f"No existe stock para el producto {cod}")
+                        continue
+                    stockprove.cantidad += cantidad
+                    stockprove.save()
+                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+                # Notas de débito: no tocan stock (no hay ItemsGrid de productos)
+                elif es_nota_debito:
+                    continue
                     try:
                         stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
                     except StockProve.DoesNotExist:

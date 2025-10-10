@@ -377,9 +377,10 @@ def _construir_comprobantes_asociados(datos_comprobante, venta, tipo_cbte):
     
     # Obtener comprobantes asociados desde la base de datos
     from ferreapps.ventas.models import ComprobanteAsociacion
+    from django.db.models import Q
     
-    # Buscar las facturas que esta nota de crédito/débito está anulando
-    asociaciones = ComprobanteAsociacion.objects.filter(nota_credito=venta)
+    # Buscar las facturas asociadas a esta nota (crédito o débito)
+    asociaciones = ComprobanteAsociacion.objects.filter(Q(nota_credito=venta) | Q(nota_debito=venta))
     
     if not asociaciones.exists():
         # Si no hay asociaciones, crear una estructura vacía pero válida
