@@ -552,7 +552,7 @@ def detalle_comprobante(request, ven_id: int):
                 asociados.append({
                     'ven_id': rid,
                     'numero_formateado': getattr(vcalc, 'numero_formateado', ''),
-                    'tipo': getattr(vcalc, 'comprobante_tipo', ''),
+                    'comprobante_nombre': getattr(cc, 'comprobante_nombre', ''),
                     'fecha': str(getattr(vcalc, 'ven_fecha', '')),
                     'total': str(getattr(cc, 'ven_total', getattr(vcalc, 'ven_total', '0.00'))),
                     'imputado': str(f['monto']),
@@ -573,7 +573,7 @@ def detalle_comprobante(request, ven_id: int):
                 asociados.append({
                     'ven_id': vid,
                     'numero_formateado': getattr(vcalc, 'numero_formateado', ''),
-                    'tipo': getattr(vcalc, 'comprobante_tipo', ''),
+                    'comprobante_nombre': getattr(cc, 'comprobante_nombre', ''),
                     'fecha': str(getattr(vcalc, 'ven_fecha', '')),
                     'total': str(getattr(cc, 'ven_total', getattr(vcalc, 'ven_total', '0.00'))),
                     'imputado': str(f['monto']),
@@ -584,6 +584,7 @@ def detalle_comprobante(request, ven_id: int):
                 'ven_id': cab.ven_id,
                 'ven_fecha': str(cab.ven_fecha),
                 'numero_formateado': getattr(cab, 'numero_formateado', ''),
+                'comprobante_nombre': getattr(cc_main, 'comprobante_nombre', ''),
                 'cliente': {
                     'razon': getattr(cab, 'cliente_razon', ''),
                     'cuit': getattr(cab, 'cliente_cuit', ''),

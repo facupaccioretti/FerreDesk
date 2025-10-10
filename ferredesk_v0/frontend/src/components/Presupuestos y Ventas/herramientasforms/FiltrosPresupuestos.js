@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import BotonNuevoComprobante from './BotonNuevoComprobante';
 
 const tiposComprobanteUnicos = (comprobantes) => {
   // Tipos permitidos en el orden específico solicitado
@@ -44,7 +45,12 @@ const FiltrosPresupuestos = ({
   setClienteId,
   vendedorId,
   setVendedorId,
-  onFiltroChange
+  onFiltroChange,
+  onNuevoPresupuesto,
+  onNuevaVenta,
+  onNuevaNotaCredito,
+  onNuevaModificacionContenido,
+  onEliminarPresupuestosViejos
 }) => {
   const tipos = tiposComprobanteUnicos(comprobantes);
   const letras = comprobanteTipo ? letrasUnicasPorTipo(comprobantes, comprobanteTipo) : [];
@@ -159,94 +165,144 @@ const FiltrosPresupuestos = ({
     });
   };
 
+  // Constantes de clases para el formato compacto
+  const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
+  const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+  const CLASES_FILTRO = "bg-white border border-slate-200 rounded-md p-2 h-16 flex flex-col justify-between"
+
   return (
-    <div className="flex flex-wrap gap-4 p-4 bg-white rounded-lg shadow-sm">
-      <div className="flex-1 min-w-[180px]">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Comprobante</label>
-        <select
-          name="comprobanteTipo"
-          value={comprobanteTipo || ''}
-          onChange={handleTipoComprobanteChange}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          <option value="">Todos</option>
-          {tipos.map(tipo => (
-            <option key={tipo.value} value={tipo.value}>{tipo.label}</option>
-          ))}
-        </select>
-      </div>
-      {mostrarLetra && (
-        <div className="flex-1 min-w-[120px]">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Letra</label>
+    <div className="flex items-start gap-3 w-full">
+      {/* Tipo de Comprobante */}
+      <div className={`${CLASES_FILTRO} flex-1`}>
+        <div className={CLASES_ETIQUETA}>Tipo de Comprobante</div>
+        <div className="mt-0.5">
           <select
-            name="comprobanteLetra"
-            value={comprobanteLetra || ''}
-            onChange={handleLetraChange}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            name="comprobanteTipo"
+            value={comprobanteTipo || ''}
+            onChange={handleTipoComprobanteChange}
+            className={CLASES_INPUT}
           >
-            <option value="">Todas</option>
-            {letras.map(letra => (
-              <option key={letra} value={letra}>{letra}</option>
+            <option value="">Todos</option>
+            {tipos.map(tipo => (
+              <option key={tipo.value} value={tipo.value}>{tipo.label}</option>
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Letra (solo si hay múltiples letras) */}
+      {mostrarLetra && (
+        <div className={`${CLASES_FILTRO} flex-1`}>
+          <div className={CLASES_ETIQUETA}>Letra</div>
+          <div className="mt-0.5">
+            <select
+              name="comprobanteLetra"
+              value={comprobanteLetra || ''}
+              onChange={handleLetraChange}
+              className={CLASES_INPUT}
+            >
+              <option value="">Todas</option>
+              {letras.map(letra => (
+                <option key={letra} value={letra}>{letra}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       )}
-      <div className="flex-1 min-w-[140px]">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha desde</label>
-        <input
-          type="date"
-          value={fechaDesde || ''}
-          onChange={handleFechaDesdeChange}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
+
+      {/* Fecha Desde */}
+      <div className={`${CLASES_FILTRO} flex-1`}>
+        <div className={CLASES_ETIQUETA}>Desde</div>
+        <div className="mt-0.5">
+          <input
+            type="date"
+            value={fechaDesde || ''}
+            onChange={handleFechaDesdeChange}
+            className={CLASES_INPUT}
+          />
+        </div>
       </div>
-      <div className="flex-1 min-w-[140px]">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha hasta</label>
-        <input
-          type="date"
-          value={fechaHasta || ''}
-          onChange={handleFechaHastaChange}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
+
+      {/* Fecha Hasta */}
+      <div className={`${CLASES_FILTRO} flex-1`}>
+        <div className={CLASES_ETIQUETA}>Hasta</div>
+        <div className="mt-0.5">
+          <input
+            type="date"
+            value={fechaHasta || ''}
+            onChange={handleFechaHastaChange}
+            className={CLASES_INPUT}
+          />
+        </div>
       </div>
-      <div className="flex-1 min-w-[220px] relative">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-        <input
-          type="text"
-          value={clienteInput}
-          onChange={handleClienteInputChange}
-          onFocus={() => setShowClienteDropdown(true)}
-          onBlur={handleClienteBlur}
-          placeholder="Buscar cliente..."
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-        {showClienteDropdown && sugerenciasClientes.length > 0 && (
-          <ul className="absolute z-10 bg-white border border-gray-200 rounded-lg mt-1 w-full max-h-56 overflow-auto shadow-lg">
-            {sugerenciasClientes.map(c => (
-              <li
-                key={c.id}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                onMouseDown={() => handleClienteSelect(c)}
-              >
-                <span className="font-semibold">{c.razon || c.nombre}</span>
-                {c.cuit ? <span className="ml-2 text-xs text-gray-500">{c.cuit}</span> : null}
-              </li>
+
+      {/* Cliente */}
+      <div className={`${CLASES_FILTRO} flex-1 relative`}>
+        <div className={CLASES_ETIQUETA}>Cliente</div>
+        <div className="mt-0.5">
+          <input
+            type="text"
+            value={clienteInput}
+            onChange={handleClienteInputChange}
+            onFocus={() => setShowClienteDropdown(true)}
+            onBlur={handleClienteBlur}
+            placeholder="Buscar cliente..."
+            className={CLASES_INPUT}
+          />
+          {showClienteDropdown && sugerenciasClientes.length > 0 && (
+            <ul className="absolute z-10 bg-white border border-slate-200 rounded-md mt-1 w-full max-h-56 overflow-auto shadow-lg">
+              {sugerenciasClientes.map(c => (
+                <li
+                  key={c.id}
+                  className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs"
+                  onMouseDown={() => handleClienteSelect(c)}
+                >
+                  <span className="font-medium">{c.razon || c.nombre}</span>
+                  {c.cuit ? <span className="ml-2 text-slate-500">{c.cuit}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Vendedor */}
+      <div className={`${CLASES_FILTRO} flex-1`}>
+        <div className={CLASES_ETIQUETA}>Vendedor</div>
+        <div className="mt-0.5">
+          <select
+            value={vendedorId || ''}
+            onChange={handleVendedorChange}
+            className={CLASES_INPUT}
+          >
+            <option value="">Todos</option>
+            {vendedores.map(v => (
+              <option key={v.id} value={v.id}>{v.nombre}</option>
             ))}
-          </ul>
-        )}
+          </select>
+        </div>
       </div>
-      <div className="flex-1 min-w-[180px]">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
-        <select
-          value={vendedorId || ''}
-          onChange={handleVendedorChange}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          <option value="">Todos</option>
-          {vendedores.map(v => (
-            <option key={v.id} value={v.id}>{v.nombre}</option>
-          ))}
-        </select>
+
+      {/* Botones de Acciones */}
+      <div className={`${CLASES_FILTRO} flex-1`}>
+        <div className={CLASES_ETIQUETA}>Acciones</div>
+        <div className="mt-0.5 flex gap-2 items-center">
+                <BotonNuevoComprobante
+                  onNuevoPresupuesto={onNuevoPresupuesto}
+                  onNuevaVenta={onNuevaVenta}
+                  onNuevaNotaCredito={onNuevaNotaCredito}
+                  onNuevaModificacionContenido={onNuevaModificacionContenido}
+                />
+          <button
+            onClick={onEliminarPresupuestosViejos}
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200 rounded-lg flex items-center gap-1 text-xs px-3 py-1 h-8"
+            title="Eliminar Presupuestos Viejos"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-3 h-3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

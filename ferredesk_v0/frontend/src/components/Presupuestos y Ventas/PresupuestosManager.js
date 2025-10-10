@@ -223,6 +223,7 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
     const [modalClienteNCAbierto, setModalClienteNCAbierto] = useState(false)
     const [clienteParaNC, setClienteParaNC] = useState(null)
     const [modalFacturasNCAbierto, setModalFacturasNCAbierto] = useState(false)
+    const [esModificacionContenido, setEsModificacionContenido] = useState(false)
     
     // --- Estados para el Eliminador de Residuo ---
     const [eliminadorModal, setEliminadorModal] = useState({ open: false })
@@ -261,9 +262,24 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
       setModalClienteNCAbierto(true)
     }
 
-    const handleGenerarLibroIva = () => {
-      navigate('/home/libro-iva-ventas')
+    const handleNuevaModificacionContenido = () => {
+      // Validar que existan comprobantes NC interna
+      const tiposNC = ['nota_credito_interna'];
+      const comprobantesNC = (comprobantes || []).filter(c => tiposNC.includes(c.tipo));
+      
+      if (comprobantesNC.length === 0) {
+        alert('No hay comprobantes de Nota de Crédito Interna configurados en el sistema.\n' +
+              'Contacte al administrador para configurar los tipos de comprobante necesarios.');
+        return;
+      }
+      
+      // Marcar que es modificación de contenido
+      setEsModificacionContenido(true)
+      // Reiniciar estados relacionados
+      setClienteParaNC(null)
+      setModalClienteNCAbierto(true)
     }
+
 
     // --- Funciones para el Eliminar Presupuestos Viejos ---
     const handleAbrirEliminador = () => {
@@ -428,43 +444,6 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                                      {/* Presupuestos y Ventas */}
                    {activeTab === "presupuestos" && (
                      <>
-                       <div className="mb-4 flex justify-between items-center">
-                         <div className="flex gap-2">
-                           <button
-                             onClick={handleNuevo}
-                             className={theme.botonPrimario}
-                           >
-                             <span className="text-lg">+</span> Nuevo Presupuesto
-                           </button>
-                           <button
-                             onClick={handleNuevaVenta}
-                             className={theme.botonPrimario}
-                           >
-                             <span className="text-lg">+</span> Nueva Venta
-                           </button>
-                           <button
-                             onClick={handleNuevaNotaCredito}
-                             className={theme.botonPrimario}
-                           >
-                             <span className="text-lg">+</span> Nueva Nota de Crédito
-                           </button>
-                           <button
-                             onClick={handleGenerarLibroIva}
-                             className={theme.botonPrimario}
-                           >
-                             <span className="text-lg">+</span> Generar Libro IVA
-                           </button>
-                         </div>
-                         <button
-                           onClick={handleAbrirEliminador}
-                           className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                           title="Eliminar Presupuestos Viejos"
-                         >
-                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-6">
-                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                           </svg>
-                         </button>
-                       </div>
                        <div className="mb-4">
                          <FiltrosPresupuestos
                            comprobantes={comprobantes}
@@ -483,6 +462,11 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
                            setClienteId={setClienteId}
                            vendedorId={vendedorId}
                            setVendedorId={setVendedorId}
+                           onNuevoPresupuesto={handleNuevo}
+                           onNuevaVenta={handleNuevaVenta}
+                           onNuevaNotaCredito={handleNuevaNotaCredito}
+                           onNuevaModificacionContenido={handleNuevaModificacionContenido}
+                           onEliminarPresupuestosViejos={handleAbrirEliminador}
                          />
                        </div>
                       <ComprobantesList
@@ -833,9 +817,14 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
         <FacturaSelectorModal
           abierto={modalFacturasNCAbierto}
           cliente={clienteParaNC}
-          onCerrar={() => setModalFacturasNCAbierto(false)}
+          soloFacturasInternas={esModificacionContenido}
+          onCerrar={() => {
+            setModalFacturasNCAbierto(false)
+            setEsModificacionContenido(false)
+          }}
           onSeleccionar={(facturas) => {
             setModalFacturasNCAbierto(false)
+            setEsModificacionContenido(false)
             // Abrir pestaña con formulario de Nota de Crédito
             const newKey = `nota-credito-${Date.now()}`
             // Determinar si todas las facturas seleccionadas son internas (letra I o tipo factura_interna)

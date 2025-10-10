@@ -178,15 +178,15 @@ const CuentaCorrienteList = ({
   // Constantes de clases para el formato compacto simplificado
   const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
   const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-  const CLASES_FILTRO = "bg-white border border-slate-200 rounded-md p-2 min-w-[260px]"
+  const CLASES_FILTRO = "bg-white border border-slate-200 rounded-md p-2 h-16 flex flex-col justify-between"
 
   return (
     <div className="space-y-4">
       {/* Filtros compactos */}
-      <div className="flex flex-wrap gap-4">
+      <div className="flex items-start gap-3 w-full">
 
         {/* Selector de Cliente */}
-        <div className={CLASES_FILTRO}>
+        <div className={`${CLASES_FILTRO} flex-1`}>
           <div className={CLASES_ETIQUETA}>Cliente</div>
           <div className="mt-0.5">
             <button
@@ -205,7 +205,7 @@ const CuentaCorrienteList = ({
         </div>
 
         {/* Fecha Desde */}
-        <div className={CLASES_FILTRO}>
+        <div className={`${CLASES_FILTRO} flex-1`}>
           <div className={CLASES_ETIQUETA}>Desde</div>
           <div className="mt-0.5">
             <input
@@ -219,7 +219,7 @@ const CuentaCorrienteList = ({
         </div>
 
         {/* Fecha Hasta */}
-        <div className={CLASES_FILTRO}>
+        <div className={`${CLASES_FILTRO} flex-1`}>
           <div className={CLASES_ETIQUETA}>Hasta</div>
           <div className="mt-0.5">
             <input
@@ -233,7 +233,7 @@ const CuentaCorrienteList = ({
         </div>
 
         {/* Checkbox Completo */}
-        <div className={CLASES_FILTRO}>
+        <div className={`${CLASES_FILTRO} flex-1`}>
           <div className={CLASES_ETIQUETA}>Mostrar completo</div>
           <div className="mt-0.5 flex items-center space-x-2">
             <input
@@ -244,14 +244,14 @@ const CuentaCorrienteList = ({
               className="w-3 h-3 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500"
               disabled={loading}
             />
-            <label htmlFor="completo" className="text-xs text-slate-600">
+            <label htmlFor="completo" className="text-xs text-slate-600 whitespace-nowrap">
               Todas las transacciones
             </label>
           </div>
         </div>
 
         {/* Botón Nuevo Recibo */}
-        <div className={CLASES_FILTRO}>
+        <div className={`${CLASES_FILTRO} flex-1`}>
           <div className={CLASES_ETIQUETA}>Acciones</div>
           <div className="mt-0.5">
             <button
@@ -285,7 +285,7 @@ const CuentaCorrienteList = ({
               </div>
               <div className="text-right">
                 <div className="text-sm text-slate-600">Saldo Total</div>
-                <div className={`text-lg font-bold ${(cuentaCorriente.saldo_total || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-lg font-bold ${(cuentaCorriente.saldo_total || 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                   ${(cuentaCorriente.saldo_total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                 </div>
               </div>

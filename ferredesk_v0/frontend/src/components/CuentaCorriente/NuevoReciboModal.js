@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { Fragment, useState, useEffect, useCallback } from "react"
+import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
 
@@ -34,6 +35,12 @@ const NuevoReciboModal = ({
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Constantes de clases FerreDesk
+  const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
+  const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+  const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-4"
+  const CLASES_BOTON_SECUNDARIO = "px-6 py-3 rounded-lg font-semibold shadow transition-all duration-200 bg-slate-200 text-slate-700 hover:bg-slate-300"
 
   // Calcular monto total de imputaciones
   const montoImputaciones = imputaciones.reduce((total, imp) => total + (imp.monto || 0), 0)
@@ -205,51 +212,77 @@ const NuevoReciboModal = ({
     }
   }, [modal.abierto])
 
-  if (!modal.abierto) return null
-
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <h2 className={`text-xl font-semibold ${theme.fuente}`}>
-              Nuevo Recibo - Paso {paso} de 2
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+    <Transition show={modal.abierto} as={Fragment} appear>
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
+        {/* Fondo oscuro */}
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-200"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-150"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black/60" />
+        </Transition.Child>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {/* PASO 1: Selección de facturas e imputaciones */}
-          {paso === 1 && (
-            <>
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-slate-800 mb-2">
-                  Paso 1: Seleccionar Facturas e Imputaciones (Opcional)
-                </h3>
-                <p className="text-sm text-slate-600">
-                  Seleccione las facturas y escriba los montos a imputar en la columna "Pago Actual". 
-                  <br />
-                  <strong>Puede omitir este paso para crear un recibo sin imputaciones.</strong>
-                </p>
+        {/* Panel del modal */}
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-200"
+          enterFrom="opacity-0 scale-95"
+          enterTo="opacity-100 scale-100"
+          leave="ease-in duration-150"
+          leaveFrom="opacity-100 scale-100"
+          leaveTo="opacity-0 scale-95"
+        >
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Dialog.Panel className="w-full max-w-6xl bg-white rounded-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${theme.primario}`}>
+                <Dialog.Title className="text-lg font-bold text-white">
+                  Nuevo Recibo - Paso {paso} de 2
+                </Dialog.Title>
+                <button
+                  onClick={onClose}
+                  className="text-slate-200 hover:text-white transition-colors"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-6 h-6"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Tabla de facturas a imputar */}
-              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <h3 className="text-lg font-medium text-slate-800">
-                    Facturas/Cotizaciones Sin Imputar
-                  </h3>
-                </div>
+              {/* Contenido */}
+              <div className="px-6 py-4 overflow-y-auto flex-1">
+                {/* PASO 1: Selección de facturas e imputaciones */}
+                {paso === 1 && (
+                  <>
+                    <div className={`${CLASES_TARJETA} mb-4`}>
+                      <div className={CLASES_ETIQUETA}>Paso 1: Seleccionar facturas e imputaciones</div>
+                      <p className="text-sm text-slate-600 mt-2">
+                        Seleccione las facturas y escriba los montos a imputar en la columna "Pago Actual". 
+                        <br />
+                        <strong>Puede omitir este paso para crear un recibo sin imputaciones.</strong>
+                      </p>
+                    </div>
+
+                    {/* Tabla de facturas a imputar */}
+                    <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+                      <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                        <h3 className="text-sm font-semibold text-slate-800">
+                          Facturas/Cotizaciones Sin Imputar
+                        </h3>
+                      </div>
                 
                 {imputaciones.length === 0 ? (
                   <div className="p-8 text-center">
@@ -314,7 +347,7 @@ const NuevoReciboModal = ({
                                   max={imputacion.saldo_pendiente}
                                   value={imputacion.monto}
                                   onChange={(e) => handleImputacionChange(imputacion.factura_id, e.target.value)}
-                                  className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent text-right"
+                                  className="w-24 border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-right"
                                   placeholder="0"
                                 />
                               </td>
@@ -324,250 +357,233 @@ const NuevoReciboModal = ({
                       </table>
                     </div>
 
-                    {/* Resumen de montos */}
-                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-200">
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm text-slate-600">
-                          Monto Total a Imputar:
+                        {/* Resumen de montos */}
+                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200">
+                          <div className="flex justify-between items-center">
+                            <div className={CLASES_ETIQUETA}>Monto total a imputar</div>
+                            <div className="text-lg font-bold text-slate-800">
+                              ${montoImputaciones.toLocaleString('es-AR')}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-lg font-bold text-slate-800">
-                          ${montoImputaciones.toLocaleString('es-AR')}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+
+                {/* PASO 2: Datos del recibo */}
+                {paso === 2 && (
+                  <>
+                    {/* Resumen de imputaciones */}
+                    {montoImputaciones > 0 && (
+                      <div className={`${CLASES_TARJETA} mb-4 bg-blue-50 border-blue-200`}>
+                        <div className={CLASES_ETIQUETA}>Resumen de imputaciones</div>
+                        <div className="grid grid-cols-2 gap-4 text-sm mt-2">
+                          <div>
+                            <span className="text-blue-600 font-medium">Facturas:</span>
+                            <div className="text-blue-800">{imputaciones.filter(imp => imp.monto > 0).length}</div>
+                          </div>
+                          <div>
+                            <span className="text-blue-600 font-medium">Monto a Imputar:</span>
+                            <div className="text-blue-800 font-bold">
+                              ${montoImputaciones.toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Formulario del recibo */}
+                    <div className={CLASES_TARJETA}>
+                      <div className={CLASES_ETIQUETA}>Datos del recibo</div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3">
+                        <div>
+                          <label className={CLASES_ETIQUETA}>Letra</label>
+                          <input
+                            type="text"
+                            value="X"
+                            readOnly
+                            className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-slate-100 text-center"
+                            title="Letra fija"
+                          />
+                        </div>
+                        <div>
+                          <label className={CLASES_ETIQUETA}>PV *</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formData.rec_pv}
+                            onChange={(e) => {
+                              const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 4)
+                              setFormData(prev => ({ ...prev, rec_pv: clean }))
+                            }}
+                            onBlur={() => setFormData(prev => ({ ...prev, rec_pv: (prev.rec_pv || "").toString().padStart(4, "0") }))}
+                            placeholder="0001"
+                            className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
+                            title="Punto de venta (4 dígitos)"
+                          />
+                        </div>
+                        <div>
+                          <label className={CLASES_ETIQUETA}>Número *</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formData.rec_numero}
+                            onChange={(e) => {
+                              const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 8)
+                              setFormData(prev => ({ ...prev, rec_numero: clean }))
+                            }}
+                            onBlur={() => setFormData(prev => ({ ...prev, rec_numero: (prev.rec_numero || "").toString().padStart(8, "0") }))}
+                            placeholder="00000001"
+                            className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
+                            title="Número (8 dígitos)"
+                          />
+                        </div>
+                        <div>
+                          <label className={CLASES_ETIQUETA}>Vista previa</label>
+                          <div className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-slate-50 text-center flex items-center justify-center">
+                            <span className="font-semibold">X {(formData.rec_pv || '').toString().padStart(4,'0')}-{(formData.rec_numero || '').toString().padStart(8,'0')}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className={CLASES_ETIQUETA}>Fecha *</label>
+                          <input
+                            type="date"
+                            value={formData.rec_fecha}
+                            onChange={(e) => setFormData(prev => ({ ...prev, rec_fecha: e.target.value }))}
+                            className={CLASES_INPUT}
+                          />
+                        </div>
+                        <div>
+                          <label className={CLASES_ETIQUETA}>Monto total *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 0)}
+                            value={esReciboExcedente ? (montoFijo ? Number(montoFijo).toFixed(2) : '') : formData.rec_monto_total}
+                            onChange={esReciboExcedente ? undefined : (e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
+                            disabled={esReciboExcedente}
+                            className={`${CLASES_INPUT} ${esReciboExcedente ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          />
+                          {!esReciboExcedente && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              Mínimo: ${Math.max(montoImputaciones, 0).toLocaleString('es-AR')}
+                            </p>
+                          )}
+                          {esReciboExcedente && (
+                            <p className="text-xs text-orange-600 mt-1 font-medium">
+                              Monto fijo (excedente del pago)
+                            </p>
+                          )}
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className={CLASES_ETIQUETA}>Observación</label>
+                          <input
+                            type="text"
+                            value={formData.rec_observacion}
+                            onChange={(e) => setFormData(prev => ({ ...prev, rec_observacion: e.target.value }))}
+                            className={CLASES_INPUT}
+                            placeholder="Observaciones del recibo..."
+                          />
                         </div>
                       </div>
                     </div>
+
+                    {/* Mostrar monto extra si hay */}
+                    {formData.rec_monto_total > montoImputaciones && (
+                      <div className={`${CLASES_TARJETA} mt-4 bg-green-50 border-green-200`}>
+                        <div className="flex items-center">
+                          <svg className="w-5 h-5 text-green-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div>
+                            <div className={`${CLASES_ETIQUETA} text-green-600`}>
+                              Monto extra sin imputar
+                            </div>
+                            <div className="text-lg font-bold text-green-900">
+                              ${(formData.rec_monto_total - montoImputaciones).toLocaleString('es-AR')}
+                            </div>
+                            <div className="text-xs text-green-700">
+                              Este monto podrá ser imputado a otras facturas en el futuro
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
-              </div>
-            </>
-          )}
 
-          {/* PASO 2: Datos del recibo */}
-          {paso === 2 && (
-            <>
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-slate-800 mb-2">
-                  Paso 2: Datos del Recibo
-                </h3>
-                <p className="text-sm text-slate-600">
-                  Complete los datos del recibo. El monto debe ser mínimo $500 y no menor a las imputaciones.
-                </p>
-              </div>
-
-              {/* Resumen de imputaciones */}
-              <div className="bg-blue-50 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-medium text-blue-800 mb-2">
-                  Resumen de Imputaciones
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-blue-600 font-medium">Facturas:</span>
-                    <div className="text-blue-800">{imputaciones.filter(imp => imp.monto > 0).length}</div>
-                  </div>
-                  <div>
-                    <span className="text-blue-600 font-medium">Monto a Imputar:</span>
-                    <div className="text-blue-800 font-bold">
-                      ${montoImputaciones.toLocaleString('es-AR')}
+                {/* Mensaje de error */}
+                {error && (
+                  <div className={`${CLASES_TARJETA} mt-4 bg-red-50 border-red-200`}>
+                    <div className="flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mr-3">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                      </svg>
+                      <span className="text-red-700 text-sm">{error}</span>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Formulario del recibo */}
-              <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-medium text-slate-800 mb-4">
-                  Datos del Recibo
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="md:col-span-2">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Letra</label>
-                        <input
-                          type="text"
-                          value="X"
-                          readOnly
-                          className="w-16 px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 text-center"
-                          title="Letra fija"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">PV *</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={formData.rec_pv}
-                          onChange={(e) => {
-                            const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 4)
-                            setFormData(prev => ({ ...prev, rec_pv: clean }))
-                          }}
-                          onBlur={() => setFormData(prev => ({ ...prev, rec_pv: (prev.rec_pv || "").toString().padStart(4, "0") }))}
-                          placeholder="0001"
-                          className="w-24 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-center"
-                          title="Punto de venta (4 dígitos)"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Número *</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={formData.rec_numero}
-                          onChange={(e) => {
-                            const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 8)
-                            setFormData(prev => ({ ...prev, rec_numero: clean }))
-                          }}
-                          onBlur={() => setFormData(prev => ({ ...prev, rec_numero: (prev.rec_numero || "").toString().padStart(8, "0") }))}
-                          placeholder="00000001"
-                          className="w-36 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-center"
-                          title="Número (8 dígitos)"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Vista previa: <span className="font-semibold">X {(formData.rec_pv || '').toString().padStart(4,'0')}-{(formData.rec_numero || '').toString().padStart(8,'0')}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Fecha *
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.rec_fecha}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rec_fecha: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Monto Total *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 0)}
-                      value={esReciboExcedente ? (montoFijo ? Number(montoFijo).toFixed(2) : '') : formData.rec_monto_total}
-                      onChange={esReciboExcedente ? undefined : (e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
-                      disabled={esReciboExcedente}
-                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${esReciboExcedente ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                    />
-                    {!esReciboExcedente && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        Mínimo: ${Math.max(montoImputaciones, 0).toLocaleString('es-AR')}
-                      </p>
-                    )}
-                    {esReciboExcedente && (
-                      <p className="text-xs text-orange-600 mt-1 font-medium">
-                        Monto fijo (excedente del pago)
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Observación
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.rec_observacion}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rec_observacion: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      placeholder="Observaciones del recibo..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Mostrar monto extra si hay */}
-              {formData.rec_monto_total > montoImputaciones && (
-                <div className="bg-green-50 rounded-lg p-4 mb-6">
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 text-green-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    <div>
-                      <div className="text-sm font-medium text-green-800">
-                        Monto Extra Sin Imputar
-                      </div>
-                      <div className="text-lg font-bold text-green-900">
-                        ${(formData.rec_monto_total - montoImputaciones).toLocaleString('es-AR')}
-                      </div>
-                      <div className="text-xs text-green-700">
-                        Este monto podrá ser imputado a otras facturas en el futuro
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Mensaje de error */}
-          {error && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mr-3">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-                <span className="text-red-700">{error}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between">
-          <div>
-            {paso === 2 && (
-              <button
-                onClick={handlePaso2Cancelar}
-                className="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
-              >
-                ← Volver
-              </button>
-            )}
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={paso === 1 ? handlePaso1Cancelar : onClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
-            >
-              Cancelar
-            </button>
-            {paso === 1 ? (
-              <button
-                onClick={handlePaso1Aceptar}
-                className={`${theme.botonPrimario} flex items-center space-x-2`}
-              >
-                <span>Continuar →</span>
-              </button>
-            ) : (
-              <button
-                onClick={handlePaso2Aceptar}
-                disabled={
-                  loading ||
-                  !formData.rec_pv?.trim() ||
-                  !formData.rec_numero?.trim() ||
-                  (esReciboExcedente 
-                    ? (montoFijo || 0) < 0 
-                    : formData.rec_monto_total < Math.max(montoImputaciones, 0))
-                }
-                className={`${theme.botonPrimario} disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2`}
-              >
-                {loading && (
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
                 )}
-                <span>✓ Crear Recibo</span>
-              </button>
-            )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-200 bg-white flex justify-between">
+                <div>
+                  {paso === 2 && !esReciboExcedente && (
+                    <button
+                      onClick={handlePaso2Cancelar}
+                      className={CLASES_BOTON_SECUNDARIO}
+                    >
+                      ← Volver
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={paso === 1 ? handlePaso1Cancelar : onClose}
+                    className={CLASES_BOTON_SECUNDARIO}
+                  >
+                    Cancelar
+                  </button>
+                  {paso === 1 ? (
+                    <button
+                      onClick={handlePaso1Aceptar}
+                      className={theme.botonPrimario}
+                    >
+                      Continuar →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handlePaso2Aceptar}
+                      disabled={
+                        loading ||
+                        !formData.rec_pv?.trim() ||
+                        !formData.rec_numero?.trim() ||
+                        (esReciboExcedente 
+                          ? (montoFijo || 0) < 0 
+                          : formData.rec_monto_total < Math.max(montoImputaciones, 0))
+                      }
+                      className={`${theme.botonPrimario} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {loading && (
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      )}
+                      Crear Recibo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </Dialog.Panel>
           </div>
-        </div>
-      </div>
-    </div>
+        </Transition.Child>
+      </Dialog>
+    </Transition>
   )
 }
 

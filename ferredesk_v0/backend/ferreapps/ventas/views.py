@@ -253,7 +253,7 @@ class VentaCalculadaFilter(FilterSet):
         
         if value.lower() == 'true':
             filtered_queryset = queryset.filter(
-                comprobante_tipo__in=['factura', 'venta']  # 'venta' es el tipo de factura interna
+                comprobante_tipo__in=['factura', 'venta', 'factura_interna']
             )
             logger.info(f"[FILTRO] Queryset filtrado: {filtered_queryset.count()} registros")
             

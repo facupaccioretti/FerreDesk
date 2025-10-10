@@ -149,7 +149,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
       titulo: "Saldo",
       align: "right",
       render: (item) => (
-        <span className={`text-sm font-bold ${item.saldo_acumulado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+        <span className={`text-sm font-bold ${item.saldo_acumulado >= 0 ? 'text-red-600' : 'text-green-600'}`}>
           ${formatearMonto(item.saldo_acumulado)}
         </span>
       ),

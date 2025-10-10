@@ -24,7 +24,7 @@ export const LETRA_FACTURA_INTERNA = 'I';
  *  - onCerrar: function()          -> callback para cerrar sin seleccionar
  *  - onSeleccionar: function(arr)  -> callback con array de facturas elegidas
  */
-export default function FacturaSelectorModal({ abierto = false, cliente = null, onCerrar = () => {}, onSeleccionar = () => {} }) {
+export default function FacturaSelectorModal({ abierto = false, cliente = null, soloFacturasInternas = false, onCerrar = () => {}, onSeleccionar = () => {} }) {
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
   
@@ -65,21 +65,21 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
       // Normalizar para asegurar estructura mínima y soportar paginación
       const lista = Array.isArray(data) ? data : data.results || []
       
-      // Nota: se deja constancia de tipos recibidos en caso de necesitar diagnóstico manual
-      // (No se usa en ejecución para evitar lint no-unused-vars)
-      // const tiposRecibidos = [...new Set(lista.map(f => f.comprobante?.tipo))];
-      
       // NUEVO: Backend ya filtró, solo validación adicional en frontend
       const facturasValidas = lista.filter(f => {
         const letra = f.comprobante?.letra;
         const tipo = f.comprobante?.tipo;
-        // Doble verificación: letra + tipo (seguridad adicional)
-        const esValida = ['A', 'B', 'C', LETRA_FACTURA_INTERNA].includes(letra) && 
-                        ['factura', 'venta'].includes(tipo);
         
-        // DEBUG: Mostrar qué comprobantes se están filtrando
-        if (!esValida) {
-          
+        // Validación según el contexto: NC normal vs Modif. Contenido
+        let esValida = false;
+        
+        if (soloFacturasInternas) {
+          // Para Modif. Contenido: SOLO facturas internas (letra I)
+          esValida = letra === LETRA_FACTURA_INTERNA && tipo === 'factura_interna';
+        } else {
+          // Para Nueva Nota de Crédito: SOLO facturas A, B, C (NO internas)
+          esValida = ['A', 'B', 'C'].includes(letra) && 
+                    ['factura', 'venta'].includes(tipo);
         }
         
         return esValida;
@@ -95,14 +95,20 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     }
   }
 
-  // Filtrado por término de búsqueda
+  // Filtrado por término de búsqueda (ya NO filtramos por tipo aquí, se hizo en obtenerFacturas)
   const facturasFiltradas = useMemo(() => {
-    if (termino.length < MIN_CARACTERES_BUSQUEDA) return facturas
-    const lower = termino.toLowerCase()
-    return facturas.filter((f) => {
-      const campos = [f.numero_formateado, f.numero, f.ven_fecha, f.ven_total, f.ven_estado]
-      return campos.some((c) => String(c || "").toLowerCase().includes(lower))
-    })
+    let resultado = facturas
+    
+    // Filtrar por término de búsqueda
+    if (termino.length >= MIN_CARACTERES_BUSQUEDA) {
+      const lower = termino.toLowerCase()
+      resultado = resultado.filter((f) => {
+        const campos = [f.numero_formateado, f.numero, f.ven_fecha, f.ven_total, f.ven_estado]
+        return campos.some((c) => String(c || "").toLowerCase().includes(lower))
+      })
+    }
+    
+    return resultado
   }, [facturas, termino])
 
   // Helpers de selección
