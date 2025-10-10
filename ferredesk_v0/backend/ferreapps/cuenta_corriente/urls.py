@@ -8,7 +8,10 @@ from .views import (
     imputar_existente,
     detalle_comprobante,
     clientes_con_movimientos,
-    CuentaCorrienteAPIView
+    CuentaCorrienteAPIView,
+    anular_recibo,
+    modificar_imputaciones,
+    obtener_imputacion_real
 )
 
 # Configurar el router para las vistas
@@ -26,6 +29,9 @@ urlpatterns = [
     path('imputar-existente/', imputar_existente, name='imputar-existente'),
     path('comprobante/<int:ven_id>/detalle/', detalle_comprobante, name='detalle-comprobante'),
     path('clientes-con-movimientos/', clientes_con_movimientos, name='clientes-con-movimientos'),
+    path('anular-recibo/', anular_recibo, name='anular-recibo'),
+    path('modificar-imputaciones/', modificar_imputaciones, name='modificar-imputaciones'),
+    path('imputacion-real/<int:ven_id_venta>/<int:ven_id_recibo>/', obtener_imputacion_real, name='obtener-imputacion-real'),
     
     # Endpoint de verificación
     path('status/', CuentaCorrienteAPIView.as_view(), name='cuenta-corriente-status'),

@@ -67,11 +67,7 @@ class ImputacionVenta(models.Model):
                 check=models.Q(imp_monto__gt=0),
                 name='imp_monto_positivo'
             ),
-            # Evitar que una factura se impute a sí misma
-            models.CheckConstraint(
-                check=~models.Q(imp_id_venta=models.F('imp_id_recibo')),
-                name='no_autoimputacion_directa'
-            ),
+            # Permitir auto-imputaciones para "Factura Recibo" (pago directo)
         ]
 
     def __str__(self):
@@ -86,7 +82,9 @@ class ImputacionVenta(models.Model):
         from decimal import Decimal
         
         # Validar que la factura y el recibo sean del mismo cliente
+        # Excepción: permitir auto-imputaciones (imp_id_venta == imp_id_recibo) para "Factura Recibo"
         if (self.imp_id_venta and self.imp_id_recibo and 
+            self.imp_id_venta.ven_id != self.imp_id_recibo.ven_id and
             self.imp_id_venta.ven_idcli != self.imp_id_recibo.ven_idcli):
             raise ValidationError(
                 'La factura y el recibo deben pertenecer al mismo cliente'
@@ -142,7 +140,6 @@ class CuentaCorrienteCliente(models.Model):
     haber = models.DecimalField(max_digits=15, decimal_places=2)
     saldo_acumulado = models.DecimalField(max_digits=15, decimal_places=2)
     saldo_pendiente = models.DecimalField(max_digits=15, decimal_places=2)
-    es_fac_rcbo = models.BooleanField()
     ven_total = models.DecimalField(max_digits=15, decimal_places=2)
     numero_formateado = models.CharField(max_length=50)
 

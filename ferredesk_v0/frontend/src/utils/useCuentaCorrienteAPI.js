@@ -134,6 +134,25 @@ const useCuentaCorrienteAPI = () => {
         return data.facturas || [];
     }, [getFacturasPendientes]);
 
+    // Anular recibo completo
+    const anularRecibo = useCallback(async (reciboId) => {
+        return await makeRequest('/api/cuenta-corriente/anular-recibo/', {
+            method: 'POST',
+            body: JSON.stringify({ recibo_id: reciboId }),
+        });
+    }, [makeRequest]);
+
+    // Modificar imputaciones de un recibo o nota de crédito
+    const modificarImputaciones = useCallback(async (comprobanteId, imputaciones) => {
+        return await makeRequest('/api/cuenta-corriente/modificar-imputaciones/', {
+            method: 'POST',
+            body: JSON.stringify({ 
+                comprobante_id: comprobanteId, 
+                imputaciones 
+            }),
+        });
+    }, [makeRequest]);
+
     // Exportar cuenta corriente a Excel
     const exportarCuentaCorriente = useCallback(async (clienteId, fechaDesde, fechaHasta, completo = false) => {
         const params = new URLSearchParams();
@@ -184,6 +203,8 @@ const useCuentaCorrienteAPI = () => {
         imputarExistente,
         cargarFacturasPendientes,
         getDetalleComprobante,
+        anularRecibo,
+        modificarImputaciones,
         exportarCuentaCorriente,
     };
 };

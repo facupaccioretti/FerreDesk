@@ -462,6 +462,129 @@ class VentaViewSet(viewsets.ModelViewSet):
                     response.data['arca_emitido'] = False
                     response.data['arca_motivo'] = 'Comprobante interno - no requiere emisión ARCA'
                 
+                # === CREAR AUTO-IMPUTACIÓN SI ES "FACTURA RECIBO" ===
+                comprobante_pagado = data.get('comprobante_pagado', False)
+                monto_pago = Decimal(str(data.get('monto_pago', 0)))
+                
+                # Obtener total de la venta desde VentaCalculada
+                from ferreapps.ventas.models import VentaCalculada
+                venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
+                total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                
+                # Auto-imputación: solo hasta el total de la venta
+                if comprobante_pagado and monto_pago > 0:
+                    from ferreapps.cuenta_corriente.models import ImputacionVenta
+                    from datetime import date
+                    
+                    # El monto de auto-imputación es el mínimo entre monto_pago y total_venta
+                    monto_auto_imputacion = min(monto_pago, total_venta)
+                    
+                    # Crear la auto-imputación: factura se imputa a sí misma
+                    ImputacionVenta.objects.create(
+                        imp_id_venta=venta_creada,      # La factura
+                        imp_id_recibo=venta_creada,     # La misma factura (auto-imputación)
+                        imp_monto=monto_auto_imputacion, # Monto del pago (limitado al total)
+                        imp_fecha=date.today(),         # Fecha actual
+                        imp_observacion='Factura Recibo - Auto-imputación'
+                    )
+                    
+                    response.data['auto_imputacion_creada'] = True
+                    response.data['monto_imputado'] = str(monto_auto_imputacion)
+                else:
+                    response.data['auto_imputacion_creada'] = False
+                
+                # === CREAR RECIBO DE EXCEDENTE SI EXISTE ===
+                recibo_excedente_data = data.get('recibo_excedente')
+                if recibo_excedente_data:
+                    # Validar que el monto del recibo coincida con el excedente
+                    excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
+                    monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
+                    
+                    if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
+                        raise ValidationError(
+                            f'El monto del recibo ({monto_recibo}) no coincide con el excedente ({excedente_calculado})'
+                        )
+                    
+                    # Validar que el recibo no tenga imputaciones
+                    if recibo_excedente_data.get('imputaciones'):
+                        raise ValidationError('El recibo de excedente no debe tener imputaciones')
+                    
+                    # Crear el recibo
+                    from ferreapps.ventas.models import VentaDetalleItem
+                    from datetime import date as datetime_date
+                    
+                    # Obtener comprobante de recibo (letra X)
+                    comprobante_recibo = Comprobante.objects.filter(
+                        tipo='recibo',
+                        letra='X',
+                        activo=True
+                    ).first()
+                    
+                    if not comprobante_recibo:
+                        raise ValidationError('No se encontró comprobante de recibo con letra X')
+                    
+                    # Formatear punto de venta y número
+                    rec_pv = int(recibo_excedente_data['rec_pv'])
+                    rec_num = int(recibo_excedente_data['rec_numero'])
+                    
+                    # Verificar unicidad
+                    ya_existe = Venta.objects.filter(
+                        comprobante=comprobante_recibo,
+                        ven_punto=rec_pv,
+                        ven_numero=rec_num
+                    ).exists()
+                    
+                    if ya_existe:
+                        raise ValidationError(
+                            f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
+                        )
+                    
+                    # Crear recibo
+                    recibo = Venta.objects.create(
+                        ven_sucursal=1,
+                        ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
+                        comprobante=comprobante_recibo,
+                        ven_punto=rec_pv,
+                        ven_numero=rec_num,
+                        ven_descu1=0,
+                        ven_descu2=0,
+                        ven_descu3=0,
+                        ven_vdocomvta=0,
+                        ven_vdocomcob=0,
+                        ven_estado='CO',
+                        ven_idcli=venta_creada.ven_idcli,
+                        ven_cuit=venta_creada.ven_cuit or '',
+                        ven_dni='',
+                        ven_domicilio=venta_creada.ven_domicilio or '',
+                        ven_razon_social=venta_creada.ven_razon_social or '',
+                        ven_idpla=venta_creada.ven_idpla,
+                        ven_idvdo=venta_creada.ven_idvdo,
+                        ven_copia=1,
+                        ven_observacion=recibo_excedente_data.get('rec_observacion', '')
+                    )
+                    
+                    # Crear item genérico para el recibo
+                    VentaDetalleItem.objects.create(
+                        vdi_idve=recibo,
+                        vdi_idsto=None,
+                        vdi_idpro=None,
+                        vdi_cantidad=1,
+                        vdi_precio_unitario_final=monto_recibo,
+                        vdi_idaliiva=3,  # Alícuota 0%
+                        vdi_orden=1,
+                        vdi_bonifica=0,
+                        vdi_costo=0,
+                        vdi_margen=0,
+                        vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
+                        vdi_detalle2=''
+                    )
+                    
+                    response.data['recibo_excedente_creado'] = True
+                    response.data['recibo_excedente_id'] = recibo.ven_id
+                    response.data['recibo_excedente_numero'] = f'X {rec_pv:04d}-{rec_num:08d}'
+                else:
+                    response.data['recibo_excedente_creado'] = False
+                
                 # Agregar datos de respuesta
                 response.data['stock_actualizado'] = stock_actualizado
                 response.data['comprobante_letra'] = comprobante["letra"]

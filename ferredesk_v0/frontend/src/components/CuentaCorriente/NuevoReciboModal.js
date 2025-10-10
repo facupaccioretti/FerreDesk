@@ -4,12 +4,19 @@ import { useState, useEffect } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
 
-const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
+const NuevoReciboModal = ({ 
+  modal, 
+  onClose, 
+  onGuardar,
+  esReciboExcedente = false,  // Nuevo: indica si es recibo de excedente
+  montoFijo = null            // Nuevo: monto fijo (no editable)
+}) => {
   const theme = useFerreDeskTheme()
   const { getFacturasPendientes, crearReciboConImputaciones } = useCuentaCorrienteAPI()
   
   // Estados para las dos partes del modal
-  const [paso, setPaso] = useState(1) // 1: Selección facturas, 2: Datos recibo
+  // Si es recibo de excedente, saltamos directo al paso 2
+  const [paso, setPaso] = useState(esReciboExcedente ? 2 : 1) // 1: Selección facturas, 2: Datos recibo
   
   // Estado para la primera parte: selección de facturas e imputaciones
   const [facturasPendientes, setFacturasPendientes] = useState([])
@@ -20,7 +27,7 @@ const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
     rec_fecha: new Date().toISOString().split('T')[0],
     rec_pv: "",
     rec_numero: "",
-    rec_monto_total: 0,
+    rec_monto_total: montoFijo || 0,  // Usar montoFijo si está disponible
     rec_observacion: '',
     rec_tipo: 'recibo'
   })
@@ -32,11 +39,12 @@ const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
   const montoImputaciones = imputaciones.reduce((total, imp) => total + (imp.monto || 0), 0)
 
   // Cargar facturas pendientes cuando se abre el modal
+  // (solo si NO es recibo de excedente)
   useEffect(() => {
-    if (modal.abierto && modal.clienteId) {
+    if (modal.abierto && modal.clienteId && !esReciboExcedente) {
       cargarFacturasPendientes()
     }
-  }, [modal.abierto, modal.clienteId])
+  }, [modal.abierto, modal.clienteId, esReciboExcedente])
 
   // Inicializar imputaciones cuando se cargan las facturas
   useEffect(() => {
@@ -53,12 +61,15 @@ const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
   }, [facturasPendientes])
 
   // Actualizar monto total del recibo cuando cambien las imputaciones
+  // (solo si NO es recibo de excedente)
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      rec_monto_total: montoImputaciones
-    }))
-  }, [montoImputaciones])
+    if (!esReciboExcedente) {
+      setFormData(prev => ({
+        ...prev,
+        rec_monto_total: montoImputaciones
+      }))
+    }
+  }, [montoImputaciones, esReciboExcedente])
 
   const cargarFacturasPendientes = async () => {
     try {
@@ -107,46 +118,64 @@ const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
       return
     }
 
-    if (formData.rec_monto_total < montoImputaciones) {
-      setError('El monto del recibo no puede ser menor al monto de las imputaciones')
-      return
-    }
+    // Si NO es recibo de excedente, validar contra imputaciones
+    if (!esReciboExcedente) {
+      if (formData.rec_monto_total < montoImputaciones) {
+        setError('El monto del recibo no puede ser menor al monto de las imputaciones')
+        return
+      }
 
-    // Monto mínimo de $500
-    if (formData.rec_monto_total < 500) {
-      setError('El monto del recibo debe ser mínimo $500')
-      return
+      // Monto mínimo de $500
+      if (formData.rec_monto_total < 500) {
+        setError('El monto del recibo debe ser mínimo $500')
+        return
+      }
     }
 
     setLoading(true)
     setError('')
 
     try {
-      // Preparar datos para enviar
-      const reciboData = {
-        rec_fecha: formData.rec_fecha,
-        rec_pv: formData.rec_pv,
-        rec_numero: formData.rec_numero,
-        rec_monto_total: formData.rec_monto_total,
-        rec_observacion: formData.rec_observacion,
-        rec_tipo: formData.rec_tipo,
-        cliente_id: modal.clienteId,
-        imputaciones: imputaciones
-          .filter(imp => imp.monto > 0)
-          .map(imp => ({
-            imp_id_venta: imp.factura_id,
-            imp_monto: imp.monto,
-            imp_observacion: ''
-          }))
-      }
+      if (esReciboExcedente) {
+        // Modo recibo de excedente: no hacer request al backend
+        // Solo devolver los datos para que se envíen junto con la venta
+        const reciboData = {
+          rec_fecha: formData.rec_fecha,
+          rec_pv: formData.rec_pv,
+          rec_numero: formData.rec_numero,
+          rec_monto_total: montoFijo || formData.rec_monto_total,
+          rec_observacion: formData.rec_observacion,
+          rec_tipo: 'recibo'
+        }
+        
+        onGuardar(reciboData)
+      } else {
+        // Modo normal: crear recibo inmediatamente
+        const reciboData = {
+          rec_fecha: formData.rec_fecha,
+          rec_pv: formData.rec_pv,
+          rec_numero: formData.rec_numero,
+          rec_monto_total: formData.rec_monto_total,
+          rec_observacion: formData.rec_observacion,
+          rec_tipo: formData.rec_tipo,
+          cliente_id: modal.clienteId,
+          imputaciones: imputaciones
+            .filter(imp => imp.monto > 0)
+            .map(imp => ({
+              imp_id_venta: imp.factura_id,
+              imp_monto: imp.monto,
+              imp_observacion: ''
+            }))
+        }
 
-      const response = await crearReciboConImputaciones(reciboData)
-      
-      // Mostrar mensaje de éxito
-      alert(`Recibo creado exitosamente: ${response.numero_recibo || formData.rec_numero}`)
-      
-      // Cerrar modal y recargar datos
-      onGuardar()
+        const response = await crearReciboConImputaciones(reciboData)
+        
+        // Mostrar mensaje de éxito
+        alert(`Recibo creado exitosamente: ${response.numero_recibo || formData.rec_numero}`)
+        
+        // Cerrar modal y recargar datos
+        onGuardar()
+      }
     } catch (err) {
       setError(err.message || 'Error al crear el recibo')
     } finally {
@@ -416,14 +445,22 @@ const NuevoReciboModal = ({ modal, onClose, onGuardar }) => {
                     <input
                       type="number"
                       step="0.01"
-                      min={Math.max(montoImputaciones, 500)}
-                      value={formData.rec_monto_total}
+                      min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 500)}
+                      value={montoFijo || formData.rec_monto_total}
                       onChange={(e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      disabled={esReciboExcedente}
+                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${esReciboExcedente ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Mínimo: ${Math.max(montoImputaciones, 500).toLocaleString('es-AR')}
-                    </p>
+                    {!esReciboExcedente && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Mínimo: ${Math.max(montoImputaciones, 500).toLocaleString('es-AR')}
+                      </p>
+                    )}
+                    {esReciboExcedente && (
+                      <p className="text-xs text-orange-600 mt-1 font-medium">
+                        Monto fijo (excedente del pago)
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">

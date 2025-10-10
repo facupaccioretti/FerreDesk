@@ -107,14 +107,13 @@ class CuentaCorrienteItemSerializer(serializers.ModelSerializer):
     haber = serializers.SerializerMethodField()
     saldo_acumulado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
-    es_fac_rcbo = serializers.SerializerMethodField()
     
     class Meta:
         model = CuentaCorrienteCliente
         fields = [
             'ven_id', 'ven_fecha', 'numero_formateado', 'comprobante_nombre',
             'comprobante_tipo', 'ven_total', 'debe', 'haber', 'saldo_acumulado',
-            'saldo_pendiente', 'es_fac_rcbo'
+            'saldo_pendiente'
         ]
 
     def get_debe(self, obj):
@@ -141,11 +140,6 @@ class CuentaCorrienteItemSerializer(serializers.ModelSerializer):
         """
         return obj.saldo_pendiente
 
-    def get_es_fac_rcbo(self, obj):
-        """
-        FAC RCBO ya viene calculado de la vista SQL
-        """
-        return obj.es_fac_rcbo
 
 
 class FacturaPendienteSerializer(serializers.ModelSerializer):

@@ -137,7 +137,8 @@ def cuenta_corriente_cliente(request, cliente_id):
             ven_idcli=cliente_id
         ).order_by('ven_fecha', 'ven_id')
         
-        saldo_total = todas_las_transacciones.last().saldo_acumulado if todas_las_transacciones.exists() else Decimal('0.00')
+        # Calcular saldo total como suma de saldos pendientes (más simple y correcto)
+        saldo_total = sum(item.saldo_pendiente for item in todas_las_transacciones)
         
         return Response({
             'cliente': ClienteCuentaCorrienteSerializer(cliente).data,
@@ -587,6 +588,193 @@ def detalle_comprobante(request, ven_id: int):
     except Exception as e:
         logger.error(f"detalle_comprobante error ven_id={ven_id}: {e}")
         return Response({'detail': 'Error interno'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def anular_recibo(request):
+    """
+    Anular un recibo completo y todas sus imputaciones
+    """
+    try:
+        recibo_id = request.data.get('recibo_id')
+        
+        if not recibo_id:
+            return Response({
+                'detail': 'ID de recibo requerido'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Obtener el recibo
+            recibo = get_object_or_404(Venta, ven_id=recibo_id)
+            
+            # Verificar que sea tipo recibo
+            if recibo.comprobante.tipo != 'recibo':
+                return Response({
+                    'detail': 'Solo se pueden anular recibos'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener información del recibo para respuesta
+            numero_formateado = f"{recibo.comprobante.letra} {recibo.ven_punto:04d}-{recibo.ven_numero:08d}"
+            monto_total = VentaCalculada.objects.filter(ven_id=recibo_id).first()
+            monto_total = getattr(monto_total, 'ven_total', 0) if monto_total else 0
+            
+            # Contar imputaciones que se van a eliminar
+            imputaciones_count = ImputacionVenta.objects.filter(imp_id_recibo=recibo).count()
+            
+            # Eliminar todas las imputaciones asociadas
+            ImputacionVenta.objects.filter(imp_id_recibo=recibo).delete()
+            
+            # Eliminar el recibo
+            recibo.delete()
+            
+            return Response({
+                'mensaje': 'Recibo anulado exitosamente',
+                'recibo_anulado': {
+                    'ven_id': recibo_id,
+                    'numero_formateado': numero_formateado,
+                    'monto_total': str(monto_total),
+                    'imputaciones_eliminadas': imputaciones_count
+                }
+            }, status=status.HTTP_200_OK)
+            
+    except Exception as e:
+        logger.error(f"Error al anular recibo {recibo_id}: {e}")
+        return Response(
+            {'detail': 'Error interno del servidor'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def obtener_imputacion_real(request, ven_id_venta, ven_id_recibo):
+    """
+    Obtener el ID real de una imputación específica
+    """
+    try:
+        imputacion = ImputacionVenta.objects.filter(
+            imp_id_venta_id=ven_id_venta,
+            imp_id_recibo_id=ven_id_recibo
+        ).first()
+        
+        if not imputacion:
+            return Response({
+                'detail': 'Imputación no encontrada'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'imp_id': imputacion.imp_id,
+            'imp_monto': str(imputacion.imp_monto),
+            'imp_fecha': imputacion.imp_fecha
+        })
+        
+    except Exception as e:
+        logger.error(f"Error al obtener imputación real: {e}")
+        return Response(
+            {'detail': 'Error interno del servidor'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def modificar_imputaciones(request):
+    """
+    Modificar imputaciones de un recibo o nota de crédito
+    """
+    try:
+        comprobante_id = request.data.get('comprobante_id')
+        imputaciones = request.data.get('imputaciones', [])
+        
+        if not comprobante_id:
+            return Response({
+                'detail': 'ID de comprobante requerido'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not imputaciones:
+            return Response({
+                'detail': 'Debe especificar al menos una imputación'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Obtener el comprobante
+            comprobante = get_object_or_404(Venta, ven_id=comprobante_id)
+            
+            # Verificar que sea recibo o nota de crédito
+            if comprobante.comprobante.tipo not in ['recibo', 'nota_credito']:
+                return Response({
+                    'detail': 'Solo se pueden modificar imputaciones de recibos o notas de crédito'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener monto total del comprobante
+            vc = VentaCalculada.objects.filter(ven_id=comprobante_id).first()
+            if not vc:
+                return Response({
+                    'detail': 'No se encontró información del comprobante'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            monto_total_comprobante = Decimal(str(getattr(vc, 'ven_total', 0)))
+            
+            # Calcular suma de nuevos montos
+            suma_nuevos_montos = sum(Decimal(str(imp['nuevo_monto'])) for imp in imputaciones)
+            
+            # Validar que no exceda el monto total del comprobante
+            if suma_nuevos_montos > monto_total_comprobante:
+                return Response({
+                    'detail': f'La suma de nuevos montos ({suma_nuevos_montos}) excede el monto total del comprobante ({monto_total_comprobante})'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Procesar cada imputación
+            modificaciones_realizadas = []
+            
+            for imp_data in imputaciones:
+                imp_id = imp_data['imp_id']
+                nuevo_monto = Decimal(str(imp_data['nuevo_monto']))
+                
+                try:
+                    imputacion = ImputacionVenta.objects.get(imp_id=imp_id)
+                    
+                    if nuevo_monto == 0:
+                        # Eliminar imputación
+                        imputacion.delete()
+                        modificaciones_realizadas.append({
+                            'imp_id': imp_id,
+                            'accion': 'eliminada',
+                            'monto_anterior': str(imputacion.imp_monto),
+                            'monto_nuevo': '0'
+                        })
+                    else:
+                        # Actualizar monto
+                        monto_anterior = imputacion.imp_monto
+                        imputacion.imp_monto = nuevo_monto
+                        imputacion.save()
+                        modificaciones_realizadas.append({
+                            'imp_id': imp_id,
+                            'accion': 'modificada',
+                            'monto_anterior': str(monto_anterior),
+                            'monto_nuevo': str(nuevo_monto)
+                        })
+                        
+                except ImputacionVenta.DoesNotExist:
+                    return Response({
+                        'detail': f'Imputación con ID {imp_id} no encontrada'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                'mensaje': 'Imputaciones modificadas exitosamente',
+                'modificaciones': modificaciones_realizadas,
+                'monto_total_comprobante': str(monto_total_comprobante),
+                'suma_final_imputaciones': str(suma_nuevos_montos),
+                'saldo_restante': str(monto_total_comprobante - suma_nuevos_montos)
+            }, status=status.HTTP_200_OK)
+            
+    except Exception as e:
+        logger.error(f"Error al modificar imputaciones: {e}")
+        return Response(
+            {'detail': 'Error interno del servidor'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 
 # =============================================================================
 # NOTA: Las funciones de cálculo de saldos ahora se manejan mediante vistas SQL

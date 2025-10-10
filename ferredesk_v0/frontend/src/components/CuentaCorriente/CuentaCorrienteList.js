@@ -6,6 +6,8 @@ import CuentaCorrienteTable from "./CuentaCorrienteTable"
 import NuevoReciboModal from "./NuevoReciboModal"
 import ImputarExistenteModal from "./ImputarExistenteModal"
 import ModalDetalleComprobante from "./ModalDetalleComprobante"
+import ModalAnularRecibo from "./ModalAnularRecibo"
+import ModalModificarImputaciones from "./ModalModificarImputaciones"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 
 const CuentaCorrienteList = ({ 
@@ -23,7 +25,9 @@ const CuentaCorrienteList = ({
     loading,
     error,
     getCuentaCorrienteCliente,
-    getFacturasPendientes
+    getFacturasPendientes,
+    anularRecibo,
+    modificarImputaciones
   } = useCuentaCorrienteAPI()
 
   const [cuentaCorriente, setCuentaCorriente] = useState(null)
@@ -36,6 +40,14 @@ const CuentaCorrienteList = ({
     clienteId: null
   })
   const [imputarExistenteModal, setImputarExistenteModal] = useState({ 
+    abierto: false,
+    comprobante: null
+  })
+  const [anularReciboModal, setAnularReciboModal] = useState({ 
+    abierto: false,
+    recibo: null
+  })
+  const [modificarPagosModal, setModificarPagosModal] = useState({ 
     abierto: false,
     comprobante: null
   })
@@ -122,6 +134,46 @@ const CuentaCorrienteList = ({
     // Recargar cuenta corriente después de imputar
     cargarCuentaCorriente()
     handleCerrarImputarExistente()
+  }
+
+  const handleAnularRecibo = (recibo) => {
+    setAnularReciboModal({ abierto: true, recibo })
+  }
+
+  const handleCerrarAnularRecibo = () => {
+    setAnularReciboModal({ abierto: false, recibo: null })
+  }
+
+  const handleConfirmarAnularRecibo = async (reciboId) => {
+    try {
+      await anularRecibo(reciboId)
+      // Recargar cuenta corriente después de anular
+      cargarCuentaCorriente()
+      handleCerrarAnularRecibo()
+    } catch (err) {
+      console.error('Error al anular recibo:', err)
+      // El error se muestra automáticamente por el hook
+    }
+  }
+
+  const handleModificarPagos = (comprobante) => {
+    setModificarPagosModal({ abierto: true, comprobante })
+  }
+
+  const handleCerrarModificarPagos = () => {
+    setModificarPagosModal({ abierto: false, comprobante: null })
+  }
+
+  const handleConfirmarModificarPagos = async (comprobanteId, imputaciones) => {
+    try {
+      await modificarImputaciones(comprobanteId, imputaciones)
+      // Recargar cuenta corriente después de modificar
+      cargarCuentaCorriente()
+      handleCerrarModificarPagos()
+    } catch (err) {
+      console.error('Error al modificar imputaciones:', err)
+      // El error se muestra automáticamente por el hook
+    }
   }
 
   // Constantes de clases para el formato compacto simplificado
@@ -248,6 +300,8 @@ const CuentaCorrienteList = ({
               loading={loading}
               onImputarPago={handleImputarExistente}
               onVerDetalle={handleVerDetalle}
+              onAnularRecibo={handleAnularRecibo}
+              onModificarPagos={handleModificarPagos}
               theme={theme}
               saldoTotal={cuentaCorriente.saldo_total}
             />
@@ -304,6 +358,24 @@ const CuentaCorrienteList = ({
         comprobante={imputarExistenteModal.comprobante}
         clienteId={clienteSeleccionado?.id}
         onImputado={handleImputacionExistenteGuardada}
+      />
+
+      {/* Modal anular recibo */}
+      <ModalAnularRecibo
+        isOpen={anularReciboModal.abierto}
+        onClose={handleCerrarAnularRecibo}
+        recibo={anularReciboModal.recibo}
+        onConfirmar={handleConfirmarAnularRecibo}
+        loading={loading}
+      />
+
+      {/* Modal modificar imputaciones */}
+      <ModalModificarImputaciones
+        isOpen={modificarPagosModal.abierto}
+        onClose={handleCerrarModificarPagos}
+        comprobante={modificarPagosModal.comprobante}
+        onConfirmar={handleConfirmarModificarPagos}
+        loading={loading}
       />
 
       {/* Mensaje de error */}
