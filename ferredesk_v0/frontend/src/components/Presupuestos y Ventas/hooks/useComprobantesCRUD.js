@@ -329,6 +329,39 @@ const useComprobantesCRUD = ({
       const data = await response.json()
 
       if (!response.ok) {
+        // Capturar error de imputaciones
+        if (data.imputaciones && data.imputaciones.length > 0) {
+          // Construir mensaje detallado y prolijo
+          let mensaje = `${data.detail}\n\n`
+          mensaje += `Comprobantes relacionados:\n\n\n`
+          
+          data.imputaciones.forEach((imp, idx) => {
+            if (imp.tipo === 'auto_imputacion') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Auto-imputación (Factura-Recibo)\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            } else if (imp.tipo === 'recibo_pago') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Pago recibido\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            } else if (imp.tipo === 'factura_pagada') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Pago realizado\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            }
+          })
+          
+          mensaje += `Total de imputaciones: ${data.total_imputaciones}\n\n`
+          mensaje += 'Para continuar, elimine estas imputaciones desde Cuenta Corriente antes de realizar la conversión.'
+          
+          // No usar alert - dejar que el error sea manejado por manejarErrorArca
+          throw new Error(mensaje)
+        }
+        
+        // Otros errores
         let msg = "No se pudo convertir la cotización"
         try {
           msg = data.detail || msg
@@ -393,6 +426,33 @@ const useComprobantesCRUD = ({
     setIsFetchingForConversion(true);
 
     try {
+      // Validación OPCIONAL: verificar imputaciones antes de abrir formulario
+      try {
+        const ccResponse = await fetch(`/api/cuenta-corriente/cliente/${facturaInterna.cliente?.id || facturaInterna.ven_idcli}/`)
+        if (ccResponse.ok) {
+          const ccData = await ccResponse.json()
+          const tieneImputaciones = ccData.items?.some(item => 
+            item.ven_id === facturaInterna.id && item.saldo_pendiente < item.ven_total
+          )
+          
+          if (tieneImputaciones) {
+            const confirmar = window.confirm(
+              'ADVERTENCIA: Esta cotización tiene imputaciones en cuenta corriente.\n\n' +
+              'No podrá completar la conversión hasta que elimine las imputaciones.\n\n' +
+              '¿Desea continuar de todos modos para ver los detalles?'
+            )
+            if (!confirmar) {
+              setIsFetchingForConversion(false);
+              setFetchingPresupuestoId(null);
+              return;
+            }
+          }
+        }
+      } catch (ccError) {
+        console.warn('No se pudo verificar imputaciones:', ccError);
+        // Continuar sin validación preventiva
+      }
+
       const [cabecera, itemsDetalle] = await Promise.all([
         fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
           if (!res.ok) {
@@ -417,15 +477,22 @@ const useComprobantesCRUD = ({
         id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
       }));
 
-      // Marcar que es conversión de factura interna
-      setConversionModal({ 
-        open: true, 
-        presupuesto: { 
+      // Abrir ConVentaForm directamente (SIN ConversionModal)
+      const key = `conversion-factura-i-${facturaInterna.id}`
+      const label = `Convertir ${facturaInterna.numero || facturaInterna.id}`
+      
+      const tabData = {
+        facturaInternaOrigen: {
           ...facturaInternaConDetalle, 
           items: itemsConId,
           tipoConversion: 'factura_i_factura'
-        } 
-      });
+        },
+        itemsSeleccionados: itemsConId,
+        itemsSeleccionadosIds: itemsConId.map(item => item.id),
+        tipoConversion: 'factura_i_factura'
+      }
+      
+      updateTabData(key, label, tabData, 'conv-factura-i');
     } catch (error) {
       console.error("Error al obtener detalle para conversión:", error);
       alert(error.message);

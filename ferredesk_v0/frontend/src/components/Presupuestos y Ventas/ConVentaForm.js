@@ -470,7 +470,9 @@ const ConVentaForm = ({
       const totalVenta = totales?.total || 0
       const estaPagado = montoPago > 0
       
-      if (estaPagado && montoPago > totalVenta) {
+      // Tolerancia de 99 centavos para evitar mensaje de excedente por diferencias mínimas
+      const TOLERANCIA_MONTO = 0.99
+      if (estaPagado && montoPago > totalVenta + TOLERANCIA_MONTO) {
         const excedente = montoPago - totalVenta
         
         // Preguntar si desea crear recibo de excedente
@@ -540,13 +542,8 @@ const ConVentaForm = ({
       if (esConversionFacturaI) {
         payload.factura_interna_origen = facturaInternaOrigen.id;
         payload.tipo_conversion = 'factura_i_factura';
-        payload.items_seleccionados = idsSeleccionados;
-        payload.conversion_metadata = {
-          items_originales: items.filter(item => item.idOriginal).map(item => ({
-            id_original: item.idOriginal,
-            no_descontar_stock: item.noDescontarStock
-          }))
-        };
+        // NO enviar items - el backend usará los existentes de la cotización
+        delete payload.items;
       } else {
         payload.presupuesto_origen = presupuestoOrigen.id;
         payload.items_seleccionados = idsSeleccionados;
@@ -558,11 +555,18 @@ const ConVentaForm = ({
       // Llamar al endpoint apropiado
       const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
       
-      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
-      if (requiereEmisionArca(tipoComprobante) && !temporizadorArcaRef.current) {
-        temporizadorArcaRef.current = setTimeout(() => {
+      // Iniciar overlay de ARCA INMEDIATAMENTE para conversiones de factura interna
+      // (no usar timeout porque los errores de validación son instantáneos)
+      if (requiereEmisionArca(tipoComprobante)) {
+        if (esConversionFacturaI) {
+          // Para conversiones, iniciar inmediatamente
           iniciarEsperaArca();
-        }, 400);
+        } else if (!temporizadorArcaRef.current) {
+          // Para ventas normales, usar timeout para evitar flash
+          temporizadorArcaRef.current = setTimeout(() => {
+            iniciarEsperaArca();
+          }, 400);
+        }
       }
 
       const resultado = await onSave(payload, tabKey, endpoint);
@@ -1108,7 +1112,7 @@ const ConVentaForm = ({
                     <SumarDuplicar
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || esConversionFacturaI}
                       showLabel={false}
                     />
                   </div>
@@ -1142,7 +1146,12 @@ const ConVentaForm = ({
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
-                initialItems={normalizarItems(formulario.items || [], { modo: 'venta', alicuotasMap })}
+                initialItems={normalizarItems(formulario.items || [], { 
+                  modo: 'venta', 
+                  alicuotasMap,
+                  esConversionFacturaI: esConversionFacturaI
+                })}
+                readOnly={esConversionFacturaI || isReadOnly}
               />
             </div>
 

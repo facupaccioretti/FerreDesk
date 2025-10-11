@@ -4,6 +4,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.http import HttpResponse, Http404
 from django.core.exceptions import ValidationError
+from django.db.models import ProtectedError
 from .models import Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed, VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
 from .serializers import (
     ComprobanteSerializer,
@@ -1030,7 +1031,6 @@ def convertir_factura_interna_a_fiscal(request):
     try:
         data = request.data
         factura_interna_id = data.get('factura_interna_origen')
-        items_seleccionados = data.get('items_seleccionados', [])
         tipo_conversion = data.get('tipo_conversion')
         
         # Validar tipo de conversión
@@ -1049,7 +1049,6 @@ def convertir_factura_interna_a_fiscal(request):
         # Preparar datos de la nueva factura fiscal (IDÉNTICO A VENTAFORM)
         venta_data = data.copy()
         venta_data.pop('factura_interna_origen', None)
-        venta_data.pop('items_seleccionados', None)
         venta_data.pop('tipo_conversion', None)
         venta_data.pop('conversion_metadata', None)
         
@@ -1057,20 +1056,33 @@ def convertir_factura_interna_a_fiscal(request):
         
         # === USAR EL MISMO FLUJO QUE VentaViewSet.create() ===
         
-        items = venta_data.get('items', [])
-        if not items:
-            return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # --- Asignar bonificación general a los ítems sin bonificación particular ---
-        bonif_general = venta_data.get('bonificacionGeneral', 0)
-        try:
-            bonif_general = float(bonif_general)
-        except Exception:
-            bonif_general = 0
-        for item in items:
-            bonif = item.get('vdi_bonifica')
-            if not bonif or float(bonif) == 0:
-                item['vdi_bonifica'] = bonif_general
+        # Para conversión de factura interna, obtener items originales y marcarlos como no descuenten stock
+        from ferreapps.ventas.models import VentaDetalleItem
+        items_originales = VentaDetalleItem.objects.filter(vdi_idve=factura_interna)
+        
+        # Convertir items originales al formato esperado por el serializer, marcándolos como originales
+        items = []
+        for item_original in items_originales:
+            item_data = {
+                'vdi_orden': item_original.vdi_orden,
+                'vdi_idsto': item_original.vdi_idsto,
+                'vdi_idpro': item_original.vdi_idpro,
+                'vdi_cantidad': item_original.vdi_cantidad,
+                'vdi_costo': item_original.vdi_costo,
+                'vdi_margen': item_original.vdi_margen,
+                'vdi_precio_unitario_final': item_original.vdi_precio_unitario_final,
+                'vdi_bonifica': item_original.vdi_bonifica,
+                'vdi_detalle1': item_original.vdi_detalle1,
+                'vdi_detalle2': item_original.vdi_detalle2,
+                'vdi_idaliiva': item_original.vdi_idaliiva,
+                # Marcar como item original para que no descuente stock
+                'idOriginal': item_original.id,
+                'noDescontarStock': True,
+                'esBloqueado': True,
+            }
+            items.append(item_data)
+        
+        print(f"LOG: Obtenidos {len(items)} items originales de la factura interna {factura_interna.ven_id}")
 
         # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
         # Obtener configuración de la ferretería para determinar política de stock negativo
@@ -1193,6 +1205,16 @@ def convertir_factura_interna_a_fiscal(request):
             nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
             venta_data['ven_numero'] = nuevo_numero
             
+            # Agregar items originales al venta_data para el serializer
+            venta_data['items'] = items
+            
+            # Limpiar flags personalizados de los items antes de pasarlos al serializer
+            # El serializer no reconoce estos campos y pueden causar errores
+            for item in venta_data['items']:
+                item.pop('idOriginal', None)
+                item.pop('noDescontarStock', None)
+                item.pop('esBloqueado', None)
+            
             # === USAR EL MISMO PATRÓN QUE CREATE(): USAR SERIALIZER COMO VENTAFORM ===
             # Esto permite que Django maneje automáticamente los ForeignKey como ven_idcli
             try:
@@ -1220,48 +1242,71 @@ def convertir_factura_interna_a_fiscal(request):
         
         print("LOG: Antes de gestionar la factura interna original")
         
-        # === LÓGICA DE GESTIÓN DE FACTURA INTERNA (igual que presupuestos) ===
-        
-        # Obtener items de la factura interna
-        items_factura_interna = list(factura_interna.items.all())
-        ids_items_factura_interna = [str(item.id) for item in items_factura_interna]
-        print(f"DEBUG - IDs items factura interna: {ids_items_factura_interna}")
-        
-        # Validar que los ítems seleccionados pertenecen a la factura interna
-        if not all(str(i) in ids_items_factura_interna for i in items_seleccionados):
-            print("DEBUG - Algunos ítems seleccionados no pertenecen a la factura interna")
-            return Response({'detail': 'Algunos ítems seleccionados no pertenecen a la factura interna.'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Convertir ambos arrays de IDs a int para comparar correctamente
-        ids_items_factura_interna_int = [int(i.id) for i in items_factura_interna]
-        items_seleccionados_int = [int(i) for i in items_seleccionados]
-        print(f"DEBUG - ids_items_factura_interna_int: {ids_items_factura_interna_int}")
-        print(f"DEBUG - items_seleccionados_int: {items_seleccionados_int}")
-        
-        # === LÓGICA DE GESTIÓN DE FACTURA INTERNA (igual que presupuestos) ===
-        if set(items_seleccionados_int) == set(ids_items_factura_interna_int):
-            print("DEBUG - Se seleccionaron todos los ítems, eliminando factura interna")
+        # === LÓGICA DE GESTIÓN DE FACTURA INTERNA ===
+        # Conversión siempre completa: eliminar la factura interna original
+        try:
+            print("DEBUG - Eliminando factura interna original")
             factura_interna.delete()
-            print("LOG: Factura interna eliminada")
+            print("LOG: Factura interna eliminada exitosamente")
             factura_interna_result = None
-        else:
-            print("DEBUG - Se dejan ítems no seleccionados en la factura interna")
-            items_restantes = [item for item in items_factura_interna if int(item.id) not in items_seleccionados_int]
-            factura_interna.items.set(items_restantes)
-            # Eliminar físicamente los ítems seleccionados de la factura interna
-            ids_a_eliminar = [item.id for item in items_factura_interna if int(item.id) in items_seleccionados_int]
-            if ids_a_eliminar:
-                VentaDetalleItem.objects.filter(id__in=ids_a_eliminar).delete()
-            # Si no quedan ítems, eliminar la factura interna
-            if not items_restantes:
-                print("LOG: Factura interna quedó vacía tras conversión, eliminando factura interna")
-                factura_interna.delete()
-                factura_interna_result = None
-            else:
-                # Los totales se calculan automáticamente en las vistas SQL
-                # No es necesario recalcular campos que no existen en el modelo Venta
-                factura_interna.save()
-                factura_interna_result = VentaSerializer(factura_interna).data
+        except ProtectedError as e:
+            # Si tiene imputaciones, capturar el error y dar contexto al usuario
+            from ferreapps.cuenta_corriente.models import ImputacionVenta
+            from django.db.models import Q
+            
+            print(f"LOG: No se puede eliminar factura interna por imputaciones: {e}")
+            
+            # Obtener todas las imputaciones relacionadas
+            imputaciones_relacionadas = ImputacionVenta.objects.filter(
+                Q(imp_id_venta=factura_interna) | Q(imp_id_recibo=factura_interna)
+            ).select_related('imp_id_venta', 'imp_id_recibo')
+            
+            # Construir lista de comprobantes relacionados
+            comprobantes_relacionados = []
+            for imp in imputaciones_relacionadas:
+                # Validar que no sea auto-imputación (ej. factura-recibo)
+                if imp.imp_id_venta.ven_id == imp.imp_id_recibo.ven_id:
+                    # Auto-imputación: la cotización se pagó a sí misma (factura-recibo)
+                    vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_venta.ven_id).first()
+                    if vc:
+                        comprobantes_relacionados.append({
+                            'tipo': 'auto_imputacion',
+                            'numero': vc.numero_formateado,
+                            'nombre': vc.comprobante_nombre + ' (Factura-Recibo)',
+                            'monto': str(imp.imp_monto),
+                            'fecha': str(imp.imp_fecha)
+                        })
+                    continue
+                
+                if imp.imp_id_venta.ven_id == factura_interna.ven_id:
+                    # Esta cotización está siendo pagada por otro comprobante
+                    vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_recibo.ven_id).first()
+                    if vc:
+                        comprobantes_relacionados.append({
+                            'tipo': 'recibo_pago',
+                            'numero': vc.numero_formateado,
+                            'nombre': vc.comprobante_nombre,
+                            'monto': str(imp.imp_monto),
+                            'fecha': str(imp.imp_fecha)
+                        })
+                elif imp.imp_id_recibo.ven_id == factura_interna.ven_id:
+                    # Esta cotización está pagando otra factura
+                    vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_venta.ven_id).first()
+                    if vc:
+                        comprobantes_relacionados.append({
+                            'tipo': 'factura_pagada',
+                            'numero': vc.numero_formateado,
+                            'nombre': vc.comprobante_nombre,
+                            'monto': str(imp.imp_monto),
+                            'fecha': str(imp.imp_fecha)
+                        })
+            
+            return Response({
+                'detail': 'No se puede convertir esta cotización porque tiene imputaciones en cuenta corriente.',
+                'razon': 'La cotización tiene pagos registrados que deben eliminarse antes de la conversión.',
+                'imputaciones': comprobantes_relacionados,
+                'total_imputaciones': len(comprobantes_relacionados)
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
         if debe_emitir_arca(tipo_comprobante):

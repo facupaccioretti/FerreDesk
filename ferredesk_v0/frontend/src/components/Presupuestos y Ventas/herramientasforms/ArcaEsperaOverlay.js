@@ -78,9 +78,9 @@ const ArcaEsperaOverlay = ({
                     
                     {/* Mensaje de error */}
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 w-full mb-6">
-                      <p className="text-red-700 text-sm leading-relaxed">
+                      <div className="text-red-700 text-sm leading-relaxed whitespace-pre-wrap">
                         {typeof errorArca === 'string' ? errorArca : 'Error desconocido en la emisión ARCA'}
-                      </p>
+                      </div>
                     </div>
 
                     {/* Botón de aceptar */}

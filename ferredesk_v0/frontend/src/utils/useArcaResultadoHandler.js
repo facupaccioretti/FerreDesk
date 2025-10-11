@@ -53,19 +53,14 @@ export const useArcaResultadoHandler = ({
   const manejarErrorArca = useCallback((error, mensajePorDefecto = "Error al procesar la operación") => {
     console.error("Error en operación:", error);
     
-    // Mostrar en overlay SOLO si ya se estaba esperando ARCA
-    if (esperandoArca) {
-      finalizarEsperaArcaError(error.message || mensajePorDefecto);
-    } else {
-      // Error no relacionado a ARCA: mostrar como alerta estándar y NO abrir overlay
-      const mensaje = (error && error.message) ? error.message : mensajePorDefecto;
-      try {
-        window.alert(mensaje);
-      } catch (_) {
-        // Entorno sin window (por seguridad): no hacer nada extra
-      }
+    // Iniciar modal ARCA si no está activo (para errores de validación tempranos)
+    if (!esperandoArca) {
+      iniciarEsperaArca();
     }
-  }, [esperandoArca, finalizarEsperaArcaError]);
+    
+    // SIEMPRE mostrar en modal ARCA
+    finalizarEsperaArcaError(error.message || mensajePorDefecto);
+  }, [esperandoArca, iniciarEsperaArca, finalizarEsperaArcaError]);
 
   /**
    * Crea una función personalizada para aceptar resultado de ARCA
