@@ -8,7 +8,9 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
 
   const formatearFecha = (fechaStr) => {
     try {
-      const fecha = new Date(fechaStr)
+      // CORREGIDO: Evitar problemas de zona horaria al crear Date desde string
+      // Si la fecha viene como "2025-10-11", crear Date en zona horaria local
+      const fecha = new Date(fechaStr + 'T00:00:00') // Agregar hora local para evitar UTC
       return fecha.toLocaleDateString('es-AR')
     } catch {
       return fechaStr

@@ -667,10 +667,20 @@ const ConVentaForm = ({
         ven_idpla: formulario.plazoId,
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
-        items: items.map((item, idx) => mapearCamposItem(item, idx)),
         comprobante_pagado: estaPagado,
         monto_pago: montoPago,
       };
+
+      // CORREGIDO: Agregar items según el tipo de conversión
+      if (esConversionFacturaI) {
+        // Para facturas internas: enviar items completos (conversión total)
+        payload.items = items.map((item, idx) => mapearCamposItem(item, idx));
+      } else {
+        // Para presupuestos: enviar items_seleccionados (conversión selectiva)
+        // IMPORTANTE: Usar el estado local 'idsSeleccionados' en lugar del prop 'itemsSeleccionadosIds'
+        // El estado se mantiene sincronizado y es el mismo que usa handleSubmit
+        payload.items_seleccionados = idsSeleccionados;
+      }
 
       // Si hay recibo de excedente (ya sea del estado o pasado como parámetro), agregarlo al payload
       const reciboFinal = reciboData || reciboExcedente;

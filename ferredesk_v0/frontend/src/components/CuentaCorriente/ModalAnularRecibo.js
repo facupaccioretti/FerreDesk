@@ -86,7 +86,7 @@ const ModalAnularRecibo = ({
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Fecha:</span>
-                                            <span>{item?.ven_fecha ? new Date(item.ven_fecha).toLocaleDateString() : '-'}</span>
+                                            <span>{item?.ven_fecha ? new Date(item.ven_fecha + 'T00:00:00').toLocaleDateString() : '-'}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Monto:</span>

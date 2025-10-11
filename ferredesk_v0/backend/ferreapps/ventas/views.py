@@ -775,7 +775,13 @@ def convertir_presupuesto_a_venta(request):
             venta_data.pop('items_seleccionados', None)
 
             if not presupuesto_id or not items_seleccionados:
-                raise Exception('Faltan datos de presupuesto o ítems seleccionados.')
+                error_msg = 'Faltan datos de presupuesto o ítems seleccionados.'
+                if not presupuesto_id:
+                    error_msg += ' No se recibió presupuesto_origen.'
+                if not items_seleccionados:
+                    error_msg += f' items_seleccionados está vacío o None (recibido: {items_seleccionados}).'
+                print(f"DEBUG - Error de validación: {error_msg}")
+                raise ValidationError(error_msg)
 
             print("DEBUG - INICIO BLOQUE ATOMICO")
             # Obtener el presupuesto con bloqueo
@@ -794,6 +800,32 @@ def convertir_presupuesto_a_venta(request):
             if not all(str(i) in ids_items_presupuesto for i in items_seleccionados):
                 print("DEBUG - Algunos ítems seleccionados no pertenecen al presupuesto")
                 raise Exception('Algunos ítems seleccionados no pertenecen al presupuesto.')
+
+            # === COPIAR ITEMS SELECCIONADOS DEL PRESUPUESTO A venta_data ===
+            # Convertir items del presupuesto al formato que espera el serializer
+            items_para_venta = []
+            for item_presupuesto in items_presupuesto:
+                if str(item_presupuesto.id) in [str(i) for i in items_seleccionados]:
+                    # Convertir el item del presupuesto al formato del serializer
+                    # IMPORTANTE: Los campos son IntegerField, no ForeignKey, por eso no tienen _id
+                    item_data = {
+                        'vdi_idsto': item_presupuesto.vdi_idsto if item_presupuesto.vdi_idsto else None,
+                        'vdi_idpro': item_presupuesto.vdi_idpro if item_presupuesto.vdi_idpro else None,
+                        'vdi_cantidad': float(item_presupuesto.vdi_cantidad),
+                        'vdi_precio_unitario_final': float(item_presupuesto.vdi_precio_unitario_final),
+                        'vdi_idaliiva': item_presupuesto.vdi_idaliiva if item_presupuesto.vdi_idaliiva else None,
+                        'vdi_orden': item_presupuesto.vdi_orden or 1,
+                        'vdi_bonifica': float(item_presupuesto.vdi_bonifica) if item_presupuesto.vdi_bonifica else 0,
+                        'vdi_costo': float(item_presupuesto.vdi_costo) if item_presupuesto.vdi_costo else 0,
+                        'vdi_margen': float(item_presupuesto.vdi_margen) if item_presupuesto.vdi_margen else 0,
+                        'vdi_detalle1': item_presupuesto.vdi_detalle1 or '',
+                        'vdi_detalle2': item_presupuesto.vdi_detalle2 or ''
+                    }
+                    items_para_venta.append(item_data)
+            
+            print(f"DEBUG - Items copiados del presupuesto: {len(items_para_venta)} items")
+            # Agregar los items a venta_data para que el serializer los procese
+            venta_data['items'] = items_para_venta
 
             # Obtener configuración de la ferretería para determinar política de stock negativo
             ferreteria = Ferreteria.objects.first()

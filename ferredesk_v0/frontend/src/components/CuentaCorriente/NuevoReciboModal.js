@@ -328,7 +328,7 @@ const NuevoReciboModal = ({
                           {imputaciones.map((imputacion, index) => (
                             <tr key={imputacion.factura_id} className="hover:bg-slate-50">
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
-                                {new Date(imputacion.fecha).toLocaleDateString('es-AR')}
+                                {new Date(imputacion.fecha + 'T00:00:00').toLocaleDateString('es-AR')}
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
                                 {imputacion.numero}

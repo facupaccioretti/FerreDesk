@@ -139,7 +139,7 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
                 <div>
                   <span className="text-blue-600 font-medium">Fecha:</span>
                   <div className="text-blue-800">
-                    {new Date(modal.recibo.ven_fecha).toLocaleDateString('es-AR')}
+                    {new Date(modal.recibo.ven_fecha + 'T00:00:00').toLocaleDateString('es-AR')}
                   </div>
                 </div>
                 <div>
@@ -252,7 +252,7 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
                   {formData.imputaciones.map((imputacion, index) => (
                     <tr key={imputacion.factura_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
-                        {new Date(imputacion.fecha).toLocaleDateString('es-AR')}
+                        {new Date(imputacion.fecha + 'T00:00:00').toLocaleDateString('es-AR')}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
                         {imputacion.numero}
