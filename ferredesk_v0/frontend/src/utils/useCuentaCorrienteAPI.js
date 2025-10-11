@@ -142,6 +142,14 @@ const useCuentaCorrienteAPI = () => {
         });
     }, [makeRequest]);
 
+    // Anular autoimputación (FacRecibo/CotRecibo)
+    const anularAutoimputacion = useCallback(async (ventaId) => {
+        return await makeRequest('/api/cuenta-corriente/anular-autoimputacion/', {
+            method: 'POST',
+            body: JSON.stringify({ venta_id: ventaId }),
+        });
+    }, [makeRequest]);
+
     // Modificar imputaciones de un recibo o nota de crédito
     const modificarImputaciones = useCallback(async (comprobanteId, imputaciones) => {
         return await makeRequest('/api/cuenta-corriente/modificar-imputaciones/', {
@@ -204,6 +212,7 @@ const useCuentaCorrienteAPI = () => {
         cargarFacturasPendientes,
         getDetalleComprobante,
         anularRecibo,
+        anularAutoimputacion,
         modificarImputaciones,
         exportarCuentaCorriente,
     };

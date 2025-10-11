@@ -10,6 +10,7 @@ from .views import (
     clientes_con_movimientos,
     CuentaCorrienteAPIView,
     anular_recibo,
+    anular_autoimputacion,
     modificar_imputaciones,
     obtener_imputacion_real
 )
@@ -30,6 +31,7 @@ urlpatterns = [
     path('comprobante/<int:ven_id>/detalle/', detalle_comprobante, name='detalle-comprobante'),
     path('clientes-con-movimientos/', clientes_con_movimientos, name='clientes-con-movimientos'),
     path('anular-recibo/', anular_recibo, name='anular-recibo'),
+    path('anular-autoimputacion/', anular_autoimputacion, name='anular-autoimputacion'),
     path('modificar-imputaciones/', modificar_imputaciones, name='modificar-imputaciones'),
     path('imputacion-real/<int:ven_id_venta>/<int:ven_id_recibo>/', obtener_imputacion_real, name='obtener-imputacion-real'),
     

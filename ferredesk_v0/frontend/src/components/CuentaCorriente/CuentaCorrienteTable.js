@@ -41,8 +41,11 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
       titulo: "Ver detalle"
     })
     
-    // Anular recibo - solo para recibos
-    if (item.comprobante_tipo === 'recibo') {
+    // Detectar si es una autoimputación (FacRecibo/CotRecibo)
+    const esAutoimputacion = item.comprobante_tipo === 'factura_recibo'
+    
+    // Anular recibo - para recibos normales y autoimputaciones
+    if (item.comprobante_tipo === 'recibo' || esAutoimputacion) {
       botones.push({
         componente: () => (
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -53,12 +56,12 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
           </svg>
         ),
         onClick: () => onAnularRecibo(item),
-        titulo: "Anular Recibo"
+        titulo: esAutoimputacion ? "Anular Autoimputación" : "Anular Recibo"
       })
     }
 
-    // Modificar pagos - para recibos, notas de crédito y factura_recibo
-    if (item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'factura_recibo') {
+    // Modificar pagos - SOLO para recibos normales y notas de crédito (NO para autoimputaciones)
+    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito') && !esAutoimputacion) {
       botones.push({
         componente: () => (
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -71,8 +74,8 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
       })
     }
 
-    // Imputar pago - solo para recibos, notas de crédito y factura_recibo
-    if (item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'factura_recibo') {
+    // Imputar pago - SOLO para recibos normales y notas de crédito (NO para autoimputaciones)
+    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito') && !esAutoimputacion) {
       botones.push({
         componente: () => (
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -81,8 +84,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
           </svg>
         ),
         onClick: () => onImputarPago(item),
-        titulo: item.comprobante_tipo === 'nota_credito' ? "Imputar Crédito" : 
-                item.comprobante_tipo === 'factura_recibo' ? "Imputar Crédito" : "Imputar Pago"
+        titulo: item.comprobante_tipo === 'nota_credito' ? "Imputar Crédito" : "Imputar Pago"
       })
     }
     

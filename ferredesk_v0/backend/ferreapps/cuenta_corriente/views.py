@@ -658,6 +658,62 @@ def anular_recibo(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def anular_autoimputacion(request):
+    """
+    Anular una autoimputación (FacRecibo/CotRecibo) - elimina la autoimputación y el registro original
+    """
+    try:
+        venta_id = request.data.get('venta_id')
+        
+        if not venta_id:
+            return Response({
+                'detail': 'ID de venta requerido'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Obtener la venta original
+            venta = get_object_or_404(Venta, ven_id=venta_id)
+            
+            # Verificar que tenga autoimputación
+            autoimputacion = ImputacionVenta.objects.filter(
+                imp_id_venta=venta,
+                imp_id_recibo=venta
+            ).first()
+            
+            if not autoimputacion:
+                return Response({
+                    'detail': 'No se encontró autoimputación para esta venta'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener información para respuesta
+            numero_formateado = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
+            monto_autoimputacion = autoimputacion.imp_monto
+            
+            # Eliminar la autoimputación
+            autoimputacion.delete()
+            
+            # Eliminar la venta original (que contiene tanto la factura como el recibo)
+            venta.delete()
+            
+            return Response({
+                'mensaje': 'Autoimputación anulada exitosamente',
+                'autoimputacion_anulada': {
+                    'ven_id': venta_id,
+                    'numero_formateado': numero_formateado,
+                    'monto_autoimputacion': str(monto_autoimputacion)
+                }
+            }, status=status.HTTP_200_OK)
+            
+    except Exception as e:
+        logger.error(f"Error al anular autoimputación {venta_id}: {e}")
+        return Response(
+            {'detail': 'Error interno del servidor'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def obtener_imputacion_real(request, ven_id_venta, ven_id_recibo):

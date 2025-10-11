@@ -695,6 +695,9 @@ const ConVentaForm = ({
         payload.tipo_conversion = 'presupuesto_factura';
       }
 
+      // Determinar el endpoint correcto según el tipo de conversión
+      const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
+
       // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
       if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
         temporizadorArcaRef.current = setTimeout(() => {
@@ -702,7 +705,7 @@ const ConVentaForm = ({
         }, 400);
       }
 
-      const resultado = await onSave(payload);
+      const resultado = await onSave(payload, tabKey, endpoint);
 
       // Limpiar temporizador si había sido agendado
       if (temporizadorArcaRef.current) {

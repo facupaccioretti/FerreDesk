@@ -26,6 +26,7 @@ const CuentaCorrienteList = ({
     error,
     getCuentaCorrienteCliente,
     anularRecibo,
+    anularAutoimputacion,
     modificarImputaciones
   } = useCuentaCorrienteAPI()
 
@@ -44,7 +45,7 @@ const CuentaCorrienteList = ({
   })
   const [anularReciboModal, setAnularReciboModal] = useState({ 
     abierto: false,
-    recibo: null
+    item: null
   })
   const [modificarPagosModal, setModificarPagosModal] = useState({ 
     abierto: false,
@@ -135,22 +136,29 @@ const CuentaCorrienteList = ({
     handleCerrarImputarExistente()
   }
 
-  const handleAnularRecibo = (recibo) => {
-    setAnularReciboModal({ abierto: true, recibo })
+  const handleAnularRecibo = (item) => {
+    setAnularReciboModal({ abierto: true, item })
   }
 
   const handleCerrarAnularRecibo = () => {
-    setAnularReciboModal({ abierto: false, recibo: null })
+    setAnularReciboModal({ abierto: false, item: null })
   }
 
-  const handleConfirmarAnularRecibo = async (reciboId) => {
+  const handleConfirmarAnularRecibo = async (item) => {
     try {
-      await anularRecibo(reciboId)
+      const esAutoimputacion = item.comprobante_tipo === 'factura_recibo'
+      
+      if (esAutoimputacion) {
+        await anularAutoimputacion(item.ven_id)
+      } else {
+        await anularRecibo(item.ven_id)
+      }
+      
       // Recargar cuenta corriente después de anular
       cargarCuentaCorriente()
       handleCerrarAnularRecibo()
     } catch (err) {
-      console.error('Error al anular recibo:', err)
+      console.error('Error al anular:', err)
       // El error se muestra automáticamente por el hook
     }
   }
@@ -363,7 +371,7 @@ const CuentaCorrienteList = ({
       <ModalAnularRecibo
         isOpen={anularReciboModal.abierto}
         onClose={handleCerrarAnularRecibo}
-        recibo={anularReciboModal.recibo}
+        item={anularReciboModal.item}
         onConfirmar={handleConfirmarAnularRecibo}
         loading={loading}
       />

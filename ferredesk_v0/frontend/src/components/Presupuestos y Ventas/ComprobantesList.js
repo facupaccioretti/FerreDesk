@@ -24,7 +24,7 @@ const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
   if (t === 'nota_credito' || t === 'nota_credito_interna' || nClean.includes('nota de credito')) {
     return { icon: <IconCredito />, label: "N. Cred." }
   }
-  if (nClean.includes("nota de debito")) return { icon: <IconCredito />, label: "N. Deb." }
+  if (nClean.includes("nota de debito")) return { icon: <IconCredito />, label: "N. Débito" }
   if (nClean.includes("recibo")) return { icon: <IconRecibo />, label: "Recibo" }
   if (nClean.includes("factura")) return { icon: <IconFactura />, label: "Factura" }
   return { icon: <IconFactura />, label: String(nombre) }

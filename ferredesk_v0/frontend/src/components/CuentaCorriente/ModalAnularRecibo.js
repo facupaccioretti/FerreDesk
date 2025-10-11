@@ -6,7 +6,7 @@ import { Dialog, Transition } from "@headlessui/react"
 const ModalAnularRecibo = ({ 
     isOpen, 
     onClose, 
-    recibo, 
+    item, 
     onConfirmar, 
     loading = false 
 }) => {
@@ -16,14 +16,16 @@ const ModalAnularRecibo = ({
     const CLASES_BOTON_SECUNDARIO = "px-6 py-3 rounded-lg font-semibold shadow transition-all duration-200 bg-slate-200 text-slate-700 hover:bg-slate-300"
     const CLASES_BOTON_PELIGRO = "px-6 py-3 rounded-lg font-semibold shadow-lg transition-all duration-200 bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800"
 
+    const esAutoimputacion = item?.comprobante_tipo === 'factura_recibo'
+    
     const handleConfirmar = () => {
-        if (recibo) {
-            onConfirmar(recibo.ven_id);
+        if (item) {
+            onConfirmar(item);
         }
     };
 
     return (
-        <Transition show={isOpen && !!recibo} as={Fragment} appear>
+        <Transition show={isOpen && !!item} as={Fragment} appear>
             <Dialog as="div" className="relative z-50" onClose={onClose}>
                 {/* Fondo oscuro */}
                 <Transition.Child
@@ -63,7 +65,7 @@ const ModalAnularRecibo = ({
                                     </div>
                                     <div>
                                         <Dialog.Title className="text-lg font-bold text-white">
-                                            Anular Recibo
+                                            {esAutoimputacion ? 'Anular Autoimputación' : 'Anular Recibo'}
                                         </Dialog.Title>
                                         <p className="text-sm text-red-100">
                                             Esta acción no se puede deshacer
@@ -74,24 +76,30 @@ const ModalAnularRecibo = ({
 
                             {/* Contenido */}
                             <div className="px-6 py-4">
-                                {/* Información del recibo */}
+                                {/* Información del recibo/autoimputación */}
                                 <div className={`${CLASES_TARJETA} mb-4 bg-slate-50`}>
-                                    <div className={CLASES_ETIQUETA}>Recibo a anular</div>
+                                    <div className={CLASES_ETIQUETA}>{esAutoimputacion ? 'Autoimputación a anular' : 'Recibo a anular'}</div>
                                     <div className="space-y-2 mt-3 text-sm">
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Número:</span>
-                                            <span className="font-medium">{recibo?.numero_formateado}</span>
+                                            <span className="font-medium">{item?.numero_formateado}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Fecha:</span>
-                                            <span>{recibo?.ven_fecha ? new Date(recibo.ven_fecha).toLocaleDateString() : '-'}</span>
+                                            <span>{item?.ven_fecha ? new Date(item.ven_fecha).toLocaleDateString() : '-'}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Monto:</span>
                                             <span className="font-medium text-green-600">
-                                                ${recibo?.ven_total ? parseFloat(recibo.ven_total).toLocaleString() : '0'}
+                                                ${item?.ven_total ? parseFloat(item.ven_total).toLocaleString() : '0'}
                                             </span>
                                         </div>
+                                        {esAutoimputacion && (
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-600">Tipo:</span>
+                                                <span className="font-medium text-blue-600">Autoimputación</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -106,12 +114,25 @@ const ModalAnularRecibo = ({
                                         <div className="ml-3">
                                             <div className={`${CLASES_ETIQUETA} text-red-600`}>Advertencia</div>
                                             <p className="mt-1 text-sm text-red-700">
-                                                Al anular este recibo se eliminarán:
+                                                {esAutoimputacion 
+                                                    ? 'Al anular esta autoimputación se eliminarán:'
+                                                    : 'Al anular este recibo se eliminarán:'
+                                                }
                                             </p>
                                             <ul className="mt-2 text-sm text-red-700 list-disc list-inside">
-                                                <li>El recibo completo</li>
-                                                <li>Todas las imputaciones asociadas</li>
-                                                <li>El historial de pagos</li>
+                                                {esAutoimputacion ? (
+                                                    <>
+                                                        <li>La autoimputación completa</li>
+                                                        <li>El registro original (factura/cotización)</li>
+                                                        <li>Todo el historial de la transacción</li>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <li>El recibo completo</li>
+                                                        <li>Todas las imputaciones asociadas</li>
+                                                        <li>El historial de pagos</li>
+                                                    </>
+                                                )}
                                             </ul>
                                         </div>
                                     </div>
@@ -120,7 +141,7 @@ const ModalAnularRecibo = ({
                                 {/* Confirmación */}
                                 <div className={`${CLASES_TARJETA} bg-yellow-50 border-yellow-200`}>
                                     <p className="text-sm text-yellow-800 font-medium">
-                                        ¿Está seguro de que desea anular este recibo?
+                                        ¿Está seguro de que desea anular {esAutoimputacion ? 'esta autoimputación' : 'este recibo'}?
                                     </p>
                                     <p className="text-sm text-yellow-700 mt-1">
                                         Esta acción es irreversible y afectará la cuenta corriente del cliente.
@@ -153,7 +174,7 @@ const ModalAnularRecibo = ({
                                             Anulando...
                                         </div>
                                     ) : (
-                                        'Anular Recibo'
+                                        esAutoimputacion ? 'Anular Autoimputación' : 'Anular Recibo'
                                     )}
                                 </button>
                             </div>
