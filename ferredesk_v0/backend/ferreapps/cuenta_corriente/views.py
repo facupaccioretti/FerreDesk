@@ -149,8 +149,10 @@ def cuenta_corriente_cliente(request, cliente_id):
             ven_idcli=cliente_id
         ).order_by('ven_fecha', 'ven_id')
         
-        # Calcular saldo total como suma de saldos pendientes (más simple y correcto)
-        saldo_total = sum(item.saldo_pendiente for item in todas_las_transacciones)
+        # Calcular saldo total como el saldo_acumulado del último registro (saldo real del cliente)
+        # Esto debe coincidir con el saldo del último comprobante en la tabla
+        ultimo_registro = todas_las_transacciones.last()
+        saldo_total = ultimo_registro.saldo_acumulado if ultimo_registro else Decimal('0.00')
         
         return Response({
             'cliente': ClienteCuentaCorrienteSerializer(cliente).data,
