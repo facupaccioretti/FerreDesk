@@ -38,6 +38,336 @@ PUNTO_VENTA_INTERNO = 99
 CLIENTE_GENERICO_ID = 1
 
 
+# ============================================================================
+# FUNCIONES AUXILIARES PARA REDUCIR ANIDAMIENTO
+# ============================================================================
+
+def _preparar_items_conversion(factura_interna):
+    """
+    Obtiene y prepara items de factura interna para conversión.
+    
+    Args:
+        factura_interna: Instancia de Venta (factura interna)
+    
+    Returns:
+        list: Lista de diccionarios con datos de items preparados
+    """
+    items_originales = VentaDetalleItem.objects.filter(vdi_idve=factura_interna)
+    items = []
+    
+    for item_original in items_originales:
+        item_data = {
+            'vdi_orden': item_original.vdi_orden,
+            'vdi_idsto': item_original.vdi_idsto,
+            'vdi_idpro': item_original.vdi_idpro,
+            'vdi_cantidad': item_original.vdi_cantidad,
+            'vdi_costo': item_original.vdi_costo,
+            'vdi_margen': item_original.vdi_margen,
+            'vdi_precio_unitario_final': item_original.vdi_precio_unitario_final,
+            'vdi_bonifica': item_original.vdi_bonifica,
+            'vdi_detalle1': item_original.vdi_detalle1,
+            'vdi_detalle2': item_original.vdi_detalle2,
+            'vdi_idaliiva': item_original.vdi_idaliiva,
+            # Marcar como item original para que no descuente stock
+            'idOriginal': item_original.id,
+            'noDescontarStock': True,
+            'esBloqueado': True,
+        }
+        items.append(item_data)
+    
+    print(f"LOG: Obtenidos {len(items)} items originales de la factura interna {factura_interna.ven_id}")
+    return items
+
+
+def _validar_y_procesar_stock(items, venta_data, ferreteria):
+    """
+    Valida y procesa stock para items de conversión.
+    
+    Args:
+        items: Lista de items a procesar
+        venta_data: Datos de la venta
+        ferreteria: Instancia de Ferreteria
+    
+    Returns:
+        tuple: (stock_actualizado, errores_stock)
+               stock_actualizado es una lista, errores_stock es una lista o None
+    """
+    permitir_stock_negativo = venta_data.get('permitir_stock_negativo', 
+                                              getattr(ferreteria, 'permitir_stock_negativo', False))
+    
+    tipo_comprobante = venta_data.get('tipo_comprobante')
+    es_presupuesto = (tipo_comprobante == 'presupuesto')
+    es_nota_credito = (tipo_comprobante == 'nota_credito')
+    errores_stock = []
+    stock_actualizado = []
+    
+    if not es_presupuesto:
+        for item in items:
+            id_stock = item.get('vdi_idsto')
+            cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+
+            # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
+            if not id_stock:
+                continue
+
+            # NUEVO: Si tiene idOriginal, noDescontarStock o esBloqueado, proviene de factura interna - NO descontar stock
+            if item.get('idOriginal') or item.get('noDescontarStock') or item.get('esBloqueado'):
+                print(f"LOG: Item original/noDescontarStock/esBloqueado - NO descuenta stock (idOriginal={item.get('idOriginal')}, noDescontarStock={item.get('noDescontarStock')}, esBloqueado={item.get('esBloqueado')})")
+                continue
+
+            # Si es un producto real NUEVO, el backend obtiene automáticamente el proveedor habitual
+            id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
+            if not id_proveedor:
+                cod = _obtener_codigo_venta(id_stock)
+                errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
+                continue
+                
+            if es_nota_credito:
+                # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
+                try:
+                    stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
+                except StockProve.DoesNotExist:
+                    cod = _obtener_codigo_venta(id_stock)
+                    errores_stock.append(f"No existe stock para el producto {cod}")
+                    continue
+                stockprove.cantidad += cantidad
+                stockprove.save()
+                stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
+            else:
+                # Para ventas normales, descontar distribuyendo entre proveedores si hace falta
+                _descontar_distribuyendo(
+                    stock_id=id_stock,
+                    proveedor_preferido_id=id_proveedor,
+                    cantidad=cantidad,
+                    permitir_stock_negativo=permitir_stock_negativo,
+                    errores_stock=errores_stock,
+                    stock_actualizado=stock_actualizado,
+                )
+    
+    if errores_stock:
+        return stock_actualizado, errores_stock
+    
+    return stock_actualizado, None
+
+
+def _asignar_comprobante_conversion(venta_data, cliente, ferreteria):
+    """
+    Asigna comprobante apropiado para la conversión.
+    
+    Args:
+        venta_data: Datos de la venta
+        cliente: Instancia de Cliente
+        ferreteria: Instancia de Ferreteria
+    
+    Returns:
+        tuple: (comprobante, error)
+               comprobante es un dict, error es un string o None
+    """
+    tipo_comprobante = venta_data.get('tipo_comprobante')
+    situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
+    tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+    
+    comprobante_id_enviado = venta_data.get('comprobante_id')
+
+    if comprobante_id_enviado:
+        comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
+        if not comprobante_obj:
+            return None, f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
+        return _construir_respuesta_comprobante(comprobante_obj), None
+    else:
+        try:
+            comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
+            return comprobante, None
+        except ValidationError as e:
+            return None, str(e)
+
+
+def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
+    """
+    Crea auto-imputación si la factura está marcada como pagada.
+    
+    Args:
+        nueva_factura: Instancia de Venta creada
+        venta_data: Datos de la venta
+    """
+    comprobante_pagado = venta_data.get('comprobante_pagado', False)
+    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
+    
+    if not (comprobante_pagado and monto_pago > 0):
+        return
+    
+    # Obtener total desde VentaCalculada (vista SQL con campos calculados)
+    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+    monto_auto_imputacion = min(monto_pago, total_venta)
+    
+    ImputacionVenta.objects.create(
+        imp_id_venta=nueva_factura,
+        imp_id_recibo=nueva_factura,
+        imp_monto=monto_auto_imputacion,
+        imp_fecha=date.today(),
+        imp_observacion='Factura Recibo - Auto-imputación'
+    )
+
+
+def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
+    """
+    Crea recibo de excedente si existe.
+    
+    Args:
+        nueva_factura: Instancia de Venta creada
+        data: Datos originales del request
+        venta_data: Datos de la venta procesados
+    """
+    recibo_excedente_data = data.get('recibo_excedente')
+    if not recibo_excedente_data:
+        return
+    
+    # Obtener total desde VentaCalculada (vista SQL con campos calculados)
+    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
+    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+    excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
+    monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
+    
+    if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
+        raise ValidationError(
+            f'El monto del recibo ({monto_recibo}) no coincide con el excedente ({excedente_calculado})'
+        )
+    
+    # Validar que el recibo no tenga imputaciones
+    if recibo_excedente_data.get('imputaciones'):
+        raise ValidationError('El recibo de excedente no debe tener imputaciones')
+    
+    # Crear el recibo
+    from datetime import date as datetime_date
+    
+    # Obtener comprobante de recibo (letra X)
+    comprobante_recibo = Comprobante.objects.filter(
+        tipo='recibo',
+        letra='X',
+        activo=True
+    ).first()
+    
+    if not comprobante_recibo:
+        raise ValidationError('No se encontró comprobante de recibo con letra X')
+    
+    # Formatear punto de venta y número
+    rec_pv = int(recibo_excedente_data['rec_pv'])
+    rec_num = int(recibo_excedente_data['rec_numero'])
+    
+    # Verificar unicidad
+    ya_existe = Venta.objects.filter(
+        comprobante=comprobante_recibo,
+        ven_punto=rec_pv,
+        ven_numero=rec_num
+    ).exists()
+    
+    if ya_existe:
+        raise ValidationError(
+            f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
+        )
+    
+    # Crear recibo
+    recibo = Venta.objects.create(
+        ven_sucursal=1,
+        ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
+        comprobante=comprobante_recibo,
+        ven_punto=rec_pv,
+        ven_numero=rec_num,
+        ven_descu1=0,
+        ven_descu2=0,
+        ven_descu3=0,
+        ven_vdocomvta=0,
+        ven_vdocomcob=0,
+        ven_estado='CO',
+        ven_idcli=nueva_factura.ven_idcli,
+        ven_cuit=nueva_factura.ven_cuit or '',
+        ven_dni='',
+        ven_domicilio=nueva_factura.ven_domicilio or '',
+        ven_razon_social=nueva_factura.ven_razon_social or '',
+        ven_idpla=nueva_factura.ven_idpla,
+        ven_idvdo=nueva_factura.ven_idvdo,
+        ven_copia=1,
+        ven_observacion=recibo_excedente_data.get('rec_observacion', '')
+    )
+    
+    # Crear item genérico para el recibo
+    VentaDetalleItem.objects.create(
+        vdi_idve=recibo,
+        vdi_idsto=None,
+        vdi_idpro=None,
+        vdi_cantidad=1,
+        vdi_precio_unitario_final=monto_recibo,
+        vdi_idaliiva=3,  # Alícuota 0%
+        vdi_orden=1,
+        vdi_bonifica=0,
+        vdi_costo=0,
+        vdi_margen=0,
+        vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
+        vdi_detalle2=''
+    )
+
+
+def _gestionar_emision_arca(nueva_factura, tipo_comprobante, factura_interna_id, 
+                             stock_actualizado, comprobante):
+    """
+    Gestiona emisión ARCA y construye respuesta.
+    
+    Args:
+        nueva_factura: Instancia de Venta creada
+        tipo_comprobante: Tipo de comprobante
+        factura_interna_id: ID de la factura interna original
+        stock_actualizado: Lista de stock actualizado
+        comprobante: Dict con datos del comprobante
+    
+    Returns:
+        dict: Response data con toda la información
+    """
+    if debe_emitir_arca(tipo_comprobante):
+        try:
+            logger.info(f"Emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id} - tipo: {tipo_comprobante}")
+            resultado_arca = emitir_arca_automatico(nueva_factura)
+            
+            # Agregar información ARCA a la respuesta
+            response_data = VentaSerializer(nueva_factura).data
+            response_data['stock_actualizado'] = stock_actualizado
+            response_data['comprobante_letra'] = comprobante["letra"]
+            response_data['comprobante_nombre'] = comprobante["nombre"]
+            response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+            response_data['factura_interna'] = None
+            response_data['arca_emitido'] = True
+            response_data['cae'] = resultado_arca.get('resultado', {}).get('cae')
+            response_data['cae_vencimiento'] = resultado_arca.get('resultado', {}).get('cae_vencimiento')
+            response_data['qr_generado'] = resultado_arca.get('resultado', {}).get('qr_generado', False)
+            response_data['observaciones'] = resultado_arca.get('resultado', {}).get('observaciones', [])
+            
+            logger.info(f"Emisión ARCA exitosa para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: CAE {resultado_arca.get('resultado', {}).get('cae')}")
+            
+            return response_data
+            
+        except Exception as e:
+            # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
+            logger.error(f"Error en emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: {e}")
+            raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
+    else:
+        # Comprobante interno - no requiere emisión ARCA
+        response_data = VentaSerializer(nueva_factura).data
+        response_data['stock_actualizado'] = stock_actualizado
+        response_data['comprobante_letra'] = comprobante["letra"]
+        response_data['comprobante_nombre'] = comprobante["nombre"]
+        response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
+        response_data['factura_interna'] = None
+        response_data['arca_emitido'] = False
+        response_data['arca_motivo'] = 'Comprobante interno - no requiere emisión ARCA'
+        
+        return response_data
+
+
+# ============================================================================
+# VISTAS DE CONVERSIÓN
+# ============================================================================
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def convertir_presupuesto_a_venta(request):
@@ -461,128 +791,34 @@ def convertir_factura_interna_a_fiscal(request):
         except Venta.DoesNotExist:
             return Response({'detail': 'Factura interna no encontrada'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Preparar datos de la nueva factura fiscal (IDÉNTICO A VENTAFORM)
+        # Preparar datos de la nueva factura fiscal
         venta_data = data.copy()
         venta_data.pop('factura_interna_origen', None)
         venta_data.pop('tipo_conversion', None)
         venta_data.pop('conversion_metadata', None)
+        venta_data['ven_estado'] = 'CE'
         
-        venta_data['ven_estado'] = 'CE'  # Estado Cerrado para factura fiscal
-        
-        # === USAR EL MISMO FLUJO QUE VentaViewSet.create() ===
-        
-        # Para conversión de factura interna, obtener items originales y marcarlos como no descuenten stock
-        items_originales = VentaDetalleItem.objects.filter(vdi_idve=factura_interna)
-        
-        # Convertir items originales al formato esperado por el serializer, marcándolos como originales
-        items = []
-        for item_original in items_originales:
-            item_data = {
-                'vdi_orden': item_original.vdi_orden,
-                'vdi_idsto': item_original.vdi_idsto,
-                'vdi_idpro': item_original.vdi_idpro,
-                'vdi_cantidad': item_original.vdi_cantidad,
-                'vdi_costo': item_original.vdi_costo,
-                'vdi_margen': item_original.vdi_margen,
-                'vdi_precio_unitario_final': item_original.vdi_precio_unitario_final,
-                'vdi_bonifica': item_original.vdi_bonifica,
-                'vdi_detalle1': item_original.vdi_detalle1,
-                'vdi_detalle2': item_original.vdi_detalle2,
-                'vdi_idaliiva': item_original.vdi_idaliiva,
-                # Marcar como item original para que no descuente stock
-                'idOriginal': item_original.id,
-                'noDescontarStock': True,
-                'esBloqueado': True,
-            }
-            items.append(item_data)
-        
-        print(f"LOG: Obtenidos {len(items)} items originales de la factura interna {factura_interna.ven_id}")
+        # Obtener items usando función auxiliar
+        items = _preparar_items_conversion(factura_interna)
 
-        # === PASO 2: CREAR NUEVA FACTURA FISCAL Y ELIMINAR ORIGINAL EN TRANSACCIÓN PRINCIPAL ===
+        # === CREAR NUEVA FACTURA FISCAL Y ELIMINAR ORIGINAL EN TRANSACCIÓN PRINCIPAL ===
         with transaction.atomic():
-            # === LÓGICA DIFERENCIADA DE STOCK PARA CONVERSIONES ===
-            # Obtener configuración de la ferretería para determinar política de stock negativo
+            # Validar y procesar stock usando función auxiliar
             ferreteria = Ferreteria.objects.first()
-            # Usar configuración de la ferretería, con posibilidad de override desde el frontend
-            permitir_stock_negativo = venta_data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+            stock_actualizado, errores_stock = _validar_y_procesar_stock(items, venta_data, ferreteria)
             
-            tipo_comprobante = venta_data.get('tipo_comprobante')
-            es_presupuesto = (tipo_comprobante == 'presupuesto')
-            es_nota_credito = (tipo_comprobante == 'nota_credito')
-            errores_stock = []
-            stock_actualizado = []
-            
-            if not es_presupuesto:
-                for item in items:
-                    id_stock = item.get('vdi_idsto')
-                    cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+            if errores_stock:
+                payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
 
-                    # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
-                    if not id_stock:
-                        continue
-
-                    # NUEVO: Si tiene idOriginal, noDescontarStock o esBloqueado, proviene de factura interna - NO descontar stock
-                    if item.get('idOriginal') or item.get('noDescontarStock') or item.get('esBloqueado'):
-                        print(f"LOG: Item original/noDescontarStock/esBloqueado - NO descuenta stock (idOriginal={item.get('idOriginal')}, noDescontarStock={item.get('noDescontarStock')}, esBloqueado={item.get('esBloqueado')})")
-                        continue
-
-                    # Si es un producto real NUEVO, el backend obtiene automáticamente el proveedor habitual
-                    id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
-                    if not id_proveedor:
-                        cod = _obtener_codigo_venta(id_stock)
-                        errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
-                        continue
-                        
-                    if es_nota_credito:
-                        # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
-                        try:
-                            stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                        except StockProve.DoesNotExist:
-                            cod = _obtener_codigo_venta(id_stock)
-                            errores_stock.append(f"No existe stock para el producto {cod}")
-                            continue
-                        stockprove.cantidad += cantidad
-                        stockprove.save()
-                        stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
-                    else:
-                        # Para ventas normales, descontar distribuyendo entre proveedores si hace falta
-                        _descontar_distribuyendo(
-                            stock_id=id_stock,
-                            proveedor_preferido_id=id_proveedor,
-                            cantidad=cantidad,
-                            permitir_stock_negativo=permitir_stock_negativo,
-                            errores_stock=errores_stock,
-                            stock_actualizado=stock_actualizado,
-                        )
-                
-                if errores_stock:
-                    payload = {'detail': 'Error de stock', 'errores': errores_stock}
-                    return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-
-            # === LÓGICA DE COMPROBANTE (IDÉNTICA AL MÉTODO CREATE) ===
-            # Obtener ferretería para leer configuración fiscal y PV
+            # Asignar comprobante usando función auxiliar
             cliente_id = venta_data.get('ven_idcli')
             cliente = Cliente.objects.filter(id=cliente_id).first()
-            situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
-            tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
+            tipo_comprobante = venta_data.get('tipo_comprobante')
             
-            # Obtener el comprobante apropiado según el tipo y cliente
-            comprobante_id_enviado = venta_data.get('comprobante_id')
-        
-            # Si el frontend envió un comprobante específico, lo usamos (validando que exista)
-            if comprobante_id_enviado:
-                comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
-                if not comprobante_obj:
-                    return Response({
-                        'detail': f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                comprobante = _construir_respuesta_comprobante(comprobante_obj)
-            else:
-                # Si no se envió un comprobante específico, utilizar la función asignar_comprobante
-                try:
-                    comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
-                except ValidationError as e:
-                    return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            comprobante, error = _asignar_comprobante_conversion(venta_data, cliente, ferreteria)
+            if error:
+                return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
             
             if not comprobante:
                 return Response({
@@ -643,110 +879,11 @@ def convertir_factura_interna_a_fiscal(request):
                     
                     print(f"LOG: Factura fiscal creada con ID {nueva_factura.ven_id}")
                     
-                    # === CREAR AUTO-IMPUTACIÓN SI ES FACTURA PAGADA ===
-                    comprobante_pagado = venta_data.get('comprobante_pagado', False)
-                    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
+                    # Crear auto-imputación usando función auxiliar
+                    _crear_auto_imputacion_si_necesario(nueva_factura, venta_data)
                     
-                    if comprobante_pagado and monto_pago > 0:
-                        # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-                        venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
-                        total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
-                        monto_auto_imputacion = min(monto_pago, total_venta)
-                        
-                        ImputacionVenta.objects.create(
-                            imp_id_venta=nueva_factura,
-                            imp_id_recibo=nueva_factura,
-                            imp_monto=monto_auto_imputacion,
-                            imp_fecha=date.today(),
-                            imp_observacion='Factura Recibo - Auto-imputación'
-                        )
-                    
-                    # === CREAR RECIBO DE EXCEDENTE SI EXISTE ===
-                    recibo_excedente_data = data.get('recibo_excedente')
-                    if recibo_excedente_data:
-                        # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-                        venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
-                        total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
-                        excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
-                        monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
-                        
-                        if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
-                            raise ValidationError(
-                                f'El monto del recibo ({monto_recibo}) no coincide con el excedente ({excedente_calculado})'
-                            )
-                        
-                        # Validar que el recibo no tenga imputaciones
-                        if recibo_excedente_data.get('imputaciones'):
-                            raise ValidationError('El recibo de excedente no debe tener imputaciones')
-                        
-                        # Crear el recibo
-                        from datetime import date as datetime_date
-                        
-                        # Obtener comprobante de recibo (letra X)
-                        comprobante_recibo = Comprobante.objects.filter(
-                            tipo='recibo',
-                            letra='X',
-                            activo=True
-                        ).first()
-                        
-                        if not comprobante_recibo:
-                            raise ValidationError('No se encontró comprobante de recibo con letra X')
-                        
-                        # Formatear punto de venta y número
-                        rec_pv = int(recibo_excedente_data['rec_pv'])
-                        rec_num = int(recibo_excedente_data['rec_numero'])
-                        
-                        # Verificar unicidad
-                        ya_existe = Venta.objects.filter(
-                            comprobante=comprobante_recibo,
-                            ven_punto=rec_pv,
-                            ven_numero=rec_num
-                        ).exists()
-                        
-                        if ya_existe:
-                            raise ValidationError(
-                                f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
-                            )
-                        
-                        # Crear recibo
-                        recibo = Venta.objects.create(
-                            ven_sucursal=1,
-                            ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
-                            comprobante=comprobante_recibo,
-                            ven_punto=rec_pv,
-                            ven_numero=rec_num,
-                            ven_descu1=0,
-                            ven_descu2=0,
-                            ven_descu3=0,
-                            ven_vdocomvta=0,
-                            ven_vdocomcob=0,
-                            ven_estado='CO',
-                            ven_idcli=nueva_factura.ven_idcli,
-                            ven_cuit=nueva_factura.ven_cuit or '',
-                            ven_dni='',
-                            ven_domicilio=nueva_factura.ven_domicilio or '',
-                            ven_razon_social=nueva_factura.ven_razon_social or '',
-                            ven_idpla=nueva_factura.ven_idpla,
-                            ven_idvdo=nueva_factura.ven_idvdo,
-                            ven_copia=1,
-                            ven_observacion=recibo_excedente_data.get('rec_observacion', '')
-                        )
-                        
-                        # Crear item genérico para el recibo
-                        VentaDetalleItem.objects.create(
-                            vdi_idve=recibo,
-                            vdi_idsto=None,
-                            vdi_idpro=None,
-                            vdi_cantidad=1,
-                            vdi_precio_unitario_final=monto_recibo,
-                            vdi_idaliiva=3,  # Alícuota 0%
-                            vdi_orden=1,
-                            vdi_bonifica=0,
-                            vdi_costo=0,
-                            vdi_margen=0,
-                            vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
-                            vdi_detalle2=''
-                        )
+                    # Crear recibo de excedente usando función auxiliar
+                    _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data)
                     
                     break
                 except IntegrityError as e:
@@ -769,7 +906,6 @@ def convertir_factura_interna_a_fiscal(request):
                 print("DEBUG - Eliminando factura interna original")
                 factura_interna.delete()
                 print("LOG: Factura interna eliminada exitosamente")
-                factura_interna_result = None
             except ProtectedError as e:
                 # Este caso no debería ocurrir porque ya manejamos las imputaciones arriba
                 # pero lo dejamos por seguridad
@@ -779,41 +915,11 @@ def convertir_factura_interna_a_fiscal(request):
                     'error_tecnico': str(e)
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-            # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
-            if debe_emitir_arca(tipo_comprobante):
-                try:
-                    logger.info(f"Emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id} - tipo: {tipo_comprobante}")
-                    resultado_arca = emitir_arca_automatico(nueva_factura)
-                    
-                    # Agregar información ARCA a la respuesta
-                    response_data = VentaSerializer(nueva_factura).data
-                    response_data['stock_actualizado'] = stock_actualizado
-                    response_data['comprobante_letra'] = comprobante["letra"]
-                    response_data['comprobante_nombre'] = comprobante["nombre"]
-                    response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
-                    response_data['factura_interna'] = factura_interna_result
-                    response_data['arca_emitido'] = True
-                    response_data['cae'] = resultado_arca.get('resultado', {}).get('cae')
-                    response_data['cae_vencimiento'] = resultado_arca.get('resultado', {}).get('cae_vencimiento')
-                    response_data['qr_generado'] = resultado_arca.get('resultado', {}).get('qr_generado', False)
-                    response_data['observaciones'] = resultado_arca.get('resultado', {}).get('observaciones', [])
-                    
-                    logger.info(f"Emisión ARCA exitosa para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: CAE {resultado_arca.get('resultado', {}).get('cae')}")
-                    
-                except Exception as e:
-                    # Error en emisión ARCA - FALLAR LA TRANSACCIÓN COMPLETA
-                    logger.error(f"Error en emisión automática ARCA para conversión factura interna {factura_interna_id} a factura fiscal {nueva_factura.ven_id}: {e}")
-                    raise FerreDeskARCAError(f"Error en emisión ARCA: {e}")
-            else:
-                # Comprobante interno - no requiere emisión ARCA
-                response_data = VentaSerializer(nueva_factura).data
-                response_data['stock_actualizado'] = stock_actualizado
-                response_data['comprobante_letra'] = comprobante["letra"]
-                response_data['comprobante_nombre'] = comprobante["nombre"]
-                response_data['comprobante_codigo_afip'] = comprobante["codigo_afip"]
-                response_data['factura_interna'] = factura_interna_result
-                response_data['arca_emitido'] = False
-                response_data['arca_motivo'] = 'Comprobante interno - no requiere emisión ARCA'
+            # Gestionar emisión ARCA y construir respuesta usando función auxiliar
+            response_data = _gestionar_emision_arca(
+                nueva_factura, tipo_comprobante, factura_interna_id, 
+                stock_actualizado, comprobante
+            )
             
             return Response(response_data, status=status.HTTP_201_CREATED)
         

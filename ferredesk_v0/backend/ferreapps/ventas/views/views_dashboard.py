@@ -234,3 +234,6 @@ def clientes_mas_ventas(request):
             
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+

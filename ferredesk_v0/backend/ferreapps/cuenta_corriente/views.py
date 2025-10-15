@@ -664,7 +664,7 @@ def anular_recibo(request):
 @permission_classes([IsAuthenticated])
 def anular_autoimputacion(request):
     """
-    Anular una autoimputación (FacRecibo/CotRecibo) - elimina la autoimputación y el registro original
+    Anular una autoimputación (FacRecibo/CotRecibo) - elimina solo la autoimputación, mantiene la venta
     """
     try:
         venta_id = request.data.get('venta_id')
@@ -693,14 +693,11 @@ def anular_autoimputacion(request):
             numero_formateado = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
             monto_autoimputacion = autoimputacion.imp_monto
             
-            # Eliminar la autoimputación
+            # Eliminar la autoimputación (NO la venta)
             autoimputacion.delete()
             
-            # Eliminar la venta original (que contiene tanto la factura como el recibo)
-            venta.delete()
-            
             return Response({
-                'mensaje': 'Autoimputación anulada exitosamente',
+                'mensaje': 'Autoimputación anulada exitosamente. La venta se mantiene sin autoimputación.',
                 'autoimputacion_anulada': {
                     'ven_id': venta_id,
                     'numero_formateado': numero_formateado,

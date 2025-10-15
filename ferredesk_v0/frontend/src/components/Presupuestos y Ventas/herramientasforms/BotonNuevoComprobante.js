@@ -24,22 +24,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       }
     },
     {
-      id: 'nota_debito',
-      label: 'Nota de Débito',
-      icon: <IconCredito />,
-      onClick: () => {
-        onNuevaNotaDebito && onNuevaNotaDebito()
-      }
-    },
-    {
-      id: 'extension_contenido',
-      label: 'Extensión Contenido',
-      icon: <IconCredito />,
-      onClick: () => {
-        onNuevaExtensionContenido && onNuevaExtensionContenido()
-      }
-    },
-    {
       id: 'venta',
       label: 'Venta',
       icon: <IconFactura />,
@@ -61,6 +45,22 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconCredito />,
       onClick: () => {
         onNuevaModificacionContenido()
+      }
+    },
+    {
+      id: 'nota_debito',
+      label: 'Nota de Débito',
+      icon: <IconCredito />,
+      onClick: () => {
+        onNuevaNotaDebito && onNuevaNotaDebito()
+      }
+    },
+    {
+      id: 'extension_contenido',
+      label: 'Extensión Contenido',
+      icon: <IconCredito />,
+      onClick: () => {
+        onNuevaExtensionContenido && onNuevaExtensionContenido()
       }
     }
   ]
