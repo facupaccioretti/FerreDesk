@@ -58,7 +58,6 @@ export const useArcaResultadoHandler = ({
       iniciarEsperaArca();
     }
     
-    // SIEMPRE mostrar en modal ARCA
     finalizarEsperaArcaError(error.message || mensajePorDefecto);
   }, [esperandoArca, iniciarEsperaArca, finalizarEsperaArcaError]);
 

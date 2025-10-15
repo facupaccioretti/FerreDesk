@@ -505,6 +505,20 @@ const VentaForm = ({
       const montoPago = Number.parseFloat(formulario.montoPago) || 0
       const totalVenta = totales?.total || 0
       const estaPagado = montoPago > 0
+
+      // Validación: Consumidor Final (ID=1) debe abonar exactamente el total (sin cero, sin parcial, sin excedente)
+      const CLIENTE_GENERICO_ID = '1'
+      if (String(formulario.clienteId) === CLIENTE_GENERICO_ID) {
+        const totalEq = Number(totalVenta).toFixed(2)
+        const pagoEq = Number(montoPago).toFixed(2)
+        if (pagoEq !== totalEq) {
+          alert(
+            'El cliente "Consumidor Final" debe abonar exactamente el total de la venta.\n\n' +
+            'Total requerido: $' + totalEq
+          )
+          return
+        }
+      }
       
       if (estaPagado && montoPago > totalVenta) {
         const excedente = montoPago - totalVenta

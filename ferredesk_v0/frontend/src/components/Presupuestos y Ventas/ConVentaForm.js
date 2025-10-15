@@ -83,6 +83,7 @@ const ConVentaForm = ({
   const [reciboExcedente, setReciboExcedente] = useState(null);
   const [mostrarModalReciboExcedente, setMostrarModalReciboExcedente] = useState(false);
 
+
   // Hook para manejar estado de ARCA
   const {
     esperandoArca,
@@ -117,6 +118,7 @@ const ConVentaForm = ({
     () => respuestaArca,
     () => errorArca
   )
+
 
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
@@ -469,6 +471,21 @@ const ConVentaForm = ({
       const montoPago = Number.parseFloat(formulario.montoPago) || 0
       const totalVenta = totales?.total || 0
       const estaPagado = montoPago > 0
+
+      // Validación: Consumidor Final (ID=1) debe abonar exactamente el total (sin cero, sin parcial, sin excedente)
+      const CLIENTE_GENERICO_ID = '1'
+      if (String(formulario.clienteId) === CLIENTE_GENERICO_ID) {
+        const totalEq = Number(totalVenta).toFixed(2)
+        const pagoEq = Number(montoPago).toFixed(2)
+        if (pagoEq !== totalEq) {
+          alert(
+            'El cliente "Consumidor Final" debe abonar exactamente el total de la venta.\n\n' +
+            'Total requerido: $' + totalEq
+          )
+          setProcesandoSubmit(false)
+          return
+        }
+      }
       
       // Tolerancia de 99 centavos para evitar mensaje de excedente por diferencias mínimas
       const TOLERANCIA_MONTO = 0.99
@@ -579,15 +596,15 @@ const ConVentaForm = ({
       
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobante)
-    } catch (error) {
-      // Limpiar temporizador en error
-      if (temporizadorArcaRef.current) {
-        clearTimeout(temporizadorArcaRef.current);
-        temporizadorArcaRef.current = null;
-      }
-      // Manejar error usando la lógica modularizada
-      manejarErrorArca(error, "Error al procesar la conversión")
-    } finally {
+       } catch (error) {
+         // Limpiar temporizador en error
+         if (temporizadorArcaRef.current) {
+           clearTimeout(temporizadorArcaRef.current);
+           temporizadorArcaRef.current = null;
+         }
+         // Manejar error estándar
+         manejarErrorArca(error, "Error al procesar la conversión")
+       } finally {
       // Desactivar flag independientemente del resultado
       setProcesandoSubmit(false);
     }
@@ -606,6 +623,7 @@ const ConVentaForm = ({
     limpiarBorrador();
     onCancel();
   };
+
 
   // Handler para cuando se guarda el recibo de excedente
   const handleReciboExcedenteGuardado = (reciboData) => {
@@ -700,6 +718,11 @@ const ConVentaForm = ({
       if (esConversionFacturaI) {
         payload.factura_interna_origen = facturaInternaOrigen.id;
         payload.tipo_conversion = 'factura_i_factura';
+        
+        // Flag para eliminación automática de auto-imputaciones (si fue confirmado por el usuario)
+        if (facturaInternaOrigen.eliminarAutoImputaciones) {
+          payload.eliminar_auto_imputaciones = true;
+        }
       } else {
         payload.presupuesto_origen = presupuestoOrigen.id;
         payload.tipo_conversion = 'presupuesto_factura';
@@ -1210,6 +1233,7 @@ const ConVentaForm = ({
         esReciboExcedente={true}
         montoFijo={Math.round((Number(formulario.montoPago || 0) - Number(totales?.total || 0)) * 100) / 100}
       />
+
       
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay 

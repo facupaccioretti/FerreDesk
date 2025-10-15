@@ -1,27 +1,18 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import React from 'react'
 import { useFerreDeskTheme } from '../../../hooks/useFerreDeskTheme'
 import { IconFactura, IconCredito, IconPresupuesto } from '../../ComprobanteIcono'
+import usePortalTooltip from './usePortalTooltip'
 
 const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCredito, onNuevaModificacionContenido, onNuevaNotaDebito, onNuevaExtensionContenido }) => {
   const theme = useFerreDeskTheme()
-  const [mostrarOpciones, setMostrarOpciones] = useState(false)
-  const dropdownRef = useRef(null)
-
-  // Cerrar dropdown al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setMostrarOpciones(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
+  
+  // Hook para manejar el portal del dropdown
+  const { visible, TooltipPortal, triggerProps } = usePortalTooltip({
+    placement: 'bottom', // El dropdown aparece debajo del botón
+    offset: 8
+  })
 
   const opciones = [
     {
@@ -30,7 +21,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconPresupuesto />,
       onClick: () => {
         onNuevoPresupuesto()
-        setMostrarOpciones(false)
       }
     },
     {
@@ -39,7 +29,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconCredito />,
       onClick: () => {
         onNuevaNotaDebito && onNuevaNotaDebito()
-        setMostrarOpciones(false)
       }
     },
     {
@@ -48,7 +37,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconCredito />,
       onClick: () => {
         onNuevaExtensionContenido && onNuevaExtensionContenido()
-        setMostrarOpciones(false)
       }
     },
     {
@@ -57,7 +45,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconFactura />,
       onClick: () => {
         onNuevaVenta()
-        setMostrarOpciones(false)
       }
     },
     {
@@ -66,7 +53,6 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconCredito />,
       onClick: () => {
         onNuevaNotaCredito()
-        setMostrarOpciones(false)
       }
     },
     {
@@ -75,16 +61,15 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
       icon: <IconCredito />,
       onClick: () => {
         onNuevaModificacionContenido()
-        setMostrarOpciones(false)
       }
     }
   ]
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <>
       {/* Botón principal */}
       <button
-        onClick={() => setMostrarOpciones(!mostrarOpciones)}
+        {...triggerProps}
         className={`${theme.botonPrimario} flex items-center gap-1 text-xs px-3 py-1 h-8`}
       >
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -92,7 +77,7 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
         </svg>
         <span>Nuevo</span>
         <svg 
-          className={`w-3 h-3 transition-transform duration-200 ${mostrarOpciones ? 'rotate-180' : ''}`} 
+          className={`w-3 h-3 transition-transform duration-200 ${visible ? 'rotate-180' : ''}`} 
           fill="none" 
           viewBox="0 0 24 24" 
           stroke="currentColor"
@@ -101,26 +86,31 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
         </svg>
       </button>
 
-      {/* Dropdown */}
-      {mostrarOpciones && (
-        <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 z-50">
-          <div className="py-2">
-            {opciones.map((opcion) => (
-              <button
-                key={opcion.id}
-                onClick={opcion.onClick}
-                className="w-full px-4 py-3 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 transition-colors duration-150"
-              >
-                <div className="text-slate-400">
-                  {opcion.icon}
-                </div>
-                <span className="font-medium">{opcion.label}</span>
-              </button>
-            ))}
-          </div>
+      {/* Portal del dropdown */}
+      <TooltipPortal
+        className="w-48 bg-white rounded-lg shadow-lg border border-slate-200"
+        role="menu"
+      >
+        <div className="py-2">
+          {opciones.map((opcion) => (
+            <button
+              key={opcion.id}
+              onClick={(e) => {
+                e.stopPropagation()
+                opcion.onClick()
+                triggerProps.onClick(e) // Cierra el dropdown después de la acción
+              }}
+              className="w-full px-4 py-3 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 transition-colors duration-150"
+            >
+              <div className="text-slate-400">
+                {opcion.icon}
+              </div>
+              <span className="font-medium">{opcion.label}</span>
+            </button>
+          ))}
         </div>
-      )}
-    </div>
+      </TooltipPortal>
+    </>
   )
 }
 
