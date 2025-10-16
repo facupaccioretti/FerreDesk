@@ -15,7 +15,7 @@ WITH VentaConTotal AS (
         vc.numero_formateado,
         -- Para recibos y NC sin items (ven_total NULL), calcular desde imputaciones
         CASE 
-            WHEN vc.ven_total IS NULL AND vc.comprobante_tipo IN ('recibo', 'nota_credito') THEN 
+            WHEN vc.ven_total IS NULL AND vc.comprobante_tipo IN ('recibo', 'nota_credito', 'nota_credito_interna') THEN 
                 COALESCE((
                     SELECT SUM(imp."IMP_MONTO") 
                     FROM "IMPUTACION_VENTA" imp 
@@ -42,28 +42,31 @@ RegistrosNormales AS (
             WHEN vct.comprobante_nombre LIKE 'Cotización%' THEN 'Cotización'
             WHEN vct.comprobante_nombre LIKE 'Recibo%' THEN 'Recibo'
             WHEN vct.comprobante_nombre LIKE 'Nota de Crédito%' THEN 'Nota de Crédito'
+            WHEN vct.comprobante_nombre LIKE 'Nota de Débito%' THEN 'Nota de Débito'
+            WHEN vct.comprobante_nombre LIKE 'Modif%' THEN 'Modif. de Contenido'
+            WHEN vct.comprobante_nombre LIKE 'Extensión%' THEN 'Extensión de Contenido'
             ELSE vct.comprobante_nombre
         END AS comprobante_nombre,
         vct.comprobante_tipo,
         CASE 
-            WHEN vct.comprobante_tipo IN ('factura', 'factura_interna') THEN vct.ven_total_calculado
+            WHEN vct.comprobante_tipo IN ('factura', 'factura_interna', 'nota_debito', 'nota_debito_interna') THEN vct.ven_total_calculado
             ELSE 0
         END AS debe,
         CASE 
-            WHEN vct.comprobante_tipo IN ('recibo', 'nota_credito') THEN vct.ven_total_calculado
+            WHEN vct.comprobante_tipo IN ('recibo', 'nota_credito', 'nota_credito_interna') THEN vct.ven_total_calculado
             ELSE 0
         END AS haber,
         vct.ven_total_calculado AS ven_total,
         vct.numero_formateado,
-        -- Saldo pendiente para facturas/cotizaciones
+        -- Saldo pendiente para facturas/cotizaciones/notas de débito
         CASE 
-            WHEN vct.comprobante_tipo IN ('factura', 'factura_interna') THEN 
+            WHEN vct.comprobante_tipo IN ('factura', 'factura_interna', 'nota_debito', 'nota_debito_interna') THEN 
                 vct.ven_total_calculado - COALESCE((
                     SELECT SUM(imp."IMP_MONTO") 
                     FROM "IMPUTACION_VENTA" imp 
                     WHERE imp."IMP_ID_VENTA" = vct.ven_id
                 ), 0)
-            WHEN vct.comprobante_tipo IN ('recibo', 'nota_credito') THEN 
+            WHEN vct.comprobante_tipo IN ('recibo', 'nota_credito', 'nota_credito_interna') THEN 
                 vct.ven_total_calculado - COALESCE((
                     SELECT SUM(imp."IMP_MONTO") 
                     FROM "IMPUTACION_VENTA" imp 
@@ -122,8 +125,8 @@ SELECT
     haber,
     SUM(
         CASE 
-            WHEN comprobante_tipo IN ('factura', 'factura_interna') THEN debe
-            WHEN comprobante_tipo IN ('recibo', 'nota_credito', 'factura_recibo') THEN -haber
+            WHEN comprobante_tipo IN ('factura', 'factura_interna', 'nota_debito', 'nota_debito_interna') THEN debe
+            WHEN comprobante_tipo IN ('recibo', 'nota_credito', 'nota_credito_interna', 'factura_recibo') THEN -haber
             ELSE 0
         END
     ) OVER (
@@ -146,7 +149,7 @@ ORDER BY ven_idcli, ven_fecha, ven_id, orden_auto_imputacion;
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('cuenta_corriente', '0008_actualizar_vista_cc_para_nd'),
+        ('cuenta_corriente', '0002_initial'),
     ]
 
     operations = [
