@@ -12,7 +12,7 @@ import SumarDuplicar from './herramientasforms/SumarDuplicar';
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useComprobanteFiscal } from './herramientasforms/useComprobanteFiscal';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { normalizarItems, normalizarItemsParaFormulario } from './herramientasforms/normalizadorItems';
 import { useArcaEstado } from '../../utils/useArcaEstado';
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler';
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
@@ -209,9 +209,8 @@ const ConVentaForm = ({
         ? data.items
         : (Array.isArray(itemsSeleccionados) ? itemsSeleccionados : []);
 
-      // Normalizar items de stock para asegurar estructura consistente
-      // NUEVO: Usar normalizarItems en lugar de normalizarItemsStock para preservar flags de conversión
-      let itemsNormalizados = normalizarItems(itemsBase, { alicuotasMap });
+      // NORMALIZACIÓN CRÍTICA: Usar función específica para formularios que garantiza precio = base sin IVA
+      let itemsNormalizados = normalizarItemsParaFormulario(itemsBase, alicuotasMap);
 
       // Restaurar flags FUNDAMENTALES de ítems originales al rehidratar desde borrador
       if (esBorrador && esConversionFacturaI && Array.isArray(itemsSeleccionados) && itemsSeleccionados.length > 0) {

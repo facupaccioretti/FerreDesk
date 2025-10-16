@@ -11,7 +11,7 @@ import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario
 import { useFormularioDraft } from './herramientasforms/useFormularioDraft';
 import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto';
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
-import { normalizarItems } from './herramientasforms/normalizadorItems';
+import { normalizarItemsParaFormulario } from './herramientasforms/normalizadorItems';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 
 // Función para combinar datos iniciales con el estado por defecto, usando la misma lógica que ConVentaForm
@@ -36,9 +36,9 @@ const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap
     copia: 1,
   };
 
-  // Normalizar items usando la misma lógica que ConVentaForm
+  // NORMALIZACIÓN CRÍTICA: Usar función específica para formularios que garantiza precio = base sin IVA
   const itemsBase = Array.isArray(data.items) ? data.items : [];
-  const itemsNormalizados = normalizarItems(itemsBase, { modo: 'presupuesto', alicuotasMap });
+  const itemsNormalizados = normalizarItemsParaFormulario(itemsBase, alicuotasMap);
 
   return {
     id: data.ven_id ?? data.id ?? '',

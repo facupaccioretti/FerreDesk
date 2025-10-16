@@ -13,11 +13,11 @@ import { useMemo, useCallback } from 'react';
  */
 export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, descu2, descu3, alicuotas }) => {
   // Cálculo de subtotal base
-  const calcularSubtotal = (item) => {
+  const calcularSubtotal = useCallback((item) => {
     const cantidad = parseFloat(item.cantidad ?? item.vdi_cantidad) || 0;
     const precioBase = parseFloat(item.precio ?? item.costo ?? item.vdi_importe) || 0;
     return cantidad * precioBase;
-  };
+  }, []);
 
   // Cálculo de bonificación particular
   const obtenerBonifParticular = (item) => {
@@ -29,19 +29,19 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
   };
 
   // Cálculo de bonificación
-  const calcularBonificacion = (item) => {
+  const calcularBonificacion = useCallback((item) => {
     const subtotal = calcularSubtotal(item);
     const bonifParticular = obtenerBonifParticular(item);
     const bonif = bonifParticular !== null ? bonifParticular : (parseFloat(bonificacionGeneral) || 0);
     return subtotal * (bonif / 100);
-  };
+  }, [calcularSubtotal, bonificacionGeneral]);
 
   // Subtotal neto tras bonificación
-  const calcularSubtotalNeto = (item) => {
+  const calcularSubtotalNeto = useCallback((item) => {
     const subtotal = calcularSubtotal(item);
     const bonificacion = calcularBonificacion(item);
     return subtotal - bonificacion;
-  };
+  }, [calcularSubtotal, calcularBonificacion]);
 
   // Cálculo de descuentos escalonados sobre el subtotal neto
   const calcularDescuento = (item) => {
@@ -64,14 +64,14 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
   };
 
   // Cálculo de IVA
-  const calcularIVA = (item, subtotalSinIva, subtotalConDescuentos) => {
+  const calcularIVA = useCallback((item, subtotalSinIva, subtotalConDescuentos) => {
     const aliId = obtenerAliId(item);
     const aliPorc = alicuotas[aliId] || 0;
     const lineaSubtotal = calcularSubtotal(item);
     const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
     const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
     return itemSubtotalConDescuentos * (aliPorc / 100);
-  };
+  }, [alicuotas, calcularSubtotal]);
 
   // Cálculo de total por línea
   const calcularTotal = (item, subtotalSinIva, subtotalConDescuentos) => {
@@ -86,8 +86,8 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
     return precioConDescuento + iva;
   };
 
-  // Cálculo de totales generales
-  const calcularTotalesGenerales = () => {
+  // Cálculo de totales generales (memoizado para dependencia correcta en useMemo)
+  const calcularTotalesGenerales = useCallback(() => {
     const subtotalSinIva = items.reduce((sum, item) => sum + calcularSubtotal(item), 0);
     // Sumar netos tras bonificación
     const subtotalNeto = items.reduce((sum, item) => sum + calcularSubtotalNeto(item), 0);
@@ -108,10 +108,10 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
       iva: ivaTotal,
       total
     };
-  };
+  }, [items, descu1, descu2, descu3, calcularIVA, calcularSubtotalNeto, calcularSubtotal]);
 
   // Memoizar cálculos
-  const totales = useMemo(() => calcularTotalesGenerales(), [items, bonificacionGeneral, descu1, descu2, descu3, alicuotas]);
+  const totales = useMemo(() => calcularTotalesGenerales(), [calcularTotalesGenerales]);
 
   return {
     totales,
