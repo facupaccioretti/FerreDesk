@@ -519,9 +519,10 @@ const VentaForm = ({
           return
         }
       }
-      
-      if (estaPagado && montoPago > totalVenta) {
-        const excedente = montoPago - totalVenta
+      // Tolerancia de 1 peso para evitar mensaje de excedente por diferencias mínimas
+      const TOLERANCIA_MONTO = 1.00
+      if (estaPagado && montoPago > totalVenta + TOLERANCIA_MONTO) {
+        const excedente = Math.max(0, Math.round((montoPago - totalVenta) * 100) / 100)
         
         // Preguntar si desea crear recibo de excedente
         const crearRecibo = window.confirm(

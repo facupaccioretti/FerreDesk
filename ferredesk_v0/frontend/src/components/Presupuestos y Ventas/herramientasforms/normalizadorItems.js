@@ -163,49 +163,4 @@ export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicu
   });
 }
 
-/**
- * Función específica para normalizar ítems que van al estado del formulario.
- * Garantiza que precio = base sin IVA y precioFinal = final con IVA.
- * @param {Array} items - Array de ítems del backend o presupuesto/factura
- * @param {Object} alicuotasMap - Mapa de alícuotas IVA (id: porcentaje)
- * @returns {Array} Array de ítems normalizados para formulario
- */
-export function normalizarItemsParaFormulario(items = [], alicuotasMap = {}) {
-  if (!Array.isArray(items)) return [];
-
-  return items.map((item) => {
-    // Obtener alícuota normalizada (manejar tanto número como objeto)
-    const aliIdRaw = item.vdi_idaliiva ?? item.idaliiva ?? (item.producto?.idaliiva?.id ?? item.producto?.idaliiva) ?? 3;
-    const aliId = (typeof aliIdRaw === 'object' && aliIdRaw?.id) ? aliIdRaw.id : aliIdRaw;
-    const aliPorc = alicuotasMap[aliId] ?? ALICUOTAS_POR_DEFECTO[aliId] ?? 0;
-
-    // Obtener precio final (con IVA) si existe
-    const precioFinalConIVA = Number.parseFloat(item.vdi_precio_unitario_final ?? item.precioFinal ?? item.precio ?? 0);
-    
-    let precioBaseSinIVA = 0;
-    let precioFinalMostrar = precioFinalConIVA;
-
-    if (precioFinalConIVA > 0) {
-      // Si hay precio final, calcular el base dividiendo por (1 + IVA)
-      const divisorIVA = 1 + (aliPorc / 100);
-      precioBaseSinIVA = divisorIVA > 0 ? precioFinalConIVA / divisorIVA : precioFinalConIVA;
-    } else {
-      // Si no hay precio final, asumir que item.precio es base
-      precioBaseSinIVA = Number.parseFloat(item.precio ?? 0);
-      precioFinalMostrar = precioBaseSinIVA * (1 + aliPorc / 100);
-    }
-
-    return {
-      ...item,
-      // precio SIEMPRE base sin IVA (para cálculos)
-      precio: precioBaseSinIVA,
-      // precioFinal SIEMPRE final con IVA (para mostrar)
-      precioFinal: precioFinalMostrar,
-      // Normalizar alícuota
-      idaliiva: aliId,
-      vdi_idaliiva: aliId,
-    };
-  });
-}
-
 // Se elimina el export default para mantener un solo tipo de exportación y compatibilidad futura. 
