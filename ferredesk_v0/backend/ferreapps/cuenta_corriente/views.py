@@ -63,8 +63,8 @@ class CuentaCorrienteFilter(FilterSet):
             return queryset.filter(
                 Q(comprobante_tipo__in=['factura', 'factura_interna'], ven_id__in=facturas_imputadas_ids, saldo_pendiente__gt=0) |  # Facturas con imputaciones parciales
                 Q(comprobante_tipo__in=['factura', 'factura_interna']) & ~Q(ven_id__in=facturas_imputadas_ids) |  # Facturas sin imputaciones
-                Q(comprobante_tipo__in=['recibo', 'nota_credito'], ven_id__in=recibos_imputados_ids, saldo_pendiente__gt=0) |  # Recibos/notas con imputaciones parciales
-                Q(comprobante_tipo__in=['recibo', 'nota_credito']) & ~Q(ven_id__in=recibos_imputados_ids)  # Recibos/notas sin imputaciones
+                Q(comprobante_tipo__in=['recibo', 'nota_credito', 'nota_credito_interna'], ven_id__in=recibos_imputados_ids, saldo_pendiente__gt=0) |  # Recibos/notas con imputaciones parciales
+                Q(comprobante_tipo__in=['recibo', 'nota_credito', 'nota_credito_interna']) & ~Q(ven_id__in=recibos_imputados_ids)  # Recibos/notas sin imputaciones
             )
 
 
@@ -134,8 +134,8 @@ def cuenta_corriente_cliente(request, cliente_id):
             queryset = queryset.filter(
                 Q(comprobante_tipo__in=['factura', 'factura_interna'], ven_id__in=facturas_imputadas_ids, saldo_pendiente__gt=0) |  # Facturas con imputaciones parciales
                 Q(comprobante_tipo__in=['factura', 'factura_interna']) & ~Q(ven_id__in=facturas_imputadas_ids) |  # Facturas sin imputaciones
-                Q(comprobante_tipo__in=['recibo', 'nota_credito'], ven_id__in=recibos_imputados_ids, saldo_pendiente__gt=0) |  # Recibos/notas con imputaciones parciales
-                Q(comprobante_tipo__in=['recibo', 'nota_credito']) & ~Q(ven_id__in=recibos_imputados_ids)  # Recibos/notas sin imputaciones
+                Q(comprobante_tipo__in=['recibo', 'nota_credito', 'nota_credito_interna'], ven_id__in=recibos_imputados_ids, saldo_pendiente__gt=0) |  # Recibos/notas con imputaciones parciales
+                Q(comprobante_tipo__in=['recibo', 'nota_credito', 'nota_credito_interna']) & ~Q(ven_id__in=recibos_imputados_ids)  # Recibos/notas sin imputaciones
             )
         
         items = list(queryset.order_by('ven_fecha', 'ven_id'))
@@ -237,7 +237,7 @@ def imputar_existente(request):
             comprobante = get_object_or_404(Venta, ven_id=comprobante_id)
             
             # Verificar que sea un recibo o nota de crédito
-            if comprobante.comprobante.tipo not in ['recibo', 'nota_credito']:
+            if comprobante.comprobante.tipo not in ['recibo', 'nota_credito', 'nota_credito_interna']:
                 return Response({
                     'detail': 'Solo se pueden imputar recibos o notas de crédito'
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -769,7 +769,7 @@ def modificar_imputaciones(request):
             comprobante = get_object_or_404(Venta, ven_id=comprobante_id)
             
             # Verificar que sea recibo o nota de crédito
-            if comprobante.comprobante.tipo not in ['recibo', 'nota_credito']:
+            if comprobante.comprobante.tipo not in ['recibo', 'nota_credito', 'nota_credito_interna']:
                 return Response({
                     'detail': 'Solo se pueden modificar imputaciones de recibos o notas de crédito'
                 }, status=status.HTTP_400_BAD_REQUEST)

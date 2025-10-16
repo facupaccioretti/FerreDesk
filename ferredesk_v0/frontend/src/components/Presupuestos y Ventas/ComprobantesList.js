@@ -21,7 +21,10 @@ const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
   const nClean = sinAcentos(n)
   if (nClean.includes("presupuesto")) return { icon: <IconPresupuesto />, label: "Presupuesto" }
   if (nClean.includes("venta")) return { icon: <IconVenta />, label: "Venta" }
-  if (t === 'nota_credito' || t === 'nota_credito_interna' || nClean.includes('nota de credito')) {
+  if (t === 'nota_credito_interna') {
+    return { icon: <IconCredito />, label: "Modif. de Contenido" }
+  }
+  if (t === 'nota_credito' || nClean.includes('nota de credito')) {
     return { icon: <IconCredito />, label: "N. Cred." }
   }
   if (nClean.includes("nota de debito")) return { icon: <IconCredito />, label: "N. Débito" }

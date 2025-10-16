@@ -63,7 +63,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
     }
 
     // Modificar pagos - SOLO para recibos normales y notas de crédito (NO para autoimputaciones)
-    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito') && !esAutoimputacion) {
+    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna') && !esAutoimputacion) {
       botones.push({
         componente: () => (
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,7 +77,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
     }
 
     // Imputar pago - SOLO para recibos normales y notas de crédito (NO para autoimputaciones)
-    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito') && !esAutoimputacion) {
+    if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna') && !esAutoimputacion) {
       botones.push({
         componente: () => (
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -86,7 +86,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
           </svg>
         ),
         onClick: () => onImputarPago(item),
-        titulo: item.comprobante_tipo === 'nota_credito' ? "Imputar Crédito" : "Imputar Pago"
+        titulo: (item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna') ? "Imputar Crédito" : "Imputar Pago"
       })
     }
     
