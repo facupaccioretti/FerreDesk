@@ -151,3 +151,5 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
 
 
 
+
+
