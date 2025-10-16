@@ -25,6 +25,8 @@ const NOMBRE_CONSUMIDOR_FINAL = "Consumidor Final"
 
 // ID fijo del vendedor por defecto "Mostrador"
 const ID_VENDEDOR_MOSTRADOR = 1
+// ID fijo del plazo por defecto "CONTADO"
+const ID_PLAZO_CONTADO = 1
 
 
 // Chip de estado (memoizado)
@@ -158,7 +160,8 @@ const ClienteForm = ({
       transporte: initialData?.transporte || "",
       // Vendedor por defecto: Mostrador (ID 1) en alta de cliente
       vendedor: initialData?.vendedor ?? ID_VENDEDOR_MOSTRADOR,
-      plazo: initialData?.plazo || "",
+      // Plazo por defecto: CONTADO (ID 1) en alta de cliente
+      plazo: initialData?.plazo ?? ID_PLAZO_CONTADO,
       categoria: initialData?.categoria || "",
       activo: initialData?.activo || "A",
       cancela: initialData?.cancela || "",
@@ -177,6 +180,16 @@ const ClienteForm = ({
       }
     }
   }, [initialData, vendedores])
+
+  // Si es nuevo cliente y aún no hay plazo seleccionado, setear CONTADO cuando lleguen los datos
+  useEffect(() => {
+    if (!initialData && (!form.plazo || String(form.plazo).trim() === "")) {
+      const existeContado = Array.isArray(plazos) && plazos.some(p => String(p.id) === String(ID_PLAZO_CONTADO))
+      if (existeContado) {
+        setForm((prev) => ({ ...prev, plazo: ID_PLAZO_CONTADO }))
+      }
+    }
+  }, [initialData, plazos])
 
   useEffect(() => {
     try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) {}

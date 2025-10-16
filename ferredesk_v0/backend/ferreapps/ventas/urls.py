@@ -29,6 +29,8 @@ urlpatterns = router.urls + [
     # Endpoints existentes
     path('convertir-presupuesto/', views.convertir_presupuesto_a_venta, name='convertir_presupuesto_a_venta'),
     path('convertir-factura-interna/', views.convertir_factura_interna_a_fiscal, name='convertir_factura_interna'),
+    path('verificar-imputaciones/<int:comprobante_id>/', views.verificar_imputaciones_comprobante, name='verificar_imputaciones_comprobante'),
+    path('eliminar-auto-imputaciones-cliente-generico/<int:comprobante_id>/', views.eliminar_auto_imputaciones_cliente_generico, name='eliminar_auto_imputaciones_cliente_generico'),
     
     # Endpoints del Libro IVA Ventas
     path('libro-iva-ventas/generar/', libro_iva_views.generar_libro_iva_ventas_endpoint, name='generar_libro_iva_ventas'),

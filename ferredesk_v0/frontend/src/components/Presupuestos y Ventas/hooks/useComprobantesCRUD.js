@@ -329,6 +329,39 @@ const useComprobantesCRUD = ({
       const data = await response.json()
 
       if (!response.ok) {
+        // Capturar error de imputaciones
+        if (data.imputaciones && data.imputaciones.length > 0) {
+          // Construir mensaje detallado y prolijo
+          let mensaje = `${data.detail}\n\n`
+          mensaje += `Comprobantes relacionados:\n\n\n`
+          
+          data.imputaciones.forEach((imp, idx) => {
+            if (imp.tipo === 'auto_imputacion') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Auto-imputación (Factura-Recibo)\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            } else if (imp.tipo === 'recibo_pago') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Pago recibido\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            } else if (imp.tipo === 'factura_pagada') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
+              mensaje += `   Tipo: Pago realizado\n`
+              mensaje += `   Monto: $${imp.monto}\n`
+              mensaje += `   Fecha: ${imp.fecha}\n\n\n`
+            }
+          })
+          
+          mensaje += `Total de imputaciones: ${data.total_imputaciones}\n\n`
+          mensaje += 'Para continuar, elimine estas imputaciones desde Cuenta Corriente antes de realizar la conversión.'
+          
+          // No usar alert - dejar que el error sea manejado por manejarErrorArca
+          throw new Error(mensaje)
+        }
+        
+        // Otros errores
         let msg = "No se pudo convertir la cotización"
         try {
           msg = data.detail || msg
@@ -393,6 +426,140 @@ const useComprobantesCRUD = ({
     setIsFetchingForConversion(true);
 
     try {
+      // === NUEVA VALIDACIÓN: Verificar imputaciones ANTES de abrir modal ===
+      const validacionResponse = await fetch(`/api/verificar-imputaciones/${facturaInterna.id}/`);
+      const validacionData = await validacionResponse.json();
+      
+      if (validacionData.tiene_imputaciones && !validacionData.puede_convertir) {
+        
+        // CASO ESPECIAL: Cliente genérico con auto-imputaciones (requiere confirmación)
+        if (validacionData.requiere_confirmacion && validacionData.es_cliente_generico && validacionData.puede_eliminar_auto) {
+          // Construir mensaje de confirmación específico
+          let mensajeConfirmacion = `${validacionData.detail}\n\n`;
+          mensajeConfirmacion += `Pagos registrados:\n\n`;
+          
+          validacionData.imputaciones.forEach((imp, idx) => {
+            if (imp.tipo === 'auto_imputacion') {
+              mensajeConfirmacion += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
+              mensajeConfirmacion += `   Monto: $${imp.monto} - Fecha: ${imp.fecha}\n\n`;
+            }
+          });
+          
+          mensajeConfirmacion += `Total: ${validacionData.total_imputaciones} pago(s) registrado(s)\n\n`;
+          mensajeConfirmacion += `${validacionData.mensaje_confirmacion}\n\n`;
+          mensajeConfirmacion += `NOTA: Esta opción solo está disponible para ventas del cliente Consumidor Final.`;
+          
+          
+          // Mostrar confirmación
+          const confirmarEliminacion = window.confirm(mensajeConfirmacion);
+          
+          if (!confirmarEliminacion) {
+            // Usuario canceló: no hacer nada
+            return;
+          }
+          
+          // Usuario confirmó: ELIMINAR AUTO-IMPUTACIONES INMEDIATAMENTE
+          try {
+            const responseEliminar = await fetch(
+              `/api/eliminar-auto-imputaciones-cliente-generico/${facturaInterna.id}/`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            const dataEliminar = await responseEliminar.json();
+            
+            if (!dataEliminar.success) {
+              window.alert(`Error al eliminar auto-imputaciones: ${dataEliminar.detail}`);
+              return;
+            }
+            
+          console.log(`Auto-imputaciones eliminadas: ${dataEliminar.num_eliminadas}`);
+          
+          // ✅ Obtener datos y abrir formulario inmediatamente después de eliminar
+          const [cabecera, itemsDetalle] = await Promise.all([
+            fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: "Error cabecera" }));
+                throw new Error(err.detail);
+              }
+              return res.json();
+            }),
+            fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${facturaInterna.id}`).then(async (res) => {
+              if (!res.ok) return [];
+              return res.json();
+            }),
+          ]);
+
+          const facturaInternaConDetalle = {
+            ...(cabecera.venta || facturaInterna),
+            items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
+          };
+
+          const itemsConId = facturaInternaConDetalle.items.map((it, idx) => ({
+            ...it,
+            id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
+          }));
+
+          const key = `conversion-factura-i-${facturaInterna.id}`
+          const label = `Convertir ${facturaInterna.numero || facturaInterna.id}`
+
+          const tabData = {
+            facturaInternaOrigen: {
+              ...facturaInternaConDetalle, 
+              items: itemsConId,
+              tipoConversion: 'factura_i_factura',
+            },
+            itemsSeleccionados: itemsConId,
+            itemsSeleccionadosIds: itemsConId.map(item => item.id),
+            tipoConversion: 'factura_i_factura'
+          }
+          
+          updateTabData(key, label, tabData, 'conv-factura-i');
+          return; // Salir después de abrir el formulario
+          
+        } catch (error) {
+          window.alert(`Error al eliminar auto-imputaciones: ${error.message}`);
+          return;
+        }
+        } else {
+          // CASO GENERAL: Imputaciones que no se pueden eliminar automáticamente
+          let mensaje = `${validacionData.detail}\n\n`;
+          mensaje += `Comprobantes relacionados:\n\n`;
+          
+          validacionData.imputaciones.forEach((imp, idx) => {
+            if (imp.tipo === 'auto_imputacion') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
+              mensaje += `   Tipo: Auto-imputación (Factura-Recibo)\n`;
+              mensaje += `   Monto: $${imp.monto}\n`;
+              mensaje += `   Fecha: ${imp.fecha}\n\n`;
+            } else if (imp.tipo === 'recibo_pago') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
+              mensaje += `   Tipo: Pago recibido\n`;
+              mensaje += `   Monto: $${imp.monto}\n`;
+              mensaje += `   Fecha: ${imp.fecha}\n\n`;
+            } else if (imp.tipo === 'factura_pagada') {
+              mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
+              mensaje += `   Tipo: Pago realizado\n`;
+              mensaje += `   Monto: $${imp.monto}\n`;
+              mensaje += `   Fecha: ${imp.fecha}\n\n`;
+            }
+          });
+          
+          mensaje += `Total de imputaciones: ${validacionData.total_imputaciones}\n\n`;
+          mensaje += 'Para continuar, elimine estas imputaciones desde Cuenta Corriente antes de realizar la conversión.';
+          
+          // Mostrar error con alert del navegador (no abrir formulario)
+          window.alert(mensaje);
+          return;
+        }
+      }
+      // === FIN VALIDACIÓN ===
+
+      // Para casos SIN imputaciones: obtener datos y abrir formulario
       const [cabecera, itemsDetalle] = await Promise.all([
         fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
           if (!res.ok) {
@@ -417,18 +584,25 @@ const useComprobantesCRUD = ({
         id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
       }));
 
-      // Marcar que es conversión de factura interna
-      setConversionModal({ 
-        open: true, 
-        presupuesto: { 
+      // Abrir ConVentaForm directamente (SIN ConversionModal)
+      const key = `conversion-factura-i-${facturaInterna.id}`
+      const label = `Convertir ${facturaInterna.numero || facturaInterna.id}`
+
+      const tabData = {
+        facturaInternaOrigen: {
           ...facturaInternaConDetalle, 
           items: itemsConId,
-          tipoConversion: 'factura_i_factura'
-        } 
-      });
+          tipoConversion: 'factura_i_factura',
+        },
+        itemsSeleccionados: itemsConId,
+        itemsSeleccionadosIds: itemsConId.map(item => item.id),
+        tipoConversion: 'factura_i_factura'
+      }
+      
+      updateTabData(key, label, tabData, 'conv-factura-i');
     } catch (error) {
       console.error("Error al obtener detalle para conversión:", error);
-      alert(error.message);
+      window.alert(error.message);
     } finally {
       setIsFetchingForConversion(false);
       setFetchingPresupuestoId(null);

@@ -14,9 +14,10 @@ const ALICUOTAS_POR_DEFECTO = {
  * @param {Object} opciones - Opciones de normalización.
  * @param {string} opciones.modo - 'venta'|'presupuesto'|'nota_credito'.
  * @param {Object} opciones.alicuotasMap - Mapa de alícuotas IVA (id: porcentaje) de la API.
+ * @param {boolean} opciones.esConversionFacturaI - Si es conversión de factura interna, marca items como originales automáticamente.
  * @returns {Array} Lista de ítems normalizados preparados para la grilla.
  */
-export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicuotasMap = {} } = {}) {
+export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicuotasMap = {}, esConversionFacturaI = false } = {}) {
   if (!Array.isArray(itemsSeleccionados)) return [];
 
   // Helper: devuelve el valor solo si no es string vacío ni null/undefined
@@ -57,10 +58,10 @@ export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicu
         bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
         proveedorId: null,
         idaliiva,
-        // Preservar metadatos de conversión si existen
-        ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
-        ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
-        ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
+        // Preservar metadatos de conversión si existen o marcar automáticamente para conversiones de factura interna
+        esBloqueado: esConversionFacturaI || (item.esBloqueado !== undefined ? item.esBloqueado : false),
+        noDescontarStock: esConversionFacturaI || (item.noDescontarStock !== undefined ? item.noDescontarStock : false),
+        idOriginal: esConversionFacturaI ? itemId : (item.idOriginal !== undefined ? item.idOriginal : null),
       };
     }
 
@@ -154,10 +155,10 @@ export function normalizarItems(itemsSeleccionados = [], { modo = 'venta', alicu
       bonificacion: Number(item.vdi_bonifica ?? item.bonificacion ?? 0),
       proveedorId: item.vdi_idpro ?? item.proveedorId ?? null,
       idaliiva,
-      // Preservar metadatos de conversión si existen
-      ...(item.esBloqueado !== undefined && { esBloqueado: item.esBloqueado }),
-      ...(item.noDescontarStock !== undefined && { noDescontarStock: item.noDescontarStock }),
-      ...(item.idOriginal !== undefined && { idOriginal: item.idOriginal }),
+      // Preservar metadatos de conversión si existen o marcar automáticamente para conversiones de factura interna
+      esBloqueado: esConversionFacturaI || (item.esBloqueado !== undefined ? item.esBloqueado : false),
+      noDescontarStock: esConversionFacturaI || (item.noDescontarStock !== undefined ? item.noDescontarStock : false),
+      idOriginal: esConversionFacturaI ? itemId : (item.idOriginal !== undefined ? item.idOriginal : null),
     };
   });
 }

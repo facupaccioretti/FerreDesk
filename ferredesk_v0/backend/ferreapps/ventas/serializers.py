@@ -76,6 +76,14 @@ class VentaSerializer(serializers.ModelSerializer):
         model = Venta
         fields = '__all__'
         extra_fields = ['tipo', 'estado', 'numero_formateado', 'cliente_nombre', 'vendedor_nombre']
+        # Valores por defecto para campos obligatorios en BD pero irrelevantes para ND
+        extra_kwargs = {
+            'ven_descu1': {'required': False, 'default': 0},
+            'ven_descu2': {'required': False, 'default': 0},
+            'ven_descu3': {'required': False, 'default': 0},
+            'ven_vdocomvta': {'required': False, 'default': 0},
+            'ven_vdocomcob': {'required': False, 'default': 0},
+        }
 
     def get_tipo(self, obj):
         if not obj.comprobante:
@@ -150,6 +158,14 @@ class VentaSerializer(serializers.ModelSerializer):
         return VentaAsociadaSerializer(facturas, many=True, context=self.context).data
 
     def validate_items(self, value):
+        # Para Notas de Débito y su equivalente interno, permitimos que el frontend no envíe items
+        # porque el backend generará un ítem genérico con el monto y la observación.
+        try:
+            tipo = (self.initial_data or {}).get('tipo_comprobante')
+        except Exception:
+            tipo = None
+        if tipo in ['nota_debito', 'nota_debito_interna']:
+            return value or []
         if not value:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
         return value
@@ -158,8 +174,15 @@ class VentaSerializer(serializers.ModelSerializer):
         items_data = self.initial_data.get('items', [])
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
 
-        # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
+        # Determinar tipo de comprobante solicitado
         tipo_comprobante = self.initial_data.get('tipo_comprobante')
+
+        # Asegurar defaults de campos obligatorios
+        for campo_default in ['ven_descu1', 'ven_descu2', 'ven_descu3', 'ven_vdocomvta', 'ven_vdocomcob']:
+            if campo_default not in validated_data or validated_data.get(campo_default) is None:
+                validated_data[campo_default] = Decimal('0')
+
+        # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
         if tipo_comprobante in ['nota_credito', 'nota_credito_interna'] and comprobantes_asociados_ids:
             facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
             
@@ -227,6 +250,66 @@ class VentaSerializer(serializers.ModelSerializer):
                         ]
                     })
 
+        # VALIDACIÓN PARA NOTAS DE DÉBITO: Verificar consistencia de letras (mismas reglas que NC)
+        if tipo_comprobante in ['nota_debito', 'nota_debito_interna'] and comprobantes_asociados_ids:
+            facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
+
+            if facturas_asociadas.exists():
+                tipos_comprobantes_asociados = set(facturas_asociadas.values_list('comprobante__tipo', flat=True))
+                tipos_invalidos = tipos_comprobantes_asociados - {'factura', 'factura_interna'}
+                if tipos_invalidos:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'No se pueden asociar comprobantes de tipo: {", ".join(sorted(tipos_invalidos))}. '
+                            f'Solo se permiten facturas (fiscales o internas) para notas de débito.'
+                        ]
+                    })
+
+                letras_facturas = set(facturas_asociadas.values_list('comprobante__letra', flat=True))
+                if len(letras_facturas) > 1:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Todas las facturas asociadas deben tener la misma letra. '
+                            f'Se encontraron letras: {", ".join(sorted(letras_facturas))}'
+                        ]
+                    })
+
+                letra_facturas = letras_facturas.pop() if letras_facturas else None
+
+                # Determinar automáticamente el comprobante de ND
+                if letra_facturas == 'I':
+                    try:
+                        comp_nd_interna = Comprobante.objects.get(
+                            tipo='nota_debito_interna',
+                            letra='I'
+                        )
+                        validated_data['comprobante_id'] = comp_nd_interna.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                'No se encontró comprobante de tipo nota_debito_interna (9994) configurado'
+                            ]
+                        })
+                elif letra_facturas in ['A', 'B', 'C']:
+                    try:
+                        comp_nd = Comprobante.objects.get(
+                            tipo='nota_debito',
+                            letra=letra_facturas
+                        )
+                        validated_data['comprobante_id'] = comp_nd.codigo_afip
+                    except Comprobante.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'tipo_comprobante': [
+                                f'No se encontró comprobante de Nota de Débito {letra_facturas} configurado'
+                            ]
+                        })
+                else:
+                    raise serializers.ValidationError({
+                        'comprobantes_asociados_ids': [
+                            f'Letra de factura no soportada para Notas de Débito: {letra_facturas}'
+                        ]
+                    })
+
         # --- NUEVO: calcular fecha de vencimiento si se envía 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
         if dias_validez is not None:
@@ -239,6 +322,36 @@ class VentaSerializer(serializers.ModelSerializer):
             if fecha_base is None:
                 fecha_base = date.today()
             validated_data['ven_vence'] = fecha_base + timedelta(days=dias_validez)
+
+        # Si es ND/ND interna y no vienen items, generar ítem genérico servidor
+        if tipo_comprobante in ['nota_debito', 'nota_debito_interna'] and not items_data:
+            detalle = (self.initial_data.get('detalle_item_generico') or
+                       ('Extensión de Contenido' if tipo_comprobante == 'nota_debito_interna' else 'Nota de Débito'))
+            exento = str(self.initial_data.get('exento_iva', '')).lower() in ['true', '1', 'si', 'sí']
+            alicuota_id = 2 if exento else 5  # EXENTO (2) o 21% (5)
+            try:
+                from django.conf import settings as dj_settings
+                max_len = getattr(dj_settings, 'PRODUCTO_DENOMINACION_MAX_CARACTERES', 100)
+            except Exception:
+                max_len = 100
+            detalle = str(detalle)[:max_len]
+            monto_neto = Decimal(str(self.initial_data.get('monto_neto_item_generico', '0')))
+            if monto_neto <= 0:
+                raise serializers.ValidationError({'monto_neto_item_generico': ['Debe ser mayor que cero']})
+            items_data = [{
+                'vdi_orden': 1,
+                'vdi_idsto': None,
+                'vdi_idpro': None,
+                'vdi_cantidad': Decimal('1'),
+                'vdi_costo': monto_neto,
+                'vdi_margen': Decimal('0'),
+                'vdi_bonifica': Decimal('0'),
+                'vdi_precio_unitario_final': monto_neto,
+                'vdi_detalle1': detalle,
+                'vdi_detalle2': '',
+                'vdi_idaliiva': alicuota_id,
+            }]
+        
         if not items_data:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
         
@@ -298,7 +411,7 @@ class VentaSerializer(serializers.ModelSerializer):
         # Solo guardar los campos base de la venta
         venta = Venta.objects.create(**validated_data)
 
-        # Asociar comprobantes (para Notas de Crédito)
+        # Asociar comprobantes (para Notas de Crédito/Débito)
         if comprobantes_asociados_ids:
             venta.comprobantes_asociados.set(comprobantes_asociados_ids)
 

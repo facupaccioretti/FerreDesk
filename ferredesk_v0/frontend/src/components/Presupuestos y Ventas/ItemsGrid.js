@@ -53,6 +53,7 @@ const ItemsGridPresupuesto = forwardRef(
       setDescu1 = () => {},
       setDescu2 = () => {},
       setDescu3 = () => {},
+      readOnly = false, // NUEVO: Prop para deshabilitar todo el grid
     },
     ref,
       ) => {
@@ -65,6 +66,9 @@ const ItemsGridPresupuesto = forwardRef(
     // Ahora incluye información del proveedor habitual
     // ------------------------------------------------------------
     const buscarProductoPorCodigo = useCallback(async (codigo) => {
+      // En modo readOnly, no buscar productos
+      if (readOnly) return null
+      
       const codigoTrim = (codigo || '').toString().trim()
       if (!codigoTrim) return null
       try {
@@ -80,7 +84,7 @@ const ItemsGridPresupuesto = forwardRef(
       } catch (_) {
         return null
       }
-    }, [])
+    }, [readOnly])
     
     // Eliminado: auto-hidratación de initialItems. El fetch solo ocurre en Enter o Blur del campo código.
 
@@ -164,7 +168,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
         );
         
-        if (!hayVacio) {
+        if (!hayVacio && !readOnly) {
           baseRows = [...baseRows, getEmptyRow()];
         }
         
@@ -173,7 +177,7 @@ const ItemsGridPresupuesto = forwardRef(
       }
       
       
-      return [getEmptyRow()];
+      return readOnly ? [] : [getEmptyRow()];
     })
     const [stockNegativo, setStockNegativo] = useState(false)
     const codigoRefs = useRef([])
@@ -190,6 +194,9 @@ const ItemsGridPresupuesto = forwardRef(
 
     const addItemWithDuplicado = useCallback(
       (producto, proveedorId, cantidad = 1) => {
+        // No agregar items en modo readOnly
+        if (readOnly) return
+        
         // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
         // para que "Sumar Cantidades" no funcione con items originales
         const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id && !r.esBloqueado && !r.idOriginal)
@@ -311,7 +318,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
         })
       },
-      [autoSumarDuplicados, aliMap, rows],
+      [autoSumarDuplicados, aliMap, rows, readOnly],
     )
 
     useEffect(() => {
@@ -364,8 +371,10 @@ const ItemsGridPresupuesto = forwardRef(
         }
         return result
       }
-      // Solo agrego un vacío si todos los renglones tienen producto
-      result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
+      // Solo agrego un vacío si todos los renglones tienen producto Y NO estamos en modo readOnly
+      if (!readOnly) {
+        result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
+      }
       return result
     }
 
@@ -401,8 +410,10 @@ const ItemsGridPresupuesto = forwardRef(
         }
         return result
       }
-      // Solo agrego un vacío si todos los renglones tienen producto
-      result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
+      // Solo agrego un vacío si todos los renglones tienen producto Y NO estamos en modo readOnly
+      if (!readOnly) {
+        result.push({ ...getEmptyRow(), id: Date.now() + Math.random() })
+      }
       return result
     }
 
@@ -519,7 +530,7 @@ const ItemsGridPresupuesto = forwardRef(
 
     const handleAddItem = useCallback(
       (producto) => {
-        if (!producto) return
+        if (!producto || readOnly) return
         const proveedorHabitual = producto.stock_proveedores?.find(
           sp => sp.proveedor?.id === producto.proveedor_habitual?.id
         )
@@ -528,7 +539,7 @@ const ItemsGridPresupuesto = forwardRef(
         // Permitir agregar siempre, independientemente del stock disponible
         addItemWithDuplicado(producto, proveedorId, cantidad)
       },
-      [addItemWithDuplicado],
+      [addItemWithDuplicado, readOnly],
     )
 
     // En useImperativeHandle, expongo también getRows para acceder siempre al array actualizado
@@ -653,15 +664,15 @@ const ItemsGridPresupuesto = forwardRef(
         const newRows = rows.filter((_, i) => i !== idx);
 
         // Si después de eliminar, no queda ninguna fila "llena" (ni de stock ni genérica),
-        // entonces reiniciamos la grilla a un único renglón vacío.
+        // entonces reiniciamos la grilla a un único renglón vacío (solo si no estamos en readOnly).
         if (newRows.every(row => !isRowLleno(row))) {
-          return [getEmptyRow()];
+          return readOnly ? [] : [getEmptyRow()];
         }
 
-        // Si la última fila está llena, nos aseguramos de que haya una vacía debajo.
+        // Si la última fila está llena, nos aseguramos de que haya una vacía debajo (solo si no estamos en readOnly).
         const last = newRows[newRows.length - 1];
         if (last && isRowLleno(last)) {
-          return [...newRows, getEmptyRow()];
+          return readOnly ? newRows : [...newRows, getEmptyRow()];
         }
         
         // Si no, simplemente devolvemos las filas actualizadas (ej. el último ya era vacío).
@@ -776,7 +787,7 @@ const ItemsGridPresupuesto = forwardRef(
                 }
                 
                 newRows[idx] = itemCargado
-                if (newRows.every(isRowLleno)) {
+                if (newRows.every(isRowLleno) && !readOnly) {
                   newRows.push(getEmptyRow())
                 }
                 return ensureSoloUnEditable(newRows)
@@ -820,7 +831,7 @@ const ItemsGridPresupuesto = forwardRef(
             }
             
             newRows[idx] = itemCargado
-            if (newRows.every(isRowLleno)) {
+            if (newRows.every(isRowLleno) && !readOnly) {
               newRows.push(getEmptyRow())
             }
             return ensureSoloUnEditable(newRows)
@@ -946,7 +957,7 @@ const ItemsGridPresupuesto = forwardRef(
               proveedorId: proveedorId,
             }
             newRows[idx] = itemCargado
-            if (newRows.every(isRowLleno)) {
+            if (newRows.every(isRowLleno) && !readOnly) {
               newRows.push(getEmptyRow())
             }
             return ensureSoloUnEditable(newRows)
@@ -983,7 +994,7 @@ const ItemsGridPresupuesto = forwardRef(
           proveedorId: proveedorId,
         }
         newRows[idx] = itemCargado
-        if (newRows.every(isRowLleno)) {
+        if (newRows.every(isRowLleno) && !readOnly) {
           newRows.push(getEmptyRow())
         }
         return ensureSoloUnEditable(newRows)
@@ -1011,8 +1022,8 @@ const ItemsGridPresupuesto = forwardRef(
 
     // Función helper para seleccionar todo el texto al hacer foco en un input
     const manejarFocoSeleccionCompleta = (evento) => {
-      // Solo seleccionar si el input no está deshabilitado
-      if (!evento.target.disabled && !evento.target.readOnly) {
+      // Solo seleccionar si el input no está deshabilitado y no estamos en modo readOnly
+      if (!evento.target.disabled && !evento.target.readOnly && !readOnly) {
         evento.target.select()
       }
     }
@@ -1061,7 +1072,12 @@ const ItemsGridPresupuesto = forwardRef(
                   setBonificacionGeneral(value)
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
-                className="w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400"
+                disabled={readOnly}
+                className={`w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                  readOnly 
+                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400'
+                }`}
               />
               <div
                 className="relative cursor-pointer"
@@ -1105,7 +1121,12 @@ const ItemsGridPresupuesto = forwardRef(
                   setDescu1(value)
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
-                className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                disabled={readOnly}
+                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${
+                  readOnly 
+                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                }`}
               />
             </div>
           </div>
@@ -1125,7 +1146,12 @@ const ItemsGridPresupuesto = forwardRef(
                   setDescu2(value)
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
-                className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
+                disabled={readOnly}
+                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${
+                  readOnly 
+                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                }`}
               />
             </div>
             {/* Tooltip descuentos escalonados */}

@@ -132,7 +132,10 @@ const useFiltrosComprobantes = ({
    * Datos normalizados de ventas
    */
   const ventasNormalizadas = useMemo(() => {
-    return ventas.map(normalizarVenta).filter(Boolean)
+    return ventas
+      .filter(v => v.comprobante?.tipo !== 'recibo')
+      .map(normalizarVenta)
+      .filter(Boolean)
   }, [ventas, normalizarVenta])
 
   /**

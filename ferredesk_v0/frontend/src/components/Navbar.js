@@ -250,9 +250,21 @@ export default function Navbar({ user, onLogout }) {
                 </a>
 
                 <a
+                  href="/home/cuenta-corriente"
+                  onClick={(e) => handleLinkClick(e, "/home/cuenta-corriente")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-teal-400 group-hover:text-teal-300">
+                    <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/>
+                    <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>
+                  </svg>
+                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Cuentas Corrientes</span>
+                </a>
+
+                <a
                   href="/home/carga-inicial-proveedor"
                   onClick={(e) => handleLinkClick(e, "/home/carga-inicial-proveedor")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-500/10 transition-all duration-200 text-left group cursor-pointer"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -260,7 +272,7 @@ export default function Navbar({ user, onLogout }) {
                     viewBox="0 0 24 24"
                     strokeWidth={1.5}
                     stroke="currentColor"
-                    className="w-4 h-4 text-green-400 group-hover:text-green-300"
+                    className="w-4 h-4 text-teal-400 group-hover:text-teal-300"
                   >
                     <path
                       strokeLinecap="round"

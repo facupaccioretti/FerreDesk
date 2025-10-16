@@ -22,6 +22,8 @@ import { useArcaResultadoHandler } from "../../utils/useArcaResultadoHandler"
 import ArcaEsperaOverlay from "./herramientasforms/ArcaEsperaOverlay"
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 import CuitStatusBanner from "../Alertas/CuitStatusBanner"
+import CampoComprobantePagado from "./herramientasforms/CampoComprobantePagado"
+import NuevoReciboModal from "../CuentaCorriente/NuevoReciboModal"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -43,6 +45,8 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   descu2: 0,
   descu3: 0,
   copia: 1,
+  // Campo para "Factura Recibo"
+  montoPago: 0,
 })
 
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => ({
@@ -305,7 +309,25 @@ const VentaForm = ({
     return (comp.ultimo_numero || 0) + 1
   })()
 
-  const handleChange = manejarCambioFormulario(setFormulario)
+  // Función personalizada para manejar cambios, incluyendo campos de pago
+  const handleChangeBase = manejarCambioFormulario(setFormulario)
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    
+    // Lógica específica para campo de pago
+    if (name === 'montoPago') {
+      const monto = parseFloat(value) || 0
+      
+      // Permitir escribir libremente, validar solo al enviar
+      setFormulario(prev => ({
+        ...prev,
+        montoPago: monto
+      }))
+    } else {
+      // Usar la función base para otros campos
+      handleChangeBase(e)
+    }
+  }
 
   const handleClienteSelect = manejarSeleccionClienteObjeto(setFormulario)
 
@@ -325,7 +347,9 @@ const VentaForm = ({
   // Estado para controlar visibilidad del banner de estado CUIT
   const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false)
 
-
+  // Estados para recibo de excedente
+  const [reciboExcedente, setReciboExcedente] = useState(null)
+  const [mostrarModalReciboExcedente, setMostrarModalReciboExcedente] = useState(false)
 
   // Sincronizar documentoInfo cuando cambie el formulario (por ejemplo, al seleccionar cliente)
   // Solo se ejecuta después de la carga inicial para evitar sobrescribir datos del formularioDraft
@@ -477,6 +501,44 @@ const VentaForm = ({
     }
 
     try {
+      // Validar campos de pago
+      const montoPago = Number.parseFloat(formulario.montoPago) || 0
+      const totalVenta = totales?.total || 0
+      const estaPagado = montoPago > 0
+
+      // Validación: Consumidor Final (ID=1) debe abonar exactamente el total (sin cero, sin parcial, sin excedente)
+      const CLIENTE_GENERICO_ID = '1'
+      if (String(formulario.clienteId) === CLIENTE_GENERICO_ID) {
+        const totalEq = Number(totalVenta).toFixed(2)
+        const pagoEq = Number(montoPago).toFixed(2)
+        if (pagoEq !== totalEq) {
+          alert(
+            'El cliente "Consumidor Final" debe abonar exactamente el total de la venta.\n\n' +
+            'Total requerido: $' + totalEq
+          )
+          return
+        }
+      }
+      
+      if (estaPagado && montoPago > totalVenta) {
+        const excedente = montoPago - totalVenta
+        
+        // Preguntar si desea crear recibo de excedente
+        const crearRecibo = window.confirm(
+          `El monto del pago ($${montoPago.toFixed(2)}) excede el total de la venta ($${totalVenta.toFixed(2)}) por $${excedente.toFixed(2)}.\n\n` +
+          `¿Desea generar un recibo por el excedente?`
+        )
+        
+        if (!crearRecibo) {
+          alert('No se puede recibir un monto mayor al total de la venta sin generar un recibo.')
+          return
+        }
+        
+        // Abrir modal de recibo con datos precargados
+        setMostrarModalReciboExcedente(true)
+        return // Detener el submit hasta que se complete el recibo
+      }
+
       // ATENCIÓN: El payload que se envía al backend DEBE contener SOLO los campos base requeridos por el modelo físico.
       // NUNCA incluir campos calculados como vdi_importe, vdi_importe_total, vdi_ivaitem, ven_total, iva_global, etc.
       // La función mapearCamposItem ya filtra y elimina estos campos, pero si modificas este código, revisa DOCUMENTACION_VISTAS_VENTAS.md y Roadmap.txt.
@@ -525,7 +587,15 @@ const VentaForm = ({
         ven_idvdo: formulario.vendedorId, // ID vendedor
         ven_copia: Number.parseInt(formulario.copia, 10) || 1, // Cantidad de copias
         items: items.map((item, idx) => mapearCamposItem(item, idx)), // Ítems mapeados
+        // Campos para "Factura Recibo"
+        comprobante_pagado: estaPagado,
+        monto_pago: montoPago,
         // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
+      }
+
+      // Si hay recibo de excedente, agregarlo al payload
+      if (reciboExcedente) {
+        payload.recibo_excedente = reciboExcedente
       }
 
       // Agregar documento (CUIT/DNI) y domicilio si existen
@@ -576,6 +646,117 @@ const VentaForm = ({
     limpiarEstadoArca() // Limpiar estado de ARCA al cancelar
     limpiarBorrador()
     onCancel()
+  }
+
+  // Handler para cuando se guarda el recibo de excedente
+  const handleReciboExcedenteGuardado = (reciboData) => {
+    // Guardar recibo temporalmente
+    setReciboExcedente(reciboData)
+    setMostrarModalReciboExcedente(false)
+    
+    // Continuar con submit de venta automáticamente
+    // Usar setTimeout para permitir que React actualice el estado primero
+    setTimeout(() => {
+      realizarSubmitVenta(reciboData)
+    }, 100)
+  }
+
+  // Función para realizar submit final (sin validación de excedente)
+  const realizarSubmitVenta = async (reciboData = null) => {
+    if (!itemsGridRef.current) {
+      return
+    }
+
+    try {
+      // Validar campos de pago (sin validación de excedente)
+      const montoPago = Number.parseFloat(formulario.montoPago) || 0
+      const estaPagado = montoPago > 0
+
+      const items = itemsGridRef.current.getItems()
+
+      // Determinar el tipo de comprobante como string fijo
+      const tipoComprobanteSeleccionado =
+        comprobantesVenta.find((c) => c.id === comprobanteId) &&
+        (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
+          ? "factura"
+          : "factura_interna"
+      
+      // Definir constantes descriptivas para valores por defecto
+      const ESTADO_VENTA_CERRADA = "CE"
+      const TIPO_VENTA = "Venta"
+
+      // Construir el payload
+      const payload = {
+        ven_estado: ESTADO_VENTA_CERRADA,
+        ven_tipo: TIPO_VENTA,
+        tipo_comprobante: tipoComprobanteSeleccionado,
+        ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
+        ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
+        ven_fecha: formulario.fecha,
+        ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
+        ven_descu1: Number.parseFloat(formulario.descu1) || 0,
+        ven_descu2: Number.parseFloat(formulario.descu2) || 0,
+        ven_descu3: Number.parseFloat(formulario.descu3) || 0,
+        bonificacionGeneral: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+        ven_bonificacion_general: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+        ven_total: Number.parseFloat(formulario.ven_total) || 0,
+        ven_vdocomvta: Number.parseFloat(formulario.ven_vdocomvta) || 0,
+        ven_vdocomcob: Number.parseFloat(formulario.ven_vdocomcob) || 0,
+        ven_idcli: formulario.clienteId,
+        ven_idpla: formulario.plazoId,
+        ven_idvdo: formulario.vendedorId,
+        ven_copia: Number.parseInt(formulario.copia, 10) || 1,
+        items: items.map((item, idx) => mapearCamposItem(item, idx)),
+        comprobante_pagado: estaPagado,
+        monto_pago: montoPago,
+      }
+
+      // Si hay recibo de excedente (ya sea del estado o pasado como parámetro), agregarlo al payload
+      const reciboFinal = reciboData || reciboExcedente
+      if (reciboFinal) {
+        payload.recibo_excedente = reciboFinal
+      }
+
+      // Agregar documento (CUIT/DNI) y domicilio si existen
+      if (documentoInfo.tipo === 'cuit' && documentoInfo.valor) {
+        payload.ven_cuit = documentoInfo.valor
+      } else if (documentoInfo.tipo === 'dni' && documentoInfo.valor) {
+        payload.ven_dni = documentoInfo.valor
+      }
+      if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
+
+      // Iniciar overlay de ARCA con retardo para evitar carrera en errores rápidos
+      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+        temporizadorArcaRef.current = setTimeout(() => {
+          iniciarEsperaArca()
+        }, 400)
+      }
+
+      const resultado = await onSave(payload)
+
+      // Limpiar temporizador si había sido agendado
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      
+      // Procesar respuesta de ARCA usando la lógica modularizada
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
+    } catch (error) {
+      // Asegurar limpieza del temporizador si hubo error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      // Manejar error usando la lógica modularizada
+      manejarErrorArca(error, "Error al procesar la venta")
+    }
+  }
+
+  // Handler para cerrar modal de recibo de excedente
+  const handleCerrarModalRecibo = () => {
+    setMostrarModalReciboExcedente(false)
+    setReciboExcedente(null)
   }
 
   // Función para agregar producto a la grilla desde el buscador
@@ -877,8 +1058,8 @@ const VentaForm = ({
                   </div>
                 </div>
 
-                {/* Segunda fila: 3 campos */}
-                <div className="grid grid-cols-3 gap-4 mb-3">
+                {/* Segunda fila: 4 campos */}
+                <div className="grid grid-cols-4 gap-4 mb-3">
                   {/* Buscador */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
@@ -912,6 +1093,14 @@ const VentaForm = ({
                       showLabel={false}
                     />
                   </div>
+
+                  {/* Campo Comprobante Pagado */}
+                  <CampoComprobantePagado 
+                    formulario={formulario}
+                    handleChange={handleChange}
+                    totales={totales}
+                    isReadOnly={isReadOnly}
+                  />
                 </div>
 
 
@@ -967,6 +1156,18 @@ const VentaForm = ({
         onSeleccionar={onSeleccionarDesdeModal}
         cargando={loadingClientes}
         error={errorClientes}
+      />
+
+      {/* Modal de recibo de excedente */}
+      <NuevoReciboModal
+        modal={{
+          abierto: mostrarModalReciboExcedente,
+          clienteId: formulario.clienteId,
+        }}
+        onClose={handleCerrarModalRecibo}
+        onGuardar={handleReciboExcedenteGuardado}
+        esReciboExcedente={true}
+        montoFijo={Math.round((Number(formulario.montoPago || 0) - Number(totales?.total || 0)) * 100) / 100}
       />
       
       {/* Overlay de espera de ARCA */}

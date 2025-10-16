@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from django.conf import settings
 from django.db.models import JSONField
+from decimal import Decimal
 
 # Create your models here.
 
@@ -92,6 +93,7 @@ class Venta(models.Model):
     comprobantes_asociados = models.ManyToManyField(
         'self',
         through='ComprobanteAsociacion',
+        through_fields=('nota_credito', 'factura_afectada'),
         symmetrical=False,
         # Este related_name permite, desde una factura, encontrar fácilmente las NCs que la afectan.
         related_name='notas_de_credito_que_la_afectan'
@@ -141,6 +143,34 @@ class Venta(models.Model):
         
         # Llamar al método save original
         super().save(*args, **kwargs)
+
+    def calcular_saldo_pendiente(self):
+        """
+        Calcula el saldo pendiente de pago de esta venta.
+        Para facturas: total - imputaciones recibidas
+        Para recibos/créditos: 0 (no tienen saldo pendiente)
+        """
+        from django.db.models import Sum
+        
+        # Si es un recibo o crédito, no tiene saldo pendiente
+        if (self.comprobante and 
+            self.comprobante.tipo in ['recibo', 'credito']):
+            return Decimal('0.00')
+        
+        # Si es una factura, calcular total - imputaciones
+        if self.comprobante and self.comprobante.tipo == 'factura':
+            # Obtener el total de la venta (usar ven_total del modelo calculado si está disponible)
+            total_factura = self.ven_total if hasattr(self, 'ven_total') else Decimal('0.00')
+            
+            # Calcular total de imputaciones recibidas
+            imputaciones_recibidas = self.imputaciones_recibidas.aggregate(
+                total=Sum('imp_monto')
+            )['total'] or Decimal('0.00')
+            
+            saldo_pendiente = total_factura - imputaciones_recibidas
+            return max(saldo_pendiente, Decimal('0.00'))
+        
+        return Decimal('0.00')
 
 class VentaDetalleItem(models.Model):
     vdi_idve = models.ForeignKey(
@@ -334,6 +364,15 @@ class ComprobanteAsociacion(models.Model):
         # Desde una NC, se puede acceder a las facturas que anula.
         related_name='facturas_anuladas'
     )
+    # La Nota de Débito que se está creando (opcional).
+    # Se agrega para asociar ND con facturas a las que incrementa.
+    nota_debito = models.ForeignKey(
+        'Venta',
+        on_delete=models.CASCADE,
+        related_name='facturas_incrementadas',
+        null=True,
+        blank=True
+    )
     # La Factura que está siendo anulada por la Nota de Crédito.
     factura_afectada = models.ForeignKey(
         'Venta',
@@ -344,7 +383,8 @@ class ComprobanteAsociacion(models.Model):
 
     class Meta:
         db_table = 'VENTA_COMPROBANTE_ASOCIACION'
-        # Se actualiza la restricción de unicidad con los nuevos nombres de campo.
+        # Mantener unicidad para asociaciones de Nota de Crédito; para ND se puede agregar
+        # una restricción similar vía migración futura si se requiere a nivel de DB.
         unique_together = ('nota_credito', 'factura_afectada')
         verbose_name = 'Asociación de Comprobante'
         verbose_name_plural = 'Asociaciones de Comprobantes'
@@ -352,6 +392,10 @@ class ComprobanteAsociacion(models.Model):
     def __str__(self):
         # Usamos try-except para evitar errores si los objetos relacionados aún no están guardados
         try:
-            return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+            if self.nota_credito_id:
+                return f"NC {self.nota_credito.ven_numero} anula a Factura {self.factura_afectada.ven_numero}"
+            if self.nota_debito_id:
+                return f"ND {self.nota_debito.ven_numero} incrementa Factura {self.factura_afectada.ven_numero}"
+            return "Asociación sin origen"
         except Exception:
-            return f"Asociación pendiente de guardado"
+            return "Asociación pendiente de guardado"

@@ -14,13 +14,14 @@ def cargar_comprobantes(apps, schema_editor):
 		{"codigo_afip": "011", "nombre": "Factura C", "descripcion": "", "letra": "C", "tipo": "factura", "activo": True},
 		{"codigo_afip": "012", "nombre": "Nota de Débito C", "descripcion": "", "letra": "C", "tipo": "nota_debito", "activo": True},
 		{"codigo_afip": "013", "nombre": "Nota de Crédito C", "descripcion": "", "letra": "C", "tipo": "nota_credito", "activo": True},
-		{"codigo_afip": "004", "nombre": "Recibo A", "descripcion": "", "letra": "A", "tipo": "recibo", "activo": True},
 		{"codigo_afip": "009", "nombre": "Recibo B", "descripcion": "", "letra": "B", "tipo": "recibo", "activo": True},
-		{"codigo_afip": "015", "nombre": "Recibo C", "descripcion": "", "letra": "C", "tipo": "recibo", "activo": True},
 		{"codigo_afip": "9996", "nombre": "Orden de Compra", "descripcion": "", "letra": "O", "tipo": "orden_compra", "activo": True},
 		{"codigo_afip": "9997", "nombre": "Presupuesto", "descripcion": "", "letra": "P", "tipo": "presupuesto", "activo": True},
-		{"codigo_afip": "9998", "nombre": "Modificación de Contenido", "descripcion": "", "letra": "I", "tipo": "nota_credito_interna", "activo": True},
 		{"codigo_afip": "9999", "nombre": "Cotización", "descripcion": "", "letra": "I", "tipo": "factura_interna", "activo": True},
+		{"codigo_afip": "9998", "nombre": "Modif. de Contenido", "descripcion": "", "letra": "I", "tipo": "nota_credito_interna", "activo": True},
+		{"codigo_afip": "004", "nombre": "Recibo A", "descripcion": "", "letra": "A", "tipo": "recibo", "activo": True},
+		{"codigo_afip": "9995", "nombre": "Recibo", "descripcion": "", "letra": "X", "tipo": "recibo", "activo": True},
+		{"codigo_afip": "9994", "nombre": "Extensión de Contenido", "descripcion": "", "letra": "I", "tipo": "nota_debito_interna", "activo": True},
 	]
 
 	for c in COMPROBANTES:
@@ -40,8 +41,8 @@ def revertir_comprobantes(apps, schema_editor):
 	Comprobante = apps.get_model('ventas', 'Comprobante')
 	Comprobante.objects.filter(codigo_afip__in=[
 		"001", "002", "003", "006", "007", "008",
-		"011", "012", "013", "004", "009", "015",
-		"9996", "9997", "9998", "9999"
+		"011", "012", "013", "004", "009", "9995",
+		"9996", "9997", "9998", "9999", "9994"
 	]).delete()
 
 

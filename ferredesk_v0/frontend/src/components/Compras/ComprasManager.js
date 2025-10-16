@@ -448,6 +448,10 @@ const ComprasManager = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        
+                        const confirmado = window.confirm('¿Está seguro de cerrar? Se perderán los cambios no guardados.');
+                        if (!confirmado) return;
+                        
                         closeTab(tab.key)
                       }}
                       className="ml-3 text-lg font-bold text-slate-300 hover:text-red-400 focus:outline-none transition-colors"

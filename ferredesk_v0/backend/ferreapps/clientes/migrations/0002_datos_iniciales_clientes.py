@@ -29,7 +29,7 @@ def cargar_datos_iniciales_clientes(apps, schema_editor):
 		id=1,
 		defaults={
 			"nombre": "CONTADO",
-			"activo": "T",
+			"activo": "S",
 			"pla_pla1": 0,
 			"pla_pla2": 0,
 			"pla_pla3": 0,
