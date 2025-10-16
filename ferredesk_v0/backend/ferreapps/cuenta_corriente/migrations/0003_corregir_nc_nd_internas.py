@@ -150,6 +150,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('cuenta_corriente', '0002_initial'),
+        ('ventas', '0003_nuevas_vistas'),  # Necesario para que VENTA_CALCULADO exista
     ]
 
     operations = [
