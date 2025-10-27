@@ -8,6 +8,7 @@ import CUITValidacionTooltip from "./CUITValidacionTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import MaestroModal from "./MaestrosModales"
+import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
 
@@ -120,6 +121,9 @@ const ClienteForm = ({
   // Hook para navegación entre campos con Enter
   const { formRef, getFormProps } = useNavegacionForm()
 
+  // Hook para obtener configuración de ferretería
+  const { ferreteria } = useFerreteriaAPI()
+
   // Detectar recarga/navegación para no limpiar el borrador en ese caso
   useEffect(() => {
     const handleBeforeUnload = () => { estaRecargandoRef.current = true }
@@ -179,7 +183,7 @@ const ClienteForm = ({
         setForm((prev) => ({ ...prev, vendedor: ID_VENDEDOR_MOSTRADOR }))
       }
     }
-  }, [initialData, vendedores])
+  }, [initialData, vendedores, form.vendedor])
 
   // Si es nuevo cliente y aún no hay plazo seleccionado, setear CONTADO cuando lleguen los datos
   useEffect(() => {
@@ -189,7 +193,7 @@ const ClienteForm = ({
         setForm((prev) => ({ ...prev, plazo: ID_PLAZO_CONTADO }))
       }
     }
-  }, [initialData, plazos])
+  }, [initialData, plazos, form.plazo])
 
   useEffect(() => {
     try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) {}
@@ -224,6 +228,10 @@ const ClienteForm = ({
   // Ref para conocer el CUIT actual dentro de efectos sin agregar dependencias
   const cuitActualRef = useRef(form.cuit)
   useEffect(() => { cuitActualRef.current = form.cuit }, [form.cuit])
+
+  // Constante para determinar si estamos en modo PRODUCCION
+  const MODO_PRODUCCION = 'PROD'
+  const esModoProduccion = ferreteria?.modo_arca === MODO_PRODUCCION
 
   // Helper: lista solo activos pero conservando la opción seleccionada aunque esté inactiva
   const filtrarActivosConSeleccion = useCallback((lista, seleccionadoId) => {
@@ -919,7 +927,7 @@ const ClienteForm = ({
                       )}
                     </select>
                   </FilaEditable>
-                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, className: `${CLASES_INPUT}` }} value={form.razon} onChange={handleChange} />
+                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: esModoProduccion && (camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO), className: `${CLASES_INPUT}` }} value={form.razon} onChange={handleChange} />
                   <FilaEditable etiqueta="Nombre Comercial" inputProps={{ name: "fantasia" }} value={form.fantasia} onChange={handleChange} />
                   <FilaEditable etiqueta="IB" inputProps={{ name: "ib", maxLength: 10 }} value={form.ib} onChange={handleChange} />
                   <FilaEditable etiqueta="Estado">

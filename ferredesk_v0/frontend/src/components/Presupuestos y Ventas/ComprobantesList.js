@@ -180,11 +180,6 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
       })
     }
 
-    botones.push({
-      componente: BotonEliminar,
-      onClick: () => handleDelete(comprobante.id),
-      titulo: "Eliminar"
-    })
   }
   // Venta cerrada (sin botón NC)
   else if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
@@ -198,11 +193,6 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         componente: BotonVerDetalle, 
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
-      },
-      { 
-        componente: BotonEliminar, 
-        onClick: () => handleDelete(comprobante.id),
-        titulo: "Eliminar"
       }
     )
   }

@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect, memo, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, memo, useRef, useCallback } from "react";
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
 import useNavegacionForm from "../../hooks/useNavegacionForm";
 import CUITValidacionTooltip from "../Clientes/CUITValidacionTooltip";
 import useValidacionCUITProveedores from "../../utils/useValidacionCUITProveedores";
+import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI";
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
 
@@ -47,6 +48,9 @@ const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange }) 
 })
 
 export default function ProveedorForm({ onSave, onCancel, initialData, formError }) {
+  // Hook para obtener configuración de ferretería
+  const { ferreteria } = useFerreteriaAPI();
+  
   const [form, setForm] = useState(initialData || {
     razon: '',
     fantasia: '',
@@ -90,6 +94,10 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   })
 
   const LONGITUD_CUIT_COMPLETO = 11;
+
+  // Constante para determinar si estamos en modo PRODUCCION
+  const MODO_PRODUCCION = 'PROD';
+  const esModoProduccion = ferreteria?.modo_arca === MODO_PRODUCCION;
 
   // Ref para conocer el CUIT actual dentro de efectos sin agregar dependencias
   const cuitActualRef = useRef(form.cuit)
@@ -355,8 +363,8 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                   </div>
                 </div>
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
-                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData || camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: !!initialData ? 'La Razón Social no es editable' : (camposAutocompletados.razon ? 'Campo autocompletado por ARCA' : undefined) }} value={form.razon} onChange={handleChange} />
-                <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true, disabled: camposAutocompletados.fantasia || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: camposAutocompletados.fantasia ? 'Campo autocompletado por ARCA' : undefined }} value={form.fantasia} onChange={handleChange} />
+                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData || (esModoProduccion && (camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO)), title: !!initialData ? 'La Razón Social no es editable' : (esModoProduccion && camposAutocompletados.razon ? 'Campo autocompletado por ARCA' : undefined) }} value={form.razon} onChange={handleChange} />
+                <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true, disabled: esModoProduccion && (camposAutocompletados.fantasia || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO), title: esModoProduccion && camposAutocompletados.fantasia ? 'Campo autocompletado por ARCA' : undefined }} value={form.fantasia} onChange={handleChange} />
               </SeccionLista>
 
               {/* Tarjeta Información de Contacto */}
@@ -364,7 +372,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 titulo="Información de Contacto y Estado"
                 icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>}
               >
-                <FilaEditable etiqueta="Domicilio *" inputProps={{ name: "domicilio", required: true, disabled: camposAutocompletados.domicilio || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO, title: camposAutocompletados.domicilio ? 'Campo autocompletado por ARCA' : undefined }} value={form.domicilio} onChange={handleChange} />
+                <FilaEditable etiqueta="Domicilio *" inputProps={{ name: "domicilio", required: true, disabled: esModoProduccion && (camposAutocompletados.domicilio || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO), title: esModoProduccion && camposAutocompletados.domicilio ? 'Campo autocompletado por ARCA' : undefined }} value={form.domicilio} onChange={handleChange} />
                 <FilaEditable etiqueta="Teléfono" inputProps={{ name: "tel1" }} value={form.tel1} onChange={handleChange} />
                 <FilaEditable etiqueta="Estado">
                   <select
