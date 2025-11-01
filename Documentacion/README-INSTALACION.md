@@ -84,6 +84,19 @@ Los instaladores automáticos instalan:
 
 ## 🎛️ **Scripts Adicionales**
 
+### **update.bat** - Actualizar FerreDesk ⭐
+- Actualiza el código desde el repositorio
+- Verifica que el build sea exitoso
+- **ROLLBACK AUTOMÁTICO** si algo falla
+- Preserva tus datos y configuración
+- ✅ **Recomendado para actualizaciones**
+
+### **recover-update.bat** - Recuperar Update Fallido 🔧
+- Usa cuando `update.bat` haya fallado
+- Fuerza reconstrucción completa sin caché
+- Limpia y reconstruye todo desde cero
+- Soluciona problemas de build corrupto
+
 ### **start.bat** - Iniciar FerreDesk
 - Inicia los servicios si están detenidos
 - Verifica que todo esté funcionando
@@ -94,6 +107,41 @@ Los instaladores automáticos instalan:
 - Elimina contenedores, imágenes y datos
 - Deja el proyecto como recién instalado
 - ⚠️ **ADVERTENCIA:** Elimina todos los datos
+
+---
+
+## 🔄 **Cómo Actualizar FerreDesk**
+
+### **Actualización Normal (Recomendado):**
+
+1. Ejecuta `update.bat`
+2. El script:
+   - Verifica actualizaciones disponibles
+   - Guarda punto de recuperación automático
+   - Actualiza el código
+   - Reconstruye el frontend
+   - **Verifica que el build sea exitoso**
+   - **Si falla, revierte automáticamente**
+3. ¡Listo! Disfruta de las nuevas funciones
+
+### **Si Update Falló:**
+
+Si `update.bat` indica que falló:
+
+1. Ejecuta `recover-update.bat`
+2. Este script:
+   - Limpia caché completamente
+   - Reconstruye SIN usar caché
+   - Verifica que funcione
+3. Si aún falla, consulta `Documentacion/SOLUCION_UPDATE_FALLIDO.md`
+
+### **Mejoras Automáticas v2.1:**
+
+✅ Backup automático del commit anterior  
+✅ Verificación del build frontend  
+✅ Rollback automático si falla  
+✅ Mensajes claros de error  
+✅ Script de recuperación dedicado  
 
 ---
 
