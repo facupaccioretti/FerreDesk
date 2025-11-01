@@ -27,7 +27,7 @@ RUN npm install
 
 # Copiar código del frontend
 COPY frontend/ .
-RUN npm run build
+RUN if [ ! -d "build" ] || [ -z "$(ls -A build)" ]; then npm run build; else echo "Build pre-compilado detectado, omitiendo compilación"; fi
 
 # Volver al backend y copiar todo el directorio (ahora está limpio)
 WORKDIR /app

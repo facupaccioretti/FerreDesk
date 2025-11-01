@@ -38,7 +38,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build outputs
-frontend/build
+# frontend/build  # Comentado para permitir builds pre-compilados
 backend/staticfiles
 *.egg-info/
 dist/
