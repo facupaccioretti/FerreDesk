@@ -1,109 +1,93 @@
-# 🧰 FerreDesk App — Sistema de Gestión Multiplataforma
 
-## 📋 Descripción general
+## Descripción general
 
-**Ferretería App** es una aplicación de escritorio multiplataforma desarrollada con tecnologías modernas. Su objetivo es gestionar el stock, ventas, usuarios y sucursales de una o varias ferreterías. La aplicación está dividida en dos grandes módulos:
+FerreDesk es una aplicación web para gestionar productos, ventas, clientes, proveedores, cuentas corrientes, compras, reservas e informes. El sistema corre sobre Docker y expone una única aplicación web en `http://localhost:8000` que sirve el frontend con React y el backend con Django integrados.
 
-- **Frontend**: React + Tailwind (accedido desde navegador, incluso local).
-- **Backend**: Django + Django REST Framework.
-- **Base de datos**: Firebird SQL (instalada localmente).
+- Frontend: React + Tailwind CSS (build servido por Django).
+- Backend: Django 5 + Django REST Framework.
+- Base de datos: PostgreSQL (en Docker). En desarrollo local también se soporta PostgreSQL.
+- Integración fiscal: módulo ARCA, WSFEv1 y Constancia Padron.
 
-## 🛠️ Tecnologías utilizadas
+## Tecnologías
 
-| Capa          | Herramienta                        |
-|---------------|------------------------------------|
-| Interfaz      | React + Tailwind                   |
-| Backend       | Django                             |
-| Base de datos | Sqlite/PostgreSQL                  |
+| Capa | Herramientas |
+|------|--------------|
+| Interfaz | React, Tailwind CSS |
+| Backend | Django, Django REST Framework |
+| Base de datos | PostgreSQL (Docker), `dj-database-url` |
+| Infraestructura | Docker, Docker Compose |
 
-
-## 📊 Funcionalidades esperadas
-
-- ✅ Login y autenticación con roles (`admin`, `cli_admin`, `cli_user`, `prueba`, `auditor`)
-- ✅ CRUD de productos
-- ✅ Gestión de ventas por usuario y por ferretería
-- ✅ Reportes y métricas (top productos, ingresos, etc.)
-- ✅ Multi-tenant: datos aislados por ferretería
-- ✅ Interfaz moderna y responsiva con React + Tailwind
-
-## 🗂️ Estructura del repositorio
+## Estructura del repositorio (actual)
 
 ```text
-FERREDESK/
-├── ferredesk_v1/                   # Versión principal del sistema
-│   ├── backend/                    # Backend con Django
-│   │   ├── manage.py              # Script principal de Django para gestionar el proyecto
-│   │   ├── ferredesk_backend/     # Configuración global Django (settings, urls, wsgi)
-│   │   ├── apps/                  # Módulos de la aplicación
-│   │   │   ├── productos/        # Gestión de catálogo de productos
-│   │   │   ├── ventas/          # Sistema de ventas y facturación
-│   │   │   ├── usuarios/        # Gestión de usuarios y autenticación
-│   │   │   └── reportes/        # Generación de reportes y estadísticas
-│   │   ├── .env                  # Variables de entorno (configuración sensible)
-│   │   ├── requirements.txt      # Dependencias de Python
-│   │   └── .gitignore           # Archivos ignorados por Git
-│   │
-│   ├── frontend/                  # Frontend con React
-│   │   ├── public/               # Archivos estáticos y assets públicos
-│   │   ├── src/                  # Código fuente de React
-│   │   │   ├── components/      # Componentes reutilizables
-│   │   │   ├── pages/          # Páginas principales
-│   │   │   ├── hooks/          # Custom hooks de React
-│   │   │   ├── context/        # Contextos de React
-│   │   │   └── utils/          # Utilidades y helpers
-│   │   ├── package.json         # Dependencias de Node.js
-│   │   └── .env                # Variables de entorno del frontend
-│   │
-│   ├── database/                 # Configuración y scripts de base de datos
-│   │   ├── schema.sql           # Esquema de la base de datos
-│   │   ├── ferredesk.fdb        # Archivo de base de datos (opcional)
-│   │   └── diagrama_db.pdf      # Diagrama ER de la base de datos
-│   │
-│   └── utilidades/               # Herramientas y recursos adicionales
-│       ├── vercel/              # Configuración de despliegue en Vercel
-│       │   ├── Pagina Login     # Prototipo de la página de login
-│       │   └── assets/          # Recursos para el prototipo
-│       └── scripts/             # Scripts de utilidad
-│           ├── setup_dev.ps1    # Script para configurar entorno de desarrollo
-│           └── backup_db.ps1    # Script para respaldar la base de datos
-│
-├── .gitignore                    # Archivos y carpetas ignorados por Git
-├── README.md                     # Documentación principal del proyecto
-└── CONTRIBUIDORES.md             # Guía para contribuidores
+FerreDesk/
+├── ferredesk_v0/
+│   ├── backend/
+│   │   ├── manage.py
+│   │   ├── ferredesk_backend/       # Settings, urls, wsgi/asgi
+│   │   └── ferreapps/               # Apps: productos, ventas, clientes, etc.
+│   │       └── ventas/ARCA/         # Integración ARCA/WSFEv1
+│   ├── frontend/                    # App React (código fuente)
+│   ├── docker-compose.yml           # Orquestación (Postgres + app)
+│   ├── Dockerfile                   # Imagen de la app (Django + build React)
+│   ├── start.bat                    # Inicia servicios con Docker Desktop
+│   ├── super-install.bat            # Instalación completa en Windows
+│   ├── recover-update.bat           # Reconstrucción forzada sin caché
+│   ├── update.bat / update2.bat     # Actualizaciones
+│   ├── clean.bat                    # Limpieza de artefactos
+│   ├── env.example                  # Variables de entorno de ejemplo
+│   └── requirements.txt             # Dependencias de Python
+├── arca_arg/                        # Librería ARCA (WSFEv1)
+└── Documentacion/                   # Documentos técnicos y de negocio
 ```
 
-### Descripción de los directorios principales
+## Ejecución rápida (Windows + Docker Desktop)
 
-#### 📦 Backend (`backend/`)
-El backend está construido con Django y contiene toda la lógica de negocio. Incluye:
-- Configuración del proyecto Django
-- Aplicaciones modulares para cada funcionalidad
-- Sistema de autenticación y autorización
-- APIs REST para comunicación con el frontend
-- Configuración de la base de datos
+Requisitos:
+- Docker Desktop instalado y corriendo.
+- Windows PowerShell.
 
-#### 🎨 Frontend (`frontend/`)
-La interfaz de usuario desarrollada con React y Tailwind CSS:
-- Componentes reutilizables y modulares
-- Sistema de rutas y navegación
-- Integración con APIs del backend
-- Estilos y temas personalizados
-- Gestión de estado global
+Pasos típicos:
+1. Abrir una consola en `ferredesk_v0`.
+2. Ejecutar `start.bat` para iniciar los servicios. El script verifica Docker, levanta los contenedores y valida el acceso.
+3. Acceder a `http://localhost:8000`.
 
-#### 💾 Base de datos (`database/`)
-Contiene todo lo relacionado con la base de datos:
-- Scripts de migración
-- Esquema de la base de datos
-- Diagramas y documentación
-- Scripts de respaldo
+Comandos alternativos (manual):
+- Iniciar: `docker-compose up -d`
+- Ver estado: `docker-compose ps`
+- Ver logs: `docker-compose logs -f`
+- Detener: `docker-compose down`
 
-#### 🛠️ Utilidades (`utilidades/`)
-Herramientas y recursos para desarrollo y mantenimiento:
-- Scripts de automatización
-- Prototipos y diseños
-- Documentación adicional
-- Herramientas de despliegue
+## Configuración de base de datos
 
----
+En Docker, la base utiliza PostgreSQL 15 con variables definidas en `docker-compose.yml`. La aplicación consume `DATABASE_URL` dentro del contenedor.
 
-Este README sirve como base completa para el repositorio de GitHub de "FerreDesk App". .
+- Servicio `postgres` (puerto host `5433`, contenedor `5432`).
+- Servicio `ferredesk` (aplicación) con `DEBUG=True` por defecto en Docker.
+
+En desarrollo local (sin Docker), la configuración por defecto (`ferredesk_v0/backend/ferredesk_backend/settings.py`) usa PostgreSQL local en `localhost:5432`. Se puede ajustar mediante variables de entorno o editando los parámetros locales.
+
+## Rutas de backend y frontend
+
+- Django sirve el build de React directamente desde el directorio `frontend/build` (detecta si corre en Docker o local para ubicar la ruta).
+- Archivos estáticos y el `index.html` del frontend se incluyen en `STATICFILES_DIRS`.
+
+## Integración ARCA / Facturación electrónica
+
+- El módulo `ferreapps/ventas/ARCA` contienen la integración con WSFEv1 y Constancia Padron.
+- Existen utilidades específicas para Libro IVA e informes en `ferreapps/ventas`.
+
+## Scripts útiles
+
+- `start.bat`: inicia la aplicación con Docker (intenta arrancar Docker Desktop si no está corriendo, verifica servicios y muestra accesos).
+- `recover-update.bat`: detiene servicios, limpia caché de Docker, reconstruye imágenes sin caché y vuelve a iniciar; valida que el frontend se haya construido.
+- `update.bat` / `update2.bat`: scripts de actualización.
+- `clean.bat`: limpieza de artefactos locales y temporales.
+
+## Solución de problemas
+
+- Verificar que Docker Desktop esté iniciado y saludable.
+- Usar `docker-compose logs -f` para inspeccionar errores de inicio.
+- Si el frontend no se reconstruye, ejecutar `recover-update.bat` para un build completo sin caché.
+- Confirmar que `http://localhost:8000` responde después del arranque; el `start.bat` hace una verificación automática.
+
