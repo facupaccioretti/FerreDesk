@@ -85,7 +85,7 @@ class CompraAdmin(admin.ModelAdmin):
     
     inlines = [CompraDetalleItemInline]
     
-    actions = ['cerrar_compras', 'anular_compras']
+    actions = ['cerrar_compras']
     
     def verificacion_totales(self, obj):
         """Muestra si los totales coinciden"""
@@ -111,19 +111,6 @@ class CompraAdmin(admin.ModelAdmin):
         
         self.message_user(request, f"Se cerraron {count} compras exitosamente")
     cerrar_compras.short_description = "Cerrar compras seleccionadas"
-    
-    def anular_compras(self, request, queryset):
-        """Acción para anular compras seleccionadas"""
-        count = 0
-        for compra in queryset.exclude(comp_estado='ANULADA'):
-            try:
-                compra.anular_compra()
-                count += 1
-            except ValueError as e:
-                self.message_user(request, f"Error al anular compra {compra.comp_id}: {e}", level='ERROR')
-        
-        self.message_user(request, f"Se anularon {count} compras exitosamente")
-    anular_compras.short_description = "Anular compras seleccionadas"
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('comp_idpro')

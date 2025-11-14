@@ -191,30 +191,6 @@ export const useComprasAPI = () => {
     }
   }, [makeRequest])
 
-  // Anular compra
-  const anularCompra = useCallback(async (compraId) => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const data = await makeRequest(`/api/compras/${compraId}/anular/`, {
-        method: 'POST',
-      })
-      
-      // Actualizar la lista local
-      setCompras(prev => prev.map(compra => 
-        compra.comp_id === compraId ? { ...compra, comp_estado: 'ANULADA' } : compra
-      ))
-      return data
-    } catch (err) {
-      setError(err.message)
-      console.error('Error anulando compra:', err)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [makeRequest])
-
   // Obtener compra por ID
   const getCompraById = useCallback(async (compraId) => {
     setLoading(true)
@@ -264,7 +240,6 @@ export const useComprasAPI = () => {
     updateCompra,
     deleteCompra,
     cerrarCompra,
-    anularCompra,
     getCompraById,
     getEstadisticas,
   }

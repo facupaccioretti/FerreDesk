@@ -4,7 +4,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useCallback } from "react"
 import Tabla from "../Tabla"
-import { BotonEliminar, BotonVerDetalle } from "../Botones"
+import { BotonEliminar, BotonVerDetalle, BotonEditar } from "../Botones"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 
 const ComprasList = ({
@@ -17,7 +17,6 @@ const ComprasList = ({
   onEditarCompra,
   onVerCompra,
   onCerrarCompra,
-  onAnularCompra,
   onEliminarCompra,
   onRefresh,
   // Props de paginación
@@ -46,20 +45,6 @@ const ComprasList = ({
     </button>
   )
 
-  // Botón custom para anular compra (solo visible cuando está abierta)
-  const BotonAnularCompra = ({ onClick, titulo }) => (
-    <button
-      onClick={onClick}
-      title={titulo}
-      className="inline-flex items-center justify-center p-1.5 rounded-md text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 focus:outline-none"
-      aria-label={titulo}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-      </svg>
-    </button>
-  )
-
   // Función para generar los botones de acciones para compras (memoizada)
   const generarBotonesCompra = useCallback((compra) => {
     const botones = [
@@ -73,6 +58,12 @@ const ComprasList = ({
     // Agregar botones solo si está en BORRADOR (abierta)
     if (compra.comp_estado === 'BORRADOR') {
       botones.push({
+        componente: BotonEditar,
+        onClick: () => onEditarCompra(compra),
+        titulo: "Editar compra"
+      })
+      
+      botones.push({
         componente: BotonCerrarCompra,
         onClick: () => {
           const confirmar = window.confirm("¿Está seguro de cerrar la compra? Esta acción no se puede deshacer.")
@@ -82,26 +73,16 @@ const ComprasList = ({
         titulo: "Cerrar compra"
       })
       
+      // Agregar botón eliminar solo si está en BORRADOR
       botones.push({
-        componente: BotonAnularCompra,
-        onClick: () => {
-          const confirmar = window.confirm("¿Está seguro de anular la compra? Esta acción no se puede deshacer.")
-          if (!confirmar) return
-          onAnularCompra(compra.comp_id)
-        },
-        titulo: "Anular compra"
+        componente: BotonEliminar,
+        onClick: () => onEliminarCompra(compra.comp_id),
+        titulo: "Eliminar compra"
       })
     }
 
-    // Agregar botón eliminar al final
-    botones.push({
-      componente: BotonEliminar,
-      onClick: () => onEliminarCompra(compra.comp_id),
-      titulo: "Eliminar compra"
-    })
-
     return botones
-  }, [onVerCompra, onCerrarCompra, onAnularCompra, onEliminarCompra])
+  }, [onVerCompra, onEditarCompra, onCerrarCompra, onEliminarCompra])
 
   const formatDate = (dateString) => {
     if (!dateString) return "-"

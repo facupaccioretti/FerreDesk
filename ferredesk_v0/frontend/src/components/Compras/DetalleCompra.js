@@ -243,16 +243,10 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
 
           {/* Tabla de ítems */}
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="bg-slate-800 px-4 py-3">
-              <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                <IconCubo />
-                {esCompra ? 'Ítems de la Compra' : 'Ítems de la Orden'}
-              </h4>
-            </div>
             <div className="max-h-80 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 sticky top-0 z-10">
-                  <tr className="text-slate-700 border-b border-slate-200">
+                <thead className="bg-slate-800 sticky top-0 z-10">
+                  <tr className="text-white border-b border-slate-200">
                     <th className="px-3 py-2 text-left font-medium w-12">#</th>
                     <th className="px-3 py-2 text-left font-medium w-32">Código</th>
                     <th className="px-3 py-2 text-left font-medium">Denominación</th>

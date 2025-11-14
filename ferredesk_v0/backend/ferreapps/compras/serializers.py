@@ -16,7 +16,7 @@ class CompraDetalleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompraDetalleItem
         fields = [
-            'cdi_orden', 'cdi_idsto', 'cdi_idpro', 'cdi_cantidad',
+            'id', 'cdi_orden', 'cdi_idsto', 'cdi_idpro', 'cdi_cantidad',
             'cdi_costo', 'cdi_detalle1', 'cdi_detalle2', 'cdi_idaliiva',
             'producto_denominacion', 'producto_codigo', 'producto_unidad',
             'codigo_proveedor'
@@ -257,6 +257,14 @@ class CompraCreateSerializer(CompraSerializer):
 
 class CompraUpdateSerializer(CompraSerializer):
     """Serializer específico para actualizar compras"""
+    items_data = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False
+    )
+    
+    class Meta(CompraSerializer.Meta):
+        fields = '__all__'
     
     def validate_comp_estado(self, value):
         """Validar que no se pueda modificar una compra cerrada o anulada"""
@@ -266,6 +274,89 @@ class CompraUpdateSerializer(CompraSerializer):
                 f"No se puede modificar una compra en estado {instance.get_comp_estado_display()}"
             )
         return value
+    
+    def update(self, instance, validated_data):
+        """Actualizar compra con sus items usando la mejor práctica"""
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items_data', None)
+        
+        with transaction.atomic():
+            # Actualizar la compra
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Actualizar items si se proporcionaron
+            if items_data is not None:
+                self._actualizar_items_inteligente(instance, items_data)
+            
+            return instance
+    
+    def _actualizar_items_inteligente(self, instance, items_data):
+        """Actualizar items de manera inteligente: actualizar existentes, crear nuevos, eliminar removidos"""
+        # Obtener items existentes
+        items_existentes = {item.id: item for item in instance.items.all()}
+        
+        # Obtener IDs de items enviados (solo los que tienen ID)
+        ids_enviados = {item.get('id') for item in items_data if item.get('id')}
+        
+        # Eliminar items que ya no están en la lista enviada
+        for item_id, item in items_existentes.items():
+            if item_id not in ids_enviados:
+                item.delete()
+        
+        # Procesar items enviados
+        for i, item_data in enumerate(items_data, 1):
+            # Limpiar campos que no pertenecen al modelo CompraDetalleItem
+            campos_a_eliminar = ['producto_codigo', 'producto_denominacion', 'producto_unidad', 'producto', 'codigo_proveedor', 'unidad']
+            for campo in campos_a_eliminar:
+                item_data.pop(campo, None)
+            
+            # Procesar ForeignKeys
+            item_data = self._procesar_foreign_keys(item_data)
+            
+            # Establecer orden y relación con la compra
+            item_data['cdi_orden'] = i
+            item_data['cdi_idca'] = instance
+            
+            # Determinar si es actualización o creación
+            item_id = item_data.pop('id', None)
+            
+            if item_id and item_id in items_existentes:
+                # Actualizar item existente
+                item = items_existentes[item_id]
+                for field, value in item_data.items():
+                    setattr(item, field, value)
+                item.save()
+            else:
+                # Crear nuevo item
+                CompraDetalleItem.objects.create(**item_data)
+    
+    def _procesar_foreign_keys(self, item_data):
+        """Procesar y validar ForeignKeys en los datos del item"""
+        # Convertir ID de Stock a instancia
+        if 'cdi_idsto' in item_data and item_data['cdi_idsto']:
+            try:
+                item_data['cdi_idsto'] = Stock.objects.get(id=item_data['cdi_idsto'])
+            except Stock.DoesNotExist:
+                item_data['cdi_idsto'] = None
+        
+        # Convertir ID de Proveedor a instancia
+        if 'cdi_idpro' in item_data and item_data['cdi_idpro']:
+            try:
+                item_data['cdi_idpro'] = Proveedor.objects.get(id=item_data['cdi_idpro'])
+            except Proveedor.DoesNotExist:
+                raise serializers.ValidationError(f"Proveedor con ID {item_data['cdi_idpro']} no encontrado")
+        
+        # Convertir ID de AlicuotaIVA a instancia
+        if 'cdi_idaliiva' in item_data and item_data['cdi_idaliiva']:
+            try:
+                item_data['cdi_idaliiva'] = AlicuotaIVA.objects.get(id=item_data['cdi_idaliiva'])
+            except AlicuotaIVA.DoesNotExist:
+                raise serializers.ValidationError(f"Alicuota de IVA con ID {item_data['cdi_idaliiva']} no encontrada")
+        
+        return item_data
 
 
 class CompraListSerializer(serializers.ModelSerializer):

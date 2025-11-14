@@ -113,9 +113,26 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
   };
 
   const botones = []
+  
+  // Verificar si es Presupuesto (único tipo que puede tener botón de eliminar)
+  // Excluir explícitamente: Modif. de Contenido, Cotizaciones, Extensión de Contenido, etc.
+  const esPresupuesto = comprobante.tipo === "Presupuesto"
+  const tipoComprobanteOriginal = comprobante.comprobante?.tipo || ""
+  const esComprobanteNoEliminable = [
+    'nota_credito_interna',  // Modif. de Contenido
+    'nota_debito_interna',   // Extensión de Contenido
+    'factura_interna',        // Cotización
+    'nota_credito',           // Nota de Crédito
+    'nota_debito',            // Nota de Débito
+    'factura',                // Factura
+    'venta'                   // Venta
+  ].includes(tipoComprobanteOriginal.toLowerCase())
+  
+  // Solo Presupuestos pueden tener botón de eliminar
+  const puedeEliminar = esPresupuesto && !esComprobanteNoEliminable
 
   // Presupuesto abierto
-  if (comprobante.tipo === "Presupuesto" && comprobante.estado === "Abierto") {
+  if (puedeEliminar && comprobante.estado === "Abierto") {
     botones.push(
       { 
         componente: BotonGenerarPDF, 
