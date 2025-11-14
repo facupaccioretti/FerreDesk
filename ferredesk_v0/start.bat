@@ -14,7 +14,7 @@ set "RUTA_DOCKER1=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
 set "RUTA_DOCKER2=%ProgramFiles(x86)%\Docker\Docker\Docker Desktop.exe"
 set "RUTA_DOCKER3=%LocalAppData%\Docker\Docker Desktop.exe"
 
-echo 🚀 Iniciando FerreDesk...
+echo Iniciando FerreDesk...
 echo.
 if "%MODO_DEBUG%"=="1" >>"%RUTA_LOG_DEBUG%" echo [DEBUG] Verificando estado de Docker
 
@@ -48,9 +48,9 @@ if !errorlevel! neq 0 (
 REM Verificar si estamos en el directorio correcto
 if "%MODO_DEBUG%"=="1" >>"%RUTA_LOG_DEBUG%" echo [DEBUG] Verificando docker-compose.yml en: %cd%
 if not exist "docker-compose.yml" (
-    echo ❌ Error: No se encontró docker-compose.yml
+    echo Error: No se encontró docker-compose.yml
     echo.
-    echo 📁 Ejecuta este script desde el directorio del proyecto FerreDesk
+    echo Ejecuta este script desde el directorio del proyecto FerreDesk
     echo.
     if "%MODO_DEBUG%"=="1" >>"%RUTA_LOG_DEBUG%" echo [DEBUG] docker-compose.yml NO encontrado en %cd%
     pause
@@ -62,8 +62,8 @@ if not exist "docker-compose.yml" (
 REM Verificar si los servicios están ejecutándose
 %COMPOSE_CMD% ps | findstr "Up" >nul
 if !errorlevel! neq 0 (
-    echo ⚠️  Los servicios no están ejecutándose
-    echo 🔄 Iniciando servicios...
+    echo Los servicios no están ejecutándose
+    echo Iniciando servicios...
     if "%MODO_DEBUG%"=="1" >>"%RUTA_LOG_DEBUG%" echo [DEBUG] Ejecutando: %COMPOSE_CMD% up -d
     %COMPOSE_CMD% up -d
     timeout /t 15 /nobreak >nul
@@ -71,24 +71,20 @@ if !errorlevel! neq 0 (
 
 REM Verificar estado final de los servicios
 echo.
-echo 🔍 Verificando estado de los servicios...
+echo Verificando estado de los servicios...
 if "%MODO_DEBUG%"=="1" >>"%RUTA_LOG_DEBUG%" echo [DEBUG] Ejecutando: %COMPOSE_CMD% ps
 %COMPOSE_CMD% ps
 
 echo.
-echo ✅ FerreDesk está ejecutándose
+echo FerreDesk está ejecutándose
 echo.
-echo 🌐 Abre tu navegador en: http://localhost:8000
+echo Abre tu navegador en: http://localhost:8000
 echo.
-echo 🔑 Credenciales de acceso:
-echo    Usuario: admin
-echo    Contraseña: admin123
-echo.
-echo 📋 Comandos útiles:
-echo    • Ver logs: docker-compose logs -f
-echo    • Detener: docker-compose down
-echo    • Reiniciar: docker-compose restart
-echo    • Limpiar todo: clean.bat
+echo Comandos útiles:
+echo    Ver logs: docker-compose logs -f
+echo    Detener: docker-compose down
+echo    Reiniciar: docker-compose restart
+echo    Limpiar todo: clean.bat
 echo.
 pause
 
