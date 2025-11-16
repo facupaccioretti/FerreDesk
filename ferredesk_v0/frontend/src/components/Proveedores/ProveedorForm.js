@@ -65,6 +65,8 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const cuitInputRef = useRef(null);
+  const errorMostradoRef = useRef(false);
+  const formErrorAnteriorRef = useRef(null);
 
   // Hook para navegación entre campos con Enter
   const { getFormProps } = useNavegacionForm();
@@ -109,6 +111,35 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   useEffect(() => {
     if (initialData) setForm({ ...initialData, acti: initialData.acti ?? 'S' });
   }, [initialData]);
+
+  // Mostrar alert nativo solo cuando cambia el error o formError (evita spam en renders)
+  useEffect(() => {
+    const mensajeError = error || formError;
+    
+    // Solo mostrar alert si hay un error y es diferente al que ya se mostró
+    if (mensajeError) {
+      // Si es formError, verificar si ya se mostró este mismo mensaje
+      if (formError && formError === formErrorAnteriorRef.current) {
+        return; // Ya se mostró este formError, no volver a mostrar
+      }
+      
+      // Si hay un error nuevo (error local) o formError nuevo, mostrar alert
+      if (error || (formError && formError !== formErrorAnteriorRef.current)) {
+        window.alert(`Error: ${mensajeError}`);
+        // Guardar referencia del formError mostrado para evitar duplicados
+        if (formError) {
+          formErrorAnteriorRef.current = formError;
+        }
+        // Marcar que se mostró un error
+        errorMostradoRef.current = true;
+      }
+    } else {
+      // Limpiar flags cuando no hay errores
+      errorMostradoRef.current = false;
+      formErrorAnteriorRef.current = null;
+    }
+  }, [error, formError]);
+
 
   const limpiarSoloNumeros = useCallback((valor) => String(valor || '').replace(/\D/g, ''), []);
 
@@ -173,6 +204,11 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
   }, [datosARCA, errorARCA, limpiarEstadosARCA])
 
   const handleChange = e => {
+    // Limpiar errores cuando el usuario modifica campos
+    if (error) {
+      setError("");
+    }
+    
     const { name, value } = e.target;
     if (name === 'cuit') {
       // Solo números y hasta 11 dígitos
@@ -289,12 +325,6 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                 </h3>
               </div>
 
-              {/* Mensajes de error */}
-              {(error || formError) && (() => {
-                // Mostrar error como alert nativo del navegador
-                window.alert(`Error: ${error || formError}`);
-                return null;
-              })()}
             </div>
 
             {/* Header compacto con nombre y código */}
