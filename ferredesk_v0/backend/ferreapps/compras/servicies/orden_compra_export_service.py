@@ -4,6 +4,7 @@ Genera archivos PDF profesionales para envío a proveedores.
 """
 
 import io
+import os
 from decimal import Decimal
 from typing import Dict, Any, BinaryIO
 from datetime import datetime
@@ -122,48 +123,43 @@ def generar_pagina_orden_compra(orden_compra, ferreteria, items_pagina, numero_p
 
     ancho_columna = ancho_total / 2  # Dividir en 2 secciones (izquierda y derecha)
     
-    # Tamaño del contenedor del logo (espacio máximo disponible)
-    tamaño_contenedor_logo = 150  # Tamaño del contenedor (ampliado 15%)
-    max_width = 150   # Ancho máximo para la imagen (ampliado 15%)
-    max_height = 150  # Alto máximo para la imagen (ampliado 15%)
+    # Calcular ancho efectivo para la tabla interna descontando paddings de la tabla externa
+    # Padding del header principal (datos_table): 8pt izquierdo + 8pt derecho = 16pt total
+    padding_header_principal = 8 * 2  # padding izquierdo + derecho de datos_table
+    # El ancho de la tabla interna debe descontar los paddings externos para evitar desbordamiento
+    ancho_tabla_interna = ancho_columna - padding_header_principal
+    
+    # Tamaño del logo: igual que en PDFs del frontend (70x70 puntos)
+    # En ReportLab, 1 punto = 1/72 pulgadas, similar a píxeles en react-pdf
+    max_width = 70   # Ancho máximo para la imagen (igual que frontend)
+    max_height = 70  # Alto máximo para la imagen (igual que frontend)
 
-    # Preparar logo si existe
+    # Preparar logo si existe (verificar que el archivo realmente exista)
     logo_element = None
     if ferreteria and ferreteria.logo_empresa:
         try:
-            # Obtener dimensiones originales de la imagen
+            # Verificar que el archivo del logo realmente exista en el sistema de archivos
             logo_path = ferreteria.logo_empresa.path
-            with PILImage.open(logo_path) as img:
-                image_width, image_height = img.size
-            
-            # Calcular factor de escala para mantener aspect ratio
-            # Tomar el menor de los dos factores para que quepa completamente
-            scale_width = max_width / image_width
-            scale_height = max_height / image_height
-            scale_factor = min(scale_width, scale_height)
-            
-            # Aplicar el factor de escala a ambas dimensiones
-            scaled_width = image_width * scale_factor
-            scaled_height = image_height * scale_factor
-            
-            # Crear elemento de imagen con dimensiones escaladas proporcionalmente
-            logo_element = Image(logo_path, width=scaled_width, height=scaled_height)
+            if os.path.exists(logo_path) and os.path.isfile(logo_path):
+                # Obtener dimensiones originales de la imagen
+                with PILImage.open(logo_path) as img:
+                    image_width, image_height = img.size
+                
+                # Calcular factor de escala para mantener aspect ratio
+                # Tomar el menor de los dos factores para que quepa completamente
+                scale_width = max_width / image_width
+                scale_height = max_height / image_height
+                scale_factor = min(scale_width, scale_height)
+                
+                # Aplicar el factor de escala a ambas dimensiones
+                scaled_width = image_width * scale_factor
+                scaled_height = image_height * scale_factor
+                
+                # Crear elemento de imagen con dimensiones escaladas proporcionalmente
+                logo_element = Image(logo_path, width=scaled_width, height=scaled_height)
         except Exception:
+            # Si hay cualquier error (archivo no existe, error al abrir imagen, etc.), no mostrar logo
             logo_element = None
-
-    # Crear placeholder para el logo (mantiene dimensiones consistentes)
-    if logo_element:
-        logo_placeholder = logo_element
-    else:
-        # Crear un placeholder cuadrado para mantener el layout consistente
-        # Usar tamaño del contenedor para el placeholder
-        logo_placeholder = Table([[""]], colWidths=[tamaño_contenedor_logo], rowHeights=[tamaño_contenedor_logo])
-        logo_placeholder.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ]))
 
     # Crear tabla anidada para la sección derecha (simplificada)
     seccion_derecha_table = Table([
@@ -188,19 +184,116 @@ def generar_pagina_orden_compra(orden_compra, ferreteria, items_pagina, numero_p
     ]))
 
     # Crear tabla anidada para la sección izquierda (logo + datos ferretería)
-    seccion_izquierda_table = Table([
-        [logo_placeholder],  # Fila 1: Logo
-        [f"{ferreteria_nombre}\n{ferreteria_direccion}\n{ferreteria_cuit}\n{ferreteria_situacion}"]  # Fila 2: Datos ferretería
-    ], colWidths=[ancho_columna])
+    # Estructura similar a PDFs del frontend: logo centrado arriba, datos centrados abajo
+    # Preparar datos de ferretería con formato similar al frontend
+    # CRÍTICO: Los Paragraphs dentro de tablas respetan automáticamente el ancho de la celda
+    # No usar leftIndent/rightIndent para evitar desbordamiento - los paddings de la tabla ya proporcionan espaciado
+    estilo_nombre_empresa = ParagraphStyle(
+        'NombreEmpresa',
+        parent=getSampleStyleSheet()['Normal'],
+        fontSize=9,
+        fontName='Helvetica-Bold',
+        alignment=1,  # CENTER
+        spaceAfter=2,
+        # Word wrap está habilitado por defecto en Paragraph
+    )
+    estilo_info_empresa = ParagraphStyle(
+        'InfoEmpresa',
+        parent=getSampleStyleSheet()['Normal'],
+        fontSize=8,
+        fontName='Helvetica',
+        alignment=1,  # CENTER
+        spaceAfter=1,
+        # Word wrap está habilitado por defecto en Paragraph
+    )
+    estilo_situacion_fiscal = ParagraphStyle(
+        'SituacionFiscal',
+        parent=getSampleStyleSheet()['Normal'],
+        fontSize=8,
+        fontName='Helvetica-Bold',
+        alignment=1,  # CENTER
+        spaceAfter=0,
+        # Word wrap está habilitado por defecto en Paragraph
+    )
+    
+    # Construir contenido de datos ferretería con Paragraphs para formato correcto
+    # Los Paragraphs dentro de tablas respetan automáticamente el ancho de la celda
+    nombre_parrafo = Paragraph(ferreteria_nombre.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_nombre_empresa)
+    direccion_parrafo = Paragraph(ferreteria_direccion.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_info_empresa)
+    cuit_parrafo = Paragraph(ferreteria_cuit.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_info_empresa)
+    situacion_parrafo = Paragraph(ferreteria_situacion.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_situacion_fiscal)
+    
+    # Crear tabla con logo y datos en horizontal (logo a la izquierda, datos a la derecha)
+    # Similar a frontend: flexDirection "row" - logo y datos coexisten horizontalmente
+    # CRÍTICO: Los anchos de las columnas deben sumar exactamente ancho_tabla_interna
+    ancho_logo = 70  # Ancho fijo del logo
+    espacio_entre_logo_datos = 8  # Espacio entre logo y datos (similar a marginLeft: 8 en frontend)
+    
+    if logo_element:
+        # Con logo: logo a la izquierda (columna 1), datos a la derecha (columna 2)
+        # CRÍTICO: Descontar paddings de la tabla principal y espacio entre logo y datos
+        # Los paddings se aplican al final, así que descontarlos del ancho total
+        padding_tabla_principal = 2 * 2  # LEFT + RIGHT padding de seccion_izquierda_table (2pt cada lado = 4pt total)
+        ancho_disponible_para_contenido = ancho_tabla_interna - padding_tabla_principal
+        # El espacio entre logo y datos se maneja con LEFTPADDING, pero debemos descontarlo del ancho disponible para los datos
+        ancho_datos = ancho_disponible_para_contenido - ancho_logo - espacio_entre_logo_datos
+        
+        # Crear tabla con datos apilados verticalmente en la columna derecha
+        # Los datos deben respetar el ancho calculado para no desbordarse
+        tabla_datos = Table([
+            [nombre_parrafo],  # Fila 1: Nombre (bold, 9pt)
+            [direccion_parrafo],  # Fila 2: Dirección (8pt)
+            [cuit_parrafo],  # Fila 3: CUIT (8pt)
+            [situacion_parrafo]  # Fila 4: Situación fiscal (bold, 8pt)
+        ], colWidths=[ancho_datos])
+        tabla_datos.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),  # Centrar datos
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            # Sin paddings en la tabla interna para maximizar espacio disponible
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        
+        # Tabla principal: logo a la izquierda, datos a la derecha
+        # CRÍTICO: Las columnas deben sumar exactamente ancho_tabla_interna
+        # Columna 1: ancho_logo, Columna 2: ancho_datos + espacio_entre_logo_datos (el espacio está en el padding)
+        # Pero como el espacio está en LEFTPADDING, el ancho de la columna 2 debe ser ancho_datos + espacio_entre_logo_datos
+        # para que total = ancho_logo + (ancho_datos + espacio_entre_logo_datos) = ancho_disponible_para_contenido + espacio_entre_logo_datos
+        # Esto sería: ancho_logo + ancho_datos + espacio_entre_logo_datos = ancho_disponible_para_contenido + espacio_entre_logo_datos
+        # Simplificando: ancho_logo + ancho_datos = ancho_disponible_para_contenido - espacio_entre_logo_datos
+        # Pero ancho_datos ya descontó espacio_entre_logo_datos, así que:
+        ancho_columna_logo = ancho_logo
+        ancho_columna_datos_con_espacio = ancho_disponible_para_contenido - ancho_logo  # Incluye el espacio
+        
+        seccion_izquierda_table = Table([
+            [logo_element, tabla_datos]  # Una sola fila: logo (izq) + datos (der)
+        ], colWidths=[ancho_columna_logo, ancho_columna_datos_con_espacio])
+    else:
+        # Sin logo: solo datos centrados ocupando todo el ancho
+        seccion_izquierda_table = Table([
+            [nombre_parrafo],  # Fila 1: Nombre (bold, 9pt)
+            [direccion_parrafo],  # Fila 2: Dirección (8pt)
+            [cuit_parrafo],  # Fila 3: CUIT (8pt)
+            [situacion_parrafo]  # Fila 4: Situación fiscal (bold, 8pt)
+        ], colWidths=[ancho_tabla_interna])
+    
     seccion_izquierda_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),  # Logo a la izquierda
+        ('ALIGN', (1, 0), (1, 0), 'LEFT'),  # Datos a la izquierda (pero centrados dentro de su celda)
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        # Paddings mínimos para evitar desbordamiento
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        # Espacio entre columnas (logo y datos) - incluido en el LEFTPADDING de la columna de datos
+        ('LEFTPADDING', (1, 0), (1, 0), espacio_entre_logo_datos),  # Espacio a la izquierda de la columna de datos
     ]))
 
     # Header principal: Tabla con 2 secciones (izquierda y derecha)
@@ -211,8 +304,9 @@ def generar_pagina_orden_compra(orden_compra, ferreteria, items_pagina, numero_p
             seccion_derecha_table  # Sección derecha: Sección con X, título, fecha y datos
         ]
     ]
-    # Altura fija del header (en puntos)
-    altura_fija_header = 120  # Altura fija para el header
+    # Altura del header ajustada para logo más pequeño (70x70) y datos
+    # Logo: 70pt + padding + datos (nombre + direccion + cuit + situacion) ~90-100pt total
+    altura_fija_header = 100  # Altura ajustada para logo de 70x70 y datos
     
     datos_table = Table(datos_section, colWidths=[ancho_columna, ancho_columna], rowHeights=[altura_fija_header])
     datos_table.setStyle(TableStyle([
@@ -249,23 +343,66 @@ def generar_pagina_orden_compra(orden_compra, ferreteria, items_pagina, numero_p
             ['Código', 'Descripción', 'Cantidad', 'Unidad']
         ]
         
-        # Agregar items de esta página
+        # Estilos para texto con word wrap
+        estilo_codigo = ParagraphStyle(
+            'CodigoStyle',
+            parent=getSampleStyleSheet()['Normal'],
+            fontSize=ALTO_FUENTE_ITEMS,
+            fontName='Helvetica',
+            alignment=1,  # CENTER
+            leftIndent=0,
+            rightIndent=0,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+        estilo_descripcion = ParagraphStyle(
+            'DescripcionStyle',
+            parent=getSampleStyleSheet()['Normal'],
+            fontSize=ALTO_FUENTE_ITEMS,
+            fontName='Helvetica',
+            alignment=0,  # LEFT
+            leftIndent=0,
+            rightIndent=0,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+        estilo_texto_normal = ParagraphStyle(
+            'TextoNormalStyle',
+            parent=getSampleStyleSheet()['Normal'],
+            fontSize=ALTO_FUENTE_ITEMS,
+            fontName='Helvetica',
+            alignment=1,  # CENTER
+            leftIndent=0,
+            rightIndent=0,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+        
+        # Agregar items de esta página usando Paragraph para permitir word wrap
         for item in items_pagina:
             codigo_proveedor = item.get('codigo_proveedor', 'N/A')
             denominacion = item.get('odi_detalle1', 'N/A')
             unidad = item.get('odi_detalle2', 'N/A')
             cantidad = item.get('odi_cantidad', '0')
             
+            # Convertir a Paragraph para permitir word wrapping automático
+            # Escapar caracteres especiales para XML/HTML usado por Paragraph
+            codigo_parrafo = Paragraph(str(codigo_proveedor).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_codigo)
+            descripcion_parrafo = Paragraph(str(denominacion).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_descripcion)
+            cantidad_parrafo = Paragraph(str(cantidad).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_texto_normal)
+            unidad_parrafo = Paragraph(str(unidad).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), estilo_texto_normal)
+            
             items_data.append([
-                codigo_proveedor,
-                denominacion,
-                str(cantidad),
-                unidad
+                codigo_parrafo,
+                descripcion_parrafo,
+                cantidad_parrafo,
+                unidad_parrafo
             ])
         
         # Crear tabla de items estilo PlantillaFacturaAPDF (sin encuadro) - ancho completo
-        ancho_codigo = ancho_total * 0.15      # 15% para código
-        ancho_descripcion = ancho_total * 0.6  # 60% para descripción
+        # Aumentar ancho de código para permitir códigos más largos (de 15% a 18%)
+        ancho_codigo = ancho_total * 0.18      # 18% para código (aumentado de 15%)
+        ancho_descripcion = ancho_total * 0.57  # 57% para descripción (reducido de 60% para compensar)
         ancho_cantidad = ancho_total * 0.125   # 12.5% para cantidad
         ancho_unidad = ancho_total * 0.125     # 12.5% para unidad
         items_table = Table(items_data, colWidths=[ancho_codigo, ancho_descripcion, ancho_cantidad, ancho_unidad])
@@ -293,11 +430,13 @@ def generar_pagina_orden_compra(orden_compra, ferreteria, items_pagina, numero_p
             ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
             
             # Sin bordes - listado flotante como PlantillaFacturaAPDF
-            # Solo padding mínimo para espaciado
-            ('LEFTPADDING', (0, 1), (-1, -1), 1),
-            ('RIGHTPADDING', (0, 1), (-1, -1), 1),
-            ('TOPPADDING', (0, 1), (-1, -1), 1),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 1),
+            # Padding adecuado para permitir word wrap sin cortar texto
+            ('LEFTPADDING', (0, 1), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 1), (-1, -1), 2),
+            ('TOPPADDING', (0, 1), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
+            # Permitir que las filas se expandan automáticamente para acomodar texto largo
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white]),
         ]))
         
         story.append(items_table)
@@ -331,10 +470,10 @@ def exportar_orden_compra_pdf(orden_compra: Dict[str, Any], numero_pagina: int =
         Archivo en memoria con el contenido PDF
     """
     
-    # Obtener datos de la ferretería
+    # Obtener datos de la ferretería (igual que en otros servicios PDF)
     try:
-        ferreteria = Ferreteria.objects.filter(activa=True).first()
-    except:
+        ferreteria = Ferreteria.objects.first()
+    except Exception as e:
         ferreteria = None
     
     # Obtener items

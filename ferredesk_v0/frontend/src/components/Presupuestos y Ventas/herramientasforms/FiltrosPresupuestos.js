@@ -7,7 +7,10 @@ const tiposComprobanteUnicos = (comprobantes) => {
     { tipo: 'factura', label: 'Factura' },
     { tipo: 'factura_interna', label: 'Cotización' },
     { tipo: 'presupuesto', label: 'Presupuesto' },
-    { tipo: 'nota_credito', label: 'Nota de Crédito' }
+    { tipo: 'nota_credito', label: 'Nota de Crédito' },
+    { tipo: 'nota_credito_interna', label: 'Modif. de Contenido' },
+    { tipo: 'nota_debito', label: 'Nota de Débito' },
+    { tipo: 'nota_debito_interna', label: 'Extensión de Contenido' }
   ];
   
   // Obtener tipos únicos de los comprobantes

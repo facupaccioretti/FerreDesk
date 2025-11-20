@@ -7,7 +7,6 @@ import Tabla from "../Tabla"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 // Constantes descriptivas para la UI
-const ALTURA_MAX_TABLA = "60vh" // evita que la tabla crezca demasiado
 const DEBOUNCE_DELAY = 300 // ms
 
 /**
@@ -224,17 +223,19 @@ export default function ProveedorSelectorModal({
               {error ? (
                 <div className="p-8 text-center text-red-600">{error}</div>
               ) : (
-                <div className="px-6 pb-6" style={{ maxHeight: ALTURA_MAX_TABLA }}>
-                  <Tabla
-                    columnas={columnas}
-                    datos={resultadosBusqueda}
-                    renderFila={renderFila}
-                    mostrarBuscador={false}
-                    mostrarOrdenamiento={false}
-                    paginadorVisible={false}
-                    sinEstilos={true}
-                    cargando={cargando || buscando}
-                  />
+                <div className="px-6 pb-6">
+                  <div className="max-h-80 overflow-auto">
+                    <Tabla
+                      columnas={columnas}
+                      datos={resultadosBusqueda}
+                      renderFila={renderFila}
+                      mostrarBuscador={false}
+                      mostrarOrdenamiento={false}
+                      paginadorVisible={false}
+                      sinEstilos={true}
+                      cargando={cargando || buscando}
+                    />
+                  </div>
                 </div>
               )}
 

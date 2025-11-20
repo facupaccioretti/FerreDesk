@@ -54,6 +54,27 @@ const CompraForm = ({
       items_data: [],
     }
 
+    // Si hay datos iniciales (edición), cargarlos inmediatamente
+    if (initialData && !modoConversion) {
+      initialState.comp_sucursal = initialData.comp_sucursal || sucursales[0]?.id || 1
+      initialState.comp_fecha = initialData.comp_fecha || new Date().toISOString().split("T")[0]
+      initialState.comp_numero_factura = initialData.comp_numero_factura || ""
+      initialState.comp_tipo = initialData.comp_tipo || "COMPRA"
+      initialState.comp_idpro = initialData.comp_idpro !== undefined && initialData.comp_idpro !== null ? initialData.comp_idpro : initialData.proveedorSeleccionado?.id || ""
+      initialState.comp_cuit = initialData.comp_cuit || ""
+      initialState.comp_razon_social = initialData.comp_razon_social || initialData.proveedorSeleccionado?.razon || ""
+      initialState.comp_domicilio = initialData.comp_domicilio || ""
+      initialState.comp_observacion = initialData.comp_observacion || ""
+      initialState.comp_total_final = initialData.comp_total_final || 0
+      initialState.comp_importe_neto = initialData.comp_importe_neto || 0
+      initialState.comp_iva_21 = initialData.comp_iva_21 || 0
+      initialState.comp_iva_10_5 = initialData.comp_iva_10_5 || 0
+      initialState.comp_iva_27 = initialData.comp_iva_27 || 0
+      initialState.comp_iva_0 = initialData.comp_iva_0 || 0
+      initialState.comp_estado = initialData.comp_estado || "BORRADOR"
+      initialState.items_data = initialData.items || []
+    }
+
     // Si es modo conversión, procesar items inmediatamente
     if (modoConversion && ordenOrigen && itemsSeleccionados && itemsSeleccionados.length > 0) {
       // Pre-cargar datos de la orden
@@ -121,28 +142,32 @@ const CompraForm = ({
 
   useEffect(() => {
     if (initialData) {
-      setFormData({
-        comp_sucursal: initialData.comp_sucursal || sucursales[0]?.id || 1,
-        comp_fecha: initialData.comp_fecha || new Date().toISOString().split("T")[0],
-        comp_numero_factura: initialData.comp_numero_factura || "",
-        comp_tipo: initialData.comp_tipo || "COMPRA",
-        comp_idpro: initialData.comp_idpro || "",
-        comp_cuit: initialData.comp_cuit || "",
-        comp_razon_social: initialData.comp_razon_social || "",
-        comp_domicilio: initialData.comp_domicilio || "",
-        comp_observacion: initialData.comp_observacion || "",
-        comp_total_final: initialData.comp_total_final || 0,
-        comp_importe_neto: initialData.comp_importe_neto || 0,
-        comp_iva_21: initialData.comp_iva_21 || 0,
-        comp_iva_10_5: initialData.comp_iva_10_5 || 0,
-        comp_iva_27: initialData.comp_iva_27 || 0,
-        comp_iva_0: initialData.comp_iva_0 || 0,
-        comp_estado: initialData.comp_estado || "BORRADOR",
-        items_data: initialData.items || [],
-      })
+      // Solo actualizar formData si NO es modo conversión (los datos ya se cargaron en useState)
+      if (!modoConversion) {
+        setFormData({
+          comp_sucursal: initialData.comp_sucursal || sucursales[0]?.id || 1,
+          comp_fecha: initialData.comp_fecha || new Date().toISOString().split("T")[0],
+          comp_numero_factura: initialData.comp_numero_factura || "",
+          comp_tipo: initialData.comp_tipo || "COMPRA",
+          comp_idpro: initialData.comp_idpro !== undefined && initialData.comp_idpro !== null ? initialData.comp_idpro : initialData.proveedorSeleccionado?.id || "",
+          comp_cuit: initialData.comp_cuit || "",
+          comp_razon_social: initialData.comp_razon_social || initialData.proveedorSeleccionado?.razon || "",
+          comp_domicilio: initialData.comp_domicilio || "",
+          comp_observacion: initialData.comp_observacion || "",
+          comp_total_final: initialData.comp_total_final || 0,
+          comp_importe_neto: initialData.comp_importe_neto || 0,
+          comp_iva_21: initialData.comp_iva_21 || 0,
+          comp_iva_10_5: initialData.comp_iva_10_5 || 0,
+          comp_iva_27: initialData.comp_iva_27 || 0,
+          comp_iva_0: initialData.comp_iva_0 || 0,
+          comp_estado: initialData.comp_estado || "BORRADOR",
+          items_data: initialData.items || [],
+        })
+      }
 
       // Manejar proveedor seleccionado desde el modal
       if (initialData.proveedorSeleccionado) {
+        // Caso NUEVA COMPRA: proveedor seleccionado del modal
         const proveedor = initialData.proveedorSeleccionado
         setSelectedProveedor(proveedor)
         setFormData(prev => ({
@@ -153,9 +178,14 @@ const CompraForm = ({
           comp_domicilio: proveedor.domicilio || "",
         }))
       } else if (initialData.comp_idpro) {
-        // Caso de edición: buscar proveedor por ID
-        const proveedor = proveedores.find((p) => p.id === initialData.comp_idpro)
-        setSelectedProveedor(proveedor)
+        // Caso EDICIÓN: usar datos directamente de la base de datos
+        const proveedorFromDB = {
+          id: initialData.comp_idpro,
+          razon: initialData.comp_razon_social,
+          cuit: initialData.comp_cuit,
+          domicilio: initialData.comp_domicilio
+        }
+        setSelectedProveedor(proveedorFromDB)
       }
 
       // Parsear comp_numero_factura si viene precargado
@@ -173,7 +203,7 @@ const CompraForm = ({
         }
       }
     }
-  }, [initialData, proveedores, sucursales, updateNumeroFacturaInForm])
+  }, [initialData, modoConversion, sucursales, updateNumeroFacturaInForm])
 
   // NUEVO: useEffect para manejar modo conversión (solo para establecer proveedor)
   useEffect(() => {
@@ -374,7 +404,30 @@ const CompraForm = ({
     if (!validateForm()) return
     setIsSubmitting(true)
     try {
-      const payload = { ...formData }
+      // Filtrar campos calculados que no deben enviarse al backend
+      const payload = {
+        ...formData,
+        items_data: formData.items_data.map(item => {
+          // Crear un nuevo objeto solo con los campos que el backend espera
+          const cleanItem = {
+            cdi_orden: item.cdi_orden,
+            cdi_idsto: item.cdi_idsto,
+            cdi_idpro: item.cdi_idpro,
+            cdi_cantidad: item.cdi_cantidad,
+            cdi_costo: item.cdi_costo,
+            cdi_detalle1: item.cdi_detalle1,
+            cdi_detalle2: item.cdi_detalle2,
+            cdi_idaliiva: item.cdi_idaliiva
+          }
+          
+          // Incluir el ID si existe (para actualización inteligente)
+          if (item.id) {
+            cleanItem.id = item.id
+          }
+          
+          return cleanItem
+        })
+      }
       
       // Agregar datos de conversión si es necesario
       if (modoConversion && ordenOrigen) {
@@ -485,8 +538,8 @@ const CompraForm = ({
                       <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
                         {errorProveedores}
                       </div>
-                    ) : modoConversion || initialData?.proveedorSeleccionado ? (
-                      // Campo de texto de solo lectura cuando viene seleccionado desde el modal o en modo conversión
+                    ) : modoConversion || initialData?.proveedorSeleccionado || initialData?.comp_id ? (
+                      // Campo de texto de solo lectura cuando viene seleccionado desde el modal, en modo conversión, o al editar
                       <input
                         type="text"
                         value={formData.comp_razon_social}
@@ -495,7 +548,7 @@ const CompraForm = ({
                         placeholder="Proveedor seleccionado"
                       />
                     ) : (
-                      // Dropdown normal cuando no viene seleccionado desde el modal
+                      // Dropdown normal solo para nuevas compras (cuando no hay initialData?.comp_id)
                       <select
                         value={formData.comp_idpro}
                         onChange={(e) => handleProveedorChange(e.target.value)}

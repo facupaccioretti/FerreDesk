@@ -218,37 +218,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    @action(detail=True, methods=['post'], url_path='anular')
-    @transaction.atomic
-    def anular_compra(self, request, pk=None):
-        """Anular una compra"""
-        try:
-            compra = self.get_object()
-            
-            if compra.comp_estado == 'ANULADA':
-                return Response(
-                    {'detail': 'La compra ya está anulada'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            compra.anular_compra()
-            
-            return Response({
-                'detail': 'Compra anulada exitosamente',
-                'compra': CompraSerializer(compra).data
-            })
-        except ValueError as e:
-            return Response(
-                {'detail': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            logger.error(f"Error al anular compra: {e}")
-            return Response(
-                {'detail': 'Error interno del servidor'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
     @action(detail=False, methods=['get'], url_path='estadisticas')
     def estadisticas(self, request):
         """Obtener estadísticas de compras"""

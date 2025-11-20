@@ -115,7 +115,7 @@ const ComprasManager = () => {
     updateCompra,
     deleteCompra,
     cerrarCompra,
-    anularCompra,
+    getCompraById,
   } = useComprasAPI()
 
   const {
@@ -209,10 +209,16 @@ const ComprasManager = () => {
     setCurrentPageOrdenes(1);
   }, []);
 
-  const handleEditarCompra = useCallback((compra) => {
-    const key = `editar-${compra.comp_id}`
-    openTab(key, `Editar ${compra.comp_numero_factura || compra.comp_id}`, compra, "form")
-  }, [openTab])
+  const handleEditarCompra = useCallback(async (compra) => {
+    try {
+      // Cargar compra completa con items antes de abrir el formulario
+      const compraCompleta = await getCompraById(compra.comp_id)
+      const key = `editar-${compra.comp_id}`
+      openTab(key, `Editar ${compra.comp_numero_factura || compra.comp_id}`, compraCompleta, "form")
+    } catch (error) {
+      alert(`Error al cargar la compra: ${error.message || error}`)
+    }
+  }, [openTab, getCompraById])
 
   const handleVerCompra = useCallback((compra) => {
     setDetalleModal({ abierto: true, modo: "compra", compra, orden: null })
@@ -243,16 +249,6 @@ const ComprasManager = () => {
       alert(`Error al cerrar compra: ${error.message || error}`)
     }
   }, [cerrarCompra, fetchCompras])
-
-  const handleAnularCompra = useCallback(async (compraId) => {
-    try {
-      await anularCompra(compraId)
-      alert("Compra anulada correctamente")
-      fetchCompras()
-    } catch (error) {
-      alert(`Error al anular compra: ${error.message || error}`)
-    }
-  }, [anularCompra, fetchCompras])
 
   const handleEliminarCompra = useCallback(async (compraId) => {
     if (window.confirm("¿Está seguro de que desea eliminar esta compra?")) {
@@ -488,7 +484,6 @@ const ComprasManager = () => {
                     onEditarCompra={handleEditarCompra}
                     onVerCompra={handleVerCompra}
                     onCerrarCompra={handleCerrarCompra}
-                    onAnularCompra={handleAnularCompra}
                     onEliminarCompra={handleEliminarCompra}
                     onRefresh={() => fetchCompras({}, currentPage, pageSize, 'id', ordenamiento)}
                     // Paginación controlada

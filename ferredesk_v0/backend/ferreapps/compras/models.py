@@ -211,15 +211,6 @@ class Compra(models.Model):
         for item in self.items.all():
             item.actualizar_stock()
 
-    def anular_compra(self):
-        """Anula la compra"""
-        if self.comp_estado == 'ANULADA':
-            raise ValueError("La compra ya está anulada")
-        
-        self.comp_estado = 'ANULADA'
-        self.comp_fecha_anulacion = timezone.now().date()
-        self.save()
-
 
 class CompraDetalleItem(models.Model):
     """

@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from django_filters import FilterSet, DateFromToRangeFilter, NumberFilter, BooleanFilter
+from django_filters import FilterSet, DateFromToRangeFilter, DateFilter, NumberFilter, BooleanFilter
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -31,13 +31,23 @@ logger = logging.getLogger(__name__)
 class CuentaCorrienteFilter(FilterSet):
     """Filtros para la cuenta corriente"""
     fecha_desde = DateFromToRangeFilter(field_name='ven_fecha', lookup_expr='gte')
-    fecha_hasta = DateFromToRangeFilter(field_name='ven_fecha', lookup_expr='lte')
+    fecha_hasta = DateFilter(method='filter_fecha_hasta')
     cliente_id = NumberFilter(field_name='ven_idcli')
     completo = BooleanFilter(method='filter_completo')
     
     class Meta:
         model = CuentaCorrienteCliente
         fields = ['ven_idcli', 'comprobante_tipo']
+    
+    def filter_fecha_hasta(self, queryset, name, value):
+        """
+        Filtrar hasta una fecha inclusive (incluye todo el día seleccionado)
+        """
+        if value:
+            # Agregar un día para incluir todo el día seleccionado (usar __lt del día siguiente)
+            fecha_hasta_inclusive = value + timedelta(days=1)
+            return queryset.filter(ven_fecha__lt=fecha_hasta_inclusive)
+        return queryset
     
     def filter_completo(self, queryset, name, value):
         """
@@ -113,11 +123,13 @@ def cuenta_corriente_cliente(request, cliente_id):
                 pass  # Si no se puede parsear, ignorar el filtro
         
         if fecha_hasta:
-            from datetime import datetime
+            from datetime import datetime, timedelta
             try:
                 # Parsear fecha en formato YYYY-MM-DD y asegurar que se interprete como fecha local
                 fecha_hasta_parsed = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-                queryset = queryset.filter(ven_fecha__lte=fecha_hasta_parsed)
+                # Agregar un día para incluir todo el día seleccionado (usar __lt del día siguiente)
+                fecha_hasta_inclusive = fecha_hasta_parsed + timedelta(days=1)
+                queryset = queryset.filter(ven_fecha__lt=fecha_hasta_inclusive)
             except ValueError:
                 pass  # Si no se puede parsear, ignorar el filtro
         
