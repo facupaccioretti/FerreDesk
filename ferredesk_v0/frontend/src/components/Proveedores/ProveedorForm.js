@@ -357,7 +357,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                         maxLength={LONGITUD_CUIT_COMPLETO}
                         className={`${getInputClasses(theme)} h-full pr-8 text-right`}
                         ref={cuitInputRef}
-                        disabled={!!initialData}
+                        disabled={esModoProduccion && !!initialData}
                         required
                       />
                       <div className="absolute top-0 right-2 h-full flex items-center">
@@ -393,7 +393,7 @@ export default function ProveedorForm({ onSave, onCancel, initialData, formError
                   </div>
                 </div>
                 <FilaEditable etiqueta="Sigla (3 letras) *" inputProps={{ name: "sigla", maxLength: 3, required: true }} value={form.sigla} onChange={handleChange} />
-                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: !!initialData || (esModoProduccion && (camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO)), title: !!initialData ? 'La Razón Social no es editable' : (esModoProduccion && camposAutocompletados.razon ? 'Campo autocompletado por ARCA' : undefined) }} value={form.razon} onChange={handleChange} />
+                <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: esModoProduccion && (!!initialData || (camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO)), title: esModoProduccion && !!initialData ? 'La Razón Social no es editable' : (esModoProduccion && camposAutocompletados.razon ? 'Campo autocompletado por ARCA' : undefined) }} value={form.razon} onChange={handleChange} />
                 <FilaEditable etiqueta="Nombre Fantasía *" inputProps={{ name: "fantasia", required: true, disabled: esModoProduccion && (camposAutocompletados.fantasia || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO), title: esModoProduccion && camposAutocompletados.fantasia ? 'Campo autocompletado por ARCA' : undefined }} value={form.fantasia} onChange={handleChange} />
               </SeccionLista>
 
