@@ -574,9 +574,43 @@ class ValidarCUITProveedorAPIView(APIView):
                 'mensaje_error': 'CUIT no proporcionado'
             })
         
-        # Usar el algoritmo de validación
-        resultado = validar_cuit(cuit)
+        # Obtener la ferretería para determinar el modo
+        from ferreapps.productos.models import Ferreteria
+        from ferreapps.clientes.algoritmo_cuit_utils import validar_formato_cuit, formatear_cuit, obtener_tipo_contribuyente, limpiar_cuit
         
+        ferreteria = Ferreteria.objects.first()
+        es_homologacion = ferreteria and ferreteria.modo_arca == 'HOM'
+        
+        # En homologación, solo validar el formato (11 dígitos), no el dígito verificador
+        if es_homologacion:
+            if not validar_formato_cuit(cuit):
+                cuit_limpio = limpiar_cuit(cuit)
+                if len(cuit_limpio) != 11:
+                    return Response({
+                        'es_valido': False,
+                        'cuit_original': cuit,
+                        'mensaje_error': 'El CUIT debe tener exactamente 11 dígitos'
+                    })
+                else:
+                    return Response({
+                        'es_valido': False,
+                        'cuit_original': cuit,
+                        'mensaje_error': 'El CUIT solo puede contener números y guiones'
+                    })
+            
+            # Si tiene formato válido, considerarlo válido en homologación (sin validar dígito verificador)
+            cuit_limpio = limpiar_cuit(cuit)
+            return Response({
+                'es_valido': True,
+                'cuit_original': cuit,
+                'cuit_formateado': formatear_cuit(cuit),
+                'tipo_contribuyente': obtener_tipo_contribuyente(cuit),
+                'cuit_limpio': cuit_limpio,
+                'mensaje_error': None
+            })
+        
+        # En producción, validar normalmente con dígito verificador
+        resultado = validar_cuit(cuit)
         return Response(resultado)
 
 
