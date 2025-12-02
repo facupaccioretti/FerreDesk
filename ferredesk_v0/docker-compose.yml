@@ -31,7 +31,7 @@ services:
       - DEBUG=True  # Cambiado a True para debuggear
       - DATABASE_URL=postgresql://ferredesk_user:ferredesk_pass_2024@postgres:5432/ferredesk  # Puerto interno 5432
       - SECRET_KEY=django-insecure-ferredesk-2024-production-key
-      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - ALLOWED_HOSTS=*
       - CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
       - CSRF_TRUSTED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
       - ARCA_TIMEOUT_CONNECTION=60

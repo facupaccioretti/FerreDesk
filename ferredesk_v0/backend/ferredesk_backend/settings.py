@@ -22,7 +22,12 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-&#7bxgw8grl4)^q)@po2m3u*1gu7!1w+^f6nzgf7ps71nx30bh')
 
 # Configuración de hosts permitidos
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# En entornos de producción on-premise (LAN/VPN) necesitamos aceptar conexiones
+# desde distintas IPs/hostnames (LAN, Tailscale, ZeroTier, etc.).
+# Por eso definimos un valor por defecto laxo, documentado, y dejamos que
+# instalaciones específicas lo sobreescriban vía variable de entorno ALLOWED_HOSTS.
+VALOR_HOSTS_PERMITIDOS_POR_DEFECTO = '*'  # Aceptar cualquier host en redes internas/VPN
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', VALOR_HOSTS_PERMITIDOS_POR_DEFECTO).split(',')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
