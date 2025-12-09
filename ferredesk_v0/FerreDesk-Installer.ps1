@@ -407,9 +407,15 @@ function Get-InstallationStatusFromPhase {
         Este status es usado por ISS para detectar instalaciones existentes.
     #>
     param(
-        [Parameter(Mandatory=$true)]
-        [string]$Phase
+        [Parameter(Mandatory=$false)]
+        [AllowEmptyString()]
+        [string]$Phase = "FASE_0"
     )
+    
+    # Validación interna para manejar valores vacíos o nulos
+    if ([string]::IsNullOrWhiteSpace($Phase)) {
+        return "NONE"
+    }
     
     switch -Wildcard ($Phase) {
         { $_ -like "FASE_*_PENDIENTE" -or $_ -like "FASE_*_EN_PROGRESO" } {
@@ -481,7 +487,11 @@ function Write-StateToRegistry {
         }
         
         # Sincronizar InstallationStatus simplificado
+        # Validar que CurrentPhase no esté vacío antes de usarlo
+        $installStatus = "NONE"
+        if (-not [string]::IsNullOrWhiteSpace($State.CurrentPhase)) {
         $installStatus = Get-InstallationStatusFromPhase -Phase $State.CurrentPhase
+        }
         if ($State.LastError) {
             $installStatus = "FAILED"
         }
@@ -549,6 +559,11 @@ function Get-InstallationState {
     }
     if (-not $state.PSObject.Properties['ErrorCategory']) {
         $state | Add-Member -MemberType NoteProperty -Name 'ErrorCategory' -Value $null -Force
+    }
+    
+    # Asegurar que CurrentPhase siempre tenga un valor válido
+    if ([string]::IsNullOrWhiteSpace($state.CurrentPhase)) {
+        $state.CurrentPhase = "FASE_0"
     }
     
     $Script:CurrentState = $state
@@ -840,13 +855,13 @@ function Test-WindowsVersion {
             return $false
         }
         
-        # Verificar arquitectura (64-bit)
-        if ($osInfo.OSArchitecture -ne "64-bit") {
-            Write-Error "Se requiere Windows 64-bit. Arquitectura detectada: $($osInfo.OSArchitecture)"
+        # Verificar arquitectura usando el método estándar de .NET (no depende del idioma)
+        if (-not [System.Environment]::Is64BitOperatingSystem) {
+            Write-Error "Se requiere Windows 64-bit. Arquitectura del sistema no es 64-bit."
             return $false
         }
         
-        Write-Info "Windows compatible detectado: $($osInfo.Caption) ($($osInfo.OSArchitecture))"
+        Write-Info "Windows compatible detectado: $($osInfo.Caption) (64-bit)"
         return $true
     } catch {
         Write-Error "Error al verificar version de Windows: $($_.Exception.Message)"
@@ -876,11 +891,12 @@ function Get-SafeInstallDirectory {
     # Si no se proporciono un directorio o era temporal, determinar uno automaticamente
     if (-not $dir) {
         # NUNCA usar $PSScriptRoot porque puede ser temporal (cuando el script se ejecuta desde {tmp} de Inno Setup)
-        # Usar siempre un directorio del usuario como fallback seguro
-        $dir = Join-Path $env:USERPROFILE "Desktop\FerreDesk"
+        # Usar LocalAppData\Programs (estándar para instalaciones por usuario)
+        $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+        $dir = Join-Path $localAppData "Programs\FerreDesk"
         
-        # Si el escritorio no existe o no tiene permisos, usar el perfil del usuario
-        if (-not (Test-Path (Split-Path $dir -Parent))) {
+        # Si LocalAppData no existe, usar el perfil del usuario como fallback
+        if (-not $localAppData -or -not (Test-Path (Split-Path $dir -Parent))) {
             $dir = Join-Path $env:USERPROFILE "FerreDesk"
         }
         
@@ -890,8 +906,9 @@ function Get-SafeInstallDirectory {
     # VALIDACIÓN CRÍTICA: Nunca usar directorios temporales
     if (Test-IsTemporaryDirectory -Path $dir) {
         Write-Warning "El directorio determinado es temporal, usando fallback seguro: $dir"
-        $dir = Join-Path $env:USERPROFILE "Desktop\FerreDesk"
-        if (-not (Test-Path (Split-Path $dir -Parent))) {
+        $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+        $dir = Join-Path $localAppData "Programs\FerreDesk"
+        if (-not $localAppData -or -not (Test-Path (Split-Path $dir -Parent))) {
             $dir = Join-Path $env:USERPROFILE "FerreDesk"
         }
     }
@@ -2916,7 +2933,15 @@ function Invoke-Phase3 {
     # VALIDACIÓN CRÍTICA: Verificar que realmente hay contenedores funcionando antes de reportar éxito
     Write-ProgressToInno -Mensaje "Verificando que los servicios esten funcionando" -Percent 95
     $finalStatusCheck = docker-compose ps 2>$null
-    $finalServicesUp = ($finalStatusCheck | Select-String "\s+Up\s+").Count
+    # Convertir a array de líneas para procesar correctamente (misma lógica que Wait-ForServicesReady)
+    $finalStatusArray = @($finalStatusCheck)
+    $finalServicesUp = 0
+    
+    foreach ($line in $finalStatusArray) {
+        if ($line -match "\s+Up\s+") {
+            $finalServicesUp++
+        }
+    }
     
     if ($finalServicesUp -lt 2) {
         Write-Error "Los servicios Docker no estan funcionando correctamente ($finalServicesUp de 2 servicios activos)."

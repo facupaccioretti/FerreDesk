@@ -17,6 +17,7 @@ OutputBaseFilename=FerreDesk-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=FerreDeskIconBig.bmp
 UninstallDisplayIcon={app}\FerreDesk.ico
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
@@ -25,6 +26,8 @@ ArchitecturesInstallIn64BitMode=x64
 ; El script de PowerShell se compila como support file y se extrae a {tmp} en tiempo de ejecucion.
 Source: "{#InstallerScript}"; Flags: dontcopy
 Source: "FerreDesk.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Logo para mostrar en el wizard
+Source: "FerredeskIcon.bmp"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
 Name: "{commondesktop}\FerreDesk"; Filename: "http://localhost:8000"; IconFilename: "{app}\FerreDesk.ico"
@@ -53,6 +56,8 @@ const
   GWL_STYLE = -16;
   PBS_MARQUEE = $08;
   PBM_SETMARQUEE = $040A;
+  // MODO PRUEBA: Cambiar a True para ver solo la página final sin completar la instalación
+  MODO_PRUEBA_PAGINA_FINAL = False;
 
 type
   TPhaseArray = array of string;
@@ -78,15 +83,11 @@ var
   InstallDirPage: TInputDirWizardPage;
   SelectedInstallDir: string;
   UserCancelled: Boolean;
+  LastInstallResultCode: Integer;
+  LogoHandle: THandle;
+  FinishedLogoHandle: THandle;
 
-procedure UserCancelButtonClick(Sender: TObject);
-begin
-  if MsgBox('¿Seguro que deseas cancelar la instalación de FerreDesk?',
-    mbConfirmation, MB_YESNO) = IDYES then
-  begin
-    UserCancelled := True;
-  end;
-end;
+{ Esta función ya no se usa - el botón Cancelar ahora funciona como cerrar la ventana }
 
 procedure ViewLogButtonClick(Sender: TObject);
 var
@@ -111,6 +112,11 @@ end;
 function ExpandLogPath: string;
 begin
   Result := ExpandConstant('{commonappdata}\FerreDesk\logs\FerreDesk-Installer.log');
+end;
+
+function ExpandInstallerPath: string;
+begin
+  Result := ExpandConstant('{commonappdata}\FerreDesk\FerreDesk-Setup-Resume.exe');
 end;
 
 function ReadRegStrSafe(const RootKey: Integer; const SubKey, ValueName: string; var Value: string): Boolean;
@@ -186,8 +192,8 @@ end;
 // Función para obtener directorio por defecto seguro para instalación
 function GetDefaultInstallDirectory: string;
 begin
-  // Usar directorio del escritorio del usuario como fallback seguro
-  Result := ExpandConstant('{userdesktop}\FerreDesk');
+  // Usar LocalAppData\Programs (estándar para instalaciones por usuario)
+  Result := ExpandConstant('{localappdata}\Programs\FerreDesk');
 end;
 
 function CopySubStr(const S: string; StartPos, Count: Integer): string;
@@ -307,6 +313,20 @@ function GetWindowLong(hWnd: THandle; nIndex: Integer): LongInt;
   external 'GetWindowLongW@user32.dll stdcall';
 function SetWindowLong(hWnd: THandle; nIndex: Integer; dwNewLong: LongInt): LongInt;
   external 'SetWindowLongW@user32.dll stdcall';
+
+// Funciones de la API de Windows para cargar y mostrar iconos
+function LoadImage(hInst: THandle; lpsz: string; uType: Cardinal; cxDesired, cyDesired: Integer; fuLoad: Cardinal): THandle;
+  external 'LoadImageW@user32.dll stdcall';
+function DrawIconEx(hDC: THandle; xLeft, yTop: Integer; hIcon: THandle; cxWidth, cyWidth: Integer; istepIfAniCur: Integer; hbrFlickerFreeDraw: THandle; diFlags: Cardinal): Boolean;
+  external 'DrawIconEx@user32.dll stdcall';
+function DestroyIcon(hIcon: THandle): Boolean;
+  external 'DestroyIcon@user32.dll stdcall';
+
+const
+  IMAGE_ICON = 1;
+  LR_LOADFROMFILE = $0010;
+  LR_DEFAULTSIZE = $0040;
+  DI_NORMAL = $0003;
 
 // === Bucle de mensajes para mantener la GUI de Inno responsiva ===
 type
@@ -447,17 +467,60 @@ end;
 procedure RegisterRunOnce;
 var
   Command: string;
+  InstallerPath: string;
+  ResultCode: Integer;
 begin
-  Command := '"' + ExpandConstant('{srcexe}') + '" /RESUME';
+  // Ruta persistente donde guardaremos el instalador
+  InstallerPath := ExpandInstallerPath;
+  
+  // Asegurar que el directorio existe
+  ForceDirectories(ExtractFileDir(InstallerPath));
+  
+  // Copiar el instalador actual a la ubicación persistente
+  // Usamos cmd copy porque FileCopy no puede copiar el ejecutable en ejecución
+  if Exec(ExpandConstant('{cmd}'), 
+          Format('/C copy /Y "%s" "%s"', [ExpandConstant('{srcexe}'), InstallerPath]),
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if ResultCode = 0 then
+    begin
+      // Registrar RunOnce con la ruta persistente
+      Command := '"' + InstallerPath + '" /RESUME';
   if WizardSilent then
     Command := Command + ' /VERYSILENT';
 
   RegWriteStringValue(HKLM, RunOnceKey, RunOnceValue, Command);
+    end
+    else
+    begin
+      // Si falla la copia, usar srcexe como fallback
+      Command := '"' + ExpandConstant('{srcexe}') + '" /RESUME';
+      if WizardSilent then
+        Command := Command + ' /VERYSILENT';
+      RegWriteStringValue(HKLM, RunOnceKey, RunOnceValue, Command);
+    end;
+  end
+  else
+  begin
+    // Si falla la ejecución del comando, usar srcexe como fallback
+    Command := '"' + ExpandConstant('{srcexe}') + '" /RESUME';
+    if WizardSilent then
+      Command := Command + ' /VERYSILENT';
+    RegWriteStringValue(HKLM, RunOnceKey, RunOnceValue, Command);
+  end;
 end;
 
 procedure UnregisterRunOnce;
+var
+  InstallerPath: string;
 begin
+  // Eliminar entrada del registro
   RegDeleteValue(HKLM, RunOnceKey, RunOnceValue);
+  
+  // Limpiar el instalador copiado si existe
+  InstallerPath := ExpandInstallerPath;
+  if FileExists(InstallerPath) then
+    DeleteFile(InstallerPath);
 end;
 
 function RunShellExec(const Cmd, Params: string; out ResultCode: Integer): Boolean;
@@ -553,7 +616,7 @@ begin
   SendMessage(WizardForm.ProgressGauge.Handle, PBM_SETMARQUEE, 1, 0);
 
   WizardForm.FilenameLabel.Caption :=
-    'Instalando FerreDesk y dependencias... esto puede demorar varios minutos.';
+    'Instalando dependencias... esto puede demorar varios minutos.';
 
   { Lanzar el script PowerShell sin esperar (puede relanzarse internamente).
     Usaremos el PID publicado en installer-state.json para seguir al proceso real. }
@@ -607,13 +670,6 @@ begin
   begin
     AppProcessMessage;
     WizardForm.Refresh;
-
-    if UserCancelled then
-    begin
-      TerminateProcess(WorkerHandle, 1);
-      exitCode := 1;
-      Break;
-    end;
 
     if not GetExitCodeProcess(WorkerHandle, exitCode) then
     begin
@@ -701,6 +757,9 @@ begin
   SelectedInstallDir := GetDefaultInstallDirectory;
   UserCancelled := False;
   AutoResume := False;
+  LastInstallResultCode := 0;
+  LogoHandle := 0;
+  FinishedLogoHandle := 0;
 
   // Pagina para seleccionar el directorio real de instalacion de FerreDesk
   // (codigo fuente + proyecto Docker). No es el mismo que la carpeta interna {app}.
@@ -710,13 +769,13 @@ begin
   InstallDirPage := CreateInputDirPage(
     wpWelcome,
     'Directorio de instalación de FerreDesk',
-    'Seleccioná la carpeta donde se instalará FerreDesk.',
-    'Se recomienda usar una carpeta simple, por ejemplo en el Escritorio. Evitá usar carpetas del sistema.',
+    '',
+    'Evitá usar carpetas del sistema que requieran permisos de administrador.',
     False,
     '');
 
   InstallDirPage.Add('Carpeta de instalación de FerreDesk:');
-  InstallDirPage.Values[0] := ExpandConstant('{userdesktop}\FerreDesk');
+  InstallDirPage.Values[0] := GetDefaultInstallDirectory;
 
   for ParamIndex := 1 to ParamCount do
   begin
@@ -758,9 +817,9 @@ begin
     { Si hay fases pendientes, la opcion por defecto debe ser Reanudar }
     if HasPendingPhases then
     begin
-      ExistingInstallPage.Add('Reanudar instalación pendiente');
-      ExistingInstallPage.Add('Reinstalar desde cero (mantiene base de datos)');
-      ExistingInstallPage.Add('Reparar instalación');
+      ExistingInstallPage.Add('Reanudar instalación pendiente (no se borra la base de datos)');
+      ExistingInstallPage.Add('Reinstalar desde cero (no se borra la base de datos)');
+      ExistingInstallPage.Add('Reparar instalación (no se borra la base de datos)');
       ExistingInstallPage.SelectedValueIndex := 0;
       
       { Mapeo de indices a acciones:
@@ -774,10 +833,10 @@ begin
     end
     else
     begin
-      ExistingInstallPage.Add('Reparar instalación');
-      ExistingInstallPage.Add('Actualizar código (git pull + docker-compose build)');
+      ExistingInstallPage.Add('Reparar instalación (no se borra la base de datos)');
+      ExistingInstallPage.Add('Actualizar código (no se borra la base de datos)');
       ExistingInstallPage.Add('Solo abrir FerreDesk en el navegador');
-      ExistingInstallPage.Add('Reinstalar desde cero (mantiene base de datos)');
+      ExistingInstallPage.Add('Reinstalar desde cero (no se borra la base de datos)');
       ExistingInstallPage.SelectedValueIndex := 0;
     end;
   end;
@@ -800,15 +859,42 @@ begin
   ViewLogButton.Visible := False;
   ViewLogButton.OnClick := @ViewLogButtonClick;
 
-  { Reemplazar el comportamiento por defecto del boton Cancel para que
-    no cierre abruptamente el wizard mientras el instalador esta corriendo.
-    La cancelacion real se manejara en el bucle de progreso. }
-  WizardForm.CancelButton.ModalResult := mrNone;
-  WizardForm.CancelButton.OnClick := @UserCancelButtonClick;
+  { Extraer el logo para usar en diferentes partes del wizard }
+  ExtractTemporaryFile('FerredeskIcon.bmp');
+  
+  { Mostrar el logo en la esquina superior derecha (visible en todas las paginas) }
+  try
+    WizardForm.WizardSmallBitmapImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\FerredeskIcon.bmp'));
+    { El logo pequeño en Inno Setup tiene un tamaño fijo de aproximadamente 55x55 píxeles }
+    { Si el bitmap es cuadrado o tiene buenas proporciones, se verá bien }
+  except
+    { Si falla cargar el bitmap, continuar sin logo }
+  end;
+  
+  { Cargar el logo grande para la pagina final (se mostrará cuando lleguemos a wpFinished) }
+  try
+    WizardForm.WizardBitmapImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\FerredeskIcon.bmp'));
+    { El logo grande en Inno Setup tiene un tamaño fijo de aproximadamente 164x314 píxeles }
+    { Si el bitmap original es cuadrado o tiene buenas proporciones, se verá bien }
+  except
+    { Si falla cargar el bitmap, continuar sin logo }
+  end;
+
+  { El botón Cancelar ahora funciona igual que cerrar la ventana (diálogo nativo de Inno Setup).
+    Durante la instalación (ssInstall) el botón se deshabilita para evitar cancelaciones
+    mientras el proceso está corriendo. }
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
+  // MODO PRUEBA: Saltar todas las páginas excepto la final
+  if MODO_PRUEBA_PAGINA_FINAL then
+  begin
+    Result := not (PageID = wpFinished);
+    Exit;
+  end;
+  
+  // Código original:
   Result := False;
   
   { Saltar pagina de directorio si:
@@ -845,7 +931,7 @@ begin
       WizardForm.FilenameLabel.Caption :=
         'Reanudando la instalación de FerreDesk... esto puede demorar varios minutos.';
       WizardForm.StatusLabel.Caption :=
-        'Continuando la instalación después del reinicio. No cierres esta ventana hasta que concluya la configuración.';
+        'Continuando la instalación. No cierres esta ventana.';
       AutoResume := False;
     end
     else if CurPageID <> wpFinished then
@@ -885,6 +971,31 @@ begin
   if CurPageID = wpFinished then
   begin
     ViewLogButton.Visible := True;
+    
+    { Asegurarse de que el logo grande esté cargado y visible en la pagina final }
+    { Recargar el bitmap para asegurar que se muestre correctamente }
+    try
+      ExtractTemporaryFile('FerredeskIcon.bmp');
+      if FileExists(ExpandConstant('{tmp}\FerredeskIcon.bmp')) then
+      begin
+        WizardForm.WizardBitmapImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\FerredeskIcon.bmp'));
+        WizardForm.WizardBitmapImage.Visible := True;
+        { Forzar actualización del componente }
+        WizardForm.WizardBitmapImage.Refresh;
+      end;
+    except
+      { Si falla, continuar sin logo - el error se ignora silenciosamente }
+    end;
+    
+    { Si el resultado fue 3010 (reinicio requerido), asegurar que el texto sea claro }
+    if LastInstallResultCode = 3010 then
+    begin
+      WizardForm.FinishedHeadingLabel.Caption :=
+        'Reinicio requerido';
+      WizardForm.FinishedLabel.Caption :=
+        'Se instalaron componentes del sistema que requieren reinicio.'#13#10#13#10 +
+        'Reiniciá tu computadora para continuar con la instalación. El instalador se reanudará automáticamente.';
+    end;
   end;
 end;
 
@@ -892,6 +1003,13 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
 begin
+  // MODO PRUEBA: Simular que la instalación terminó exitosamente
+  if MODO_PRUEBA_PAGINA_FINAL and (CurStep = ssInstall) then
+  begin
+    LastInstallResultCode := 0; // Éxito
+    Exit; // Salir sin ejecutar nada
+  end;
+  
   if CurStep = ssInstall then begin
     { Durante la fase de instalación principal deshabilitamos el botón Cancel
       para evitar que el usuario intente cancelar mientras el script externo
@@ -926,6 +1044,8 @@ begin
     else
       ExistingInstallChoice := -1;
     ResultCode := RunInstallationFlow;
+    { Guardar el código de resultado para usarlo en CurPageChanged }
+    LastInstallResultCode := ResultCode;
     { Registrar en el mismo log del instalador el codigo devuelto por PowerShell
       para facilitar el diagnostico cuando se usa solo el wizard. }
     SaveStringToFile(LogFilePath,
@@ -937,11 +1057,7 @@ begin
       3010: begin
         { Éxito con reinicio requerido (estándar Windows Installer) }
         RegisterRunOnce;
-        WizardForm.FinishedHeadingLabel.Caption :=
-          'Reinicio requerido para completar la instalación de FerreDesk';
-        WizardForm.FinishedLabel.Caption :=
-          'La Fase 1 de instalación se completó correctamente, pero es necesario reiniciar Windows para continuar con las fases restantes.'#13#10#13#10 +
-          'Después del reinicio, este instalador se reanudará automáticamente para completar la configuración de FerreDesk.';
+        { El texto se establecerá en CurPageChanged cuando se muestre wpFinished }
         MsgBox(
           'Se instalaron o actualizaron componentes del sistema requeridos por FerreDesk.'#13#10#13#10 +
           'Se requiere reiniciar para completar la instalación.'#13#10 +
@@ -950,11 +1066,9 @@ begin
       end;
     else begin
       { Cualquier otro código = error (código estándar es -1) }
-      { Mostrar mensaje de error genérico - detalles en log }
+      { Mostrar mensaje de error genérico }
       MsgBox(
-        'Ocurrió un error durante la instalación de FerreDesk.'#13#10#13#10 +
-        'Revisá el archivo de log para más detalles.'#13#10 +
-        'El archivo de log se encuentra en: ' + LogFilePath,
+        'Ocurrió un error durante la instalación de FerreDesk.',
         mbError, MB_OK);
     end;
     end; { Cierra el case ResultCode of }
