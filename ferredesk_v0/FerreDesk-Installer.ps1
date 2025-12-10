@@ -647,7 +647,9 @@ function Exit-WithError {
 function Clear-InstallationState {
     <#
     .SYNOPSIS
-        Elimina cualquier estado previo (archivo y registro).
+        Elimina cualquier estado previo (archivo y registro temporal).
+        IMPORTANTE: NO borra la clave de desinstalación de Windows, que contiene InstallLocation.
+        La clave de desinstalación debe persistir para que el desinstalador funcione correctamente.
     #>
     try {
         if (Test-Path $Script:StateFilePath) {
@@ -658,6 +660,10 @@ function Clear-InstallationState {
     }
     
     try {
+        # IMPORTANTE: Solo borramos la clave temporal de instalación (HKLM:\SOFTWARE\FerreDesk\Installer)
+        # NO borramos la clave de desinstalación estándar de Windows que contiene InstallLocation
+        # La clave estándar es: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}
+        # y contiene InstallLocation que necesita el desinstalador para encontrar el directorio
         if (Test-Path $Script:RegistryBasePath) {
             Remove-Item -Path $Script:RegistryBasePath -Recurse -Force -ErrorAction Stop
         }
@@ -1900,9 +1906,9 @@ function Get-FerreDeskCodigo {
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error "Error al clonar el repositorio"
                     Write-Info "Posibles soluciones:"
-                    Write-Info "  • Verifica tu conexion a internet"
-                    Write-Info "  • Asegurate de tener acceso al repositorio"
-                    Write-Info "  • Contacta al administrador del sistema"
+                    Write-Info "  Verifica tu conexion a internet"
+                    Write-Info "  Asegurate de tener acceso al repositorio"
+                    Write-Info "  Contacta al administrador del sistema"
                     return $false
                 }
                 
@@ -2867,6 +2873,29 @@ function Invoke-Phase3 {
         return $Script:EXIT_ERROR
     }
     
+    # CRÍTICO: Asegurar que el directorio existe físicamente
+    # Esto es necesario porque el directorio puede venir del estado/registro y no existir
+    # (por ejemplo, si se borró manualmente o si nunca se creó en una instalación anterior)
+    # Importante: El directorio aquí puede ser el seleccionado por el usuario (parámetro) 
+    # o el del estado guardado, pero siempre debe existir antes de clonar
+    if (-not (Test-Path $Script:InstallDirectory)) {
+        try {
+            Write-Info "El directorio de instalacion no existe. Creando: $Script:InstallDirectory"
+            New-Item -Path $Script:InstallDirectory -ItemType Directory -Force | Out-Null
+            if (-not (Test-Path $Script:InstallDirectory)) {
+                Write-Error "No se pudo crear el directorio de instalacion: $Script:InstallDirectory"
+                Write-Info "Verifica que tengas permisos de escritura en la ubicacion seleccionada."
+                return $Script:EXIT_ERROR
+            }
+            Write-Success "Directorio de instalacion creado exitosamente"
+        } catch {
+            Write-Error "Error al crear el directorio de instalacion: $Script:InstallDirectory"
+            Write-Error "Detalles: $($_.Exception.Message)"
+            Write-Info "Verifica que tengas permisos de escritura en la ubicacion seleccionada."
+            return $Script:EXIT_ERROR
+        }
+    }
+    
     Write-ProgressToInno -Mensaje "Fase 3/3: Descargando y configurando FerreDesk" -Percent 75
     Write-Info "Fase 3/3: Descargando y configurando FerreDesk"
     
@@ -2931,29 +2960,52 @@ function Invoke-Phase3 {
     }
     
     # VALIDACIÓN CRÍTICA: Verificar que realmente hay contenedores funcionando antes de reportar éxito
+    # Si Wait-ForServicesReady ya retornó éxito, confiar en ese resultado pero hacer una verificación final
     Write-ProgressToInno -Mensaje "Verificando que los servicios esten funcionando" -Percent 95
-    $finalStatusCheck = docker-compose ps 2>$null
-    # Convertir a array de líneas para procesar correctamente (misma lógica que Wait-ForServicesReady)
-    $finalStatusArray = @($finalStatusCheck)
-    $finalServicesUp = 0
-    
-    foreach ($line in $finalStatusArray) {
-        if ($line -match "\s+Up\s+") {
-            $finalServicesUp++
+    Push-Location $projectDir
+    try {
+        # Ejecutar docker-compose ps y capturar salida como array de líneas (misma lógica que Wait-ForServicesReady)
+        $finalStatusCheck = docker-compose ps 2>$null
+        $finalStatusArray = @($finalStatusCheck)
+        
+        $finalServicesUp = 0
+        $finalServicesRestarting = 0
+        
+        # Usar exactamente la misma lógica que Wait-ForServicesReady para contar servicios Up
+        foreach ($line in $finalStatusArray) {
+            $lineTrimmed = if ($line) { $line.Trim() } else { "" }
+            # Ignorar líneas vacías y encabezados comunes
+            if ($lineTrimmed -and 
+                $lineTrimmed -notmatch "^NAME\s+IMAGE\s+COMMAND\s+SERVICE" -and
+                $lineTrimmed -notmatch "^-+$" -and
+                $lineTrimmed.Length -gt 10) {
+                # Contar servicios que están "Up"
+                if ($lineTrimmed -match "\s+Up\s+") {
+                    $finalServicesUp++
+                    if ($lineTrimmed -match "Restarting") {
+                        $finalServicesRestarting++
+                    }
+                }
+            }
         }
-    }
-    
-    if ($finalServicesUp -lt 2) {
-        Write-Error "Los servicios Docker no estan funcionando correctamente ($finalServicesUp de 2 servicios activos)."
-        Write-Info "Estado actual de los servicios:"
-        docker-compose ps
-        Write-Host ""
-        Write-Info "El build de Docker probablemente fallo o los servicios no se iniciaron."
-        Write-Info "Por favor, revisa los logs con: docker-compose logs"
-        Write-Info "O intenta construir manualmente: docker-compose up --build -d"
-        $state.LastError = "Servicios Docker no iniciados correctamente (solo $finalServicesUp de 2 servicios activos)"
-        Set-InstallationState $state
-        return $Script:EXIT_ERROR
+        
+        # Debug: mostrar lo que se encontró
+        Write-Debug "Validacion final: $finalServicesUp servicios Up detectados (reinicándose: $finalServicesRestarting)"
+        
+        if ($finalServicesUp -lt 2) {
+            Write-Error "Los servicios Docker no estan funcionando correctamente ($finalServicesUp de 2 servicios activos)."
+            Write-Info "Estado actual de los servicios:"
+            docker-compose ps
+            Write-Host ""
+            Write-Info "El build de Docker probablemente fallo o los servicios no se iniciaron."
+            Write-Info "Por favor, revisa los logs con: docker-compose logs"
+            Write-Info "O intenta construir manualmente: docker-compose up --build -d"
+            $state.LastError = "Servicios Docker no iniciados correctamente (solo $finalServicesUp de 2 servicios activos)"
+            Set-InstallationState $state
+            return $Script:EXIT_ERROR
+        }
+    } finally {
+        Pop-Location
     }
     
     Write-ProgressToInno -Mensaje "Verificando aplicacion web" -Percent 97
