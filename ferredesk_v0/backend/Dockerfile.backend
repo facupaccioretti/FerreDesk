@@ -1,0 +1,48 @@
+FROM python:3.11-slim
+
+# =====================================
+# 1. Dependencias del sistema
+# =====================================
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    curl \
+    netcat-traditional \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
+
+WORKDIR /app
+
+# =====================================
+# 2. Instalar dependencias Python
+# =====================================
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# =====================================
+# 3. Copiar BACKEND completo
+# =====================================
+COPY backend/ .
+
+# =====================================
+# 4. Copiar el build del FRONTEND
+#    (Debe existir en frontend/build antes de construir)
+# =====================================
+COPY frontend/build /app/frontend_build
+
+# =====================================
+# 5. Crear directorios necesarios
+# =====================================
+RUN mkdir -p data media staticfiles
+
+# =====================================
+# 6. Script de inicio
+# =====================================
+COPY scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+RUN sed -i 's/\r$//g' /app/start.sh
+
+EXPOSE 8000
+
+CMD ["/app/start.sh"]

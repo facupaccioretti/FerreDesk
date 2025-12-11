@@ -1,0 +1,24 @@
+# Etapa 1: Build del frontend
+FROM node:18 AS build
+
+WORKDIR /app
+
+# Copiar package.json e instalar dependencias
+COPY package*.json ./
+RUN npm install
+
+# Copiar todo el código del frontend
+COPY . .
+
+# Build de producción (como hacía tu Dockerfile original)
+RUN npm run build
+
+# Etapa 2: Servir con Nginx (estándar profesional)
+FROM nginx:1.25
+
+# Copiar la build generada
+COPY --from=build /app/build /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

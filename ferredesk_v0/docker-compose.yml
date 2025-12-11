@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"  # Host:Container (5433 externo, 5432 interno)
+      - "5433:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ferredesk_user -d ferredesk"]
@@ -20,16 +20,18 @@ services:
       timeout: 5s
       retries: 5
 
-  # Aplicación Django + React
-  ferredesk:
-    build: .
-    container_name: ferredesk_app
+  # Aplicación Django (sirve backend + frontend build)
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.backend
+    container_name: ferredesk_backend
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DEBUG=True  # Cambiado a True para debuggear
-      - DATABASE_URL=postgresql://ferredesk_user:ferredesk_pass_2024@postgres:5432/ferredesk  # Puerto interno 5432
+      - DEBUG=False
+      - DATABASE_URL=postgresql://ferredesk_user:ferredesk_pass_2024@postgres:5432/ferredesk
       - SECRET_KEY=django-insecure-ferredesk-2024-production-key
       - ALLOWED_HOSTS=localhost,127.0.0.1
       - CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
@@ -48,4 +50,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data: 
+  postgres_data:
