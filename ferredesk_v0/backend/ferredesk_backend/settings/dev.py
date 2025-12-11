@@ -9,6 +9,8 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 # Ruta al build del frontend en desarrollo
 FRONTEND_BUILD_DIR = BASE_DIR.parent / "frontend" / "build"
+# Directorio raíz del build de React que usan las vistas de serve_react_app
+REACT_APP_DIR = FRONTEND_BUILD_DIR
 
 TEMPLATES[0]["DIRS"] = [
     FRONTEND_BUILD_DIR,

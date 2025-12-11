@@ -8,8 +8,10 @@ DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
-# Ruta donde Docker coloca el build
+# Ruta donde Docker coloca el build del frontend (copiado por Dockerfile.backend)
 FRONTEND_BUILD_DIR = os.path.join(BASE_DIR, "frontend_build")
+# Directorio raíz del build de React que usan las vistas de serve_react_app
+REACT_APP_DIR = FRONTEND_BUILD_DIR
 
 TEMPLATES[0]["DIRS"] = [
     FRONTEND_BUILD_DIR,
