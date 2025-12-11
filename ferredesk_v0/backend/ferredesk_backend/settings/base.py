@@ -1,11 +1,9 @@
-# ferredesk_backend/settings/base.py
-
 from pathlib import Path
 import os
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -29,7 +27,6 @@ INSTALLED_APPS = [
     'ferreapps.compras',
     'ferreapps.cuenta_corriente',
 
-    # Terceros
     'rest_framework',
     'django_filters',
     'django_extensions',
@@ -49,9 +46,41 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'ferredesk_backend.urls'
 
+# TEMPLATES — AHORA EN BASE.PY
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],  # dev y prod lo sobrescriben
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
 WSGI_APPLICATION = 'ferredesk_backend.wsgi.application'
 
-# REST FRAMEWORK
+# STATICFILES FINDERS
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'America/Argentina/Buenos_Aires'
+USE_I18N = True
+USE_TZ = True
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "usuarios.Usuario"
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -63,27 +92,8 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ),
-    'EXCEPTION_HANDLER': 'ferreapps.ventas.utils.ferre_exception_handler',
 }
 
-# INTERNACIONALIZACIÓN
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'America/Argentina/Buenos_Aires'
-USE_I18N = True
-USE_TZ = True
-
-# MEDIA
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# PRIMARY KEY
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Negocio
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
 TAM_PAGINA_POR_DEFECTO = 10
 TAM_PAGINA_MAXIMA = 200
