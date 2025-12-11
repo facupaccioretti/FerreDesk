@@ -25,6 +25,7 @@ AppPublisher=FerreDesk
 AppPublisherURL=https://github.com/facupaccioretti/FerreDesk
 DefaultGroupName=FerreDesk
 Uninstallable=yes
+SetupLogging=yes
 
 [Files]
 ; El script de PowerShell se compila como support file y se extrae a {tmp} en tiempo de ejecucion.
@@ -57,10 +58,12 @@ const
   STILL_ACTIVE = 259;
   PROCESS_TERMINATE = $0001;
   PROCESS_QUERY_LIMITED_INFORMATION = $1000;
+  PROCESS_SET_QUOTA = $0100;
   SYNCHRONIZE = $00100000;
   GWL_STYLE = -16;
   PBS_MARQUEE = $08;
   PBM_SETMARQUEE = $040A;
+  JOB_OBJECT_TERMINATE_AT_CLOSE = $0001;
   // MODO PRUEBA: Cambiar a True para ver solo la página final sin completar la instalación
   MODO_PRUEBA_PAGINA_FINAL = False;
 
@@ -93,6 +96,9 @@ var
   FinishedLogoHandle: THandle;
   UninstallRemoveCode: Boolean;
   UninstallRemoveLogs: Boolean;
+  PowerShellWorkerPid: Cardinal;
+  PowerShellWorkerHandle: THandle;
+  PowerShellJobObject: THandle;
 
 { Esta función ya no se usa - el botón Cancelar ahora funciona como cerrar la ventana }
 
@@ -119,6 +125,39 @@ end;
 function ExpandLogPath: string;
 begin
   Result := ExpandConstant('{commonappdata}\FerreDesk\logs\FerreDesk-Installer.log');
+end;
+
+function ExpandInnoLogPath: string;
+begin
+  Result := ExpandConstant('{commonappdata}\FerreDesk\logs\FerreDesk-Setup.log');
+end;
+
+// Función para escribir logs de Inno Setup a archivo persistente
+procedure WriteInnoLog(const Mensaje: string);
+var
+  LogFile: string;
+  Timestamp: string;
+  LogLine: string;
+  LogDir: string;
+begin
+  try
+    LogFile := ExpandInnoLogPath;
+    LogDir := ExtractFileDir(LogFile);
+    
+    // Asegurar que el directorio existe
+    if not DirExists(LogDir) then
+      ForceDirectories(LogDir);
+    
+    // Generar timestamp usando GetDateTimeString (formato: yyyy-mm-dd hh:nn:ss)
+    Timestamp := GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':');
+    LogLine := '[' + Timestamp + '] [INNO] ' + Mensaje;
+    
+    // Escribir al archivo (append)
+    SaveStringToFile(LogFile, LogLine + #13#10, True);
+  except
+    // Si falla escribir al log, usar Log() estándar de Inno Setup como fallback
+    Log('WriteInnoLog ERROR: No se pudo escribir al archivo de log: ' + GetExceptionMessage);
+  end;
 end;
 
 function ExpandInstallerPath: string;
@@ -310,6 +349,17 @@ function TerminateProcess(hProcess: THandle; uExitCode: Cardinal): Boolean;
   external 'TerminateProcess@kernel32.dll stdcall';
 function CloseHandle(hObject: THandle): Boolean;
   external 'CloseHandle@kernel32.dll stdcall';
+function GetLastError: Cardinal;
+  external 'GetLastError@kernel32.dll stdcall';
+// === Funciones de la API de Windows para Job Objects ===
+function CreateJobObject(lpJobAttributes: LongInt; lpName: string): THandle;
+  external 'CreateJobObjectW@kernel32.dll stdcall';
+function AssignProcessToJobObject(hJob, hProcess: THandle): Boolean;
+  external 'AssignProcessToJobObject@kernel32.dll stdcall';
+function TerminateJobObject(hJob: THandle; uExitCode: Cardinal): Boolean;
+  external 'TerminateJobObject@kernel32.dll stdcall';
+function GetCurrentProcessId: Cardinal;
+  external 'GetCurrentProcessId@kernel32.dll stdcall';
 
 // Funciones de la API de Windows para manipular la interfaz (barra de progreso)
 procedure Sleep(dwMilliseconds: Cardinal);
@@ -1202,6 +1252,110 @@ begin
   Result := PS64Path;
 end;
 
+// Función para terminar el proceso PowerShell y limpiar recursos
+procedure KillPowerShellProcess;
+var
+  TempHandle: THandle;
+  ExitCode: Cardinal;
+begin
+  WriteInnoLog('KillPowerShellProcess: Iniciando cleanup del proceso PowerShell');
+  Log('KillPowerShellProcess: Iniciando cleanup del proceso PowerShell.');
+  
+  // Intentar terminar usando Job Object primero (mata todos los procesos hijos)
+  if PowerShellJobObject <> 0 then
+  begin
+    WriteInnoLog('Intentando terminar Job Object (Handle: ' + IntToStr(PowerShellJobObject) + ')...');
+    Log('KillPowerShellProcess: Intentando terminar Job Object.');
+    if TerminateJobObject(PowerShellJobObject, 1) then
+    begin
+      WriteInnoLog('Job Object terminado exitosamente');
+      Log('KillPowerShellProcess: Job Object terminado exitosamente.');
+    end
+    else
+    begin
+      WriteInnoLog('ADVERTENCIA: No se pudo terminar Job Object. Error: ' + IntToStr(GetLastError));
+      Log('KillPowerShellProcess: No se pudo terminar Job Object (puede que ya esté cerrado).');
+    end;
+    CloseHandle(PowerShellJobObject);
+    PowerShellJobObject := 0;
+    WriteInnoLog('Job Object handle cerrado');
+  end;
+  
+  // Si hay handle del proceso, intentar terminar directamente
+  if PowerShellWorkerHandle <> 0 then
+  begin
+    WriteInnoLog('Intentando terminar proceso usando handle (Handle: ' + IntToStr(PowerShellWorkerHandle) + ', PID: ' + IntToStr(PowerShellWorkerPid) + ')...');
+    Log('KillPowerShellProcess: Intentando terminar proceso usando handle.');
+    // Verificar si el proceso todavía está activo
+    if GetExitCodeProcess(PowerShellWorkerHandle, ExitCode) then
+    begin
+      if ExitCode = STILL_ACTIVE then
+      begin
+        WriteInnoLog('Proceso todavía activo, terminando...');
+        Log('KillPowerShellProcess: Proceso todavía activo, terminando...');
+        if TerminateProcess(PowerShellWorkerHandle, 1) then
+        begin
+          WriteInnoLog('Proceso terminado exitosamente usando handle');
+          Log('KillPowerShellProcess: Proceso terminado exitosamente.');
+        end
+        else
+        begin
+          WriteInnoLog('ADVERTENCIA: No se pudo terminar el proceso usando handle. Error: ' + IntToStr(GetLastError));
+          Log('KillPowerShellProcess: No se pudo terminar el proceso (puede que ya esté cerrado).');
+        end;
+      end
+      else
+      begin
+        WriteInnoLog('Proceso ya terminó (código: ' + IntToStr(ExitCode) + ')');
+        Log('KillPowerShellProcess: Proceso ya terminó (código: ' + IntToStr(ExitCode) + ').');
+      end;
+    end
+    else
+    begin
+      WriteInnoLog('ADVERTENCIA: No se pudo obtener código de salida del proceso. Error: ' + IntToStr(GetLastError));
+    end;
+    CloseHandle(PowerShellWorkerHandle);
+    PowerShellWorkerHandle := 0;
+    WriteInnoLog('Proceso handle cerrado');
+  end;
+  
+  // Si tenemos PID pero no handle, intentar abrir uno temporal solo para terminar
+  if (PowerShellWorkerPid <> 0) and (PowerShellWorkerHandle = 0) then
+  begin
+    WriteInnoLog('Intentando abrir handle temporal para PID: ' + IntToStr(PowerShellWorkerPid));
+    Log('KillPowerShellProcess: Intentando abrir handle temporal para PID: ' + IntToStr(PowerShellWorkerPid));
+    TempHandle := OpenProcess(PROCESS_TERMINATE, False, PowerShellWorkerPid);
+    if TempHandle <> 0 then
+    begin
+      WriteInnoLog('Handle temporal abierto, terminando proceso...');
+      Log('KillPowerShellProcess: Handle temporal abierto, terminando proceso...');
+      if TerminateProcess(TempHandle, 1) then
+      begin
+        WriteInnoLog('Proceso terminado usando handle temporal');
+        Log('KillPowerShellProcess: Proceso terminado usando handle temporal.');
+      end
+      else
+      begin
+        WriteInnoLog('ADVERTENCIA: No se pudo terminar el proceso con handle temporal. Error: ' + IntToStr(GetLastError));
+        Log('KillPowerShellProcess: No se pudo terminar el proceso con handle temporal.');
+      end;
+      CloseHandle(TempHandle);
+      WriteInnoLog('Handle temporal cerrado');
+    end
+    else
+    begin
+      WriteInnoLog('ADVERTENCIA: No se pudo abrir handle temporal. Error: ' + IntToStr(GetLastError) + ' (proceso puede que ya no exista)');
+      Log('KillPowerShellProcess: No se pudo abrir handle temporal (proceso puede que ya no exista).');
+    end;
+  end;
+  
+  // Resetear variables globales
+  PowerShellWorkerPid := 0;
+  
+  WriteInnoLog('KillPowerShellProcess: Cleanup completado');
+  Log('KillPowerShellProcess: Cleanup completado.');
+end;
+
 function ExecutePowerShellPhase(const Phase: string; const ResumeFlag: Boolean; const ExtraArgs: string): Integer;
 var
   Params: string;
@@ -1214,8 +1368,28 @@ var
   RuntimeExitCode: Integer;
   exitCode: Cardinal;
   Attempts: Integer;
+  ParentPid: Cardinal;
+  StubExitCode: Cardinal;
+var
+  ResumeFlagStr: string;
 begin
   Result := -1;
+  if ResumeFlag then
+    ResumeFlagStr := 'True'
+  else
+    ResumeFlagStr := 'False';
+  
+  WriteInnoLog('========================================');
+  WriteInnoLog('ExecutePowerShellPhase: Iniciando ejecución de fase PowerShell');
+  WriteInnoLog('  Phase: ' + Phase);
+  WriteInnoLog('  ResumeFlag: ' + ResumeFlagStr);
+  WriteInnoLog('  ExtraArgs: ' + ExtraArgs);
+  Log('ExecutePowerShellPhase: Iniciando ejecución de fase PowerShell.');
+  if ResumeFlag then
+    Log('ExecutePowerShellPhase: Phase=' + Phase + ', ResumeFlag=True, ExtraArgs=' + ExtraArgs)
+  else
+    Log('ExecutePowerShellPhase: Phase=' + Phase + ', ResumeFlag=False, ExtraArgs=' + ExtraArgs);
+  
   DeleteFile(ProgressFilePath);
   { Eliminar archivo de estado previo para evitar leer PIDs/codigos de
     ejecuciones anteriores. El script volvera a crear estado y tambien
@@ -1225,6 +1399,21 @@ begin
   { Extraer el script de PowerShell compilado como support file al directorio temporal }
   ExtractTemporaryFile('{#InstallerScript}');
   ScriptPath := ExpandConstant('{tmp}\{#InstallerScript}');
+
+  { Obtener PID del proceso actual (Inno Setup) para pasarlo como ParentPid }
+  ParentPid := GetCurrentProcessId;
+  WriteInnoLog('PID del instalador (padre): ' + IntToStr(ParentPid));
+  Log('ExecutePowerShellPhase: PID del instalador (padre): ' + IntToStr(ParentPid));
+
+  { Persistir ParentPid en registro para que el script pueda recuperarlo en /RESUME }
+  if WriteRegStrSafe(HKLM, RegistryBase, 'InstallerParentPid', IntToStr(ParentPid)) then
+  begin
+    WriteInnoLog('InstallerParentPid guardado en registro (HKLM\' + RegistryBase + '): ' + IntToStr(ParentPid));
+  end
+  else
+  begin
+    WriteInnoLog('ADVERTENCIA: No se pudo escribir InstallerParentPid en registro (HKLM\' + RegistryBase + '). Error: ' + IntToStr(GetLastError));
+  end;
 
   { Siempre ejecutamos el script en modo silencioso (-Silent) para que
     toda la salida detallada vaya al log y el usuario vea solo el wizard. }
@@ -1238,6 +1427,7 @@ begin
   Params := Params + ' -StateFile "' + StateFilePath + '"';
   Params := Params + ' -LogPath "' + LogFilePath + '"';
   Params := Params + ' -ProgressFile "' + ProgressFilePath + '"';
+  Params := Params + ' -ParentPid ' + IntToStr(ParentPid);
   
   { GARANTIZAR: SelectedInstallDir siempre tiene un valor válido }
   if SelectedInstallDir = '' then
@@ -1261,6 +1451,25 @@ begin
     Con ArchitecturesInstallIn64BitMode=x64, esto debería ser la versión de 64 bits,
     pero hacerlo explícito garantiza que usemos la versión correcta. }
   PowerShellPath := GetPowerShell64Path;
+  WriteInnoLog('Ruta de PowerShell: ' + PowerShellPath);
+  WriteInnoLog('Parámetros completos: ' + Params);
+  Log('ExecutePowerShellPhase: Ruta de PowerShell: ' + PowerShellPath);
+  Log('ExecutePowerShellPhase: Parámetros: ' + Params);
+  
+  { Crear Job Object para garantizar terminación automática si el instalador se cierra }
+  WriteInnoLog('Creando Job Object...');
+  PowerShellJobObject := CreateJobObject(0, '');
+  if PowerShellJobObject = 0 then
+  begin
+    WriteInnoLog('ERROR: No se pudo crear Job Object. Error: ' + IntToStr(GetLastError));
+    Log('ExecutePowerShellPhase: ADVERTENCIA - No se pudo crear Job Object. Continuando sin él.');
+  end
+  else
+  begin
+    WriteInnoLog('Job Object creado exitosamente. Handle: ' + IntToStr(PowerShellJobObject));
+    Log('ExecutePowerShellPhase: Job Object creado exitosamente.');
+  end;
+  
   { Activar barra de progreso indeterminada (estilo marquee) }
   SetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE,
     GetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE) or PBS_MARQUEE);
@@ -1271,52 +1480,144 @@ begin
 
   { Lanzar el script PowerShell sin esperar (puede relanzarse internamente).
     Usaremos el PID publicado en installer-state.json para seguir al proceso real. }
+  WriteInnoLog('Lanzando proceso PowerShell stub...');
+  Log('ExecutePowerShellPhase: Lanzando proceso PowerShell...');
   if not Exec(PowerShellPath, Params, '', SW_HIDE, ewNoWait, StubHandle) then
   begin
+    WriteInnoLog('ERROR: No se pudo ejecutar PowerShell. Error: ' + IntToStr(GetLastError));
+    Log('ExecutePowerShellPhase: ERROR - No se pudo ejecutar PowerShell.');
     SendMessage(WizardForm.ProgressGauge.Handle, PBM_SETMARQUEE, 0, 0);
     SetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE,
       GetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE) and (not PBS_MARQUEE));
     WizardForm.ProgressGauge.Position := 0;
+    if PowerShellJobObject <> 0 then
+    begin
+      CloseHandle(PowerShellJobObject);
+      PowerShellJobObject := 0;
+    end;
     Result := -1;
     Exit;
   end;
+  WriteInnoLog('Proceso PowerShell stub lanzado. StubHandle: ' + IntToStr(StubHandle));
+  Log('ExecutePowerShellPhase: Proceso PowerShell lanzado. StubHandle obtenido.');
 
-  { Esperar a que el script publique su PID real en el archivo de estado }
+  { Esperar a que el script publique su PID real en el archivo de estado.
+    Aumentado timeout de 10 segundos (50 intentos) a 60 segundos (300 intentos)
+    para dar tiempo a PowerShell de relanzarse con permisos de administrador. }
   WorkerPid := 0;
   RuntimeExitCode := -1;
   Attempts := 0;
-  while (WorkerPid = 0) and (Attempts < 50) do
+  WriteInnoLog('Esperando a que PowerShell publique su PID (timeout: 60 segundos, 300 intentos)...');
+  Log('ExecutePowerShellPhase: Esperando a que PowerShell publique su PID (timeout: 60 segundos)...');
+  while (WorkerPid = 0) and (Attempts < 300) do
   begin
+    { Verificar que el proceso stub todavía está vivo antes de asumir error }
+    if StubHandle <> 0 then
+    begin
+      if GetExitCodeProcess(StubHandle, StubExitCode) then
+      begin
+        if StubExitCode <> STILL_ACTIVE then
+        begin
+          Log('ExecutePowerShellPhase: Proceso stub terminó prematuramente (código: ' + IntToStr(StubExitCode) + ').');
+          Break;
+        end;
+      end
+      else
+      begin
+        Log('ExecutePowerShellPhase: No se pudo verificar estado del stub (puede que ya no exista).');
+      end;
+    end;
+    
     if ReadRuntimePidAndExit(WorkerPid, RuntimeExitCode) and (WorkerPid <> 0) then
+    begin
+      WriteInnoLog('PID obtenido exitosamente: ' + IntToStr(WorkerPid) + ' (intentos: ' + IntToStr(Attempts) + ', tiempo: ' + IntToStr(Attempts * 200) + 'ms)');
+      Log('ExecutePowerShellPhase: PID obtenido exitosamente: ' + IntToStr(WorkerPid) + ' (intentos: ' + IntToStr(Attempts) + ').');
       Break;
+    end;
+    
+    if (Attempts mod 25) = 0 then
+    begin
+      WriteInnoLog('Esperando PID... (intento ' + IntToStr(Attempts) + ' de 300, ' + IntToStr(Attempts * 200) + 'ms transcurridos)');
+      Log('ExecutePowerShellPhase: Esperando PID... (intento ' + IntToStr(Attempts) + ' de 300)');
+    end;
+    
     Sleep(200);
     Inc(Attempts);
   end;
 
   if WorkerPid = 0 then
   begin
-    { No se obtuvo PID: no podemos seguir al proceso real }
+    WriteInnoLog('ERROR: No se obtuvo PID después de ' + IntToStr(Attempts) + ' intentos (timeout alcanzado, ' + IntToStr(Attempts * 200) + 'ms)');
+    Log('ExecutePowerShellPhase: ERROR - No se obtuvo PID después de ' + IntToStr(Attempts) + ' intentos (timeout alcanzado).');
     SendMessage(WizardForm.ProgressGauge.Handle, PBM_SETMARQUEE, 0, 0);
     SetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE,
       GetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE) and (not PBS_MARQUEE));
     WizardForm.ProgressGauge.Position := 0;
+    if PowerShellJobObject <> 0 then
+    begin
+      CloseHandle(PowerShellJobObject);
+      PowerShellJobObject := 0;
+    end;
     Result := 1;
     Exit;
   end;
 
-  WorkerHandle := OpenProcess(SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_TERMINATE,
+  { Abrir handle del proceso con permisos adicionales para Job Object }
+  WriteInnoLog('Abriendo handle del proceso PowerShell (PID: ' + IntToStr(WorkerPid) + ')...');
+  Log('ExecutePowerShellPhase: Abriendo handle del proceso PowerShell (PID: ' + IntToStr(WorkerPid) + ')...');
+  WorkerHandle := OpenProcess(SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_TERMINATE or PROCESS_SET_QUOTA,
     False, WorkerPid);
   if WorkerHandle = 0 then
   begin
+    WriteInnoLog('ERROR: No se pudo abrir handle del proceso PowerShell. Error: ' + IntToStr(GetLastError));
+    Log('ExecutePowerShellPhase: ERROR - No se pudo abrir handle del proceso PowerShell.');
     SendMessage(WizardForm.ProgressGauge.Handle, PBM_SETMARQUEE, 0, 0);
     SetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE,
       GetWindowLong(WizardForm.ProgressGauge.Handle, GWL_STYLE) and (not PBS_MARQUEE));
     WizardForm.ProgressGauge.Position := 0;
+    if PowerShellJobObject <> 0 then
+    begin
+      CloseHandle(PowerShellJobObject);
+      PowerShellJobObject := 0;
+    end;
     Result := 1;
     Exit;
   end;
+  WriteInnoLog('Handle del proceso abierto exitosamente. Handle: ' + IntToStr(WorkerHandle));
+  Log('ExecutePowerShellPhase: Handle del proceso abierto exitosamente.');
+
+  { Asignar proceso al Job Object para garantizar terminación automática }
+  if PowerShellJobObject <> 0 then
+  begin
+    WriteInnoLog('Asignando proceso al Job Object...');
+    Log('ExecutePowerShellPhase: Asignando proceso al Job Object...');
+    if AssignProcessToJobObject(PowerShellJobObject, WorkerHandle) then
+    begin
+      WriteInnoLog('Proceso asignado al Job Object exitosamente');
+      Log('ExecutePowerShellPhase: Proceso asignado al Job Object exitosamente.');
+    end
+    else
+    begin
+      WriteInnoLog('ADVERTENCIA: No se pudo asignar proceso al Job Object. Error: ' + IntToStr(GetLastError));
+      Log('ExecutePowerShellPhase: ADVERTENCIA - No se pudo asignar proceso al Job Object. Continuando sin él.');
+    end;
+  end
+  else
+  begin
+    WriteInnoLog('ADVERTENCIA: PowerShellJobObject es 0, no se puede asignar proceso al Job Object');
+  end;
+
+  { Guardar PID y handles en variables globales para cleanup posterior }
+  PowerShellWorkerPid := WorkerPid;
+  PowerShellWorkerHandle := WorkerHandle;
+  WriteInnoLog('Variables globales actualizadas:');
+  WriteInnoLog('  PowerShellWorkerPid: ' + IntToStr(PowerShellWorkerPid));
+  WriteInnoLog('  PowerShellWorkerHandle: ' + IntToStr(PowerShellWorkerHandle));
+  WriteInnoLog('Iniciando monitoreo del proceso PowerShell...');
+  Log('ExecutePowerShellPhase: Variables globales actualizadas. Monitoreando proceso...');
 
   exitCode := STILL_ACTIVE;
+  Attempts := 0;
   while True do
   begin
     AppProcessMessage;
@@ -1324,17 +1625,35 @@ begin
 
     if not GetExitCodeProcess(WorkerHandle, exitCode) then
     begin
+      WriteInnoLog('ERROR: No se pudo obtener código de salida del proceso. Error: ' + IntToStr(GetLastError));
+      Log('ExecutePowerShellPhase: No se pudo obtener código de salida del proceso.');
       exitCode := 1;
       Break;
     end;
 
     if exitCode <> STILL_ACTIVE then
+    begin
+      WriteInnoLog('Proceso PowerShell terminó con código: ' + IntToStr(exitCode) + ' (después de ' + IntToStr(Attempts) + ' verificaciones)');
+      Log('ExecutePowerShellPhase: Proceso terminó con código: ' + IntToStr(exitCode));
       Break;
+    end;
+    
+    Inc(Attempts);
+    if (Attempts mod 150) = 0 then  // Cada 30 segundos (150 * 200ms)
+    begin
+      WriteInnoLog('Monitoreando proceso... (verificación ' + IntToStr(Attempts) + ', proceso todavía activo)');
+    end;
 
     Sleep(200);
   end;
 
-  CloseHandle(WorkerHandle);
+  { NO cerrar handles aquí - se cerrarán en DeinitializeSetup o KillPowerShellProcess }
+  { Solo resetear variables si el proceso terminó normalmente }
+  if exitCode <> STILL_ACTIVE then
+  begin
+    PowerShellWorkerHandle := 0;
+    PowerShellWorkerPid := 0;
+  end;
 
   { Apagar marquee }
   SendMessage(WizardForm.ProgressGauge.Handle, PBM_SETMARQUEE, 0, 0);
@@ -1344,9 +1663,79 @@ begin
 
   { Preferir el ExitCode que publico el script en el estado, si existe }
   if ReadRuntimePidAndExit(WorkerPid, RuntimeExitCode) and (RuntimeExitCode >= 0) then
-    Result := RuntimeExitCode
+  begin
+    WriteInnoLog('Usando ExitCode del estado: ' + IntToStr(RuntimeExitCode));
+    Log('ExecutePowerShellPhase: Usando ExitCode del estado: ' + IntToStr(RuntimeExitCode));
+    Result := RuntimeExitCode;
+  end
   else
+  begin
+    WriteInnoLog('Usando ExitCode del proceso: ' + IntToStr(exitCode));
+    Log('ExecutePowerShellPhase: Usando ExitCode del proceso: ' + IntToStr(exitCode));
     Result := Integer(exitCode);
+  end;
+  
+  WriteInnoLog('ExecutePowerShellPhase completado. Resultado final: ' + IntToStr(Result));
+  WriteInnoLog('========================================');
+  Log('ExecutePowerShellPhase: Ejecución completada. Resultado: ' + IntToStr(Result));
+end;
+
+// Procedimiento de cleanup automático al cerrar el instalador
+procedure DeinitializeSetup;
+begin
+  WriteInnoLog('========================================');
+  WriteInnoLog('DeinitializeSetup: Iniciando cleanup automático');
+  WriteInnoLog('  PowerShellWorkerPid: ' + IntToStr(PowerShellWorkerPid));
+  WriteInnoLog('  PowerShellWorkerHandle: ' + IntToStr(PowerShellWorkerHandle));
+  WriteInnoLog('  PowerShellJobObject: ' + IntToStr(PowerShellJobObject));
+  Log('DeinitializeSetup: Iniciando cleanup automático.');
+  KillPowerShellProcess;
+  WriteInnoLog('DeinitializeSetup: Cleanup completado');
+  WriteInnoLog('========================================');
+  Log('DeinitializeSetup: Cleanup completado.');
+end;
+
+// Handler para manejar cancelación manual del usuario
+procedure WizardFormCloseQuery(Sender: TObject; var CanClose: Boolean);
+var
+  Response: Integer;
+begin
+  CanClose := True;
+  
+  WriteInnoLog('WizardFormCloseQuery: Usuario intentó cerrar el instalador');
+  WriteInnoLog('  PowerShellWorkerPid: ' + IntToStr(PowerShellWorkerPid));
+  WriteInnoLog('  PowerShellWorkerHandle: ' + IntToStr(PowerShellWorkerHandle));
+  WriteInnoLog('  PowerShellJobObject: ' + IntToStr(PowerShellJobObject));
+  
+  // Solo preguntar si hay un proceso PowerShell corriendo
+  if (PowerShellWorkerPid <> 0) or (PowerShellWorkerHandle <> 0) or (PowerShellJobObject <> 0) then
+  begin
+    WriteInnoLog('Proceso PowerShell detectado, preguntando confirmación al usuario');
+    Log('WizardFormCloseQuery: Proceso PowerShell detectado, preguntando confirmación al usuario.');
+    Response := MsgBox(
+      'Hay una instalación en progreso. Si cerrás el instalador ahora, el proceso de instalación se cancelará.'#13#10#13#10 +
+      '¿Estás seguro de que querés cerrar el instalador?',
+      mbConfirmation, MB_YESNO);
+    
+    if Response = IDYES then
+    begin
+      WriteInnoLog('Usuario confirmó cierre. Terminando proceso PowerShell...');
+      Log('WizardFormCloseQuery: Usuario confirmó cierre. Terminando proceso PowerShell...');
+      KillPowerShellProcess;
+      CanClose := True;
+    end
+    else
+    begin
+      WriteInnoLog('Usuario canceló el cierre');
+      Log('WizardFormCloseQuery: Usuario canceló el cierre.');
+      CanClose := False;
+    end;
+  end
+  else
+  begin
+    WriteInnoLog('No hay proceso PowerShell corriendo. Permitiendo cierre');
+    Log('WizardFormCloseQuery: No hay proceso PowerShell corriendo. Permitiendo cierre.');
+  end;
 end;
 
 function RunInstallationFlow: Integer;
@@ -1418,6 +1807,13 @@ begin
   LastInstallResultCode := 0;
   LogoHandle := 0;
   FinishedLogoHandle := 0;
+  
+  // Inicializar logging de Inno Setup
+  WriteInnoLog('========================================');
+  WriteInnoLog('Inno Setup - Inicio del instalador');
+  WriteInnoLog('PID del instalador: ' + IntToStr(GetCurrentProcessId));
+  WriteInnoLog('Versión: {#MyAppVersion}');
+  WriteInnoLog('========================================');
 
   // Pagina para seleccionar el directorio real de instalacion de FerreDesk
   // (codigo fuente + proyecto Docker). No es el mismo que la carpeta interna {app}.
@@ -1435,17 +1831,29 @@ begin
   InstallDirPage.Add('Carpeta de instalación de FerreDesk:');
   InstallDirPage.Values[0] := GetDefaultInstallDirectory;
 
+  // Logging de parámetros recibidos
+  WriteInnoLog('Parámetros de línea de comandos:');
   for ParamIndex := 1 to ParamCount do
   begin
     Param := UpperCase(ParamStr(ParamIndex));
+    WriteInnoLog('  Parámetro ' + IntToStr(ParamIndex) + ': ' + ParamStr(ParamIndex));
     if Param = '/RESUME' then
+    begin
       ResumeFromCmd := True;
+      WriteInnoLog('  -> Modo RESUME detectado');
+    end;
   end;
+  if ParamCount = 0 then
+    WriteInnoLog('  (Sin parámetros)');
 
   StateFilePath := ExpandStatePath;
   LogFilePath := ExpandLogPath;
   ForceDirectories(ExtractFileDir(StateFilePath));
   ForceDirectories(ExtractFileDir(LogFilePath));
+  
+  WriteInnoLog('Rutas configuradas:');
+  WriteInnoLog('  StateFile: ' + StateFilePath);
+  WriteInnoLog('  LogFile: ' + LogFilePath);
   ExistingInstallDetected := False;
   ForceReinstall := False;
   DetectedPhase := 'FASE_0';
@@ -1462,6 +1870,19 @@ begin
   SelectedInstallDir := GetDefaultInstallDirectory;
 
   DetectExistingInstall;  // Esto sobrescribirá SelectedInstallDir si hay instalación válida
+  
+  WriteInnoLog('Detección de instalación existente:');
+  if ExistingInstallDetected then
+    WriteInnoLog('  ExistingInstallDetected: True')
+  else
+    WriteInnoLog('  ExistingInstallDetected: False');
+  WriteInnoLog('  DetectedPhase: ' + DetectedPhase);
+  WriteInnoLog('  DetectedInstallDir: ' + DetectedInstallDir);
+  if HasPendingPhases then
+    WriteInnoLog('  HasPendingPhases: True')
+  else
+    WriteInnoLog('  HasPendingPhases: False');
+  WriteInnoLog('  SelectedInstallDir: ' + SelectedInstallDir);
 
   if ExistingInstallDetected and (not ResumeFromCmd) then
   begin
@@ -1505,7 +1926,12 @@ begin
     YA NO activamos AutoResume solo por HasPendingPhases, porque eso causa
     que al abrir el instalador manualmente se salte el menu de opciones. }
   if ResumeFromCmd then
+  begin
     AutoResume := True;
+    WriteInnoLog('AutoResume activado (modo RunOnce después de reinicio)');
+  end
+  else
+    WriteInnoLog('AutoResume desactivado (instalación normal o manual)');
 
   ViewLogButton := TNewButton.Create(WizardForm);
   ViewLogButton.Parent := WizardForm;
@@ -1541,6 +1967,21 @@ begin
   { El botón Cancelar ahora funciona igual que cerrar la ventana (diálogo nativo de Inno Setup).
     Durante la instalación (ssInstall) el botón se deshabilita para evitar cancelaciones
     mientras el proceso está corriendo. }
+  
+  { Inicializar variables globales de Job Objects }
+  PowerShellWorkerPid := 0;
+  PowerShellWorkerHandle := 0;
+  PowerShellJobObject := 0;
+  
+  WriteInnoLog('Variables globales inicializadas:');
+  WriteInnoLog('  PowerShellWorkerPid: 0');
+  WriteInnoLog('  PowerShellWorkerHandle: 0');
+  WriteInnoLog('  PowerShellJobObject: 0');
+  
+  { Conectar handler para manejar cancelación manual del usuario }
+  WizardForm.OnCloseQuery := @WizardFormCloseQuery;
+  
+  WriteInnoLog('InitializeWizard completado exitosamente');
 end;
 
 

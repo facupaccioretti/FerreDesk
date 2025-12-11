@@ -63,7 +63,10 @@ param(
     [switch]$Reinstall,
     
     [Parameter(Mandatory=$false)]
-    [switch]$NoOpenBrowser
+    [switch]$NoOpenBrowser,
+    
+    [Parameter(Mandatory=$false)]
+    [int]$ParentPid
 )
 
 # ========================================
@@ -108,6 +111,14 @@ $Script:WSLWaitTimeout = 120
 
 # Directorio de instalacion (se determina mas adelante si no se proporciona)
 $Script:InstallDirectory = $null
+
+# Monitoreo del proceso padre (Inno Setup)
+$Script:ParentPid = $null
+$Script:ParentMonitorJob = $null
+# Contador de fallas consecutivas al verificar el proceso padre (tolerancia a falsos negativos breves)
+$Script:ConteoFallasProcesoPadre = 0
+# Evitar spam de logs cuando no hay PID de padre configurado
+$Script:AvisoSinParentPidMostrado = $false
 
 # Configuracion global de manejo de errores
 # Capturar TODOS los errores, no detener el script automaticamente
@@ -328,6 +339,160 @@ function Write-Debug {
     Write-Log -Mensaje $Mensaje -Tipo "DEBUG"
 }
 
+# ========================================
+#    FUNCIONES DE MONITOREO DEL PROCESO PADRE
+# ========================================
+
+function Test-ParentProcessAlive {
+    <#
+    .SYNOPSIS
+        Verifica si el proceso padre (Inno Setup) sigue vivo.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ParentProcessId
+    )
+    
+    try {
+        $parentProcess = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
+        if ($parentProcess) {
+            return $true
+        } else {
+            return $false
+        }
+    } catch {
+        Write-Log "Error al verificar proceso padre (PID: $ParentProcessId): $($_.Exception.Message)" -Tipo "DEBUG"
+        return $false
+    }
+}
+
+function Start-ParentProcessMonitor {
+    <#
+    .SYNOPSIS
+        Inicia un job en segundo plano que monitorea el proceso padre.
+        Si detecta que el padre murió, termina el proceso del script.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ParentProcessId
+    )
+    
+    if (-not $ParentProcessId -or $ParentProcessId -le 0) {
+        Write-Log "ParentProcessId no válido, no se iniciará monitoreo del proceso padre." -Tipo "DEBUG"
+        return
+    }
+    
+    Write-Log "Iniciando monitoreo del proceso padre (PID: $ParentProcessId)..." -Tipo "DEBUG"
+    
+    # Ruta del archivo de log del monitor (mismo directorio que el log principal)
+    $monitorLogFile = Join-Path (Split-Path -Path $Script:LogFile -Parent) "FerreDesk-Installer.parent_monitor.log"
+    
+    $monitorScript = {
+        param($ParentPid, $ScriptPid, $LogFile)
+        
+        # Función auxiliar para escribir al log del monitor
+        function Write-MonitorLog {
+            param([string]$Message, [string]$Type = "INFO")
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $logMessage = "[$timestamp] [$Type] $Message"
+            try {
+                $logDir = Split-Path -Path $LogFile -Parent
+                if (-not (Test-Path $logDir)) {
+                    $null = New-Item -ItemType Directory -Path $logDir -Force -ErrorAction SilentlyContinue
+                }
+                Add-Content -Path $LogFile -Value $logMessage -ErrorAction SilentlyContinue
+            } catch {
+                # Si falla escribir al log, ignorar silenciosamente
+            }
+        }
+        
+        Write-MonitorLog "========================================" "INFO"
+        Write-MonitorLog "Monitor del proceso padre iniciado" "INFO"
+        Write-MonitorLog "ParentPid: $ParentPid" "INFO"
+        Write-MonitorLog "ScriptPid: $ScriptPid" "INFO"
+        Write-MonitorLog "LogFile: $LogFile" "INFO"
+        Write-MonitorLog "========================================" "INFO"
+        
+        $checkCount = 0
+        $lastLogTime = Get-Date
+        
+        while ($true) {
+            Start-Sleep -Seconds 2
+            $checkCount++
+            
+            try {
+                $parentProcess = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+                if (-not $parentProcess) {
+                    Write-MonitorLog "PROCESO PADRE TERMINADO: El proceso padre (PID: $ParentPid) ya no existe" "WARNING"
+                    Write-MonitorLog "Auto-terminando script PowerShell (PID: $ScriptPid)..." "WARNING"
+                    Write-MonitorLog "Total de verificaciones realizadas: $checkCount" "INFO"
+                    # Terminar el proceso del script
+                    Stop-Process -Id $ScriptPid -Force -ErrorAction SilentlyContinue
+                    break
+                }
+                
+                # Loggear cada 30 segundos (cada 15 verificaciones, ya que cada verificación es 2 segundos)
+                $now = Get-Date
+                if (($now - $lastLogTime).TotalSeconds -ge 30) {
+                    Write-MonitorLog "Proceso padre todavía activo (PID: $ParentPid). Verificaciones: $checkCount" "DEBUG"
+                    $lastLogTime = $now
+                }
+            } catch {
+                # Si falla la verificación, asumir que el padre murió
+                Write-MonitorLog "ERROR al verificar proceso padre: $($_.Exception.Message)" "ERROR"
+                Write-MonitorLog "Auto-terminando script PowerShell (PID: $ScriptPid)..." "WARNING"
+                Write-MonitorLog "Total de verificaciones realizadas: $checkCount" "INFO"
+                Stop-Process -Id $ScriptPid -Force -ErrorAction SilentlyContinue
+                break
+            }
+        }
+        
+        Write-MonitorLog "Monitor del proceso padre finalizado" "INFO"
+    }
+    
+    try {
+        $monitorJob = Start-Job -ScriptBlock $monitorScript -ArgumentList $ParentProcessId, $PID, $monitorLogFile
+        Write-Log "Monitor del proceso padre iniciado (Job ID: $($monitorJob.Id), Log: $monitorLogFile)" -Tipo "DEBUG"
+        return $monitorJob
+    } catch {
+        Write-Warning "No se pudo iniciar el monitor del proceso padre: $($_.Exception.Message)"
+        Write-Log "ERROR al iniciar monitor del proceso padre: $($_.Exception.Message)" -Tipo "ERROR"
+        return $null
+    }
+}
+
+function Test-ParentProcessAlivePeriodic {
+    <#
+    .SYNOPSIS
+        Verifica si el proceso padre sigue vivo. Si no, termina el script.
+        Esta función debe llamarse periódicamente en puntos críticos.
+    #>
+    # Si no hay PID configurado, no abortar: asumir que no se puede monitorear
+    if (-not $Script:ParentPid -or $Script:ParentPid -le 0) {
+        if (-not $Script:AvisoSinParentPidMostrado) {
+            Write-Log "No hay ParentPid configurado; se omite verificación de proceso padre." -Tipo "WARNING"
+            $Script:AvisoSinParentPidMostrado = $true
+        }
+        return $true
+    }
+
+    $parentSigueVivo = Test-ParentProcessAlive -ParentProcessId $Script:ParentPid
+    if (-not $parentSigueVivo) {
+        $Script:ConteoFallasProcesoPadre++
+        Write-Log "Verificación de proceso padre falló (PID: $Script:ParentPid). Conteo fallas: $Script:ConteoFallasProcesoPadre" -Tipo "WARNING"
+        # Tolerar fallos ocasionales; abortar solo con 3 fallas consecutivas
+        if ($Script:ConteoFallasProcesoPadre -ge 3) {
+            Write-Log "Proceso padre (PID: $Script:ParentPid) ya no existe tras fallas consecutivas. Indicando fin de monitoreo..." -Tipo "WARNING"
+            return $false
+        }
+    } else {
+        # Resetear conteo si la verificación fue exitosa
+        $Script:ConteoFallasProcesoPadre = 0
+    }
+
+    return $true
+}
+
 function Wait-ForOptionalKeyPress {
     param(
         [string]$Mensaje = "Presiona cualquier tecla para continuar..."
@@ -414,7 +579,7 @@ function Get-InstallationStatusFromPhase {
     
     # Validación interna para manejar valores vacíos o nulos
     if ([string]::IsNullOrWhiteSpace($Phase)) {
-        return "NONE"
+        return "NONE" 
     }
     
     switch -Wildcard ($Phase) {
@@ -829,6 +994,9 @@ function Request-Administrator {
     if ($NoOpenBrowser) {
         $arguments += "-NoOpenBrowser"
     }
+    if ($ParentPid -and $ParentPid -gt 0) {
+        $arguments += "-ParentPid", "$ParentPid"
+    }
     
     try {
         # Iniciar nueva instancia con permisos de administrador
@@ -1227,6 +1395,8 @@ function Install-Chocolatey {
         Instala Chocolatey (logica integrada de install_choco.ps1).
         Mismo metodo que usa super-install.bat pero integrado en este script.
     #>
+    Test-ParentProcessAlivePeriodic
+    
     $chocoPath = "C:\ProgramData\chocolatey\bin\choco.exe"
     
     Write-Info "Verificando si Chocolatey esta instalado en '$chocoPath'..."
@@ -1410,6 +1580,8 @@ function Install-Git {
     .SYNOPSIS
         Instala Git usando Chocolatey con verificaciones robustas.
     #>
+    Test-ParentProcessAlivePeriodic
+    
     if (Test-GitInstalled) {
         try {
             $version = git --version 2>&1
@@ -1634,6 +1806,8 @@ function Install-DockerDesktop {
     .SYNOPSIS
         Instala Docker Desktop usando Chocolatey.
     #>
+    Test-ParentProcessAlivePeriodic
+    
     if (Test-DockerInstalled) {
         $version = docker --version 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -1797,8 +1971,12 @@ function Wait-ForDockerReady {
     $maxAttempts = [math]::Floor($TimeoutSeconds / $interval)
     $wizardHintShown = $false
     
+    Write-Log "Wait-ForDockerReady: Iniciando espera (timeout: $TimeoutSeconds segundos, máximo $maxAttempts intentos)" -Tipo "INFO"
+    Write-Log "Wait-ForDockerReady: Configuración - Intervalo: ${interval}s, Timeout: ${TimeoutSeconds}s, Máximo intentos: $maxAttempts" -Tipo "DEBUG"
+    
     for ($i = 1; $i -le $maxAttempts; $i++) {
         if (Test-DockerRunning) {
+            Write-Log "Wait-ForDockerReady: Docker Desktop está listo (intento $i de $maxAttempts, tiempo transcurrido: ${elapsed}s)" -Tipo "SUCCESS"
             Write-Success "Docker Desktop esta listo"
             return $true
         }
@@ -1808,6 +1986,7 @@ function Wait-ForDockerReady {
             if ($dockerProcesses) {
                 Write-Warning "Docker Desktop puede estar mostrando el asistente inicial/EULA."
                 Write-Info "Si ves la ventana de Docker Desktop solicitando aceptar terminos, haz clic en 'Aceptar' y no cierres la aplicacion."
+                Write-Log "Wait-ForDockerReady: Docker Desktop puede estar mostrando EULA/Asistente inicial" -Tipo "INFO"
                 $wizardHintShown = $true
             }
         }
@@ -1815,11 +1994,23 @@ function Wait-ForDockerReady {
         $percentComplete = [math]::Min(($i / $maxAttempts) * 100, 100)
         Write-Progress -Activity "Esperando Docker Desktop..." -Status "Verificando... ($elapsed/$TimeoutSeconds segundos)" -PercentComplete $percentComplete
         
+        # Verificar proceso padre periódicamente
+        if (-not (Test-ParentProcessAlivePeriodic)) {
+            Write-Log "Wait-ForDockerReady: Proceso padre terminado, abortando espera de Docker" -Tipo "WARNING"
+            return $false
+        }
+        
+        # Loggear cada 30 segundos (cada 6 intentos, ya que cada intento es 5 segundos)
+        if ($i % 6 -eq 0) {
+            Write-Log "Wait-ForDockerReady: Docker todavía no está listo (intento $i de $maxAttempts, tiempo transcurrido: ${elapsed}s)" -Tipo "DEBUG"
+        }
+        
         Start-Sleep -Seconds $interval
         $elapsed += $interval
     }
     
     Write-Progress -Activity "Esperando Docker Desktop..." -Completed
+    Write-Log "Wait-ForDockerReady: TIMEOUT - Docker Desktop no está listo después de $elapsed segundos ($maxAttempts intentos)" -Tipo "WARNING"
     Write-Warning "Timeout esperando Docker Desktop. Puede necesitar mas tiempo para iniciar."
     return $false
 }
@@ -2265,9 +2456,12 @@ function Wait-ForServicesReady {
     
     Write-Info "Esperando a que los servicios esten listos..."
     Write-Host ""
+    Write-Log "Wait-ForServicesReady: Iniciando espera de servicios Docker" -Tipo "INFO"
+    Write-Log "Wait-ForServicesReady: ProjectDir: $projectDir" -Tipo "DEBUG"
     
     # Verificar que docker-compose.yml existe antes de continuar
     if (-not (Test-Path (Join-Path $projectDir "docker-compose.yml"))) {
+        Write-Log "Wait-ForServicesReady: ERROR - docker-compose.yml no encontrado en $projectDir" -Tipo "ERROR"
         Write-Error "docker-compose.yml no encontrado en $projectDir"
         return $false
     }
@@ -2278,6 +2472,8 @@ function Wait-ForServicesReady {
     $maxAttempts = [math]::Floor($timeout / $interval)
     $noContainersCount = 0
     $maxNoContainersAttempts = 3  # Si no hay contenedores después de 3 intentos, salir
+    
+    Write-Log "Wait-ForServicesReady: Configuración - Timeout: ${timeout}s, Intervalo: ${interval}s, Máximo intentos: $maxAttempts" -Tipo "DEBUG"
     
     Push-Location $projectDir
     
@@ -2395,6 +2591,7 @@ function Wait-ForServicesReady {
             
             # Verificar que haya al menos 2 servicios "Up" y no estén reiniciándose
             if ($servicesUp -ge 2 -and $servicesRestarting -eq 0) {
+                Write-Log "Wait-ForServicesReady: Servicios listos (intento $i de $maxAttempts, tiempo transcurrido: ${elapsed}s, servicios Up: $servicesUp)" -Tipo "SUCCESS"
                 Write-Progress -Activity "Esperando servicios..." -Completed
                 Write-Host ""
                 Write-Info "Estado final de los servicios:"
@@ -2412,6 +2609,12 @@ function Wait-ForServicesReady {
             $percentComplete = [math]::Min(($i / $maxAttempts) * 100, 100)
             Write-Progress -Activity "Esperando servicios..." -Status "Verificando... ($elapsed/$timeout segundos) - $servicesUp servicio(s) activo(s)" -PercentComplete $percentComplete
             
+            # Verificar proceso padre periódicamente
+            if (-not (Test-ParentProcessAlivePeriodic)) {
+                Write-Log "Wait-ForServicesReady: Proceso padre terminado, abortando espera de servicios" -Tipo "WARNING"
+                return $false
+            }
+            
             Start-Sleep -Seconds $interval
             $elapsed += $interval
             
@@ -2419,12 +2622,14 @@ function Wait-ForServicesReady {
             if ($elapsed % 30 -eq 0 -and $elapsed -gt 0) {
                 Write-Host ""
                 Write-Info "Estado actual de los servicios ($elapsed/$timeout segundos):"
+                Write-Log "Wait-ForServicesReady: Estado de servicios (intento $i de $maxAttempts, tiempo transcurrido: ${elapsed}s)" -Tipo "DEBUG"
                 docker-compose ps
                 Write-Host ""
             }
         }
         
         Write-Progress -Activity "Esperando servicios..." -Completed
+        Write-Log "Wait-ForServicesReady: TIMEOUT - Servicios no están listos después de $elapsed segundos ($maxAttempts intentos)" -Tipo "WARNING"
         Write-Host ""
         Write-Warning "Timeout esperando servicios. Pueden necesitar mas tiempo para iniciar."
         
@@ -3171,8 +3376,58 @@ function Main {
     
     Initialize-Logging
     
+    # Logging detallado de parámetros recibidos
+    Write-Log "========================================" -Tipo "INFO"
+    Write-Log "Inicio de instalación - Parámetros recibidos" -Tipo "INFO"
+    Write-Log "  InstallDirectory: $InstallDirectory" -Tipo "INFO"
+    Write-Log "  Silent: $Silent" -Tipo "INFO"
+    Write-Log "  LogPath: $LogPath" -Tipo "INFO"
+    Write-Log "  ProgressFile: $ProgressFile" -Tipo "INFO"
+    Write-Log "  Phase: $Phase" -Tipo "INFO"
+    Write-Log "  StateFile: $StateFile" -Tipo "INFO"
+    Write-Log "  Resume: $Resume" -Tipo "INFO"
+    Write-Log "  Repair: $Repair" -Tipo "INFO"
+    Write-Log "  Update: $Update" -Tipo "INFO"
+    Write-Log "  Reinstall: $Reinstall" -Tipo "INFO"
+    Write-Log "  NoOpenBrowser: $NoOpenBrowser" -Tipo "INFO"
+    Write-Log "  ParentPid: $ParentPid" -Tipo "INFO"
+    Write-Log "========================================" -Tipo "INFO"
+    
+    # Recuperar ParentPid desde el registro si no vino por parámetros
+    if (-not $ParentPid -or $ParentPid -le 0) {
+        try {
+            $regValue = Get-ItemProperty -Path $Script:RegistryBasePath -Name 'InstallerParentPid' -ErrorAction SilentlyContinue
+            if ($regValue -and $regValue.InstallerParentPid -and ([int]$regValue.InstallerParentPid) -gt 0) {
+                $ParentPid = [int]$regValue.InstallerParentPid
+                Write-Log "ParentPid recuperado desde registro: $ParentPid" -Tipo "INFO"
+            } else {
+                Write-Log "No se encontró InstallerParentPid en registro o valor inválido." -Tipo "DEBUG"
+            }
+        } catch {
+            Write-Log "Error al leer InstallerParentPid del registro: $($_.Exception.Message)" -Tipo "DEBUG"
+        }
+    }
+
+    # Inicializar monitoreo del proceso padre si se obtuvo ParentPid (>0)
+    if ($ParentPid -and $ParentPid -gt 0) {
+        $Script:ParentPid = $ParentPid
+        $Script:ConteoFallasProcesoPadre = 0
+        Write-Log "ParentPid establecido: $ParentPid" -Tipo "INFO"
+        Write-Log "Iniciando monitoreo del proceso padre..." -Tipo "INFO"
+        $Script:ParentMonitorJob = Start-ParentProcessMonitor -ParentProcessId $ParentPid
+        if ($Script:ParentMonitorJob) {
+            Write-Log "Monitor del proceso padre iniciado exitosamente (Job ID: $($Script:ParentMonitorJob.Id))" -Tipo "INFO"
+        } else {
+            Write-Warning "No se pudo iniciar el monitor del proceso padre. Continuando sin monitoreo."
+            Write-Log "ADVERTENCIA: No se pudo iniciar el monitor del proceso padre. Continuando sin monitoreo." -Tipo "WARNING"
+        }
+    } else {
+        Write-Log "No se proporcionó ni se pudo recuperar ParentPid, no se iniciará monitoreo del proceso padre." -Tipo "WARNING"
+        Write-Log "ADVERTENCIA: El script no puede detectar si el instalador se cierra inesperadamente." -Tipo "WARNING"
+    }
+    
     # Registrar PID del proceso principal para diagnosticar posibles divorcios con el instalador
-    Write-Log "MAIN_PID: $PID" -Tipo "DEBUG"
+    Write-Log "MAIN_PID: $PID" -Tipo "INFO"
     
     $state = Get-InstallationState
 
@@ -3185,13 +3440,21 @@ function Main {
         $state | Add-Member -MemberType NoteProperty -Name 'ExitCode' -Value $null -Force
     }
     
+    Write-Log "Estado de instalación detectado:" -Tipo "INFO"
+    Write-Log "  CurrentPhase: $($state.CurrentPhase)" -Tipo "INFO"
+    Write-Log "  InstallDirectory: $($state.InstallDirectory)" -Tipo "INFO"
+    Write-Log "  RequiresRestart: $($state.RequiresRestart)" -Tipo "INFO"
+    Write-Log "  LastError: $($state.LastError)" -Tipo "INFO"
+    
     try {
         $state.Pid = "$PID"
         $state.ExitCode = $null
         Set-InstallationState $state
+        Write-Log "PID registrado en estado: $PID" -Tipo "DEBUG"
     } catch {
         # Si falla, continuamos igualmente; el instalador externo seguira usando el resultado de Exec.
         Write-Warning "No se pudo registrar PID en el estado: $($_.Exception.Message)"
+        Write-Log "ERROR al registrar PID en estado: $($_.Exception.Message)" -Tipo "ERROR"
     }
 
     # PRIORIDAD: Si se pasó el parámetro InstallDirectory, establecerlo ANTES de sincronizar desde el estado
