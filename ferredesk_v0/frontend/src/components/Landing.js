@@ -18,7 +18,7 @@ const Landing = () => {
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg ring-2 ring-orange-400/30">
               <img
-                src="/static/favicon.ico"
+                src="/favicon.ico"
                 alt="Logo FerreDesk"
                 className="w-6 h-6 object-contain"
               />

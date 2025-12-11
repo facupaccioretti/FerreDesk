@@ -1,0 +1,33 @@
+# Entornos y dependencias locales
+venv
+.env
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.swp
+
+# Cachés y artefactos de herramientas
+.cache/
+.mypy_cache/
+.pytest_cache/
+
+# Logs y base de datos local
+*.log
+db.sqlite3
+
+# Archivos generados en runtime
+media/
+staticfiles/
+data/
+cache/
+
+# Frontend (no necesario en la imagen del backend)
+frontend/
+
+# IDE / VCS
+.vscode/
+.idea/
+.git
+.gitignore
+

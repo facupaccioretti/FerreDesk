@@ -44,6 +44,14 @@ backend/staticfiles
 dist/
 build/
 
+node_modules
+.cache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.git
+
 # Environment variables
 .env
 .env.local

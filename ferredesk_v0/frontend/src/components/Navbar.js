@@ -29,7 +29,7 @@ export default function Navbar({ user, onLogout }) {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg ring-2 ring-orange-400/30">
             {(() => {
-              const RUTA_ICONO_NAVBAR = "/static/favicon.ico"
+              const RUTA_ICONO_NAVBAR = "/favicon.ico"
               return (
                 <img
                   src={RUTA_ICONO_NAVBAR || "/placeholder.svg"}
