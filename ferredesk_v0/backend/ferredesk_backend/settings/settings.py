@@ -4,6 +4,6 @@ import os
 ENV = os.environ.get("ENVIRONMENT", "development").lower()
 
 if ENV == "production":
-    from .settings.prod import *
+    from .prod import *  # noqa: F401,F403
 else:
-    from .settings.dev import *
+    from .dev import *  # noqa: F401,F403
