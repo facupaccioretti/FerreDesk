@@ -5,12 +5,13 @@ services:
     env_file:
       - .env
     environment:
+      # Mantenemos tus configuraciones actuales
       TZ: America/Argentina/Buenos_Aires
       PGTZ: America/Argentina/Buenos_Aires
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "5433:5432" # Puerto externo 5433 para no chocar si el usuario tiene postgres local
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -18,33 +19,24 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  app: 
     build:
       context: .
-      dockerfile: backend/Dockerfile.backend
-    container_name: ferredesk_backend
+      dockerfile: Dockerfile
+    image: lautajuare/ferredesk:latest # Nombre de la imagen para producción
+    container_name: ferredesk_app
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      # Solo persistimos media y estáticos recolectados si es necesario
       - ./media:/app/media
-      - ./staticfiles:/app/staticfiles
+      # IMPORTANTE: Ya no montamos el código (- ./backend:/app) 
+      # porque queremos usar el código que está DENTRO de la imagen (producción)
     ports:
       - "8000:8000"
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
-    container_name: ferredesk_frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
     restart: unless-stopped
 
 volumes:
