@@ -42,12 +42,12 @@ def register(request):
             # Crear el perfil de cliente
             CliUsuario.objects.create(
                 user=user,
-                cuenta_activa=False  # Por defecto, la cuenta está inactiva
+                cuenta_activa=True  # La cuenta se activa automáticamente al registrarse
             )
             
             return JsonResponse({
                 'status': 'success',
-                'message': 'Usuario registrado exitosamente. La cuenta está pendiente de activación.'
+                'message': 'Usuario registrado exitosamente. Ya puedes iniciar sesión.'
             })
             
         except Exception as e:

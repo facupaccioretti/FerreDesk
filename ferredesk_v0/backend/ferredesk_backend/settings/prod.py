@@ -8,13 +8,11 @@ DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
-# Ruta donde Docker coloca el build del frontend (copiado por Dockerfile.backend)
-FRONTEND_BUILD_DIR = os.path.join(BASE_DIR, "frontend_build")
-# Directorio raíz del build de React que usan las vistas de serve_react_app
-REACT_APP_DIR = FRONTEND_BUILD_DIR
+# Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
+REACT_APP_DIR = os.path.join(BASE_DIR, 'react_frontend')
 
 TEMPLATES[0]["DIRS"] = [
-    FRONTEND_BUILD_DIR,
+    REACT_APP_DIR,
     os.path.join(BASE_DIR, "templates"),
 ]
 
@@ -22,8 +20,20 @@ TEMPLATES[0]["DIRS"] = [
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# En producción NO DEBE HABER STATICFILES_DIRS
-STATICFILES_DIRS = []
+# Directorio de estáticos de React (apuntamos a la subcarpeta 'static')
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'react_frontend', 'static'),
+]
+
+# Whitenoise sin manifest (mantiene nombres originales de React build)
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 # Base de datos desde variable de entorno
 DATABASES = {
@@ -41,3 +51,4 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+
