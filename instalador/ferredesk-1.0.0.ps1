@@ -48,6 +48,14 @@ $Script:DockerImage = "lautajuare/ferredesk:latest"
 
 # Timeouts
 $Script:DockerWaitTimeout = 600
+
+# ========================================
+#    EXIT CODES (CRÍTICO)
+# ========================================
+# Estos valores deben coincidir con los que espera Inno Setup
+$Script:EXIT_SUCCESS = 0          # Instalación exitosa
+$Script:EXIT_ERROR = -1           # Error genérico
+$Script:EXIT_NEEDS_RESTART = 3010 # Código estándar de Windows para "reinicio requerido"
 $Script:ServicesWaitTimeout = 300
 $Script:WSLWaitTimeout = 120
 
@@ -183,10 +191,29 @@ function Get-InstallationState {
     Initialize-InstallerStorage
     $state = $null
     
+    # Primero intentar leer del archivo JSON
     if (Test-Path $Script:StateFilePath) {
         try {
             $json = Get-Content -Path $Script:StateFilePath -Raw -ErrorAction Stop
             if ($json) { $state = $json | ConvertFrom-Json }
+        } catch { }
+    }
+    
+    # Si no hay JSON o está vacío, intentar leer del REGISTRO
+    # Esto es CRÍTICO para resume porque ISS borra el JSON al iniciar
+    if (-not $state -or [string]::IsNullOrWhiteSpace($state.CurrentPhase) -or $state.CurrentPhase -eq "FASE_0") {
+        try {
+            if (Test-Path $Script:RegistryBasePath) {
+                $regCurrentPhase = (Get-ItemProperty -Path $Script:RegistryBasePath -Name "CurrentPhase" -ErrorAction SilentlyContinue).CurrentPhase
+                $regInstallDir = (Get-ItemProperty -Path $Script:RegistryBasePath -Name "InstallDirectory" -ErrorAction SilentlyContinue).InstallDirectory
+                
+                if ($regCurrentPhase -and $regCurrentPhase -ne "FASE_0") {
+                    Write-Debug "Recuperando estado desde registro: $regCurrentPhase"
+                    $state = Get-DefaultState
+                    $state.CurrentPhase = $regCurrentPhase
+                    if ($regInstallDir) { $state.InstallDirectory = $regInstallDir }
+                }
+            }
         } catch { }
     }
     
@@ -641,6 +668,72 @@ function Test-ApplicationResponding {
 }
 
 # ========================================
+#    FUNCIONES DE MONITOREO DEL PROCESO PADRE
+# ========================================
+
+function Test-ParentProcessAlive {
+    param([int]$ParentProcessId)
+    try {
+        $parentProcess = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
+        return ($parentProcess -ne $null)
+    } catch {
+        return $false
+    }
+}
+
+function Start-ParentProcessMonitor {
+    param([int]$ParentProcessId)
+    
+    if (-not $ParentProcessId -or $ParentProcessId -le 0) {
+        Write-Debug "No se monitorea proceso padre (PID invalido o no provisto)"
+        return
+    }
+    
+    Write-Info "Iniciando monitor de proceso padre (PID: $ParentProcessId)..."
+    
+    $monitorLogFile = Join-Path (Split-Path -Path $Script:LogFile -Parent) "FerreDesk-Installer.parent_monitor.log"
+    
+    $monitorScript = {
+        param($ParentPid, $ScriptPid, $LogFile)
+        
+        function Log-Monitor {
+            param([string]$Msg)
+            try { Add-Content -Path $LogFile -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Msg" -ErrorAction SilentlyContinue } catch {}
+        }
+        
+        Log-Monitor "Monitor iniciado para ParentPid: $ParentPid, ScriptPid: $ScriptPid"
+        
+        while ($true) {
+            Start-Sleep -Seconds 2
+            $parent = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+            if (-not $parent) {
+                Log-Monitor "PADRE MUERTO (PID $ParentPid). Terminando script ($ScriptPid)..."
+                Stop-Process -Id $ScriptPid -Force -ErrorAction SilentlyContinue
+                break
+            }
+        }
+    }
+    
+    try {
+        $monitorJob = Start-Job -ScriptBlock $monitorScript -ArgumentList $ParentProcessId, $PID, $monitorLogFile
+        $Script:ParentMonitorJob = $monitorJob
+        Write-Debug "Monitor iniciado (Job ID: $($monitorJob.Id))"
+    } catch {
+        Write-Warning "No se pudo iniciar monitor de proceso padre: $($_.Exception.Message)"
+    }
+}
+
+# ========================================
+#    INICIO DE EJECUCION
+# ========================================
+
+# Iniciar monitoreo si se proveyó PID
+if ($ParentPid) {
+    Start-ParentProcessMonitor -ParentProcessId $ParentPid
+}
+
+
+# ========================================
 #    FASES DE INSTALACION
 # ========================================
 
@@ -686,26 +779,32 @@ function Invoke-Phase1 {
     Write-ProgressToInno -Mensaje "Instalando Docker Desktop" -Percent 55
     $dockerResult = Install-DockerDesktop
     
-    if ($wslResult.RequiresRestart -or $dockerResult.RequiresRestart -or $requiresRestart) {
-        $state.CurrentPhase = "FASE_2_PENDIENTE"
-        $state.RequiresRestart = $true
-        Set-InstallationState $state
-        
-        Write-Warning "========================================" 
-        Write-Warning "   REINICIO DEL SISTEMA REQUERIDO"
-        Write-Warning "========================================"
-        Write-Info "1. Reinicia tu computadora"
-        Write-Info "2. La instalacion continuara automaticamente"
-        Write-Info ""
-        Write-Info "Si la instalacion no continua automaticamente,"
-        Write-Info "ejecuta el instalador .exe nuevamente."
-        
-        return $Script:EXIT_NEEDS_RESTART
-    }
+    # FORZAR REINICIO SIEMPRE AL FINAL DE FASE 1
+    # Esto es CRÍTICO porque:
+    # 1. Las variables de entorno (PATH) de Docker no están disponibles hasta después del reinicio
+    # 2. El usuario podría no haber cerrado sesión desde la instalación de Docker
+    # 3. El grupo "docker-users" solo se aplica después del re-login
+    # Sin reinicio, Fase 2 y 3 fallarán con "docker: comando no reconocido"
     
     $state.CurrentPhase = "FASE_2_PENDIENTE"
+    $state.RequiresRestart = $true
+    # CRÍTICO: Guardar el ExitCode en el estado ANTES de retornar
+    # para que Inno Setup pueda leerlo del JSON
+    $state.ExitCode = "$Script:EXIT_NEEDS_RESTART"
     Set-InstallationState $state
-    return $Script:EXIT_SUCCESS
+    
+    Write-Warning "========================================"
+    Write-Warning "   REINICIO DEL SISTEMA REQUERIDO"
+    Write-Warning "========================================"
+    Write-Info "Es necesario reiniciar para aplicar cambios de configuracion."
+    Write-Info ""
+    Write-Info "1. Reinicia tu computadora"
+    Write-Info "2. La instalacion continuara automaticamente"
+    Write-Info ""
+    Write-Info "Si la instalacion no continua automaticamente,"
+    Write-Info "ejecuta el instalador .exe nuevamente."
+    
+    return $Script:EXIT_NEEDS_RESTART
 }
 
 function Invoke-Phase2 {
@@ -880,19 +979,38 @@ function Main {
         Set-MainExitCodeAndExit -Codigo $Script:EXIT_SUCCESS -Contexto "ya instalado"
     }
     
+    # Ejecutar fases y capturar el primer error/reinicio
+    $finalResult = $Script:EXIT_SUCCESS
+    $finalContext = "completado"
+    
     foreach ($phase in $phases) {
         $result = switch ($phase) {
             "FASE_1" { Invoke-Phase1 }
             "FASE_2" { Invoke-Phase2 }
             "FASE_3" { Invoke-Phase3 }
         }
+
+        # --- FIX COMPATIBILIDAD LEGACY ---
+        # Asegurar que $result sea un solo entero, no un array
+        # Si funciones como Start-DockerDesktop o Update-WSL escapan booleanos al pipeline,
+        # el resultado será un array. Tomamos el último elemento (el exit code real).
+        if ($result -is [Array]) {
+            Write-Debug "Detectado retorno multiple en fase $phase. Saneando resultado..."
+            $result = $result[-1]
+        }
+        $result = [int]$result
+        # ---------------------------------
         
+        # Si la fase no fue exitosa, detener inmediatamente
         if ($result -ne $Script:EXIT_SUCCESS) {
-            Set-MainExitCodeAndExit -Codigo $result -Contexto $phase
+            $finalResult = $result
+            $finalContext = $phase
+            break  # CRÍTICO: Salir del bucle inmediatamente
         }
     }
     
-    Set-MainExitCodeAndExit -Codigo $Script:EXIT_SUCCESS -Contexto "completado"
+    # Salir UNA SOLA VEZ con el resultado final
+    Set-MainExitCodeAndExit -Codigo $finalResult -Contexto $finalContext
 }
 
 Main
