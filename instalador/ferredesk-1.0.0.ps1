@@ -44,7 +44,7 @@ $Script:DefaultStateFile = Join-Path $Script:ProgramDataRoot "installer-state.js
 $Script:RegistryBasePath = "HKLM:\SOFTWARE\FerreDesk\Installer"
 
 # Imagen Docker Hub
-$Script:DockerImage = "lautajuare/ferredesk:latest"
+$Script:DockerImage = "lautajuare/ferredesk:1.0.0"
 
 # Timeouts
 $Script:DockerWaitTimeout = 600
@@ -486,12 +486,21 @@ function New-EnvironmentFile {
     $secretKey = New-SecureSecretKey
     $dbPassword = New-SecurePassword
     
+    # Extraer version de la imagen Docker (formato: imagen:version)
+    $dockerVersion = "1.0.0"
+    if ($Script:DockerImage -match ':([^:]+)$') {
+        $dockerVersion = $matches[1]
+    }
+    
     $envContent = @"
 # FerreDesk Production Configuration
 # Generado automaticamente - NO COMPARTIR
 
 ENVIRONMENT=production
 DEBUG=False
+
+# FerreDesk Version
+FERREDESK_VERSION=$dockerVersion
 
 # Database
 POSTGRES_DB=ferredesk
@@ -564,7 +573,7 @@ services:
       retries: 5
 
   app:
-    image: $Script:DockerImage
+    image: lautajuare/ferredesk:`${FERREDESK_VERSION}
     container_name: ferredesk_app
     depends_on:
       postgres:
