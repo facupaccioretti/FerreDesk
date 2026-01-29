@@ -116,10 +116,14 @@ class StockViewSet(viewsets.ModelViewSet):
         """
         queryset = super().get_queryset()
 
-        # Búsqueda exacta por código (para el grid)
-        codigo_exacto = self.request.query_params.get('codvta', None)
-        if codigo_exacto:
-            queryset = queryset.filter(codvta__iexact=codigo_exacto)
+        # Búsqueda unificada por código (para el grid): param "codigo" busca en codvta O código de barras.
+        # No usamos "codvta" aquí para evitar que DjangoFilterBackend aplique filtro extra y anule el OR.
+        codigo_unificado = self.request.query_params.get('codigo', None)
+        if codigo_unificado:
+            codigo_trim = codigo_unificado.strip()
+            queryset = queryset.filter(
+                Q(codvta__iexact=codigo_trim) | Q(codigo_barras__iexact=codigo_trim)
+            )
         else:
             # Búsqueda general por código o denominación (para otros casos)
             termino_busqueda = self.request.query_params.get('search', None)

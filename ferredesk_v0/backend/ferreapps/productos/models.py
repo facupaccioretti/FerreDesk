@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 
 class Ferreteria(models.Model):
@@ -6,7 +6,6 @@ class Ferreteria(models.Model):
     direccion = models.CharField(max_length=200)
     telefono = models.CharField(max_length=20)
     email = models.EmailField(blank=True, null=True)
-    activa = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     
     SITUACION_IVA_CHOICES = [
@@ -107,6 +106,14 @@ class Ferreteria(models.Model):
     permitir_stock_negativo = models.BooleanField(
         default=False,
         help_text='Permite que el sistema permita vender con stock negativo por defecto'
+    )
+    
+    # Prefijo para códigos de barras Code 128 internos
+    prefijo_codigo_barras = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text='Siglas para códigos de barras internos Code 128 (ej: ABC, MIF). Si está vacío, se usa solo el número secuencial.'
     )
     
     # Estado de configuración ARCA
@@ -332,6 +339,51 @@ class Proveedor(models.Model):
     class Meta:
         db_table = 'PROVEEDORES'
 
+
+class ContadorCodigoBarras(models.Model):
+    """Contador secuencial para generación de códigos de barras internos."""
+    
+    TIPO_EAN13 = 'EAN13'
+    TIPO_CODE128 = 'CODE128'
+    
+    TIPO_CHOICES = [
+        (TIPO_EAN13, 'EAN-13'),
+        (TIPO_CODE128, 'Code 128'),
+    ]
+    
+    tipo = models.CharField(
+        max_length=10,
+        unique=True,
+        choices=TIPO_CHOICES,
+        db_column='TIPO_CODIGO'
+    )
+    ultimo_numero = models.BigIntegerField(
+        default=0,
+        db_column='ULTIMO_NUMERO'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'CONTADOR_CODIGO_BARRAS'
+        verbose_name = 'Contador de Código de Barras'
+        verbose_name_plural = 'Contadores de Códigos de Barras'
+    
+    def __str__(self):
+        return f"{self.tipo}: {self.ultimo_numero}"
+    
+    @classmethod
+    def obtener_siguiente_numero(cls, tipo: str) -> int:
+        """Obtiene el siguiente número secuencial de forma atómica."""
+        with transaction.atomic():
+            contador, _ = cls.objects.select_for_update().get_or_create(
+                tipo=tipo,
+                defaults={'ultimo_numero': 0}
+            )
+            contador.ultimo_numero += 1
+            contador.save()
+            return contador.ultimo_numero
+
+
 class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
@@ -382,12 +434,36 @@ class Stock(models.Model):
         db_column='ES_PRECIO_LISTA_CERO_MANUAL',
         help_text='TRUE si el precio fue cargado manualmente, FALSE si se calcula desde costo+margen'
     )
+    
+    # Campos para código de barras
+    TIPO_CODIGO_BARRAS_CHOICES = [
+        ('EAN13', 'EAN-13 Interno'),
+        ('CODE128', 'Code 128 Interno'),
+        ('EXTERNO', 'Código externo/escaneado'),
+    ]
+    codigo_barras = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        unique=True,
+        db_column='STO_CODIGO_BARRAS',
+        help_text='Código de barras asociado al producto'
+    )
+    tipo_codigo_barras = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        choices=TIPO_CODIGO_BARRAS_CHOICES,
+        db_column='STO_TIPO_CODIGO_BARRAS',
+        help_text='Tipo de código de barras (EAN13, CODE128, EXTERNO)'
+    )
 
     class Meta:
         db_table = 'STOCK'
         indexes = [
             models.Index(fields=['acti']),
             models.Index(fields=['proveedor_habitual']),
+            models.Index(fields=['codigo_barras']),
         ]
 
 class StockProve(models.Model):

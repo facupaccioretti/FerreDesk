@@ -21,6 +21,9 @@ import {
   useValidaciones 
 } from "./herramientastockform"
 
+// Importar módulo de códigos de barras
+import { CodigoBarrasModal } from "./codigoBarras"
+
 // Constantes de validación de campos (evitar valores mágicos)
 // Longitudes máximas según el modelo en backend (productos/models.py)
 const LONGITUD_MAX_CODIGO_VENTA = 15 // Stock.codvta CharField(max_length=15)
@@ -204,40 +207,23 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   // Estados adicionales que no están en los hooks
   const [showAsociarCodigo, setShowAsociarCodigo] = useState(false)
   const [mostrarTooltipStock, setMostrarTooltipStock] = useState(false)
+  const [showCodigoBarrasModal, setShowCodigoBarrasModal] = useState(false)
+  
+  // El código de barras se guarda en form para persistir entre cambios de pestaña
+  // Usamos form como fuente de verdad, con fallback a stock (valor de BD)
+  const codigoBarrasEfectivo = form.codigo_barras ?? stock?.codigo_barras ?? null
+  const tipoCodigoBarrasEfectivo = form.tipo_codigo_barras ?? stock?.tipo_codigo_barras ?? null
+  
+  // Callback cuando el modal cambia el código
+  const handleCodigoBarrasChange = (codigo, tipo) => {
+    // Actualizar el form para que se guarde con el producto y persista entre pestañas
+    updateForm({
+      codigo_barras: codigo,
+      tipo_codigo_barras: tipo
+    })
+  }
 
   
-
-  useEffect(() => {
-    if (!stock) return
-    // Usar SIEMPRE el detalle enriquecido del producto: stock.stock_proveedores embebido
-    const stockProveedoresDetallado = Array.isArray(stock.stock_proveedores)
-      ? stock.stock_proveedores.map((sp) => ({
-          ...sp,
-          proveedor_id: sp.proveedor_id || (sp.proveedor && (sp.proveedor.id || sp.proveedor)),
-        }))
-      : []
-
-    setForm({
-      codvta: stock.codvta || "",
-      deno: stock.deno || "",
-      unidad: stock.unidad || "",
-      cantmin: stock.cantmin || 0,
-      proveedor_habitual_id:
-        stock.proveedor_habitual && typeof stock.proveedor_habitual === "object"
-          ? String(stock.proveedor_habitual.id)
-          : stock.proveedor_habitual && typeof stock.proveedor_habitual === "string"
-            ? stock.proveedor_habitual
-            : "",
-      idfam1: stock.idfam1 && typeof stock.idfam1 === "object" ? stock.idfam1.id : (stock.idfam1 ?? null),
-      idfam2: stock.idfam2 && typeof stock.idfam2 === "object" ? stock.idfam2.id : (stock.idfam2 ?? null),
-      idfam3: stock.idfam3 && typeof stock.idfam3 === "object" ? stock.idfam3.id : (stock.idfam3 ?? null),
-      idaliiva: stock.idaliiva && typeof stock.idaliiva === "object" ? stock.idaliiva.id : (stock.idaliiva ?? ""),
-      margen: stock.margen !== undefined && stock.margen !== null ? String(stock.margen) : "",
-      acti: stock.acti !== undefined && stock.acti !== null ? String(stock.acti) : "",
-      id: stock.id,
-      stock_proveedores: stockProveedoresDetallado,
-    })
-  }, [stock, setForm])
 
   // Persistencia automática del borrador la maneja useStockForm (clave dinámica)
 
@@ -930,6 +916,46 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                     </div>
                   </div>
                   
+                  {/* Código de Barras */}
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Código de Barras</span>
+                    <div className="min-w-[180px] text-right flex items-center gap-2 justify-end">
+                      {codigoBarrasEfectivo ? (
+                        <>
+                          <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                            {codigoBarrasEfectivo}
+                          </span>
+                          {/* Indicador si el código es local (no guardado aún) */}
+                          {form.codigo_barras && form.codigo_barras !== stock?.codigo_barras && (
+                            <span className="text-[10px] text-amber-600" title="Se guardará con el producto">
+                              (pendiente)
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowCodigoBarrasModal(true)}
+                            className="text-orange-600 hover:text-orange-800 text-xs"
+                            title="Gestionar código de barras"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowCodigoBarrasModal(true)}
+                          className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-white hover:bg-slate-50 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 flex items-center justify-center gap-1"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 122.88 97.04" fill="currentColor">
+                            <path d="M2.38,0h18.33v4.76H4.76V17.2H0V2.38C0,1.07,1.07,0,2.38,0L2.38,0z M17.92,16.23h8.26v64.58h-8.26V16.23L17.92,16.23z M69.41,16.23h5.9v64.58h-5.9V16.23L69.41,16.23z M57.98,16.23h4.42v64.58h-4.42V16.23L57.98,16.23z M33.19,16.23h2.51v64.58h-2.51 V16.23L33.19,16.23z M97.59,16.23h7.37v64.58h-7.37V16.23L97.59,16.23z M82.32,16.23h8.26v64.58h-8.26V16.23L82.32,16.23z M42.71,16.23h8.26v64.58h-8.26V16.23L42.71,16.23z M4.76,79.84v12.44h15.95v4.76H2.38C1.07,97.04,0,95.98,0,94.66V79.84H4.76 L4.76,79.84z M103.4,0h17.1c1.31,0,2.38,1.07,2.38,2.38V17.2h-4.76V4.76H103.4V0L103.4,0z M122.88,79.84v14.82 c0,1.31-1.07,2.38-2.38,2.38h-17.1v-4.76h14.72V79.84H122.88L122.88,79.84z"/>
+                          </svg>
+                          Agregar código
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   
                 </div>
               </div>
@@ -1475,6 +1501,18 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         </form>
       </div>
 
+      {/* Modal de Código de Barras */}
+      <CodigoBarrasModal
+        open={showCodigoBarrasModal}
+        onClose={() => setShowCodigoBarrasModal(false)}
+        producto={stock || { id: null, codvta: form.codvta, deno: form.deno }}
+        codigoBarrasInicial={codigoBarrasEfectivo}
+        tipoCodigoBarrasInicial={tipoCodigoBarrasEfectivo}
+        onCodigoChange={handleCodigoBarrasChange}
+        onActualizado={() => {
+          // Refrescar datos del producto si es necesario (solo para productos existentes)
+        }}
+      />
 
     </div>
   )

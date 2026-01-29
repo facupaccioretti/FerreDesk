@@ -279,6 +279,29 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
           </div>
         </div>
 
+        {/* Códigos de Barras */}
+        <div className="flex items-center border-b border-slate-100 pb-3">
+          <div className="w-1/3">
+            <h5 className="font-medium text-slate-800">Prefijo Códigos de Barras</h5>
+            <p className="text-sm text-slate-600">Siglas para códigos Code 128 internos (ej: ABC, MIF)</p>
+          </div>
+          <div className="w-2/3">
+            <input
+              type="text"
+              value={config.prefijo_codigo_barras || ""}
+              onChange={(e) => onConfigChange("prefijo_codigo_barras", e.target.value.toUpperCase())}
+              className="w-full max-w-[200px] border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 uppercase"
+              placeholder="Ej: ABC"
+              maxLength={10}
+              disabled={loading}
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              {config.prefijo_codigo_barras 
+                ? `Los códigos se generarán como: ${config.prefijo_codigo_barras}-00000001`
+                : "Si está vacío, se generará solo el número: 00000001"}
+            </p>
+          </div>
+        </div>
 
       </div>
     </div>

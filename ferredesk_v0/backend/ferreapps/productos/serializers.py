@@ -77,6 +77,8 @@ class StockSerializer(serializers.ModelSerializer):
             'stock_total',
             # Campos de listas de precios
             'precio_lista_0', 'precio_lista_0_manual', 'precios_listas',
+            # Campos de código de barras
+            'codigo_barras', 'tipo_codigo_barras',
         ]
 
     def get_precios_listas(self, obj):

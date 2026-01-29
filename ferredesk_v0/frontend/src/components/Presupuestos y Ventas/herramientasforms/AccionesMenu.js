@@ -1,6 +1,6 @@
 "use client"
 
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../../Botones"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir } from "../../Botones"
 import usePortalTooltip from "./usePortalTooltip"
 
 /**
@@ -13,7 +13,7 @@ const AccionesMenu = ({
   botones = [],
 }) => {
   // Hook para manejar el portal del tooltip
-  const { visible, TooltipPortal, triggerProps } = usePortalTooltip({
+  const { TooltipPortal, triggerProps } = usePortalTooltip({
     placement: 'bottom', // El menú aparece debajo del botón
     offset: 8
   })
@@ -79,6 +79,7 @@ const AccionesMenu = ({
                           boton.componente === BotonGenerarPDF ? 'text-red-500' :
                           boton.componente === BotonVerDetalle ? 'text-slate-600' :
                           boton.componente === BotonNotaCredito ? 'text-orange-500' :
+                          boton.componente === BotonImprimir ? 'text-slate-600' :
                           'text-slate-600'
                         }`}
                       />

@@ -16,6 +16,38 @@ function getCookie(name) {
   return cookieValue
 }
 
+/**
+ * Transforma los datos del producto (API) al formato esperado por el formulario.
+ * El backend devuelve objetos anidados para relaciones (idaliiva, idfam1..3, proveedor_habitual);
+ * los selects esperan IDs (número o string).
+ */
+function stockAFormulario(stock) {
+  const idDeRelacion = (obj) => {
+    if (obj == null) return null
+    if (typeof obj === "object" && "id" in obj) return obj.id
+    if (typeof obj === "number" || typeof obj === "string") return obj
+    return null
+  }
+  const idAli = idDeRelacion(stock.idaliiva)
+  const idFam1 = idDeRelacion(stock.idfam1)
+  const idFam2 = idDeRelacion(stock.idfam2)
+  const idFam3 = idDeRelacion(stock.idfam3)
+  const provHab = stock.proveedor_habitual
+  const proveedorHabitualId = provHab != null
+    ? (typeof provHab === "object" && "id" in provHab ? String(provHab.id) : String(provHab))
+    : ""
+
+  return {
+    ...stock,
+    id: stock.id,
+    idaliiva: idAli ?? "",
+    idfam1: idFam1 ?? null,
+    idfam2: idFam2 ?? null,
+    idfam3: idFam3 ?? null,
+    proveedor_habitual_id: proveedorHabitualId,
+  }
+}
+
 const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
 // Claves para almacenar borradores de stock
   const claveBorrador = useMemo(() => {
@@ -33,9 +65,9 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
     } catch (e) {
       // Ignorar errores de parseo
     }
-    // Fallback a datos iniciales
+    // Fallback a datos iniciales: normalizar objetos anidados → IDs para selects
     if (stock) {
-      return { ...stock, id: stock.id }
+      return stockAFormulario(stock)
     }
     return {
       codvta: "",

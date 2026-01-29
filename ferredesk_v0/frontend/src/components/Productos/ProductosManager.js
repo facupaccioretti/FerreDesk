@@ -15,6 +15,9 @@ import FamiliasModal from "./FamiliasModal"
 // Importar el modal de listas de precios
 import ListasPrecioModal from "./ListasPrecioModal"
 
+// Modal de impresión de etiquetas de código de barras
+import { ImprimirEtiquetasModal } from "./codigoBarras"
+
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
@@ -72,6 +75,7 @@ const ProductosManager = () => {
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null })
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
   const [showListasPrecioModal, setShowListasPrecioModal] = useState(false)
+  const [productoParaImprimirEtiquetas, setProductoParaImprimirEtiquetas] = useState(null)
   const [user, setUser] = useState({ username: "ferreadmin" })
 
   // Estado de búsqueda para ProductosTable
@@ -362,6 +366,7 @@ const ProductosManager = () => {
                   deleteProveedor={deleteProveedor}
                   deleteProducto={deleteProducto}
                   onEdit={handleEditProducto}
+                  onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                   onUpdateStock={handleUpdateStock}
                   searchProductos={searchProductos}
                   setSearchProductos={setSearchProductos}
@@ -399,6 +404,7 @@ const ProductosManager = () => {
                   deleteProveedor={deleteProveedor}
                   deleteProducto={deleteProducto}
                   onEdit={handleEditProducto}
+                  onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                   onUpdateStock={handleUpdateStock}
                   searchProductos={searchProductos}
                   setSearchProductos={setSearchProductos}
@@ -505,6 +511,12 @@ const ProductosManager = () => {
         open={showListasPrecioModal}
         onClose={() => setShowListasPrecioModal(false)}
         onEditProducto={handleEditProducto}
+      />
+
+      <ImprimirEtiquetasModal
+        open={!!productoParaImprimirEtiquetas}
+        onClose={() => setProductoParaImprimirEtiquetas(null)}
+        productos={productoParaImprimirEtiquetas ? [productoParaImprimirEtiquetas] : []}
       />
     </div>
   )

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react"
 import Tabla from "../Tabla"
-import { BotonEditar, BotonEliminar } from "../Botones"
+import { BotonEditar, BotonEliminar, BotonImprimir } from "../Botones"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 
 function ProveedoresModal({ open, onClose, proveedores, setProveedores }) {
@@ -163,6 +163,7 @@ export default function ProductosTable({
   updateProveedor,
   deleteProducto,
   onEdit,
+  onImprimirCodigoBarras,
   onUpdateStock,
   fam1Filtro,
   setFam1Filtro,
@@ -183,9 +184,9 @@ export default function ProductosTable({
   ordenamientoControlado = null,
   cargando = false,
 }) {
-  // Función para generar los botones de acciones para productos
+  // Función para generar los botones de acciones para productos (Opción B: imprimir solo si tiene código)
   const generarBotonesProducto = (producto) => {
-    return [
+    const botones = [
       {
         componente: BotonEditar,
         onClick: () => onEdit(producto),
@@ -197,6 +198,14 @@ export default function ProductosTable({
         titulo: "Eliminar producto"
       }
     ]
+    if (producto.codigo_barras && typeof onImprimirCodigoBarras === "function") {
+      botones.push({
+        componente: BotonImprimir,
+        onClick: () => onImprimirCodigoBarras(producto),
+        titulo: "Imprimir código de barras"
+      })
+    }
+    return botones
   }
   const [showProvModal, setShowProvModal] = useState(false)
   // Removido el estado local search

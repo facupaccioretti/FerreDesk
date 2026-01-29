@@ -81,8 +81,7 @@ const ItemsGridPresupuesto = forwardRef(
     
     // ------------------------------------------------------------
     // Búsqueda remota por código (ventas/presupuesto/NC)
-    // Usa el ViewSet de Stock: GET /api/productos/stock/?codvta=<codigo>
-    // Ahora incluye información del proveedor habitual
+    // Búsqueda unificada: param "codigo" hace que el backend busque por codvta O código de barras (sin filtro extra).
     // ------------------------------------------------------------
     const buscarProductoPorCodigo = useCallback(async (codigo) => {
       // En modo readOnly, no buscar productos
@@ -91,14 +90,18 @@ const ItemsGridPresupuesto = forwardRef(
       const codigoTrim = (codigo || '').toString().trim()
       if (!codigoTrim) return null
       try {
-        const url = `/api/productos/stock/?codvta=${encodeURIComponent(codigoTrim)}`
+        const url = `/api/productos/stock/?codigo=${encodeURIComponent(codigoTrim)}`
         const resp = await fetch(url, { credentials: 'include' })
         if (!resp.ok) return null
         const data = await resp.json()
         const lista = Array.isArray(data) ? data : (data.results || [])
         if (!Array.isArray(lista) || lista.length === 0) return null
-        // Elegir coincidencia exacta por codvta si existe, ignorando mayúsculas/minúsculas
-        const exacta = lista.find(p => (p.codvta || p.codigo || '').toString().toLowerCase() === codigoTrim.toLowerCase())
+        // Preferir coincidencia exacta por codvta o código de barras, sino el primero
+        const exacta = lista.find(
+          p =>
+            (p.codvta || p.codigo || '').toString().toLowerCase() === codigoTrim.toLowerCase() ||
+            (p.codigo_barras || '').toString().toLowerCase() === codigoTrim.toLowerCase()
+        )
         return exacta || lista[0]
       } catch (_) {
         return null
