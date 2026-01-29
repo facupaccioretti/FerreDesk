@@ -367,6 +367,21 @@ class Stock(models.Model):
         default='S',
         db_column='STO_ACTI'
     )
+    
+    # Campos para Lista de Precios 0 (precio base)
+    precio_lista_0 = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='PRECIO_VENTA_LISTA_CERO_SIN_IVA',
+        help_text='Precio de venta base (Lista 0) sin IVA'
+    )
+    precio_lista_0_manual = models.BooleanField(
+        default=False,
+        db_column='ES_PRECIO_LISTA_CERO_MANUAL',
+        help_text='TRUE si el precio fue cargado manualmente, FALSE si se calcula desde costo+margen'
+    )
 
     class Meta:
         db_table = 'STOCK'
@@ -469,5 +484,136 @@ class VistaStockProducto(models.Model):
         db_table = 'VISTA_STOCK_PRODUCTO'
         verbose_name = 'Vista de Stock de Producto'
         verbose_name_plural = 'Vistas de Stock de Productos'
+
+
+# =============================================================================
+# SISTEMA DE LISTAS DE PRECIOS
+# =============================================================================
+
+class ListaPrecio(models.Model):
+    """
+    Configuración de márgenes generales por lista de precios (0-4).
+    - Lista 0: Precio base (sin descuento/recargo sobre sí misma)
+    - Listas 1-4: Aplican margen_descuento sobre Lista 0
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_LISTA_DE_PRECIOS')
+    numero = models.IntegerField(unique=True, db_column='NUMERO_LISTA_DE_PRECIOS')
+    nombre = models.CharField(max_length=50, db_column='NOMBRE_LISTA_DE_PRECIOS')
+    margen_descuento = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        db_column='PORCENTAJE_AJUSTE_SOBRE_LISTA_CERO',
+        help_text='Porcentaje de descuento (-) o recargo (+) sobre Lista 0'
+    )
+    activo = models.BooleanField(default=True, db_column='ESTA_ACTIVA')
+    fecha_actualizacion = models.DateTimeField(auto_now=True, db_column='FECHA_ACTUALIZACION')
+
+    class Meta:
+        db_table = 'LISTAS_DE_PRECIOS'
+        verbose_name = 'Lista de Precios'
+        verbose_name_plural = 'Listas de Precios'
+        ordering = ['numero']
+
+    def __str__(self):
+        return f"Lista {self.numero} - {self.nombre}"
+
+
+class PrecioProductoLista(models.Model):
+    """
+    Precio de un producto para una lista específica (1-4).
+    La Lista 0 se almacena directamente en Stock.precio_lista_0.
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_PRECIO_DE_PRODUCTO_POR_LISTA_DE_PRECIOS')
+    stock = models.ForeignKey(
+        'Stock',
+        on_delete=models.CASCADE,
+        db_column='ID_PRODUCTO_STOCK',
+        related_name='precios_listas'
+    )
+    lista_numero = models.IntegerField(db_column='NUMERO_LISTA_DE_PRECIOS')
+    precio = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        db_column='PRECIO_VENTA_SIN_IVA'
+    )
+    precio_manual = models.BooleanField(
+        default=False,
+        db_column='ES_PRECIO_MANUAL',
+        help_text='TRUE si fue cargado manualmente, FALSE si es calculado'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True, db_column='FECHA_ACTUALIZACION')
+    fecha_carga_manual = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column='FECHA_CARGA_MANUAL',
+    )
+    usuario_carga_manual = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column='USUARIO_CARGA_MANUAL',
+    )
+
+    class Meta:
+        db_table = 'PRECIOS_DE_PRODUCTOS_POR_LISTA_DE_PRECIOS'
+        verbose_name = 'Precio de Producto por Lista'
+        verbose_name_plural = 'Precios de Productos por Lista'
+        unique_together = (('stock', 'lista_numero'),)
+        indexes = [
+            models.Index(fields=['stock', 'lista_numero']),
+            models.Index(fields=['lista_numero']),
+            models.Index(fields=['precio_manual']),
+        ]
+
+    def __str__(self):
+        tipo = "Manual" if self.precio_manual else "Calculado"
+        return f"{self.stock.codvta} - Lista {self.lista_numero}: ${self.precio} ({tipo})"
+
+
+class ActualizacionListaDePrecios(models.Model):
+    """
+    Registro de auditoría para actualizaciones de márgenes de listas.
+    Permite rastrear cuándo se actualizó una lista y cuántos productos
+    quedaron sin recalcular por tener precio manual.
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_ACTUALIZACION_DE_LISTA_DE_PRECIOS')
+    lista_numero = models.IntegerField(db_column='NUMERO_LISTA_DE_PRECIOS')
+    porcentaje_anterior = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        db_column='PORCENTAJE_ANTERIOR'
+    )
+    porcentaje_nuevo = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        db_column='PORCENTAJE_NUEVO'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now_add=True, db_column='FECHA_ACTUALIZACION')
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column='USUARIO_ID'
+    )
+    cantidad_productos_recalculados = models.IntegerField(
+        default=0,
+        db_column='CANTIDAD_PRODUCTOS_RECALCULADOS'
+    )
+    cantidad_productos_manuales_no_recalculados = models.IntegerField(
+        default=0,
+        db_column='CANTIDAD_PRODUCTOS_CON_PRECIO_MANUAL_NO_RECALCULADOS'
+    )
+
+    class Meta:
+        db_table = 'ACTUALIZACIONES_DE_LISTAS_DE_PRECIOS'
+        verbose_name = 'Actualización de Lista de Precios'
+        verbose_name_plural = 'Actualizaciones de Listas de Precios'
+        ordering = ['-fecha_actualizacion']
+
+    def __str__(self):
+        return f"Lista {self.lista_numero}: {self.porcentaje_anterior}% → {self.porcentaje_nuevo}% ({self.fecha_actualizacion.strftime('%d/%m/%Y %H:%M')})"
 
 

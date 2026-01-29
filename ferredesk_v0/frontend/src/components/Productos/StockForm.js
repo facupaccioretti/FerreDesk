@@ -9,6 +9,8 @@ import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
+import { useListasPrecioAPI, usePreciosProductoListaAPI } from "../../utils/useListasPrecioAPI"
+import { calcularPrecioLista, calcularPrecioLista0, calcularMargenDesdePrecios } from "../../utils/calcularPrecioLista"
 
 // Importar hooks modulares
 import { 
@@ -73,6 +75,22 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // Hook para detectar denominaciones similares
   const { sugerencias, isLoading: isLoadingSugerencias, error: errorSugerencias, mostrarTooltip, handleDenominacionBlur, limpiarSugerencias, toggleTooltip } = useDetectorDenominaciones()
+
+  // Hooks para listas de precios
+  const { listas: listasPrecio } = useListasPrecioAPI()
+  const { guardarPreciosProducto } = usePreciosProductoListaAPI()
+
+  // Estados para precios de listas
+  const [preciosListas, setPreciosListas] = useState({
+    lista0: { precio: '', manual: false },
+    lista1: { precio: '', manual: false },
+    lista2: { precio: '', manual: false },
+    lista3: { precio: '', manual: false },
+    lista4: { precio: '', manual: false },
+  })
+  
+  // Estado para tooltips de precios manuales
+  const [mostrarTooltipPrecioManual, setMostrarTooltipPrecioManual] = useState(null)
 
   // Hooks modulares
   const { 
@@ -238,10 +256,171 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         })
     }
   }, [modo, form.id, setForm])
-  
 
+  // Efecto para inicializar precios de listas cuando se carga el producto (modo edición)
+  useEffect(() => {
+    if (!stock) return
+    
+    // Inicializar precio Lista 0 desde el producto
+    const precioLista0 = stock.precio_lista_0 || ''
+    const esManualLista0 = stock.precio_lista_0_manual || false
+    
+    // Inicializar precios de listas 1-4 desde precios_listas
+    const preciosListasIniciales = {
+      lista0: { precio: precioLista0, manual: esManualLista0 },
+      lista1: { precio: '', manual: false },
+      lista2: { precio: '', manual: false },
+      lista3: { precio: '', manual: false },
+      lista4: { precio: '', manual: false },
+    }
+    
+    // Cargar precios existentes de listas 1-4
+    if (Array.isArray(stock.precios_listas)) {
+      stock.precios_listas.forEach(pl => {
+        const key = `lista${pl.lista_numero}`
+        if (preciosListasIniciales[key]) {
+          preciosListasIniciales[key] = {
+            precio: pl.precio || '',
+            manual: pl.precio_manual || false,
+          }
+        }
+      })
+    }
+    
+    setPreciosListas(preciosListasIniciales)
+  }, [stock])
 
+  // Obtener costo del proveedor habitual
+  const obtenerCostoProveedorHabitual = () => {
+    const provHabId = form.proveedor_habitual_id
+    if (!provHabId) return 0
+    
+    // Buscar en stockProveParaMostrar o en stock.stock_proveedores
+    const spEncontrado = stockProveParaMostrar.find(
+      sp => String(sp.proveedor?.id || sp.proveedor) === String(provHabId)
+    )
+    return Number(spEncontrado?.costo || 0)
+  }
 
+  // Función para calcular precio Lista 0 desde costo + margen
+  const calcularPrecioLista0Automatico = () => {
+    const costo = obtenerCostoProveedorHabitual()
+    const margen = Number(form.margen || 0)
+    if (costo > 0 && margen >= 0) {
+      return calcularPrecioLista0(costo, margen)
+    }
+    return 0
+  }
+
+  // Función para recalcular precios de listas 1-4 desde Lista 0
+  const recalcularPreciosListas = (precioLista0) => {
+    if (!precioLista0 || precioLista0 <= 0) return
+
+    setPreciosListas(prev => {
+      const nuevos = { ...prev }
+      
+      // Para cada lista 1-4, si no es manual, recalcular
+      for (let i = 1; i <= 4; i++) {
+        const key = `lista${i}`
+        if (!nuevos[key].manual) {
+          const listaConfig = listasPrecio.find(l => l.numero === i)
+          const margenLista = Number(listaConfig?.margen_descuento || 0)
+          nuevos[key] = {
+            ...nuevos[key],
+            precio: calcularPrecioLista(precioLista0, margenLista),
+          }
+        }
+      }
+      
+      return nuevos
+    })
+  }
+
+  // Handler para cuando cambia el precio de Lista 0
+  const handlePrecioLista0Change = (valor, esManual = false) => {
+    const precioNum = Number(valor) || 0
+    
+    setPreciosListas(prev => ({
+      ...prev,
+      lista0: { precio: precioNum || valor, manual: esManual },
+    }))
+    
+    // Si se ingresa un precio manual, recalcular el margen
+    if (esManual && precioNum > 0) {
+      const costo = obtenerCostoProveedorHabitual()
+      if (costo > 0) {
+        const nuevoMargen = calcularMargenDesdePrecios(precioNum, costo)
+        setForm(prev => ({ ...prev, margen: String(nuevoMargen) }))
+      }
+    }
+    
+    // Recalcular precios de listas 1-4
+    if (precioNum > 0) {
+      recalcularPreciosListas(precioNum)
+    }
+  }
+
+  // Handler para cuando cambia el precio de una lista (1-4)
+  const handlePrecioListaChange = (listaNumero, valor, esManual = false) => {
+    const key = `lista${listaNumero}`
+    const precioNum = Number(valor) || 0
+    
+    setPreciosListas(prev => ({
+      ...prev,
+      [key]: { precio: precioNum || valor, manual: esManual },
+    }))
+  }
+
+  // Handler para toggle de precio manual
+  const handleTogglePrecioManual = (listaNumero) => {
+    const key = `lista${listaNumero}`
+    
+    setPreciosListas(prev => {
+      const nuevoManual = !prev[key].manual
+      
+      // Si se desactiva el modo manual, recalcular el precio
+      if (!nuevoManual) {
+        if (listaNumero === 0) {
+          // Recalcular Lista 0 desde costo + margen
+          const precioCalculado = calcularPrecioLista0Automatico()
+          return {
+            ...prev,
+            [key]: { precio: precioCalculado, manual: false },
+          }
+        } else {
+          // Recalcular lista 1-4 desde Lista 0
+          const precioLista0 = Number(prev.lista0.precio) || 0
+          const listaConfig = listasPrecio.find(l => l.numero === listaNumero)
+          const margenLista = Number(listaConfig?.margen_descuento || 0)
+          const precioCalculado = calcularPrecioLista(precioLista0, margenLista)
+          return {
+            ...prev,
+            [key]: { precio: precioCalculado, manual: false },
+          }
+        }
+      }
+      
+      return {
+        ...prev,
+        [key]: { ...prev[key], manual: nuevoManual },
+      }
+    })
+  }
+
+  // Efecto para recalcular precios cuando cambia el margen (si Lista 0 no es manual)
+  useEffect(() => {
+    if (!preciosListas.lista0.manual && form.margen) {
+      const precioCalculado = calcularPrecioLista0Automatico()
+      if (precioCalculado > 0) {
+        setPreciosListas(prev => ({
+          ...prev,
+          lista0: { ...prev.lista0, precio: precioCalculado },
+        }))
+        recalcularPreciosListas(precioCalculado)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.margen, form.proveedor_habitual_id])
 
 
 
@@ -283,9 +462,16 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
       return
     }
     
+    // Preparar formulario con precios de lista 0
+    const formConPrecios = {
+      ...form,
+      precio_lista_0: Number(preciosListas.lista0.precio) || null,
+      precio_lista_0_manual: preciosListas.lista0.manual,
+    }
+    
     // Usar el hook de guardado atómico (maneja todo internamente)
     const resultado = await guardarProductoAtomico(
-      form,
+      formConPrecios,
       stockProvePendientes,
       codigosPendientes,
       proveedoresAgregados,
@@ -299,6 +485,21 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     )
     
     if (resultado.success) {
+      const productoId = resultado.data?.id || form.id
+      if (productoId) {
+        try {
+          const preciosAGuardar = [1, 2, 3, 4].map(i => ({
+            lista_numero: i,
+            precio: Number(preciosListas[`lista${i}`].precio) || 0,
+            precio_manual: preciosListas[`lista${i}`].manual,
+          }))
+          
+          await guardarPreciosProducto(productoId, preciosAGuardar)
+        } catch (errorPrecios) {
+          console.error('Error al guardar precios de listas:', errorPrecios)
+        }
+      }
+      
       try { localStorage.removeItem(claveBorrador) } catch (_) {}
     }
   }
@@ -1015,6 +1216,144 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Tarjeta Listas de Precios */}
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px]">
+                <h5 className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Listas de Precios
+                </h5>
+                <div className="divide-y divide-slate-200">
+                  {/* Precio Lista 0 (Base) */}
+                  <div className="py-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[12px] text-slate-700 font-semibold">Lista 0 (Base)</span>
+                        <span
+                          className="relative cursor-pointer"
+                          onMouseEnter={() => setMostrarTooltipPrecioManual(0)}
+                          onMouseLeave={() => setMostrarTooltipPrecioManual(null)}
+                        >
+                          <span className="w-3 h-3 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center">
+                            <svg className="w-2 h-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </span>
+                          {mostrarTooltipPrecioManual === 0 && (
+                            <span className="absolute left-4 top-0 z-20 bg-slate-800 text-white text-xs rounded px-2 py-1 shadow-lg w-48">
+                              Precio base calculado desde costo + margen. Puede editarse manualmente.
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1 text-[10px] text-slate-500">
+                          <input
+                            type="checkbox"
+                            checked={preciosListas.lista0.manual}
+                            onChange={() => handleTogglePrecioManual(0)}
+                            className="w-3 h-3 accent-orange-600"
+                          />
+                          Manual
+                        </label>
+                      </div>
+                    </div>
+                    <div className="mt-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-slate-500">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={preciosListas.lista0.precio}
+                          onChange={(e) => handlePrecioLista0Change(e.target.value, preciosListas.lista0.manual)}
+                          disabled={!preciosListas.lista0.manual}
+                          className={`w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-7 ${
+                            preciosListas.lista0.manual
+                              ? 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Separador visual */}
+                  <div className="py-1 bg-slate-100 -mx-2 px-2">
+                    <span className="text-[10px] text-slate-500 font-medium">Listas derivadas (desde Lista 0)</span>
+                  </div>
+
+                  {/* Precios Listas 1-4 */}
+                  {[1, 2, 3, 4].map((listaNum) => {
+                    const key = `lista${listaNum}`
+                    const listaConfig = listasPrecio.find(l => l.numero === listaNum)
+                    const nombreLista = listaConfig?.nombre || `Lista ${listaNum}`
+                    const margenLista = listaConfig?.margen_descuento || 0
+                    
+                    return (
+                      <div key={listaNum} className="py-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[12px] text-slate-700">{nombreLista}</span>
+                            <span className="text-[10px] text-slate-400">
+                              ({margenLista >= 0 ? '+' : ''}{margenLista}%)
+                            </span>
+                            {preciosListas[key].manual && (
+                              <span
+                                className="relative cursor-pointer"
+                                onMouseEnter={() => setMostrarTooltipPrecioManual(listaNum)}
+                                onMouseLeave={() => setMostrarTooltipPrecioManual(null)}
+                              >
+                                <span className="w-3 h-3 rounded-full bg-amber-200 flex items-center justify-center">
+                                  <svg className="w-2 h-2 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                </span>
+                                {mostrarTooltipPrecioManual === listaNum && (
+                                  <span className="absolute left-4 top-0 z-20 bg-amber-800 text-white text-xs rounded px-2 py-1 shadow-lg w-52">
+                                    Precio cargado manualmente. No se actualizará al cambiar el margen general de esta lista.
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                          <label className="flex items-center gap-1 text-[10px] text-slate-500">
+                            <input
+                              type="checkbox"
+                              checked={preciosListas[key].manual}
+                              onChange={() => handleTogglePrecioManual(listaNum)}
+                              className="w-3 h-3 accent-orange-600"
+                            />
+                            Manual
+                          </label>
+                        </div>
+                        <div className="mt-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={preciosListas[key].precio}
+                              onChange={(e) => handlePrecioListaChange(listaNum, e.target.value, preciosListas[key].manual)}
+                              disabled={!preciosListas[key].manual}
+                              className={`w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-7 ${
+                                preciosListas[key].manual
+                                  ? 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

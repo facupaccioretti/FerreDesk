@@ -12,6 +12,9 @@ import { useStockProveAPI } from "../../utils/useStockProveAPI"
 // Importar el modal de familias
 import FamiliasModal from "./FamiliasModal"
 
+// Importar el modal de listas de precios
+import ListasPrecioModal from "./ListasPrecioModal"
+
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
@@ -68,6 +71,7 @@ const ProductosManager = () => {
   const [expandedId, setExpandedId] = useState(null)
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null })
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
+  const [showListasPrecioModal, setShowListasPrecioModal] = useState(false)
   const [user, setUser] = useState({ username: "ferreadmin" })
 
   // Estado de búsqueda para ProductosTable
@@ -327,6 +331,12 @@ const ProductosManager = () => {
                   >
                     Gestionar Familias
                   </button>
+                  <button
+                    onClick={() => setShowListasPrecioModal(true)}
+                    className={theme.botonPrimario}
+                  >
+                    Actualizar Listas
+                  </button>
                 </div>
               )}
               {/* Contenido de pestañas */}
@@ -488,6 +498,13 @@ const ProductosManager = () => {
         addFamilia={addFamilia}
         updateFamilia={updateFamilia}
         deleteFamilia={deleteFamilia}
+      />
+
+      {/* Modal para gestionar listas de precios */}
+      <ListasPrecioModal
+        open={showListasPrecioModal}
+        onClose={() => setShowListasPrecioModal(false)}
+        onEditProducto={handleEditProducto}
       />
     </div>
   )

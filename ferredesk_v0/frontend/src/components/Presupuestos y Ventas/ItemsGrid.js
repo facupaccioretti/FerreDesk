@@ -2,6 +2,7 @@
 
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { obtenerPrecioParaLista } from "../../utils/calcularPrecioLista"
 
 import { BotonDuplicar, BotonEliminar } from "../Botones"
 
@@ -54,11 +55,29 @@ const ItemsGridPresupuesto = forwardRef(
       setDescu2 = () => {},
       setDescu3 = () => {},
       readOnly = false, // NUEVO: Prop para deshabilitar todo el grid
+      listaPrecioId = 0, // Número de lista de precios activa (0=Minorista por defecto)
+      listasPrecio = [], // Configuración de listas de precios [{numero, margen_descuento, ...}]
     },
     ref,
       ) => {
     // Hook del tema de FerreDesk
     const theme = useFerreDeskTheme();
+    
+    // Helper para obtener precio según lista de precios activa
+    // Usa la utilidad importada con fallback al cálculo legacy (costo + margen)
+    const obtenerPrecioBaseProducto = useCallback((producto, proveedorHabitual) => {
+      // Primero intentar obtener precio de la lista activa
+      let precioBase = obtenerPrecioParaLista(producto, listaPrecioId, listasPrecio)
+      
+      // Fallback: si no hay precio de lista, usar cálculo legacy (costo + margen)
+      if (!precioBase) {
+        const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
+        const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
+        precioBase = costoNum * (1 + margenNum / 100)
+      }
+      
+      return Math.round(precioBase * 100) / 100
+    }, [listaPrecioId, listasPrecio]);
     
     // ------------------------------------------------------------
     // Búsqueda remota por código (ventas/presupuesto/NC)
@@ -217,29 +236,22 @@ const ItemsGridPresupuesto = forwardRef(
             setRows((prevRows) => {
               const lastRow = prevRows[prevRows.length - 1]
               
-              // Buscar el proveedor habitual en stock_proveedores
-              const proveedorHabitual = producto.stock_proveedores?.find(
-                sp => sp.proveedor?.id === producto.proveedor_habitual?.id
-              )
+// Buscar el proveedor habitual en stock_proveedores
+                const proveedorHabitual = producto.stock_proveedores?.find(
+                  sp => sp.proveedor?.id === producto.proveedor_habitual?.id
+                )
 
-              // -------------------------------------------------------------
-              // Cálculo del precio base (sin IVA) y precio final (con IVA)
-              // 1) Si el backend ya provee un precio de venta, usarlo.
-              // 2) Caso contrario, generar precio = costo * (1 + margen/100).
-              // 3) Luego aplicar IVA según la alícuota para obtener precioFinal.
-              // -------------------------------------------------------------
-              const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
-              const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-              const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
-              const aliPorcTmp = aliMap[aliIdTmp] || 0
+                // -------------------------------------------------------------
+                // Cálculo del precio base usando lista de precios activa
+                // Si no hay precio de lista, fallback a costo + margen
+                // -------------------------------------------------------------
+                const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
+                const aliPorcTmp = aliMap[aliIdTmp] || 0
+                const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
+                const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
 
-              let precioBaseTmp = Number.parseFloat(proveedorHabitual?.precio_venta ?? 0) || 0
-              if (!precioBaseTmp) {
-                precioBaseTmp = costoNum * (1 + margenNum / 100)
-              }
-              // Redondear a 2 decimales
-              precioBaseTmp = Math.round(precioBaseTmp * 100) / 100
-              const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
+                const precioBaseTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
+                const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
 
               const nuevoItem = {
                 id: Date.now() + Math.random(),
@@ -274,17 +286,13 @@ const ItemsGridPresupuesto = forwardRef(
             sp => sp.proveedor?.id === producto.proveedor_habitual?.id
           )
 
-          // --- Cálculo precio base / final (idéntico al bloque anterior) ---
+          // --- Cálculo precio base usando lista de precios activa ---
           const margenTmp = Number.parseFloat(producto?.margen ?? 0) || 0
           const costoTmp = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
           const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
           const aliPorcTmp = aliMap[aliIdTmp] || 0
 
-          let precioBaseTmp = Number.parseFloat(proveedorHabitual?.precio_venta ?? 0) || 0
-          if (!precioBaseTmp) {
-            precioBaseTmp = costoTmp * (1 + margenTmp / 100)
-          }
-          precioBaseTmp = Math.round(precioBaseTmp * 100) / 100
+          const precioBaseTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
           const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
 
           const nuevoItem = {
@@ -318,7 +326,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
         })
       },
-      [autoSumarDuplicados, aliMap, rows, readOnly],
+      [autoSumarDuplicados, aliMap, rows, readOnly, obtenerPrecioBaseProducto],
     )
 
     useEffect(() => {
@@ -759,15 +767,10 @@ const ItemsGridPresupuesto = forwardRef(
               setRows((prevRows) => {
                 const newRows = [...prevRows]
 
-                // ⭐ CORRECCIÓN: Calcular precio final igual que para items nuevos, con fallback si no hay proveedor
+                // Calcular precio usando lista de precios activa
                 const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
                 const aliPorc = aliMap[aliId] || 0
-                let precioBase = proveedorHabitual?.precio_venta || 0
-                if (!precioBase) {
-                  const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-                  const margenNum = Number.parseFloat(prod?.margen ?? 0) || 0
-                  precioBase = Math.round((costoNum * (1 + margenNum / 100)) * 100) / 100
-                }
+                const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
                 const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
 
                 const itemCargado = {
@@ -776,7 +779,7 @@ const ItemsGridPresupuesto = forwardRef(
                   denominacion: prod.deno || prod.nombre || "",
                   unidad: prod.unidad || prod.unidadmedida || "-",
                   precio: precioBase,
-                  precioFinal: precioFinal, // ⭐ NUEVO: Agregar precioFinal calculado
+                  precioFinal: precioFinal,
                   vdi_costo: (proveedorHabitual?.costo || 0),
                   margen: prod?.margen ?? 0,
                   cantidad: row.cantidad || 1,
@@ -807,12 +810,8 @@ const ItemsGridPresupuesto = forwardRef(
             const newRows = [...prevRows]
             const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
             const aliPorc = aliMap[aliId] || 0
-            let precioBase = proveedorHabitual?.precio_venta || 0
-            if (!precioBase) {
-              const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-              const margenNum = Number.parseFloat(prod?.margen ?? 0) || 0
-              precioBase = Math.round((costoNum * (1 + margenNum / 100)) * 100) / 100
-            }
+            // Usar lista de precios activa para calcular precio
+            const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
             const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
             const itemCargado = {
               ...newRows[idx],
@@ -934,12 +933,8 @@ const ItemsGridPresupuesto = forwardRef(
             const newRows = [...prevRows]
             const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
             const aliPorc = aliMap[aliId] || 0
-            let precioBase = proveedorHabitual?.precio_venta || 0
-            if (!precioBase) {
-              const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-              const margenNum = Number.parseFloat(prod?.margen ?? 0) || 0
-              precioBase = Math.round((costoNum * (1 + margenNum / 100)) * 100) / 100
-            }
+            // Usar lista de precios activa para calcular precio
+            const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
             const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
             const itemCargado = {
               ...newRows[idx],
@@ -971,12 +966,8 @@ const ItemsGridPresupuesto = forwardRef(
         const newRows = [...prevRows]
         const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
         const aliPorc = aliMap[aliId] || 0
-        let precioBase = proveedorHabitual?.precio_venta || 0
-        if (!precioBase) {
-          const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-          const margenNum = Number.parseFloat(prod?.margen ?? 0) || 0
-          precioBase = Math.round((costoNum * (1 + margenNum / 100)) * 100) / 100
-        }
+        // Usar lista de precios activa para calcular precio
+        const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
         const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
         const itemCargado = {
           ...newRows[idx],

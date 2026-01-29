@@ -16,6 +16,7 @@ import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 // import { normalizarItems } from './herramientasforms/normalizadorItems' // Ya no se usa
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
+import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 
 // (eliminado helper de stock_proveedores no utilizado en Presupuesto)
 
@@ -93,6 +94,12 @@ const PresupuestoForm = ({
 
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false })
   const { alicuotas, loading: loadingAlicuotasHook, error: errorAlicuotas } = useAlicuotasIVAAPI()
+
+  // Hook para listas de precios
+  const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
+  
+  // Estado para la lista de precios activa (0 = Minorista por defecto)
+  const [listaPrecioId, setListaPrecioId] = useState(0)
 
   const alicuotasMap = useMemo(
     () =>
@@ -344,6 +351,10 @@ const PresupuestoForm = ({
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
     setDocumentoInfo(documentoValidado)
+    
+    // Actualizar lista de precios según el cliente seleccionado
+    const listaCliente = clienteSeleccionado.lista_precio_id ?? 0
+    setListaPrecioId(listaCliente)
   }, [setFormulario])
 
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
@@ -570,8 +581,8 @@ const PresupuestoForm = ({
             </div>
           </div>
 
-          {/* Segunda fila: 3 campos */}
-          <div className="grid grid-cols-3 gap-4 mb-3">
+          {/* Segunda fila: 4 campos */}
+          <div className="grid grid-cols-4 gap-4 mb-3">
             {/* Buscador */}
             <div>
               <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
@@ -606,6 +617,23 @@ const PresupuestoForm = ({
                 showLabel={false}
               />
             </div>
+
+            {/* Lista de Precios */}
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Lista de Precios</label>
+              <select
+                value={listaPrecioId}
+                onChange={(e) => setListaPrecioId(Number(e.target.value))}
+                disabled={isReadOnly || loadingListas}
+                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              >
+                {listasPrecio.map((lista) => (
+                  <option key={lista.numero} value={lista.numero}>
+                    {lista.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -639,6 +667,8 @@ const PresupuestoForm = ({
           alicuotas={alicuotasMap}
           onRowsChange={handleRowsChange}
           initialItems={formulario.items}
+          listaPrecioId={listaPrecioId}
+          listasPrecio={listasPrecio}
         />
       </div>
       <div className="mt-8 flex justify-end space-x-4">

@@ -24,6 +24,7 @@ import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 import CuitStatusBanner from "../Alertas/CuitStatusBanner"
 import CampoComprobantePagado from "./herramientasforms/CampoComprobantePagado"
 import NuevoReciboModal from "../CuentaCorriente/NuevoReciboModal"
+import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -116,6 +117,12 @@ const VentaForm = ({
     consultarARCAStatus,
     limpiarEstadosARCAStatus
   } = useValidacionCUIT()
+
+  // Hook para listas de precios
+  const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
+  
+  // Estado para la lista de precios activa (0 = Minorista por defecto)
+  const [listaPrecioId, setListaPrecioId] = useState(0)
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -481,6 +488,10 @@ const VentaForm = ({
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(cli)
     setDocumentoInfo(documentoValidado)
+    
+    // Actualizar lista de precios según el cliente seleccionado
+    const listaCliente = cli.lista_precio_id ?? 0
+    setListaPrecioId(listaCliente)
     
     // Marcar que ya no es carga inicial
     setEsCargaInicial(false)
@@ -1095,7 +1106,26 @@ const VentaForm = ({
                     />
                   </div>
 
-                  {/* Campo Comprobante Pagado */}
+                  {/* Lista de Precios */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Lista de Precios</label>
+                    <select
+                      value={listaPrecioId}
+                      onChange={(e) => setListaPrecioId(Number(e.target.value))}
+                      disabled={isReadOnly || loadingListas}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      {listasPrecio.map((lista) => (
+                        <option key={lista.numero} value={lista.numero}>
+                          {lista.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Tercera fila: Campo Comprobante Pagado */}
+                <div className="grid grid-cols-4 gap-4">
                   <CampoComprobantePagado 
                     formulario={formulario}
                     handleChange={handleChange}
@@ -1126,6 +1156,8 @@ const VentaForm = ({
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
                 initialItems={formulario.items}
+                listaPrecioId={listaPrecioId}
+                listasPrecio={listasPrecio}
               />
             </div>
 

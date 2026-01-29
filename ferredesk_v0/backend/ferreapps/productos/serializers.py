@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,6 +64,9 @@ class StockSerializer(serializers.ModelSerializer):
     idaliiva = AlicuotaIVASerializer(read_only=True)
     idaliiva_id = serializers.PrimaryKeyRelatedField(queryset=AlicuotaIVA.objects.all(), source='idaliiva', write_only=True, required=False)
     stock_total = serializers.SerializerMethodField()
+    
+    # Campos para sistema de listas de precios
+    precios_listas = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
@@ -72,7 +75,52 @@ class StockSerializer(serializers.ModelSerializer):
             'idfam1', 'idfam1_id', 'idfam2', 'idfam2_id', 'idfam3', 'idfam3_id',
             'proveedor_habitual', 'proveedor_habitual_id', 'acti', 'stock_proveedores',
             'stock_total',
+            # Campos de listas de precios
+            'precio_lista_0', 'precio_lista_0_manual', 'precios_listas',
         ]
+
+    def get_precios_listas(self, obj):
+        """Obtiene precios de listas 1-4. Usa override manual si existe, sino calcula desde precio_lista_0."""
+        from .models import ListaPrecio
+        
+        overrides = {
+            p.lista_numero: p 
+            for p in obj.precios_listas.filter(precio_manual=True).select_related('usuario_carga_manual')
+        }
+        
+        margenes = {
+            l.numero: float(l.margen_descuento) 
+            for l in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+        }
+        
+        precio_base = float(obj.precio_lista_0 or 0)
+        resultado = []
+        
+        for numero in [1, 2, 3, 4]:
+            if numero in overrides:
+                override = overrides[numero]
+                usuario = override.usuario_carga_manual
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': float(override.precio),
+                    'precio_manual': True,
+                    'fecha_carga_manual': override.fecha_carga_manual,
+                    'usuario_carga_manual': usuario.id if usuario else None,
+                    'usuario_nombre': usuario.username if usuario else None,
+                })
+            else:
+                margen = margenes.get(numero, 0)
+                precio_calculado = round(precio_base * (1 + margen / 100), 2)
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': precio_calculado,
+                    'precio_manual': False,
+                    'fecha_carga_manual': None,
+                    'usuario_carga_manual': None,
+                    'usuario_nombre': None,
+                })
+        
+        return resultado
 
     def get_stock_total(self, obj):
         """Obtiene el stock total desde la vista VISTA_STOCK_PRODUCTO para el producto dado."""
