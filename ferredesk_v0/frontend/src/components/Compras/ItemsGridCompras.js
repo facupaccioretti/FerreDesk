@@ -45,6 +45,7 @@ const ItemsGridCompras = forwardRef(
       onItemsChange,
       readOnly = false,
       modoOrdenCompra = false, // Nuevo prop para modo ordenes de compra
+      mostrarModoLector = false, // Muestra checkbox "Modo lector" solo en Orden de Compra
     },
     ref,
   ) => {
@@ -223,6 +224,8 @@ const ItemsGridCompras = forwardRef(
     const cantidadRefs = useRef([])
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
     const [idxCodigoFoco, setIdxCodigoFoco] = useState(null)
+    const [modoLector, setModoLector] = useState(false)
+    const [idxCodigoSiguienteFoco, setIdxCodigoSiguienteFoco] = useState(null)
 
     useEffect(() => {
       if (idxCantidadFoco !== null) {
@@ -239,6 +242,17 @@ const ItemsGridCompras = forwardRef(
         setIdxCodigoFoco(null)
       }
     }, [idxCodigoFoco])
+
+    // useEffect para modo lector: mover foco al código del siguiente renglón vacío
+    useEffect(() => {
+      if (idxCodigoSiguienteFoco !== null) {
+        const idxRenglonVacio = rows.findIndex((row, i) => i > idxCodigoSiguienteFoco && isRowVacio(row))
+        if (idxRenglonVacio !== -1 && codigoRefs.current[idxRenglonVacio]) {
+          codigoRefs.current[idxRenglonVacio].focus()
+        }
+        setIdxCodigoSiguienteFoco(null)
+      }
+    }, [rows, idxCodigoSiguienteFoco, isRowVacio])
 
     
 
@@ -367,7 +381,11 @@ const ItemsGridCompras = forwardRef(
                     emitirCambio(ensured)
                     return ensured
                   })
-                  setIdxCantidadFoco(idxExistente)
+                  if (modoLector) {
+                    setIdxCodigoSiguienteFoco(idxExistente)
+                  } else {
+                    setIdxCantidadFoco(idxExistente)
+                  }
                   return
                 }
                 
@@ -413,7 +431,11 @@ const ItemsGridCompras = forwardRef(
                   emitirCambio(ensured)
                   return ensured
                 })
-                setIdxCantidadFoco(idx)
+                if (modoLector) {
+                  setIdxCodigoSiguienteFoco(idx)
+                } else {
+                  setIdxCantidadFoco(idx)
+                }
                 return
               } else {
                 // PRODUCTO NO ENCONTRADO - limpiar fila (como en ItemsGrid original)
@@ -580,6 +602,21 @@ const ItemsGridCompras = forwardRef(
 
     return (
       <div className="space-y-3 w-full">
+        {/* Checkbox Modo lector - solo visible en Orden de Compra */}
+        {mostrarModoLector && (
+          <div className="flex items-center">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={modoLector}
+                onChange={(e) => setModoLector(e.target.checked)}
+                disabled={readOnly}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <span className="text-sm font-medium text-slate-700">Modo lector</span>
+            </label>
+          </div>
+        )}
         <div className="w-full">
           <div className="max-h-[14rem] overflow-y-auto overscroll-contain rounded-lg border border-slate-200/50 shadow">
             <table className="min-w-full text-[12px]">

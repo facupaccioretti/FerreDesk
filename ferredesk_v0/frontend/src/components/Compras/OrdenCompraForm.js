@@ -368,6 +368,7 @@ ja de                        placeholder="Domicilio del proveedor"
                  showPrecios={false}
                  showIVA={false}
                  modoOrdenCompra={true}
+                 mostrarModoLector={true}
                />
               {errors.items && <p className="mt-2 text-sm text-red-600">{errors.items}</p>}
             </div>

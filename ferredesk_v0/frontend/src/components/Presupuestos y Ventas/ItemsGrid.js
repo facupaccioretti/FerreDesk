@@ -206,6 +206,8 @@ const ItemsGridPresupuesto = forwardRef(
     // Flag para evitar doble procesamiento entre Enter/Tab y Blur
     const procesandoCodigoRef = useRef(false)
     const [idxCantidadFoco, setIdxCantidadFoco] = useState(null)
+    const [modoLector, setModoLector] = useState(false)
+    const [idxCodigoSiguienteFoco, setIdxCodigoSiguienteFoco] = useState(null)
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
   const [mostrarTooltipOriginal, setMostrarTooltipOriginal] = useState({})
@@ -732,9 +734,11 @@ const ItemsGridPresupuesto = forwardRef(
             // Mostrar error si no se encuentra el producto
             const inputCodigo = codigoRefs.current[idx]
             if (inputCodigo && inputCodigo.setCustomValidity) {
-              // Mostrar error sin forzar focus ni seleccionar texto
               inputCodigo.setCustomValidity('No se encontró el código de producto')
+              inputCodigo.reportValidity()
             }
+            e.preventDefault()
+            e.stopPropagation()
             return
           }
           
@@ -758,7 +762,11 @@ const ItemsGridPresupuesto = forwardRef(
                 newRows[idx] = getEmptyRow()
                 return ensureSoloUnEditable(newRows)
               })
-              setIdxCantidadFoco(idxExistente)
+              if (modoLector) {
+                setIdxCodigoSiguienteFoco(idxExistente)
+              } else {
+                setIdxCantidadFoco(idxExistente)
+              }
               e.preventDefault()
               e.stopPropagation()
               return
@@ -795,7 +803,11 @@ const ItemsGridPresupuesto = forwardRef(
                 }
                 return ensureSoloUnEditable(newRows)
               })
-              setIdxCantidadFoco(idx)
+              if (modoLector) {
+                setIdxCodigoSiguienteFoco(idx)
+              } else {
+                setIdxCantidadFoco(idx)
+              }
               e.preventDefault()
               e.stopPropagation()
               return
@@ -835,8 +847,12 @@ const ItemsGridPresupuesto = forwardRef(
             }
             return ensureSoloUnEditable(newRows)
           })
-          // Mover foco a cantidad después de cargar el producto
-          setIdxCantidadFoco(idx)
+          // Mover foco según modo: lector va al siguiente código, normal va a cantidad
+          if (modoLector) {
+            setIdxCodigoSiguienteFoco(idx)
+          } else {
+            setIdxCantidadFoco(idx)
+          }
           } finally {
             // Liberar el flag para permitir futuros procesos
             procesandoCodigoRef.current = false
@@ -1001,6 +1017,17 @@ const ItemsGridPresupuesto = forwardRef(
         setIdxCantidadFoco(null)
       }
     }, [rows, idxCantidadFoco])
+
+    // useEffect para modo lector: mover foco al código del siguiente renglón vacío
+    useEffect(() => {
+      if (idxCodigoSiguienteFoco !== null) {
+        const idxRenglonVacio = rows.findIndex((row, i) => i > idxCodigoSiguienteFoco && isRowVacio(row))
+        if (idxRenglonVacio !== -1 && codigoRefs.current[idxRenglonVacio]) {
+          codigoRefs.current[idxRenglonVacio].focus()
+        }
+        setIdxCodigoSiguienteFoco(null)
+      }
+    }, [rows, idxCodigoSiguienteFoco])
 
     // Mantener referencia estable de onRowsChange para evitar bucles por identidad
     const onRowsChangeRef = useRef(onRowsChange)
@@ -1170,6 +1197,18 @@ const ItemsGridPresupuesto = forwardRef(
                 </div>
               )}
             </div>
+
+            {/* Modo lector para escaneo continuo con lector de códigos de barras */}
+            <label className="flex items-center gap-2 mt-5 ml-4 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={modoLector}
+                onChange={(e) => setModoLector(e.target.checked)}
+                disabled={readOnly}
+                className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+              />
+              <span className="text-sm font-medium text-slate-700">Modo lector</span>
+            </label>
           </div>
 
                      {/* Resumen de Totales compacto */}
