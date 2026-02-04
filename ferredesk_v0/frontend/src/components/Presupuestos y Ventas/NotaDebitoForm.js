@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import useNavegacionForm from '../../hooks/useNavegacionForm'
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario'
 import SelectorDocumento from './herramientasforms/SelectorDocumento'
@@ -7,6 +7,8 @@ import { useArcaEstado } from '../../utils/useArcaEstado'
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler'
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay'
 import CuitStatusBanner from '../Alertas/CuitStatusBanner'
+import ModalCobroVenta from './herramientasforms/ModalCobroVenta'
+import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal'
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme'
 
 // Constantes descriptivas
@@ -45,6 +47,7 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
     exentoIVA: false,
     montoNeto: '',
     observacion: '',
+    cobrado: false,
   }
 }
 
@@ -108,6 +111,12 @@ const NotaDebitoForm = ({
     requiereEmisionArca,
     obtenerMensajePersonalizado
   } = useArcaEstado()
+
+  // Modal de cobro, recibo de excedente y recibo parcial (igual patrón que VentaForm)
+  const [mostrarModalCobro, setMostrarModalCobro] = useState(false)
+  const [datosCobroPendientes, setDatosCobroPendientes] = useState(null)
+  const [mostrarModalReciboExcedente, setMostrarModalReciboExcedente] = useState(false)
+  const [mostrarModalReciboParcial, setMostrarModalReciboParcial] = useState(false)
 
   const {
     procesarResultadoArca,
@@ -173,6 +182,112 @@ const NotaDebitoForm = ({
     return true
   }
 
+  const construirPayloadBase = () => {
+    const montoNeto = parseFloat(formulario.montoNeto)
+    const observacion = (formulario.observacion || (esInterna ? 'Extensión de Contenido' : 'Nota de Débito')).slice(0, LONGITUD_MAX_OBSERVACION)
+    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
+    return {
+      ven_estado: 'CE',
+      ven_tipo: 'Nota de Débito',
+      tipo_comprobante: tipoComprobanteSeleccionado,
+      comprobante_id: comprobanteND?.codigo_afip || '',
+      comprobantes_asociados_ids: (formulario.facturasAsociadas || facturasAsociadas || []).map(f => f.id || f.ven_id),
+      ven_fecha: formulario.fecha,
+      ven_idcli: formulario.clienteId,
+      ven_idpla: formulario.plazoId,
+      ven_idvdo: formulario.vendedorId,
+      ven_sucursal: formulario.sucursalId,
+      ven_copia: formulario.copia || 1,
+      ven_cuit: formulario.cuit || '',
+      detalle_item_generico: observacion,
+      exento_iva: !!formulario.exentoIVA,
+      monto_neto_item_generico: montoNeto,
+    }
+  }
+
+  const enviarNotaDebitoConPagos = async (datosCobro, reciboExcedenteOpcional = null, reciboParcialOpcional = null) => {
+    const payload = construirPayloadBase()
+    payload.comprobante_pagado = !datosCobro.enviar_cuenta_corriente
+    payload.monto_pago = datosCobro.enviar_cuenta_corriente ? 0 : datosCobro.monto_pago
+    payload.pagos = datosCobro.enviar_cuenta_corriente ? [] : datosCobro.pagos
+    if (datosCobro.justificacion_diferencia) payload.justificacion_diferencia = datosCobro.justificacion_diferencia
+    if (datosCobro.excedente_destino) payload.excedente_destino = datosCobro.excedente_destino
+    if (datosCobro.justificacion_excedente) payload.justificacion_excedente = datosCobro.justificacion_excedente
+    if (reciboExcedenteOpcional) payload.recibo_excedente = reciboExcedenteOpcional
+    if (reciboParcialOpcional) payload.recibo_parcial = reciboParcialOpcional
+    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
+    if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+      temporizadorArcaRef.current = setTimeout(() => iniciarEsperaArca(), 400)
+    }
+    try {
+      const resultado = await onSave(payload, () => {})
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
+    } catch (error) {
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      manejarErrorArca(error, 'Error al procesar la nota de débito')
+    }
+  }
+
+  const handleConfirmarModalCobro = (datos) => {
+    // Confirmar antes de guardar la nota de débito
+    if (!window.confirm("¿Está seguro de guardar los cambios?")) {
+      return
+    }
+    
+    setMostrarModalCobro(false)
+    if (datos.enviar_cuenta_corriente) {
+      enviarNotaDebitoConPagos(datos, null)
+      return
+    }
+    if (datos.crear_recibo_parcial) {
+      setDatosCobroPendientes(datos)
+      setMostrarModalReciboParcial(true)
+      return
+    }
+    const totalND = Number(formulario.montoNeto) || 0
+    const excedente = (datos.monto_pago || 0) - totalND
+    const TOLERANCIA = 0.01
+    if (datos.excedente_destino === 'recibo' && excedente > TOLERANCIA) {
+      setDatosCobroPendientes(datos)
+      setMostrarModalReciboExcedente(true)
+      return
+    }
+    enviarNotaDebitoConPagos(datos, null)
+  }
+
+  const handleReciboExcedenteGuardado = (reciboData) => {
+    setMostrarModalReciboExcedente(false)
+    if (datosCobroPendientes) {
+      enviarNotaDebitoConPagos(datosCobroPendientes, reciboData)
+      setDatosCobroPendientes(null)
+    }
+  }
+
+  const handleReciboParcialGuardado = (reciboData) => {
+    setMostrarModalReciboParcial(false)
+    if (datosCobroPendientes) {
+      enviarNotaDebitoConPagos(datosCobroPendientes, null, reciboData)
+      setDatosCobroPendientes(null)
+    }
+  }
+
+  const handleCerrarModalRecibo = () => {
+    setMostrarModalReciboExcedente(false)
+    setDatosCobroPendientes(null)
+  }
+
+  const handleCerrarModalReciboParcial = () => {
+    setMostrarModalReciboParcial(false)
+    setDatosCobroPendientes(null)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -188,55 +303,9 @@ const NotaDebitoForm = ({
       return
     }
 
-    const observacion = (formulario.observacion || (esInterna ? 'Extensión de Contenido' : 'Nota de Débito')).slice(0, LONGITUD_MAX_OBSERVACION)
-    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
-
-    const payload = {
-      ven_estado: 'CE',
-      ven_tipo: 'Nota de Débito',
-      tipo_comprobante: tipoComprobanteSeleccionado,
-      comprobante_id: comprobanteND?.codigo_afip || '',
-      comprobantes_asociados_ids: (formulario.facturasAsociadas || facturasAsociadas || []).map(f => f.id || f.ven_id),
-
-      ven_fecha: formulario.fecha,
-      ven_idcli: formulario.clienteId,
-      ven_idpla: formulario.plazoId,
-      ven_idvdo: formulario.vendedorId,
-      ven_sucursal: formulario.sucursalId,
-      ven_copia: formulario.copia || 1,
-
-      ven_cuit: formulario.cuit || '',
-
-      // Ítem genérico: datos para que el backend lo genere
-      detalle_item_generico: observacion,
-      exento_iva: !!formulario.exentoIVA,
-      monto_neto_item_generico: montoNeto,
-    }
-
-    try {
-      // Mostrar overlay con retardo para evitar flashes si responde muy rápido
-      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
-        temporizadorArcaRef.current = setTimeout(() => {
-          iniciarEsperaArca()
-        }, 400)
-      }
-
-      const resultado = await onSave(payload, () => {})
-
-      if (temporizadorArcaRef.current) {
-        clearTimeout(temporizadorArcaRef.current)
-        temporizadorArcaRef.current = null
-      }
-
-      // Procesar resultado ARCA (muestra modal o cierra si no se emitió)
-      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
-    } catch (error) {
-      if (temporizadorArcaRef.current) {
-        clearTimeout(temporizadorArcaRef.current)
-        temporizadorArcaRef.current = null
-      }
-      manejarErrorArca(error, 'Error al procesar la nota de débito')
-    }
+    // Siempre abrir modal de cobro para registrar medios de pago
+    // Si no está pagada, los montos serán 0 por defecto
+    setMostrarModalCobro(true)
   }
 
   return (
@@ -332,6 +401,7 @@ const NotaDebitoForm = ({
                   <label htmlFor="exentoIVA" className="text-[12px] font-semibold text-slate-700">Exento de IVA</label>
                 </div>
 
+
                 {/* Monto neto */}
                 <div>
                   <label className="block text-[12px] font-semibold text-slate-700 mb-1">Monto neto *</label>
@@ -390,6 +460,44 @@ const NotaDebitoForm = ({
           </div>
         </form>
       </div>
+
+      {/* Modal de cobro (múltiples medios de pago) */}
+      <ModalCobroVenta
+        abierto={mostrarModalCobro}
+        totalVenta={Number(formulario.montoNeto) || 0}
+        clienteId={formulario.clienteId}
+        montoPagoInicial={0}
+        onClose={() => setMostrarModalCobro(false)}
+        onConfirmar={handleConfirmarModalCobro}
+      />
+
+      {/* Modal de recibo de excedente (cuando en modal cobro eligen "a cuenta") */}
+      <NuevoReciboModal
+        modal={{
+          abierto: mostrarModalReciboExcedente,
+          clienteId: formulario.clienteId,
+        }}
+        onClose={handleCerrarModalRecibo}
+        onGuardar={handleReciboExcedenteGuardado}
+        esReciboExcedente={true}
+        montoFijo={
+          datosCobroPendientes
+            ? Math.round((datosCobroPendientes.monto_pago - Number(formulario.montoNeto || 0)) * 100) / 100
+            : 0
+        }
+      />
+
+      <NuevoReciboModal
+        modal={{
+          abierto: mostrarModalReciboParcial,
+          clienteId: formulario.clienteId,
+        }}
+        onClose={handleCerrarModalReciboParcial}
+        onGuardar={handleReciboParcialGuardado}
+        esReciboParcial={true}
+        montoFijo={datosCobroPendientes?.monto_pago ?? 0}
+      />
+
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay
         estaEsperando={esperandoArca}

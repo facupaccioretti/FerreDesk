@@ -152,7 +152,7 @@ const useComprobantesCRUD = ({
         ven_descu1: cabecera.ven_descu1,
         ven_descu2: cabecera.ven_descu2,
         ven_descu3: cabecera.ven_descu3,
-        
+
         // IVA discriminado completo (todas las alícuotas con porcentaje > 0)
         iva_discriminado: todasAlicuotas
           .filter(ali => ali.porce > 0) // Solo alícuotas con porcentaje > 0
@@ -190,6 +190,12 @@ const useComprobantesCRUD = ({
    */
   const handleConvertir = async (presupuesto) => {
     if (!presupuesto || !presupuesto.id || (isFetchingForConversion && fetchingPresupuestoId === presupuesto.id)) return
+
+    // Validar que no esté ya convertida
+    if (presupuesto.convertida_a_fiscal) {
+      alert('Esta cotización ya fue convertida a factura fiscal.')
+      return
+    }
 
     setFetchingPresupuestoId(presupuesto.id)
     setIsFetchingForConversion(true)
@@ -421,6 +427,12 @@ const useComprobantesCRUD = ({
    */
   const handleConvertirFacturaI = async (facturaInterna) => {
     if (!facturaInterna || !facturaInterna.id || (isFetchingForConversion && fetchingPresupuestoId === facturaInterna.id)) return;
+
+    // Validar que no esté ya convertida
+    if (facturaInterna.convertida_a_fiscal) {
+      alert('Esta cotización ya fue convertida a factura fiscal.')
+      return
+    }
 
     setFetchingPresupuestoId(facturaInterna.id);
     setIsFetchingForConversion(true);

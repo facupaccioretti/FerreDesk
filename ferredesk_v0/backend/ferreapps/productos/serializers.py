@@ -79,6 +79,8 @@ class StockSerializer(serializers.ModelSerializer):
             'precio_lista_0', 'precio_lista_0_manual', 'precios_listas',
             # Campos de código de barras
             'codigo_barras', 'tipo_codigo_barras',
+            # Impuesto interno (informativo; no se cobra en venta)
+            'impuesto_interno_porcentaje',
         ]
 
     def get_precios_listas(self, obj):

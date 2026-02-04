@@ -19,8 +19,8 @@ import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay';
 import useValidacionCUIT from '../../utils/useValidacionCUIT';
 import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
-import CampoComprobantePagado from './herramientasforms/CampoComprobantePagado';
 import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal';
+import ModalCobroVenta from './herramientasforms/ModalCobroVenta';
 
 const ConVentaForm = ({
   onSave,
@@ -62,7 +62,7 @@ const ConVentaForm = ({
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
 
   // Hook para consulta de estado CUIT en ARCA
-  const { 
+  const {
     estadoARCAStatus,
     mensajesARCAStatus,
     isLoadingARCAStatus,
@@ -75,13 +75,18 @@ const ConVentaForm = ({
   const [loadingError, setLoadingError] = useState(null);
 
   const [gridKey, setGridKey] = useState(Date.now()); // Estado para forzar remount
-  
+
   // Estado para controlar visibilidad del banner de estado CUIT
   const [mostrarBannerCuit, setMostrarBannerCuit] = useState(false);
 
   // Estados para recibo de excedente
   const [reciboExcedente, setReciboExcedente] = useState(null);
   const [mostrarModalReciboExcedente, setMostrarModalReciboExcedente] = useState(false);
+
+  // Modal de cobro (múltiples medios de pago) y datos pendientes cuando excedente → recibo o pago parcial → recibo
+  const [mostrarModalCobro, setMostrarModalCobro] = useState(false);
+  const [datosCobroPendientes, setDatosCobroPendientes] = useState(null);
+  const [mostrarModalReciboParcial, setMostrarModalReciboParcial] = useState(false);
 
 
   // Hook para manejar estado de ARCA
@@ -123,9 +128,9 @@ const ConVentaForm = ({
   const alicuotasMap = useMemo(() => (
     Array.isArray(alicuotasIVA)
       ? alicuotasIVA.reduce((acc, ali) => {
-          acc[ali.id] = parseFloat(ali.porce) || 0;
-          return acc;
-        }, {})
+        acc[ali.id] = parseFloat(ali.porce) || 0;
+        return acc;
+      }, {})
       : {}
   ), [alicuotasIVA]);
 
@@ -168,11 +173,11 @@ const ConVentaForm = ({
   // (eliminado indicador isReady no utilizado)
 
   // Usar el hook useFormularioDraft
-  const { 
-    formulario, 
-    setFormulario, 
-    limpiarBorrador, 
-    actualizarItems 
+  const {
+    formulario,
+    setFormulario,
+    limpiarBorrador,
+    actualizarItems
   } = useFormularioDraft({
     claveAlmacenamiento: claveDraft,
     datosIniciales: origenDatos,
@@ -199,8 +204,6 @@ const ConVentaForm = ({
         // Metadatos de origen para asociar el borrador a esta conversión
         __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
         __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
-    // Campo para "Factura Recibo"
-    montoPago: 0,
       };
       // Usar items del borrador SOLO si 'data' proviene de borrador (tiene metadata propia)
       const esBorrador = data && Object.prototype.hasOwnProperty.call(data, '__origenTipo');
@@ -303,9 +306,15 @@ const ConVentaForm = ({
   // Selector de Clientes (Modal)
   // =========================
   const [selectorAbierto, setSelectorAbierto] = useState(false);
-  const abrirSelector = () => setSelectorAbierto(true);
+  const abrirSelector = () => {
+    if (esConversionFacturaI) {
+      alert('No se puede cambiar el cliente durante la fiscalización de una cotización');
+      return;
+    }
+    setSelectorAbierto(true);
+  };
   const cerrarSelector = () => setSelectorAbierto(false);
-  
+
   // Función para ocultar el banner de estado CUIT
   const ocultarBannerCuit = () => {
     setMostrarBannerCuit(false);
@@ -435,21 +444,7 @@ const ConVentaForm = ({
   // Envoltorio de handleChange para marcar fin de carga inicial en campos clave
   const handleChangeBase = manejarCambioFormulario(setFormulario);
   const handleChange = (e) => {
-    const { name, value } = e.target
-    
-    // Lógica específica para campo de pago
-    if (name === 'montoPago') {
-      const monto = parseFloat(value) || 0
-      
-      // Permitir escribir libremente, validar solo al enviar
-      setFormulario(prev => ({
-        ...prev,
-        montoPago: monto
-      }))
-    } else {
-      // Usar la función base para otros campos
-      handleChangeBase(e);
-    }
+    handleChangeBase(e);
     
     const nombreCampo = e?.target?.name;
     if (nombreCampo === 'cuit' || nombreCampo === 'domicilio' || nombreCampo === 'clienteId') {
@@ -460,54 +455,28 @@ const ConVentaForm = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!window.confirm("¿Está seguro de guardar los cambios?")) return;
-    
+
     // Activar flag para evitar validación ARCA durante el proceso
     setProcesandoSubmit(true);
     if (!itemsGridRef.current) return;
 
     try {
-      // Validar campos de pago
-      const montoPago = Number.parseFloat(formulario.montoPago) || 0
-      const totalVenta = totales?.total || 0
-      const estaPagado = montoPago > 0
-
-      // Validación: Consumidor Final (ID=1) debe abonar exactamente el total (sin cero, sin parcial, sin excedente)
-      const CLIENTE_GENERICO_ID = '1'
-      if (String(formulario.clienteId) === CLIENTE_GENERICO_ID) {
-        const totalEq = Number(totalVenta).toFixed(2)
-        const pagoEq = Number(montoPago).toFixed(2)
-        if (pagoEq !== totalEq) {
-          alert(
-            'El cliente "Consumidor Final" debe abonar exactamente el total de la venta.\n\n' +
-            'Total requerido: $' + totalEq
-          )
+      // FISCALIZACIÓN: Si es conversión de Cotización → Factura, omitir modal de pago
+      // El dinero ya ingresó cuando se hizo la cotización (factura interna)
+      if (esConversionFacturaI) {
+        // Confirmar antes de guardar la conversión
+        if (!window.confirm("¿Está seguro de guardar los cambios?")) {
           setProcesandoSubmit(false)
           return
         }
-      }
-      
-      // Tolerancia de 1 peso para evitar mensaje de excedente por diferencias mínimas
-      const TOLERANCIA_MONTO = 1.00
-      if (estaPagado && montoPago > totalVenta + TOLERANCIA_MONTO) {
-        const excedente = montoPago - totalVenta
-        
-        // Preguntar si desea crear recibo de excedente
-        const crearRecibo = window.confirm(
-          `El monto del pago ($${montoPago.toFixed(2)}) excede el total de la venta ($${totalVenta.toFixed(2)}) por $${excedente.toFixed(2)}.\n\n` +
-          `¿Desea generar un recibo por el excedente?`
-        )
-        
-        if (!crearRecibo) {
-          alert('No se puede recibir un monto mayor al total de la venta sin generar un recibo.')
-          setProcesandoSubmit(false)
-          return
-        }
-        
-        // Abrir modal de recibo con datos precargados
-        setMostrarModalReciboExcedente(true)
+        // Continuar con el submit normal sin pago (la cotización ya está pagada)
+        // El backend NO generará movimientos de caja duplicados
+      } else {
+        // Siempre abrir modal de cobro para registrar medios de pago
+        // Si no está pagada, los montos serán 0 por defecto
+        setMostrarModalCobro(true)
         setProcesandoSubmit(false)
-        return // Detener el submit hasta que se complete el recibo
+        return
       }
 
       // ATENCIÓN: El payload que se envía al backend DEBE contener SOLO los campos base requeridos por el modelo físico.
@@ -544,11 +513,12 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
-        // Campos para "Factura Recibo"
-        comprobante_pagado: estaPagado,
-        monto_pago: montoPago,
         // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
       };
+      
+      // Campos para "Factura Recibo" (se establecen desde el modal de cobro)
+      payload.comprobante_pagado = false
+      payload.monto_pago = 0
 
       // Si hay recibo de excedente, agregarlo al payload
       if (reciboExcedente) {
@@ -571,7 +541,7 @@ const ConVentaForm = ({
 
       // Llamar al endpoint apropiado
       const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/';
-      
+
       // Iniciar overlay de ARCA INMEDIATAMENTE para conversiones de factura interna
       // (no usar timeout porque los errores de validación son instantáneos)
       if (requiereEmisionArca(tipoComprobante)) {
@@ -593,18 +563,18 @@ const ConVentaForm = ({
         clearTimeout(temporizadorArcaRef.current);
         temporizadorArcaRef.current = null;
       }
-      
+
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobante)
-       } catch (error) {
-         // Limpiar temporizador en error
-         if (temporizadorArcaRef.current) {
-           clearTimeout(temporizadorArcaRef.current);
-           temporizadorArcaRef.current = null;
-         }
-         // Manejar error estándar
-         manejarErrorArca(error, "Error al procesar la conversión")
-       } finally {
+    } catch (error) {
+      // Limpiar temporizador en error
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current);
+        temporizadorArcaRef.current = null;
+      }
+      // Manejar error estándar
+      manejarErrorArca(error, "Error al procesar la conversión")
+    } finally {
       // Desactivar flag independientemente del resultado
       setProcesandoSubmit(false);
     }
@@ -613,7 +583,7 @@ const ConVentaForm = ({
   const handleCancel = () => {
     const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
     if (!confirmado) return;
-    
+
     // Limpiar temporizador si está pendiente
     if (temporizadorArcaRef.current) {
       clearTimeout(temporizadorArcaRef.current);
@@ -625,16 +595,133 @@ const ConVentaForm = ({
   };
 
 
+  /**
+   * Envía la conversión con datos de cobro del modal (pagos, monto_pago, excedente_destino)
+   * y opcional recibo de excedente. Misma lógica ARCA/onSave que realizarSubmitVenta.
+   */
+  const enviarVentaConPagos = async (datosCobro, reciboExcedenteOpcional = null, reciboParcialOpcional = null) => {
+    if (!itemsGridRef.current) return
+    setProcesandoSubmit(true)
+    const tipoComprobanteSeleccionado =
+      (comprobantesVenta.find((c) => c.id === comprobanteId)?.tipo || '').toLowerCase() === 'factura'
+        ? 'factura'
+        : 'factura_interna'
+    const ESTADO_VENTA_CERRADA = 'CE'
+    const TIPO_VENTA = 'Venta'
+
+    const payload = {
+      ven_estado: ESTADO_VENTA_CERRADA,
+      ven_tipo: TIPO_VENTA,
+      tipo_comprobante: tipoComprobanteSeleccionado,
+      ven_numero: Number.parseInt(formulario.numero, 10) || numeroComprobante,
+      ven_sucursal: Number.parseInt(formulario.sucursalId, 10) || 1,
+      ven_fecha: formulario.fecha,
+      ven_impneto: Number.parseFloat(formulario.ven_impneto) || 0,
+      ven_descu1: Number.parseFloat(formulario.descu1) || 0,
+      ven_descu2: Number.parseFloat(formulario.descu2) || 0,
+      ven_descu3: Number.parseFloat(formulario.descu3) || 0,
+      bonificacionGeneral: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+      ven_bonificacion_general: Number.parseFloat(formulario.bonificacionGeneral) || 0,
+      ven_total: Number.parseFloat(formulario.ven_total) || 0,
+      ven_vdocomvta: Number.parseFloat(formulario.ven_vdocomvta) || 0,
+      ven_vdocomcob: Number.parseFloat(formulario.ven_vdocomcob) || 0,
+      ven_idcli: formulario.clienteId,
+      ven_idpla: formulario.plazoId,
+      ven_idvdo: formulario.vendedorId,
+      ven_copia: Number.parseInt(formulario.copia, 10) || 1,
+      comprobante_pagado: !datosCobro.enviar_cuenta_corriente,
+      monto_pago: datosCobro.enviar_cuenta_corriente ? 0 : datosCobro.monto_pago,
+      pagos: datosCobro.enviar_cuenta_corriente ? [] : datosCobro.pagos,
+    }
+    if (datosCobro.justificacion_diferencia) payload.justificacion_diferencia = datosCobro.justificacion_diferencia
+    if (datosCobro.excedente_destino) payload.excedente_destino = datosCobro.excedente_destino
+    if (datosCobro.justificacion_excedente) payload.justificacion_excedente = datosCobro.justificacion_excedente
+    if (reciboExcedenteOpcional) payload.recibo_excedente = reciboExcedenteOpcional
+    if (reciboParcialOpcional) payload.recibo_parcial = reciboParcialOpcional
+    if (documentoInfo.tipo === 'cuit' && documentoInfo.valor) payload.ven_cuit = documentoInfo.valor
+    else if (documentoInfo.tipo === 'dni' && documentoInfo.valor) payload.ven_dni = documentoInfo.valor
+    if (formulario.domicilio) payload.ven_domicilio = formulario.domicilio
+
+    if (esConversionFacturaI) {
+      payload.factura_interna_origen = facturaInternaOrigen.id
+      payload.tipo_conversion = 'factura_i_factura'
+      // NO enviar items - el backend usa los existentes de la cotización
+    } else {
+      payload.presupuesto_origen = presupuestoOrigen.id
+      payload.items_seleccionados = idsSeleccionados
+      payload.tipo_conversion = 'presupuesto_factura'
+    }
+    const endpoint = esConversionFacturaI ? '/api/convertir-factura-interna/' : '/api/convertir-presupuesto/'
+
+    if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+      temporizadorArcaRef.current = setTimeout(() => iniciarEsperaArca(), 400)
+    }
+    try {
+      const resultado = await onSave(payload, tabKey, endpoint)
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
+    } catch (error) {
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      manejarErrorArca(error, 'Error al procesar la conversión')
+    } finally {
+      setProcesandoSubmit(false)
+    }
+  }
+
+  const handleConfirmarModalCobro = (datos) => {
+    // Confirmar antes de guardar la venta
+    if (!window.confirm("¿Está seguro de guardar los cambios?")) {
+      return
+    }
+    
+    setMostrarModalCobro(false)
+    if (datos.enviar_cuenta_corriente) {
+      enviarVentaConPagos(datos, null)
+      return
+    }
+    if (datos.crear_recibo_parcial) {
+      setDatosCobroPendientes(datos)
+      setMostrarModalReciboParcial(true)
+      return
+    }
+    const totalVentaNum = Number(totales?.total) || 0
+    const excedente = (datos.monto_pago || 0) - totalVentaNum
+    const TOLERANCIA = 0.01
+    if (datos.excedente_destino === 'recibo' && excedente > TOLERANCIA) {
+      setDatosCobroPendientes(datos)
+      setMostrarModalReciboExcedente(true)
+      return
+    }
+    enviarVentaConPagos(datos, null)
+  }
+
   // Handler para cuando se guarda el recibo de excedente
   const handleReciboExcedenteGuardado = (reciboData) => {
-    // Guardar recibo temporalmente
-    setReciboExcedente(reciboData);
-    setMostrarModalReciboExcedente(false);
-    
-    // Continuar con submit de venta automáticamente
+    setMostrarModalReciboExcedente(false)
+    if (datosCobroPendientes) {
+      enviarVentaConPagos(datosCobroPendientes, reciboData)
+      setDatosCobroPendientes(null)
+      return
+    }
+    setReciboExcedente(reciboData)
     setTimeout(() => {
-      realizarSubmitVenta(reciboData);
-    }, 100);
+      realizarSubmitVenta(reciboData)
+    }, 100)
+  };
+
+  // Handler para cuando se guarda el recibo de pago parcial (monto cobrado ahora)
+  const handleReciboParcialGuardado = (reciboData) => {
+    setMostrarModalReciboParcial(false)
+    if (datosCobroPendientes) {
+      enviarVentaConPagos(datosCobroPendientes, null, reciboData)
+      setDatosCobroPendientes(null)
+    }
   };
 
   // Función para realizar submit final (sin validación de excedente)
@@ -647,16 +734,15 @@ const ConVentaForm = ({
     }
 
     try {
-      // Validar campos de pago (sin validación de excedente)
-      const montoPago = Number.parseFloat(formulario.montoPago) || 0;
-      const estaPagado = montoPago > 0;
+      // Esta función ya no se usa para ventas pagadas (se usa enviarVentaConPagos)
+      const estaPagado = false;
 
       const items = itemsGridRef.current.getItems();
 
       // Determinar el tipo de comprobante como string fijo
       const tipoComprobanteSeleccionado =
         comprobantesVenta.find((c) => c.id === comprobanteId) &&
-        (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
+          (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
           ? "factura"
           : "factura_interna";
 
@@ -686,7 +772,7 @@ const ConVentaForm = ({
         ven_idvdo: formulario.vendedorId,
         ven_copia: formulario.copia || 1,
         comprobante_pagado: estaPagado,
-        monto_pago: montoPago,
+        monto_pago: 0,
       };
 
       // CORREGIDO: Agregar items según el tipo de conversión
@@ -718,7 +804,7 @@ const ConVentaForm = ({
       if (esConversionFacturaI) {
         payload.factura_interna_origen = facturaInternaOrigen.id;
         payload.tipo_conversion = 'factura_i_factura';
-        
+
         // Flag para eliminación automática de auto-imputaciones (si fue confirmado por el usuario)
         if (facturaInternaOrigen.eliminarAutoImputaciones) {
           payload.eliminar_auto_imputaciones = true;
@@ -745,7 +831,7 @@ const ConVentaForm = ({
         clearTimeout(temporizadorArcaRef.current);
         temporizadorArcaRef.current = null;
       }
-      
+
       // Procesar respuesta de ARCA usando la lógica modularizada
       procesarResultadoArca(resultado, tipoComprobanteSeleccionado);
     } catch (error) {
@@ -764,9 +850,15 @@ const ConVentaForm = ({
 
   // Handler para cerrar modal de recibo de excedente
   const handleCerrarModalRecibo = () => {
-    setMostrarModalReciboExcedente(false);
-    setReciboExcedente(null);
-  };
+    setMostrarModalReciboExcedente(false)
+    setReciboExcedente(null)
+    setDatosCobroPendientes(null)
+  }
+
+  const handleCerrarModalReciboParcial = () => {
+    setMostrarModalReciboParcial(false)
+    setDatosCobroPendientes(null)
+  }
 
   // Función para agregar producto a la grilla desde el buscador
   const handleAddItemToGrid = (producto) => {
@@ -783,7 +875,7 @@ const ConVentaForm = ({
         { value: 'factura', label: 'Factura', tipo: 'factura' }
       ];
     }
-    
+
     // Si es conversión de presupuesto, permitir cotización (factura interna) y factura (igual que VentaForm)
     return [
       { value: 'factura_interna', label: 'Cotización', tipo: 'factura_interna', letra: 'I' },
@@ -945,26 +1037,26 @@ const ConVentaForm = ({
               const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
               return comprobanteSeleccionado?.letra === 'A';
             })() && (
-              <CuitStatusBanner
-                cuit={formulario.cuit}
-                estado={(() => {
-                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
-                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                    return 'error';
-                  }
-                  return estadoARCAStatus || 'ok';
-                })()}
-                mensajes={(() => {
-                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
-                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                    return ['CUIT faltante o inválido. Verificar datos del cliente.'];
-                  }
-                  return mensajesARCAStatus || [];
-                })()}
-                onDismiss={ocultarBannerCuit}
-                isLoading={isLoadingARCAStatus}
-              />
-            )}
+                <CuitStatusBanner
+                  cuit={formulario.cuit}
+                  estado={(() => {
+                    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                      return 'error';
+                    }
+                    return estadoARCAStatus || 'ok';
+                  })()}
+                  mensajes={(() => {
+                    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                      return ['CUIT faltante o inválido. Verificar datos del cliente.'];
+                    }
+                    return mensajesARCAStatus || [];
+                  })()}
+                  onDismiss={ocultarBannerCuit}
+                  isLoading={isLoadingARCAStatus}
+                />
+              )}
 
             {/* Badge de letra del comprobante */}
             {letraComprobanteMostrar && (
@@ -996,7 +1088,7 @@ const ConVentaForm = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0118 0Z" />
                   </svg>
                 </div>
-{esConversionFacturaI ? 'Conversión de Cotización a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
+                {esConversionFacturaI ? 'Conversión de Cotización a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
@@ -1153,13 +1245,6 @@ const ConVentaForm = ({
                     />
                   </div>
 
-                  {/* Campo Comprobante Pagado */}
-                  <CampoComprobantePagado 
-                    formulario={formulario}
-                    handleChange={handleChange}
-                    totales={totales}
-                    isReadOnly={isReadOnly}
-                  />
                 </div>
               </div>
             </div>
@@ -1182,8 +1267,8 @@ const ConVentaForm = ({
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
-                initialItems={normalizarItems(formulario.items || [], { 
-                  modo: 'venta', 
+                initialItems={normalizarItems(formulario.items || [], {
+                  modo: 'venta',
                   alicuotasMap,
                   esConversionFacturaI: esConversionFacturaI
                 })}
@@ -1231,12 +1316,36 @@ const ConVentaForm = ({
         onClose={handleCerrarModalRecibo}
         onGuardar={handleReciboExcedenteGuardado}
         esReciboExcedente={true}
-        montoFijo={Math.round((Number(formulario.montoPago || 0) - Number(totales?.total || 0)) * 100) / 100}
+        montoFijo={
+          datosCobroPendientes
+            ? Math.round((datosCobroPendientes.monto_pago - Number(totales?.total || 0)) * 100) / 100
+            : 0
+        }
       />
 
-      
+      <NuevoReciboModal
+        modal={{
+          abierto: mostrarModalReciboParcial,
+          clienteId: formulario.clienteId,
+        }}
+        onClose={handleCerrarModalReciboParcial}
+        onGuardar={handleReciboParcialGuardado}
+        esReciboParcial={true}
+        montoFijo={datosCobroPendientes?.monto_pago ?? 0}
+      />
+
+      {/* Modal de cobro (múltiples medios de pago) */}
+      <ModalCobroVenta
+        abierto={mostrarModalCobro}
+        totalVenta={totales?.total ?? 0}
+        clienteId={formulario.clienteId}
+        montoPagoInicial={0}
+        onClose={() => setMostrarModalCobro(false)}
+        onConfirmar={handleConfirmarModalCobro}
+      />
+
       {/* Overlay de espera de ARCA */}
-      <ArcaEsperaOverlay 
+      <ArcaEsperaOverlay
         estaEsperando={esperandoArca}
         mensajePersonalizado={obtenerMensajePersonalizado(tipoComprobante)}
         mostrarDetalles={true}

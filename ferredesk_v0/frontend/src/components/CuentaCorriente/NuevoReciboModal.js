@@ -9,15 +9,18 @@ const NuevoReciboModal = ({
   modal, 
   onClose, 
   onGuardar,
-  esReciboExcedente = false,  // Nuevo: indica si es recibo de excedente
-  montoFijo = null            // Nuevo: monto fijo (no editable)
+  esReciboExcedente = false,  // Recibo de excedente (monto sobrante del pago)
+  esReciboParcial = false,     // Recibo de pago parcial (monto pagado; se imputa a la factura en backend)
+  montoFijo = null            // Monto fijo (no editable) para excedente o parcial
 }) => {
   const theme = useFerreDeskTheme()
   const { getFacturasPendientes, crearReciboConImputaciones } = useCuentaCorrienteAPI()
   
+  const esReciboConMontoFijo = esReciboExcedente || esReciboParcial
+  
   // Estados para las dos partes del modal
-  // Si es recibo de excedente, saltamos directo al paso 2
-  const [paso, setPaso] = useState(esReciboExcedente ? 2 : 1) // 1: Selección facturas, 2: Datos recibo
+  // Si es recibo de excedente o parcial, saltamos directo al paso 2
+  const [paso, setPaso] = useState(esReciboConMontoFijo ? 2 : 1) // 1: Selección facturas, 2: Datos recibo
   
   // Estado para la primera parte: selección de facturas e imputaciones
   const [facturasPendientes, setFacturasPendientes] = useState([])
@@ -58,12 +61,12 @@ const NuevoReciboModal = ({
   }, [modal.clienteId, getFacturasPendientes])
 
   // Cargar facturas pendientes cuando se abre el modal
-  // (solo si NO es recibo de excedente)
+  // (solo si NO es recibo de excedente ni parcial)
   useEffect(() => {
-    if (modal.abierto && modal.clienteId && !esReciboExcedente) {
+    if (modal.abierto && modal.clienteId && !esReciboConMontoFijo) {
       cargarFacturasPendientes()
     }
-  }, [modal.abierto, modal.clienteId, esReciboExcedente, cargarFacturasPendientes])
+  }, [modal.abierto, modal.clienteId, esReciboConMontoFijo, cargarFacturasPendientes])
 
   // Inicializar imputaciones cuando se cargan las facturas
   useEffect(() => {
@@ -80,15 +83,15 @@ const NuevoReciboModal = ({
   }, [facturasPendientes])
 
   // Actualizar monto total del recibo cuando cambien las imputaciones
-  // (solo si NO es recibo de excedente)
+  // (solo si NO es recibo de excedente ni parcial)
   useEffect(() => {
-    if (!esReciboExcedente) {
+    if (!esReciboConMontoFijo) {
       setFormData(prev => ({
         ...prev,
         rec_monto_total: montoImputaciones
       }))
     }
-  }, [montoImputaciones, esReciboExcedente])
+  }, [montoImputaciones, esReciboConMontoFijo])
 
   const handleImputacionChange = (facturaId, monto) => {
     setImputaciones(prev => prev.map(imp => 
@@ -138,14 +141,14 @@ const NuevoReciboModal = ({
     setError('')
 
     try {
-      if (esReciboExcedente) {
-        // Modo recibo de excedente: no hacer request al backend
-        // Solo devolver los datos para que se envíen junto con la venta
+      if (esReciboExcedente || esReciboParcial) {
+        // Modo recibo excedente o parcial: no hacer request al backend
+        // Solo devolver los datos para que se envíen junto con la venta (backend crea recibo e imputación)
         const reciboData = {
           rec_fecha: formData.rec_fecha,
           rec_pv: formData.rec_pv,
           rec_numero: formData.rec_numero,
-          rec_monto_total: montoFijo || formData.rec_monto_total,
+          rec_monto_total: montoFijo != null ? Number(montoFijo) : formData.rec_monto_total,
           rec_observacion: formData.rec_observacion,
           rec_tipo: 'recibo'
         }
@@ -460,13 +463,13 @@ const NuevoReciboModal = ({
                           <input
                             type="number"
                             step="0.01"
-                            min={esReciboExcedente ? montoFijo : Math.max(montoImputaciones, 0)}
-                            value={esReciboExcedente ? (montoFijo ? Number(montoFijo).toFixed(2) : '') : formData.rec_monto_total}
-                            onChange={esReciboExcedente ? undefined : (e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
-                            disabled={esReciboExcedente}
-                            className={`${CLASES_INPUT} ${esReciboExcedente ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            min={esReciboConMontoFijo ? montoFijo : Math.max(montoImputaciones, 0)}
+                            value={esReciboConMontoFijo ? (montoFijo != null ? Number(montoFijo).toFixed(2) : '') : formData.rec_monto_total}
+                            onChange={esReciboConMontoFijo ? undefined : (e) => setFormData(prev => ({ ...prev, rec_monto_total: parseFloat(e.target.value) || 0 }))}
+                            disabled={esReciboConMontoFijo}
+                            className={`${CLASES_INPUT} ${esReciboConMontoFijo ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           />
-                          {!esReciboExcedente && (
+                          {!esReciboConMontoFijo && (
                             <p className="text-xs text-slate-500 mt-1">
                               Mínimo: ${Math.max(montoImputaciones, 0).toLocaleString('es-AR')}
                             </p>
@@ -474,6 +477,11 @@ const NuevoReciboModal = ({
                           {esReciboExcedente && (
                             <p className="text-xs text-orange-600 mt-1 font-medium">
                               Monto fijo (excedente del pago)
+                            </p>
+                          )}
+                          {esReciboParcial && (
+                            <p className="text-xs text-orange-600 mt-1 font-medium">
+                              Monto del pago parcial (se imputará a la factura al guardar)
                             </p>
                           )}
                         </div>
@@ -562,8 +570,8 @@ const NuevoReciboModal = ({
                         loading ||
                         !formData.rec_pv?.trim() ||
                         !formData.rec_numero?.trim() ||
-                        (esReciboExcedente 
-                          ? (montoFijo || 0) < 0 
+                        (esReciboConMontoFijo 
+                          ? (montoFijo == null || Number(montoFijo) <= 0) 
                           : formData.rec_monto_total < Math.max(montoImputaciones, 0))
                       }
                       className={`${theme.botonPrimario} disabled:opacity-50 disabled:cursor-not-allowed`}

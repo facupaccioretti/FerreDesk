@@ -88,6 +88,87 @@ class Venta(models.Model):
     # usa para determinar su caducidad automática.
     ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)
 
+    # Sesión de caja en la que se registró esta venta.
+    # null=True para ventas históricas creadas antes del módulo de caja.
+    # Las nuevas ventas deben asignar la sesión activa del usuario.
+    sesion_caja = models.ForeignKey(
+        'caja.SesionCaja',
+        on_delete=models.PROTECT,
+        db_column='VEN_SESION_CAJA_ID',
+        related_name='ventas',
+        null=True,
+        blank=True,
+        help_text='Sesión de caja en la que se registró esta venta'
+    )
+
+    # Descuento de cierre/redondeo: monto fijo que se resta del total final.
+    ven_descuento_cierre = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        db_column='VEN_DESCUENTO_CIERRE',
+        default=0,
+        help_text='Descuento de cierre/redondeo en monto fijo'
+    )
+
+    # === AUDITORÍA COBRO (aplica al cobro principal; 1 venta = 1 cobro en PTV) ===
+    efectivo_recibido_bruto = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        db_column='VEN_EFECTIVO_RECIBIDO_BRUTO',
+        null=True,
+        blank=True,
+        help_text='Suma de montos efectivo recibidos antes de restar vuelto'
+    )
+    vuelto_calculado = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        db_column='VEN_VUELTO_CALCULADO',
+        null=True,
+        blank=True,
+        help_text='Monto excedente (vuelto dado o propina/vuelto pendiente); para reportes'
+    )
+    excedente_destino = models.CharField(
+        max_length=20,
+        db_column='VEN_EXCEDENTE_DESTINO',
+        null=True,
+        blank=True,
+        help_text='Destino del excedente: vuelto, propina, vuelto_pendiente'
+    )
+    justificacion_excedente = models.TextField(
+        db_column='VEN_JUSTIFICACION_EXCEDENTE',
+        null=True,
+        blank=True,
+        help_text='Justificación cuando excedente es propina o vuelto pendiente'
+    )
+
+    # === CAMPOS DE CONVERSIÓN COTIZACIÓN → FACTURA FISCAL ===
+    
+    # Factura fiscal que reemplazó esta cotización
+    factura_fiscal_convertida = models.OneToOneField(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='VEN_FACTURA_FISCAL_ID',
+        related_name='cotizacion_origen',
+        help_text='Si esta cotización fue convertida, referencia a la factura fiscal resultante'
+    )
+    
+    # Estado de conversión
+    convertida_a_fiscal = models.BooleanField(
+        default=False,
+        db_column='VEN_CONVERTIDA_A_FISCAL',
+        help_text='True si esta cotización fue convertida a factura fiscal'
+    )
+    
+    # Fecha de conversión (para auditoría)
+    fecha_conversion = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column='VEN_FECHA_CONVERSION',
+        help_text='Momento en que se convirtió a factura fiscal'
+    )
+
     # NUEVO CAMPO: Define la relación M2M para asociar comprobantes.
     # Usado principalmente para que una Nota de Crédito pueda referenciar a una o más Facturas.
     comprobantes_asociados = models.ManyToManyField(
@@ -315,6 +396,7 @@ class VentaCalculada(models.Model):
     ven_descu1 = models.DecimalField(max_digits=4, decimal_places=2)
     ven_descu2 = models.DecimalField(max_digits=4, decimal_places=2)
     ven_descu3 = models.DecimalField(max_digits=4, decimal_places=2)
+    ven_descuento_cierre = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     ven_vdocomvta = models.DecimalField(max_digits=4, decimal_places=2)
     ven_vdocomcob = models.DecimalField(max_digits=4, decimal_places=2)
     ven_estado = models.CharField(max_length=2, null=True)
@@ -346,6 +428,12 @@ class VentaCalculada(models.Model):
     cliente_localidad = models.CharField(max_length=100, null=True)
     cliente_provincia = models.CharField(max_length=100, null=True)
     cliente_condicion_iva = models.CharField(max_length=50, null=True)
+    
+    # Campos de conversión (desde vista SQL)
+    convertida_a_fiscal = models.BooleanField(default=False, null=True)
+    factura_fiscal_id = models.IntegerField(null=True)
+    fecha_conversion = models.DateTimeField(null=True)
+    es_operacion_efectiva = models.BooleanField(default=True, null=True)
 
     class Meta:
         managed = False

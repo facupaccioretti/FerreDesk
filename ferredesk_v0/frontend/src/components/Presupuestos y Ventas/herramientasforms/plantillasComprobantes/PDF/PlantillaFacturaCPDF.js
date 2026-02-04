@@ -670,7 +670,7 @@ const configFacturaC = {
       {mostrarTraspasoSiguiente && netoPagina !== null && generarFilaTraspaso(netoPagina, styles, formatearMoneda, false)}
     </View>
   ),
-  // Ajuste de la tabla de totales: solo Subtotal y Total (finales)
+  // Ajuste de la tabla de totales: Subtotal y Total
   generarTotales: (data, styles, formatearMoneda) => {
     const configTotalesC = [
       { label: "Subtotal", tipo: "total" },

@@ -594,6 +594,8 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
     # NUEVOS CAMPOS PARA EL TOOLTIP
     notas_credito_que_la_anulan = serializers.SerializerMethodField()
     facturas_anuladas = serializers.SerializerMethodField()
+    # Info de la factura fiscal cuando esta cotización fue convertida (para UI)
+    factura_fiscal_info = serializers.SerializerMethodField()
     # Campo personalizado para el QR
     ven_qr = serializers.SerializerMethodField()
 
@@ -648,6 +650,26 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
             'descripcion': obj.comprobante_descripcion,
             'activo': obj.comprobante_activo,
         }
+
+    def get_factura_fiscal_info(self, obj):
+        """
+        Si esta cotización fue convertida a factura fiscal, devuelve los datos
+        de la factura resultante y auditoría (número, fecha facturación, usuario que facturó).
+        """
+        if not getattr(obj, 'factura_fiscal_id', None):
+            return None
+        try:
+            venta = Venta.objects.select_related('sesion_caja__usuario').get(pk=obj.factura_fiscal_id)
+            data = dict(VentaAsociadaSerializer(venta, context=self.context).data)
+            data['fecha_conversion'] = getattr(obj, 'fecha_conversion', None)
+            if venta.sesion_caja and venta.sesion_caja.usuario:
+                u = venta.sesion_caja.usuario
+                data['usuario_conversion'] = (u.get_full_name() or u.username) if hasattr(u, 'get_full_name') else getattr(u, 'username', str(u))
+            else:
+                data['usuario_conversion'] = None
+            return data
+        except Venta.DoesNotExist:
+            return None
 
     # MÉTODOS NUEVOS PARA EL TOOLTIP (Implementación segura)
     def get_notas_credito_que_la_anulan(self, obj):

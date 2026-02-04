@@ -35,6 +35,17 @@ def _tiene_valor_no_cero(valor):
     limpio = _solo_digitos(valor)
     return bool(limpio) and limpio != "0"
 
+
+def _importe_arca(valor):
+    """
+    Normaliza un importe para el payload ARCA: 2 decimales (exigido por ARCA, código 10056).
+    Solo se usa al armar el dict enviado a AFIP; no modifica BD ni lo que ve el cliente.
+    """
+    if valor is None:
+        return 0.0
+    return round(float(valor), 2)
+
+
 def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_venta):
     """
     Construye el diccionario de datos para AFIP según el tipo de comprobante.
@@ -207,9 +218,9 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
     # Factura A, Nota de Crédito A y Nota de Débito A (1, 3, 2) - Con IVA discriminado
     if tipo_cbte in [1, 3, 2]:
         datos_comprobante.update({
-            'ImpNeto': float(venta_calculada.ven_impneto),
-            'ImpIVA': float(venta_calculada.iva_global),
-            'ImpTotal': float(venta_calculada.ven_total)
+            'ImpNeto': _importe_arca(venta_calculada.ven_impneto),
+            'ImpIVA': _importe_arca(venta_calculada.iva_global),
+            'ImpTotal': _importe_arca(venta_calculada.ven_total)
         })
         
         # Incluir alícuotas de IVA si existen
@@ -221,10 +232,11 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
     elif tipo_cbte in [6, 8, 11, 13, 7, 12]:
         # Lógica específica para Factura C (tipo 11) y Nota de Crédito C (tipo 13) - Monotributista
         if tipo_cbte in [11, 13]:  # Factura C y Nota de Crédito C
+            total_c = _importe_arca(venta_calculada.ven_total)
             datos_comprobante.update({
-                'ImpNeto': float(venta_calculada.ven_total),  # Para tipo C, el total es el neto
-                'ImpIVA': 0.0,  # CORREGIDO: Tipo C no discrimina IVA
-                'ImpTotal': float(venta_calculada.ven_total)  # CORREGIDO: Total igual al neto
+                'ImpNeto': total_c,   # Para tipo C, el total es el neto
+                'ImpIVA': 0.0,        # Tipo C no discrimina IVA
+                'ImpTotal': total_c
             })
             tipo_nombre = "FACTURA C" if tipo_cbte == 11 else "NOTA DE CRÉDITO C"
             logger.info(f"LÓGICA {tipo_nombre} APLICADA:")
@@ -233,10 +245,12 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
             logger.info(f"   • ImpTotal: {venta_calculada.ven_total} (igual al neto)")
             logger.info(f"   • NO se incluye objeto IVA")
         else:  # Factura B, Nota de Crédito B, Nota de Débito B, Nota de Débito C
+            neto = _importe_arca(venta_calculada.ven_impneto)
+            iva = _importe_arca(venta_calculada.iva_global)
             datos_comprobante.update({
-                'ImpNeto': float(venta_calculada.ven_impneto),  # CORREGIDO: Usar ven_impneto como Factura A
-                'ImpIVA': float(venta_calculada.iva_global),    # CORREGIDO: Usar iva_global de la vista
-                'ImpTotal': float(venta_calculada.ven_impneto) + float(venta_calculada.iva_global)  # CORREGIDO: Neto + IVA
+                'ImpNeto': neto,
+                'ImpIVA': iva,
+                'ImpTotal': _importe_arca(venta_calculada.ven_impneto + venta_calculada.iva_global)
             })
             
             # Incluir alícuotas de IVA si existen y si ImpNeto > 0 (solo para Factura B, no C)
@@ -275,8 +289,8 @@ def _construir_alicuotas_afip(alicuotas_venta):
         id_afip = obtener_id_afip_por_porcentaje(alicuota.ali_porce)
 
         # Regla: ARCA no acepta alícuotas con base imponible igual a 0 (Obs 10020)
-        base = float(alicuota.neto_gravado)
-        importe = float(alicuota.iva_total)
+        base = _importe_arca(alicuota.neto_gravado)
+        importe = _importe_arca(alicuota.iva_total)
         if base <= 0:
             # Omitir alícuotas sin base. Esto filtra comentarios genéricos sin importe.
             continue

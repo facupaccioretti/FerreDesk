@@ -41,6 +41,11 @@ const useGuardadoAtomico = ({ modo, stock, stockProve, onSave }) => {
       if (formToSave.idaliiva !== null && formToSave.idaliiva !== undefined) formToSave.idaliiva_id = formToSave.idaliiva
       delete formToSave.idaliiva
 
+      // Impuesto interno: enviar null si viene vacío para que el backend acepte
+      if (formToSave.impuesto_interno_porcentaje === "" || formToSave.impuesto_interno_porcentaje === undefined) {
+        formToSave.impuesto_interno_porcentaje = null
+      }
+
       // Asegurar que el ID del producto se envíe correctamente (EXACTAMENTE como en el original)
       if (!stock?.id && form.id) {
         formToSave.id = form.id

@@ -45,6 +45,7 @@ function stockAFormulario(stock) {
     idfam2: idFam2 ?? null,
     idfam3: idFam3 ?? null,
     proveedor_habitual_id: proveedorHabitualId,
+    impuesto_interno_porcentaje: stock.impuesto_interno_porcentaje != null ? stock.impuesto_interno_porcentaje : null,
   }
 }
 
@@ -81,6 +82,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
       idaliiva: "",
       acti: "S", // Estado por defecto: Activo para productos nuevos
       id: undefined,
+      impuesto_interno_porcentaje: null,
     }
   })
 
@@ -120,6 +122,8 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
       // Campos que deben transformarse a número (o null si vacío)
       if (["idfam1", "idfam2", "idfam3", "idaliiva"].includes(name)) {
         finalValue = value === "" ? null : Number(value)
+      } else if (name === "impuesto_interno_porcentaje") {
+        finalValue = value === "" ? null : (parseFloat(value) || null)
       } else if (name === "proveedor_habitual_id") {
         // Este campo se mantiene como string para preservar ceros a la izquierda si los hubiera
         finalValue = value === "" ? "" : String(value)

@@ -1471,6 +1471,22 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       </select>
                     </div>
                   </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[12px] text-slate-700">Impuesto interno (%)</span>
+                    <div className="min-w-[180px] text-right">
+                      <input
+                        type="number"
+                        name="impuesto_interno_porcentaje"
+                        value={form.impuesto_interno_porcentaje ?? ""}
+                        onChange={handleChange}
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        placeholder="Opcional"
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 max-w-[180px] ml-auto"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

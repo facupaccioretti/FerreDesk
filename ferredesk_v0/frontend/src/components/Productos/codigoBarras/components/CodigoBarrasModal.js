@@ -240,7 +240,7 @@ function CodigoBarrasModal({
                   </p>
                   {!esProductoExistente && (
                     <p className="text-amber-300 text-xs mt-1">
-                      ⚠️ Producto nuevo - el código se guardará junto con el producto
+                       Producto nuevo - el código se guardará junto con el producto
                     </p>
                   )}
                 </div>

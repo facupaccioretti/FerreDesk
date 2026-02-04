@@ -23,6 +23,7 @@ import DashboardsManager from './components/DashboardsManager';
 import ComprasManager from './components/Compras/ComprasManager';
 import CargaInicialProveedor from './components/Carga Inicial/CargaInicialProveedor';
 import CuentaCorrienteManager from './components/CuentaCorriente/CuentaCorrienteManager';
+import CajaManager from './components/Caja/CajaManager';
 
 // Componente principal con rutas
 export default function App() {
@@ -139,6 +140,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <CuentaCorrienteManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/home/caja"
+          element={
+            <PrivateRoute>
+              <CajaManager />
             </PrivateRoute>
           }
         />

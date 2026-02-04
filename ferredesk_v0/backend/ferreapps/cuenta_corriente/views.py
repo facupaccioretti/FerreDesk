@@ -335,6 +335,20 @@ def crear_recibo_con_imputaciones(request):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
+        # === VALIDACIÓN DE CAJA ABIERTA ===
+        # Un recibo implica cobro de dinero, por lo que requiere tener caja abierta
+        from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+        
+        sesion_caja = SesionCaja.objects.filter(
+            usuario=request.user,
+            estado=ESTADO_CAJA_ABIERTA
+        ).first()
+        if not sesion_caja:
+            return Response({
+                'detail': 'Debe abrir una caja antes de crear un recibo.',
+                'error_code': 'CAJA_NO_ABIERTA'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         data = serializer.validated_data
         cliente_id = data['cliente_id']
         fecha_recibo = data['rec_fecha']
@@ -400,7 +414,8 @@ def crear_recibo_con_imputaciones(request):
                 ven_idpla=cliente.plazo.id if cliente.plazo else 1,
                 ven_idvdo=cliente.vendedor.id if cliente.vendedor else 1,
                 ven_copia=1,
-                ven_observacion=observacion
+                ven_observacion=observacion,
+                sesion_caja=sesion_caja  # Vincular a la caja abierta
             )
             
             # Crear un item genérico con el monto total del recibo

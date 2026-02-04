@@ -458,6 +458,16 @@ class Stock(models.Model):
         help_text='Tipo de código de barras (EAN13, CODE128, EXTERNO)'
     )
 
+    # Impuesto interno: informativo; no se cobra en venta minorista (ya viene en el costo).
+    impuesto_interno_porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='STO_IMP_INTERNO_PORCE',
+        help_text='Porcentaje nominal del impuesto interno que ya viene en el costo (ej. 70 cigarrillos, 26 destilados, 14 cerveza, 8 gaseosas). Solo informativo.'
+    )
+
     class Meta:
         db_table = 'STOCK'
         indexes = [
