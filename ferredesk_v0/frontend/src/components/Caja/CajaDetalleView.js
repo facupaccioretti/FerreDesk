@@ -101,14 +101,14 @@ const CajaDetalleView = ({ sesionId }) => {
     diferencia > 0 ? "text-green-600" : diferencia < 0 ? "text-red-600" : "text-slate-600"
 
   return (
-    <div className="space-y-3">
-      {/* Línea: Caja cerrada + datos sesión */}
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-          <span className="font-medium text-slate-700">Caja #{sesion.id} · Cerrada</span>
-        </div>
-        <span className="text-slate-400">|</span>
+    <div className="space-y-2">
+      {/* Línea 1: Header compacto */}
+      <div className="flex items-center gap-2 text-xs">
+        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+        <span className="font-semibold text-slate-700">Caja #{sesion.id}</span>
+        <span className="text-slate-400">·</span>
+        <span className="px-1.5 py-0.5 text-xs font-medium bg-slate-200 text-slate-700 rounded">Cerrada</span>
+        <span className="text-slate-400">·</span>
         <span className="text-slate-500">{sesion.usuario_nombre || sesion.usuario?.username || "-"}</span>
         <span className="text-slate-400">·</span>
         <span className="text-slate-500">{formatearFecha(sesion.fecha_hora_inicio)} → {formatearFecha(sesion.fecha_hora_fin)}</span>
@@ -120,67 +120,77 @@ const CajaDetalleView = ({ sesionId }) => {
         )}
       </div>
 
-      {/* Línea: números (inicial, contado, calculado, diferencia) */}
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-        <span className="text-slate-500" title="Fondo con el que se abrió la caja">Saldo inicial <strong className="text-slate-700">${formatearMoneda(sesion.saldo_inicial)}</strong></span>
-        <span className="text-slate-500" title="Monto que el cajero contó físicamente al cerrar">Contado (físico) <strong className="text-slate-700">${formatearMoneda(sesion.saldo_final_declarado)}</strong></span>
-        <span className="text-slate-500" title="Monto que el sistema calcula según registros (ventas, movimientos)">Calculado (sistema) <strong className="text-slate-700">${formatearMoneda(sesion.saldo_final_sistema)}</strong></span>
-        <span className={`font-semibold ${diferenciaColor}`} title="Diferencia: positivo = sobrante, negativo = faltante">
-          Diferencia {diferencia !== 0 ? (diferencia > 0 ? "+" : "−") : ""}${formatearMoneda(Math.abs(diferencia))}
-        </span>
+      {/* Línea 2: Saldos en grid compacto */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-slate-50 rounded border border-slate-200 px-2 py-1">
+          <p className="text-[10px] text-slate-500 leading-tight">Inicial</p>
+          <p className="text-sm font-semibold text-slate-800 leading-tight">${formatearMoneda(sesion.saldo_inicial)}</p>
+        </div>
+        <div className="bg-slate-50 rounded border border-slate-200 px-2 py-1">
+          <p className="text-[10px] text-slate-500 leading-tight">Contado</p>
+          <p className="text-sm font-semibold text-slate-800 leading-tight">${formatearMoneda(sesion.saldo_final_declarado)}</p>
+        </div>
+        <div className="bg-slate-50 rounded border border-slate-200 px-2 py-1">
+          <p className="text-[10px] text-slate-500 leading-tight">Calculado</p>
+          <p className="text-sm font-semibold text-slate-800 leading-tight">${formatearMoneda(sesion.saldo_final_sistema)}</p>
+        </div>
+        <div className={`rounded border px-2 py-1 ${diferencia > 0 ? "bg-green-50 border-green-200" : diferencia < 0 ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
+          <p className="text-[10px] text-slate-600 leading-tight">Diferencia</p>
+          <p className={`text-sm font-bold leading-tight ${diferenciaColor}`}>
+            {diferencia !== 0 ? (diferencia > 0 ? "+" : "−") : ""}${formatearMoneda(Math.abs(diferencia))}
+          </p>
+        </div>
       </div>
 
-      {/* Línea: cobros por método + resumen movimientos */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
-        {resumen?.totales_por_metodo && resumen.totales_por_metodo.length > 0 && (
-          <>
-            <span className="text-slate-400">Cobros:</span>
-            {resumen.totales_por_metodo.map((item, index) => (
-              <span key={index}>{item.metodo_pago__nombre} <strong className="text-slate-700">${formatearMoneda(item.total)}</strong></span>
-            ))}
-            <span className="text-slate-300">·</span>
-          </>
-        )}
-        {resumen && (
-          <span>
-            Ingresos manuales: <strong className="text-green-600">+${formatearMoneda(resumen.total_ingresos_manuales)}</strong>
-            {" "} Egresos manuales: <strong className="text-red-600">−${formatearMoneda(resumen.total_egresos_manuales)}</strong>
-          </span>
-        )}
-      </div>
+      {/* Línea 3: Resumen compacto */}
+      {(resumen?.totales_por_metodo?.length > 0 || resumen) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
+          {resumen?.totales_por_metodo && resumen.totales_por_metodo.length > 0 && (
+            <>
+              <span className="text-slate-500 font-medium">Cobros:</span>
+              {resumen.totales_por_metodo.map((item, index) => (
+                <span key={index}>
+                  {item.metodo_pago__nombre} <strong className="text-slate-800">${formatearMoneda(item.total)}</strong>
+                </span>
+              ))}
+              {(parseFloat(resumen?.total_ingresos_manuales) > 0 || parseFloat(resumen?.total_egresos_manuales) > 0) && (
+                <span className="text-slate-300">·</span>
+              )}
+            </>
+          )}
+          {resumen && (parseFloat(resumen.total_ingresos_manuales) > 0 || parseFloat(resumen.total_egresos_manuales) > 0) && (
+            <>
+              <span className="text-green-600">
+                Ing: <strong>+${formatearMoneda(resumen.total_ingresos_manuales)}</strong>
+              </span>
+              <span className="text-red-600">
+                Eg: <strong>−${formatearMoneda(resumen.total_egresos_manuales)}</strong>
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* Excedentes no facturados y vuelto pendiente */}
+      {/* Línea 4: Excedentes compacto */}
       {(parseFloat(resumen?.excedente_no_facturado_propina) > 0 || parseFloat(resumen?.vuelto_pendiente) > 0) && (
-        <div className="text-xs text-slate-600 space-y-1">
-          {parseFloat(resumen?.excedente_no_facturado_propina) > 0 && (
-            <p>
-              Excedente no facturado (propina/redondeo): <strong className="text-slate-800">${formatearMoneda(resumen.excedente_no_facturado_propina)}</strong>
-            </p>
-          )}
-          {parseFloat(resumen?.vuelto_pendiente) > 0 && (
-            <p>
-              Vuelto pendiente: <strong className="text-slate-800">${formatearMoneda(resumen.vuelto_pendiente)}</strong>
-            </p>
-          )}
-          {resumen?.ventas_con_excedente?.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-slate-200">
-              <p className="text-slate-500 font-medium mb-1">Detalle por comprobante:</p>
-              <ul className="space-y-1">
-                {resumen.ventas_con_excedente.map((item, index) => (
-                  <li key={index} className="flex flex-wrap gap-x-2 gap-y-0.5">
-                    <span className="font-medium text-slate-700">{item.numero}</span>
-                    <span className="text-slate-500">
-                      {item.excedente_destino === "propina" ? "Propina/redondeo" : "Vuelto pendiente"}
-                      {" "}${formatearMoneda(item.vuelto_calculado)}
-                    </span>
-                    {item.justificacion_excedente && (
-                      <span className="text-slate-500 italic" title="Justificación">— {item.justificacion_excedente}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+        <div className="bg-amber-50 rounded border border-amber-200 px-2 py-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+            {parseFloat(resumen?.excedente_no_facturado_propina) > 0 && (
+              <span className="text-amber-700">
+                Excedente: <strong className="text-amber-900">${formatearMoneda(resumen.excedente_no_facturado_propina)}</strong>
+              </span>
+            )}
+            {parseFloat(resumen?.vuelto_pendiente) > 0 && (
+              <span className="text-amber-700">
+                Vuelto pend: <strong className="text-amber-900">${formatearMoneda(resumen.vuelto_pendiente)}</strong>
+              </span>
+            )}
+            {resumen?.ventas_con_excedente?.length > 0 && (
+              <span className="text-amber-600 text-[10px]">
+                ({resumen.ventas_con_excedente.length} comprobante{resumen.ventas_con_excedente.length > 1 ? "s" : ""})
+              </span>
+            )}
+          </div>
         </div>
       )}
 

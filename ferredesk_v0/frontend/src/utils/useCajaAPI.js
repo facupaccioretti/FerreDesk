@@ -201,6 +201,93 @@ export function useCajaAPI() {
         return makeRequest(`${API_BASE}/pagos/?venta=${ventaId}`);
     }, [makeRequest]);
 
+    // ========================================
+    // CUENTAS BANCO
+    // ========================================
+
+    /**
+     * Obtiene las cuentas bancarias / billeteras configuradas.
+     * @param {boolean} soloActivas - Si true, solo retorna cuentas activas
+     * @returns {Promise<Array>}
+     */
+    const obtenerCuentasBanco = useCallback(async (soloActivas = false) => {
+        const url = soloActivas
+            ? `${API_BASE}/cuentas-banco/?solo_activas=true`
+            : `${API_BASE}/cuentas-banco/`;
+        return makeRequest(url);
+    }, [makeRequest]);
+
+    // ========================================
+    // CHEQUES (VALORES EN CARTERA)
+    // ========================================
+
+    /**
+     * Obtiene cheques, opcionalmente filtrados por estado.
+     * @param {string|null} estado - EN_CARTERA | DEPOSITADO | ENTREGADO | RECHAZADO
+     * @returns {Promise<Array|{results:Array}>}
+     */
+    const obtenerCheques = useCallback(async (estado = null) => {
+        const url = estado
+            ? `${API_BASE}/cheques/?estado=${encodeURIComponent(estado)}`
+            : `${API_BASE}/cheques/`;
+        return makeRequest(url);
+    }, [makeRequest]);
+
+    /**
+     * Deposita un cheque a una cuenta propia.
+     * @param {number} chequeId 
+     * @param {number} cuentaBancoId 
+     * @returns {Promise<object>}
+     */
+    const depositarCheque = useCallback(async (chequeId, cuentaBancoId) => {
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/depositar/`, {
+            method: 'POST',
+            body: JSON.stringify({ cuenta_banco_id: cuentaBancoId }),
+        });
+    }, [makeRequest]);
+
+    /**
+     * Endosa cheques seleccionados a un proveedor.
+     * @param {number} proveedorId 
+     * @param {Array<number>} chequeIds 
+     * @returns {Promise<object>}
+     */
+    const endosarCheques = useCallback(async (proveedorId, chequeIds) => {
+        return makeRequest(`${API_BASE}/cheques/endosar/`, {
+            method: 'POST',
+            body: JSON.stringify({ proveedor_id: proveedorId, cheque_ids: chequeIds }),
+        });
+    }, [makeRequest]);
+
+    /**
+     * Marca un cheque como rechazado: genera ND automática y contrasiento si estaba depositado.
+     * @param {number} chequeId - ID del cheque
+     * @param {{ cargosAdministrativosBanco?: number|null }} opciones - Opcional. cargosAdministrativosBanco: monto que debitó el banco (se agrega como ítem no gravado en la ND).
+     * @returns {Promise<object>} - Cheque actualizado (con nota_debito_venta_id, cliente_origen, etc.)
+     */
+    const marcarChequeRechazado = useCallback(async (chequeId, opciones = {}) => {
+        const body = {};
+        if (opciones.cargosAdministrativosBanco != null && Number(opciones.cargosAdministrativosBanco) > 0) {
+            body.cargos_administrativos_banco = Number(opciones.cargosAdministrativosBanco);
+        }
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/marcar-rechazado/`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    }, [makeRequest]);
+
+    /**
+     * Reactiva un cheque rechazado (RECHAZADO → EN_CARTERA).
+     * @param {number} chequeId - ID del cheque
+     * @returns {Promise<object>} - Cheque actualizado
+     */
+    const reactivarCheque = useCallback(async (chequeId) => {
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/reactivar/`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        });
+    }, [makeRequest]);
+
     return {
         // Estado
         loading,
@@ -223,6 +310,16 @@ export function useCajaAPI() {
 
         // Pagos
         obtenerPagosVenta,
+
+        // Cuentas banco
+        obtenerCuentasBanco,
+
+        // Cheques
+        obtenerCheques,
+        depositarCheque,
+        endosarCheques,
+        marcarChequeRechazado,
+        reactivarCheque,
     };
 }
 

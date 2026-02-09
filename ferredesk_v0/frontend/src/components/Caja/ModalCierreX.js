@@ -96,6 +96,23 @@ const ModalCierreX = ({ sesion, resumen, onCerrar }) => {
               </ul>
             </div>
           )}
+
+          {resumen?.totales_por_banco?.length > 0 && (
+            <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+              <h4 className="text-xs font-semibold text-slate-600 mb-2">Transferencias/QR por banco</h4>
+              <ul className="space-y-1 text-xs">
+                {resumen.totales_por_banco.map((item, index) => (
+                  <li key={index} className="flex justify-between">
+                    <span className="text-slate-600">
+                      {item.cuenta_banco__nombre || "Sin banco"}{" "}
+                      <span className="text-slate-400">({item.metodo_pago__nombre})</span>
+                    </span>
+                    <span className="font-medium text-slate-800">${formatMoney(item.total)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="p-4 pt-2 border-t border-slate-200 flex-shrink-0">

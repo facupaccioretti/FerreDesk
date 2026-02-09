@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import Tabla from "../Tabla"
 
 /**
  * Componente que muestra el historial de cajas cerradas.
@@ -15,8 +16,6 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
 
   const [cajas, setCajas] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [pagina, setPagina] = useState(1)
-  const [itemsPorPagina] = useState(20)
 
   // Filtros locales
   const [fechaDesde, setFechaDesde] = useState("")
@@ -92,16 +91,107 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
     return true
   })
 
-  // Paginación
-  const inicio = (pagina - 1) * itemsPorPagina
-  const fin = inicio + itemsPorPagina
-  const cajasPagina = cajasFiltradas.slice(inicio, fin)
-  const totalPaginas = Math.ceil(cajasFiltradas.length / itemsPorPagina)
-
   const handleClickFila = (caja) => {
     if (onCajaClick) {
       onCajaClick(caja)
     }
+  }
+
+  const columnas = [
+    {
+      id: "fecha_hora_inicio",
+      titulo: "FECHA APERTURA",
+      render: (caja) => (
+        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_inicio)}</span>
+      ),
+    },
+    {
+      id: "fecha_hora_fin",
+      titulo: "FECHA CIERRE",
+      render: (caja) => (
+        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_fin)}</span>
+      ),
+    },
+    {
+      id: "usuario",
+      titulo: "USUARIO",
+      render: (caja) => (
+        <span className="text-sm text-slate-600">
+          {caja.usuario?.username || caja.usuario_nombre || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "sucursal",
+      titulo: "SUCURSAL",
+      render: (caja) => <span className="text-sm text-slate-600">{caja.sucursal || "-"}</span>,
+    },
+    {
+      id: "saldo_inicial",
+      titulo: "SALDO INICIAL",
+      align: "right",
+      render: (caja) => (
+        <span className="text-sm text-right font-medium text-slate-800">
+          ${formatearMoneda(caja.saldo_inicial)}
+        </span>
+      ),
+    },
+    {
+      id: "saldo_final_declarado",
+      titulo: "SALDO FINAL",
+      align: "right",
+      render: (caja) => (
+        <span className="text-sm text-right font-medium text-slate-800">
+          ${formatearMoneda(caja.saldo_final_declarado)}
+        </span>
+      ),
+    },
+    {
+      id: "diferencia",
+      titulo: "DIFERENCIA",
+      align: "right",
+      render: (caja) => {
+        const diferencia = parseFloat(caja.diferencia) || 0
+        const diferenciaColor =
+          diferencia > 0
+            ? "text-green-600"
+            : diferencia < 0
+            ? "text-red-600"
+            : "text-slate-600"
+        return (
+          <span className={`text-sm text-right font-semibold ${diferenciaColor}`}>
+            {diferencia !== 0 ? (diferencia > 0 ? "+" : "") : ""}
+            ${formatearMoneda(Math.abs(diferencia))}
+          </span>
+        )
+      },
+    },
+  ]
+
+  const renderFila = (caja, idxVisible, indiceInicio) => {
+    return (
+      <tr
+        key={caja.id}
+        onClick={() => handleClickFila(caja)}
+        className="hover:bg-slate-50 cursor-pointer transition-colors"
+      >
+        {columnas.map((col) => {
+          const contenido = col.render ? col.render(caja, idxVisible, indiceInicio) : caja[col.id]
+          const alignClass = { left: "text-left", center: "text-center", right: "text-right" }[
+            col.align || "left"
+          ]
+          return (
+            <td
+              key={col.id}
+              className={`px-4 py-3 whitespace-nowrap text-sm ${alignClass}`}
+              style={col.ancho ? { width: col.ancho } : undefined}
+            >
+              {contenido}
+            </td>
+          )
+        })}
+      </tr>
+    )
   }
 
   return (
@@ -195,140 +285,19 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
 
       {/* Tabla */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        {cargando ? (
-          <div className="p-12 text-center">
-            <div className="animate-spin w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-slate-600">Cargando historial...</p>
-          </div>
-        ) : cajasPagina.length === 0 ? (
-          <div className="p-12 text-center">
-            <svg
-              className="w-16 h-16 mx-auto mb-4 text-slate-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <p className="text-slate-500">No hay cajas cerradas en el historial</p>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                      Fecha Apertura
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                      Fecha Cierre
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                      Usuario
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">
-                      Sucursal
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">
-                      Saldo Inicial
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">
-                      Saldo Final
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">
-                      Diferencia
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {cajasPagina.map((caja) => {
-                    const diferencia = parseFloat(caja.diferencia) || 0
-                    const diferenciaColor =
-                      diferencia > 0
-                        ? "text-green-600"
-                        : diferencia < 0
-                        ? "text-red-600"
-                        : "text-slate-600"
-
-                    return (
-                      <tr
-                        key={caja.id}
-                        onClick={() => handleClickFila(caja)}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors"
-                      >
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {formatearFecha(caja.fecha_hora_inicio)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {formatearFecha(caja.fecha_hora_fin)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {caja.usuario?.username || caja.usuario_nombre || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {caja.sucursal || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right font-medium text-slate-800">
-                          ${formatearMoneda(caja.saldo_inicial)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right font-medium text-slate-800">
-                          ${formatearMoneda(caja.saldo_final_declarado)}
-                        </td>
-                        <td className={`px-4 py-3 text-sm text-right font-semibold ${diferenciaColor}`}>
-                          {diferencia !== 0 ? (diferencia > 0 ? "+" : "") : ""}
-                          ${formatearMoneda(Math.abs(diferencia))}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            {totalPaginas > 1 && (
-              <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Mostrando {inicio + 1} - {Math.min(fin, cajasFiltradas.length)} de{" "}
-                  {cajasFiltradas.length} cajas
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                    disabled={pagina === 1}
-                    className={`px-3 py-1 text-sm rounded border ${
-                      pagina === 1
-                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    Anterior
-                  </button>
-                  <span className="px-3 py-1 text-sm text-slate-700">
-                    Página {pagina} de {totalPaginas}
-                  </span>
-                  <button
-                    onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-                    disabled={pagina === totalPaginas}
-                    className={`px-3 py-1 text-sm rounded border ${
-                      pagina === totalPaginas
-                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <Tabla
+          columnas={columnas}
+          datos={cajasFiltradas}
+          valorBusqueda=""
+          onCambioBusqueda={() => {}}
+          mostrarBuscador={false}
+          mostrarOrdenamiento={false}
+          filasPorPaginaInicial={20}
+          paginadorVisible={true}
+          renderFila={renderFila}
+          sinEstilos={true}
+          cargando={cargando}
+        />
       </div>
     </div>
   )

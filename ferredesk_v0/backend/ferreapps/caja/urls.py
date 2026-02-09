@@ -18,6 +18,8 @@ router.register(r'sesiones', views.SesionCajaViewSet, basename='sesion-caja')
 router.register(r'movimientos', views.MovimientoCajaViewSet, basename='movimiento-caja')
 router.register(r'metodos-pago', views.MetodoPagoViewSet, basename='metodo-pago')
 router.register(r'pagos', views.PagoVentaViewSet, basename='pago-venta')
+router.register(r'cuentas-banco', views.CuentaBancoViewSet, basename='cuenta-banco')
+router.register(r'cheques', views.ChequeViewSet, basename='cheque')
 
 urlpatterns = [
     path('', include(router.urls)),

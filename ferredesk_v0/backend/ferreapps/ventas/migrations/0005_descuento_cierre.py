@@ -202,6 +202,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('ventas', '0004_venta_sesion_caja'),
+        ('cuenta_corriente', '0002_initial'),  # La vista usa IMPUTACION_VENTA.IMP_ID_RECIBO/IMP_ID_VENTA (agregados en 0002)
     ]
 
     operations = [

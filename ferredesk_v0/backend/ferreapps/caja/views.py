@@ -9,21 +9,28 @@ Implementa los ViewSets para:
 
 from django.utils import timezone
 from django.db.models import Sum, Q
+from django.db import transaction
+from django.core.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from decimal import Decimal
+from django.utils import timezone
 
 from .models import (
     SesionCaja,
     MovimientoCaja,
     MetodoPago,
     PagoVenta,
+    CuentaBanco,
+    Cheque,
     ESTADO_CAJA_ABIERTA,
     ESTADO_CAJA_CERRADA,
     TIPO_MOVIMIENTO_ENTRADA,
     TIPO_MOVIMIENTO_SALIDA,
+    CODIGO_TRANSFERENCIA,
+    CODIGO_QR,
 )
 from .serializers import (
     SesionCajaSerializer,
@@ -33,6 +40,8 @@ from .serializers import (
     CrearMovimientoSerializer,
     MetodoPagoSerializer,
     PagoVentaSerializer,
+    ChequeSerializer,
+    CuentaBancoSerializer,
 )
 
 
@@ -273,6 +282,20 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         ).annotate(
             total=Sum('monto')
         ).order_by('metodo_pago__orden')
+
+        # Transferencias/QR por banco/billetera (solo lectura para Cierre X)
+        totales_por_banco = PagoVenta.objects.filter(
+            venta__sesion_caja=sesion,
+            es_vuelto=False,
+            metodo_pago__codigo__in=[CODIGO_TRANSFERENCIA, CODIGO_QR],
+        ).values(
+            'metodo_pago__codigo',
+            'metodo_pago__nombre',
+            'cuenta_banco__id',
+            'cuenta_banco__nombre',
+        ).annotate(
+            total=Sum('monto')
+        ).order_by('metodo_pago__orden', 'cuenta_banco__nombre')
         
         # Movimientos manuales
         total_ingresos = sesion.movimientos.filter(
@@ -332,6 +355,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             'total_ingresos_manuales': str(total_ingresos),
             'total_egresos_manuales': str(total_egresos),
             'totales_por_metodo': list(totales_por_metodo),
+            'totales_por_banco': list(totales_por_banco),
             'cantidad_ventas': cantidad_ventas,
             'total_ventas': str(total_ventas),
             'excedente_no_facturado_propina': str(excedente_propina),
@@ -415,20 +439,208 @@ class MetodoPagoViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PagoVentaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para consultar pagos de ventas.
-    
+
     Solo lectura - los pagos se crean al registrar ventas.
     """
-    
+
     queryset = PagoVenta.objects.all()
     serializer_class = PagoVentaSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Filtra pagos por venta si se especifica."""
         queryset = super().get_queryset().select_related('venta', 'metodo_pago')
-        
+
         venta_id = self.request.query_params.get('venta')
         if venta_id:
             queryset = queryset.filter(venta_id=venta_id)
-        
+
         return queryset
+
+
+class CuentaBancoViewSet(viewsets.ModelViewSet):
+    """ViewSet para CRUD de cuentas bancarias y billeteras virtuales."""
+
+    queryset = CuentaBanco.objects.all()
+    serializer_class = CuentaBancoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Opcional: filtrar solo activas para listados de selección."""
+        queryset = super().get_queryset()
+        solo_activas = self.request.query_params.get('solo_activas', 'false').lower() == 'true'
+        if solo_activas:
+            queryset = queryset.filter(activo=True)
+        return queryset.order_by('nombre')
+
+
+class ChequeViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura para cheques (valores en cartera e historial)."""
+
+    queryset = Cheque.objects.all()
+    serializer_class = ChequeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related(
+            'venta',
+            'venta__ven_idcli',
+            'venta__comprobante',
+            'pago_venta',
+            'cuenta_banco_deposito',
+            'proveedor',
+            'usuario_registro',
+            'nota_debito_venta',
+            'nota_debito_venta__comprobante',
+        )
+        estado = self.request.query_params.get('estado')
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        return queryset.order_by('-fecha_hora_registro')
+
+    @action(detail=False, methods=['get'], url_path='alertas-vencimiento')
+    def alertas_vencimiento(self, request):
+        """Devuelve cantidad de cheques por vencer en los próximos N días.
+
+        Regla: vencimiento legal = fecha_presentacion + 30 días.
+        Parámetros:
+        - dias (int): ventana de alerta. Default 5.
+        """
+        try:
+            dias = int(request.query_params.get('dias', 5))
+        except Exception:
+            dias = 5
+        if dias < 1:
+            dias = 1
+        if dias > 60:
+            dias = 60
+
+        hoy = timezone.localdate()
+        from datetime import timedelta
+        fecha_limite = hoy + timedelta(days=dias)
+
+        # Solo cheques en cartera (todavía bajo control de la empresa)
+        qs = Cheque.objects.filter(estado=Cheque.ESTADO_EN_CARTERA)
+
+        # Fecha de vencimiento = presentacion + 30 días
+        # Filtrar los que vencen dentro de la ventana: (presentacion + 30) <= fecha_limite
+        #  => presentacion <= fecha_limite - 30
+        fecha_presentacion_limite = fecha_limite - timedelta(days=30)
+
+        cantidad = qs.filter(fecha_presentacion__lte=fecha_presentacion_limite).count()
+
+        return Response({
+            'dias': dias,
+            'cantidad': cantidad,
+        })
+
+    @action(detail=True, methods=['post'], url_path='depositar')
+    def depositar(self, request, pk=None):
+        """Deposita un cheque EN_CARTERA a una cuenta propia (CuentaBanco)."""
+        cheque = self.get_object()
+        if cheque.estado != Cheque.ESTADO_EN_CARTERA:
+            return Response({'detail': 'Solo cheques EN_CARTERA pueden depositarse.'}, status=status.HTTP_400_BAD_REQUEST)
+        cuenta_banco_id = request.data.get('cuenta_banco_id')
+        if not cuenta_banco_id:
+            return Response({'detail': 'Debe enviar cuenta_banco_id.'}, status=status.HTTP_400_BAD_REQUEST)
+        cuenta = CuentaBanco.objects.filter(id=cuenta_banco_id, activo=True).first()
+        if not cuenta:
+            return Response({'detail': 'Cuenta bancaria no encontrada o inactiva.'}, status=status.HTTP_400_BAD_REQUEST)
+        cheque.cuenta_banco_deposito = cuenta
+        cheque.estado = Cheque.ESTADO_DEPOSITADO
+        cheque.save(update_fields=['cuenta_banco_deposito', 'estado'])
+        return Response(ChequeSerializer(cheque).data)
+
+    @action(detail=False, methods=['post'], url_path='endosar')
+    def endosar(self, request):
+        """Endosa uno o más cheques EN_CARTERA a un proveedor."""
+        proveedor_id = request.data.get('proveedor_id')
+        cheque_ids = request.data.get('cheque_ids') or []
+        if not proveedor_id or not cheque_ids:
+            return Response({'detail': 'Debe enviar proveedor_id y cheque_ids.'}, status=status.HTTP_400_BAD_REQUEST)
+        from ferreapps.productos.models import Proveedor
+        proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+        if not proveedor:
+            return Response({'detail': 'Proveedor no encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+        cheques = Cheque.objects.filter(id__in=cheque_ids, estado=Cheque.ESTADO_EN_CARTERA)
+        if cheques.count() != len(cheque_ids):
+            return Response({'detail': 'Solo se pueden endosar cheques EN_CARTERA.'}, status=status.HTTP_400_BAD_REQUEST)
+        cheques.update(estado=Cheque.ESTADO_ENTREGADO, proveedor=proveedor)
+        return Response({'endosados': len(cheque_ids)})
+
+    @action(detail=True, methods=['post'], url_path='marcar-rechazado')
+    def marcar_rechazado(self, request, pk=None):
+        """Marca el cheque como rechazado, genera ND al cliente y opcionalmente contrasiento si estaba depositado."""
+        cheque = self.get_object()
+        estados_permitidos = (Cheque.ESTADO_EN_CARTERA, Cheque.ESTADO_DEPOSITADO, Cheque.ESTADO_ENTREGADO)
+        if cheque.estado not in estados_permitidos:
+            return Response(
+                {'detail': 'Solo cheques en En cartera, Depositado o Entregado pueden marcarse como rechazados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not cheque.venta_id:
+            return Response({'detail': 'El cheque debe estar vinculado a una venta.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not cheque.pago_venta_id:
+            return Response({'detail': 'El cheque debe estar vinculado a un pago de venta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sesion_caja = SesionCaja.objects.filter(
+            usuario=request.user,
+            estado=ESTADO_CAJA_ABIERTA,
+        ).first()
+        if not sesion_caja:
+            return Response(
+                {'detail': 'Debe abrir una caja antes de marcar un cheque como rechazado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from decimal import Decimal
+        from .utils import generar_nota_debito_cheque_rechazado, registrar_contrasiento_cheque_depositado
+
+        monto_cargos = request.data.get('cargos_administrativos_banco')
+        if monto_cargos is not None:
+            try:
+                monto_cargos = Decimal(str(monto_cargos)).quantize(Decimal('0.01'))
+                if monto_cargos < 0:
+                    return Response(
+                        {'detail': 'Los cargos administrativos del banco no pueden ser negativos.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except (ValueError, TypeError):
+                return Response(
+                    {'detail': 'cargos_administrativos_banco debe ser un número válido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            with transaction.atomic():
+                nd_venta = generar_nota_debito_cheque_rechazado(
+                    cheque, sesion_caja, request.user,
+                    monto_cargos_administrativos_banco=monto_cargos,
+                )
+                if cheque.estado == Cheque.ESTADO_DEPOSITADO:
+                    registrar_contrasiento_cheque_depositado(cheque, sesion_caja, request.user)
+                cheque.estado = Cheque.ESTADO_RECHAZADO
+                cheque.nota_debito_venta = nd_venta
+                cheque.save(update_fields=['estado', 'nota_debito_venta'])
+        except ValidationError as e:
+            detail = e.messages[0] if getattr(e, 'messages', None) else str(e)
+            return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Re-obtener el cheque con relaciones para que el serializer exponga nota_debito_venta_id, etc.
+        cheque = self.get_queryset().get(pk=cheque.pk)
+        return Response(ChequeSerializer(cheque).data)
+
+    @action(detail=True, methods=['post'], url_path='reactivar')
+    def reactivar(self, request, pk=None):
+        """Vuelve un cheque RECHAZADO a EN_CARTERA (cuando el cliente devuelve el cheque y paga en efectivo)."""
+        cheque = self.get_object()
+        if cheque.estado != Cheque.ESTADO_RECHAZADO:
+            return Response(
+                {'detail': 'Solo cheques en estado Rechazado pueden reactivarse.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cheque.estado = Cheque.ESTADO_EN_CARTERA
+        cheque.save(update_fields=['estado'])
+        return Response(ChequeSerializer(cheque).data)

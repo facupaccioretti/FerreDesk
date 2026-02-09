@@ -15,13 +15,20 @@ import copy
 from django.db import transaction
 from django.core.exceptions import ValidationError
 
+from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
+
 from .models import (
     PagoVenta,
     MovimientoCaja,
     MetodoPago,
     SesionCaja,
     TIPO_MOVIMIENTO_ENTRADA,
+    TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
+    CODIGO_TRANSFERENCIA,
+    CODIGO_QR,
+    CODIGO_CHEQUE,
+    Cheque,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,6 +213,43 @@ def registrar_pagos_venta(
                 metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
             except MetodoPago.DoesNotExist:
                 raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+
+            # Transferencia/QR: requiere cuenta banco destino
+            cuenta_banco_id = pago_data.get('cuenta_banco_id')
+            if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR]:
+                if not cuenta_banco_id:
+                    raise ValidationError(
+                        'Debe indicar cuenta_banco_id para pagos por transferencia/QR.'
+                    )
+            else:
+                cuenta_banco_id = None
+
+            # Datos de cheque (solo si el método es cheque)
+            datos_cheque = None
+            if metodo_pago.codigo == CODIGO_CHEQUE:
+                numero_cheque = (pago_data.get('numero_cheque') or '').strip()
+                banco_emisor = (pago_data.get('banco_emisor') or '').strip()
+                cuit_librador = (pago_data.get('cuit_librador') or '').strip()
+                fecha_emision = pago_data.get('fecha_emision')
+                fecha_presentacion = pago_data.get('fecha_presentacion')
+
+                if not numero_cheque or not banco_emisor or not cuit_librador or not fecha_emision or not fecha_presentacion:
+                    raise ValidationError('Faltan datos obligatorios del cheque.')
+
+                # Validación estricta: 11 dígitos numéricos sin guiones
+                if len(cuit_librador) != 11 or not cuit_librador.isdigit():
+                    raise ValidationError('El CUIT del librador debe tener 11 dígitos numéricos (sin guiones).')
+                resultado_cuit = validar_cuit(cuit_librador)
+                if not resultado_cuit.get('es_valido'):
+                    raise ValidationError(resultado_cuit.get('mensaje_error') or 'El CUIT del librador no es válido.')
+
+                datos_cheque = {
+                    'numero': numero_cheque,
+                    'banco_emisor': banco_emisor,
+                    'cuit_librador': cuit_librador,
+                    'fecha_emision': fecha_emision,
+                    'fecha_presentacion': fecha_presentacion,
+                }
             
             monto_recibido = pago_data.get('monto_recibido')
             if monto_recibido is not None:
@@ -218,6 +262,7 @@ def registrar_pagos_venta(
             pago_venta = PagoVenta(
                 venta=venta,
                 metodo_pago=metodo_pago,
+                cuenta_banco_id=cuenta_banco_id,
                 monto=monto,
                 es_vuelto=False,
                 referencia_externa=pago_data.get('referencia_externa', ''),
@@ -228,6 +273,20 @@ def registrar_pagos_venta(
             pago_venta.full_clean()
             pago_venta.save()
             pagos_creados.append(pago_venta)
+
+            if datos_cheque is not None:
+                Cheque.objects.create(
+                    numero=datos_cheque['numero'],
+                    banco_emisor=datos_cheque['banco_emisor'],
+                    monto=monto,
+                    cuit_librador=datos_cheque['cuit_librador'],
+                    fecha_emision=datos_cheque['fecha_emision'],
+                    fecha_presentacion=datos_cheque['fecha_presentacion'],
+                    estado=Cheque.ESTADO_EN_CARTERA,
+                    venta=venta,
+                    pago_venta=pago_venta,
+                    usuario_registro=sesion_caja.usuario,
+                )
             
             # Si el método de pago afecta arqueo (efectivo), crear movimiento de caja
             if metodo_pago.afecta_arqueo:
@@ -343,3 +402,170 @@ def calcular_vuelto_dado(venta) -> Decimal:
     ).aggregate(total=Sum('monto'))['total']
     
     return total or Decimal('0.00')
+
+
+# -----------------------------------------------------------------------------
+# Cheque rechazado: generación de ND y contrasiento (Fase 7)
+# -----------------------------------------------------------------------------
+
+# ID de alícuota IVA "NO GRAVADO" (0%) para el ítem de la ND por cheque rechazado:
+# no hay nuevo hecho imponible, los impuestos ya fueron pagados en la factura original.
+ALICUOTA_NO_GRAVADO_ID = 1
+
+def generar_nota_debito_cheque_rechazado(cheque: 'Cheque', sesion_caja: SesionCaja, usuario, monto_cargos_administrativos_banco=None) -> 'Venta':
+    """
+    Genera una Nota de Débito (o Extensión de Contenido si la factura era interna)
+    por el monto del cheque rechazado y opcionalmente por cargos administrativos
+    que el banco debitó al procesar el rechazo. La ND queda como saldo en cuenta corriente;
+    no se registra pago.
+
+    Parámetros:
+        cheque: Cheque rechazado (debe tener venta y pago_venta).
+        sesion_caja: Sesión de caja abierta del usuario.
+        usuario: Usuario que ejecuta la acción (para auditoría).
+        monto_cargos_administrativos_banco: Opcional. Monto en decimal; si > 0 se agrega
+            un segundo ítem "Cargos administrativos banco" (no gravado).
+
+    Retorno:
+        Venta (ND o Extensión de Contenido) creada.
+
+    Excepciones:
+        ValidationError: Si el cheque no tiene venta/pago_venta o datos insuficientes.
+    """
+    from datetime import date
+    from django.core.exceptions import ValidationError
+
+    if not cheque.venta_id:
+        raise ValidationError('El cheque debe estar vinculado a una venta para generar la ND.')
+    if not cheque.pago_venta_id:
+        raise ValidationError('El cheque debe estar vinculado a un pago de venta.')
+
+    venta_orig = cheque.venta
+    cliente = venta_orig.ven_idcli
+    comprobante_orig = venta_orig.comprobante
+    if not comprobante_orig:
+        raise ValidationError('La venta de origen no tiene comprobante asociado.')
+    letra = (comprobante_orig.letra or '').strip()
+    tipo_orig = (comprobante_orig.tipo or '').strip().lower()
+
+    # Determinar comprobante de la ND según letra de la factura original
+    from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
+    from ferreapps.ventas.ARCA import debe_emitir_arca, emitir_arca_automatico
+    from ferreapps.productos.models import Ferreteria
+
+    if letra == 'I':
+        comp_nd = Comprobante.objects.filter(
+            tipo='nota_debito_interna',
+            letra='I',
+            activo=True,
+        ).first()
+        if not comp_nd:
+            raise ValidationError('No se encontró comprobante Extensión de Contenido (nota_debito_interna I) configurado.')
+        punto_venta = 99  # PUNTO_VENTA_INTERNO
+    elif letra in ('A', 'B', 'C'):
+        comp_nd = Comprobante.objects.filter(
+            tipo='nota_debito',
+            letra=letra,
+            activo=True,
+        ).first()
+        if not comp_nd:
+            raise ValidationError(f'No se encontró comprobante Nota de Débito {letra} configurado.')
+        ferreteria = Ferreteria.objects.first()
+        punto_venta = getattr(ferreteria, 'punto_venta_arca', None) or 1
+    else:
+        raise ValidationError(f'Letra de comprobante no soportada para ND: {letra}')
+
+    # Siguiente número para este comprobante y punto de venta
+    ultima = Venta.objects.filter(
+        ven_punto=punto_venta,
+        comprobante_id=comp_nd.codigo_afip,
+    ).order_by('-ven_numero').first()
+    nuevo_numero = 1 if not ultima else ultima.ven_numero + 1
+
+    hoy = date.today()
+    monto = cheque.monto
+
+    nd_venta = Venta.objects.create(
+        ven_sucursal=venta_orig.ven_sucursal,
+        ven_fecha=hoy,
+        comprobante_id=comp_nd.codigo_afip,
+        ven_punto=punto_venta,
+        ven_numero=nuevo_numero,
+        ven_descu1=Decimal('0'),
+        ven_descu2=Decimal('0'),
+        ven_descu3=Decimal('0'),
+        ven_vdocomvta=Decimal('0'),
+        ven_vdocomcob=Decimal('0'),
+        ven_estado=venta_orig.ven_estado or 'CO',
+        ven_idcli=cliente,
+        ven_cuit=getattr(venta_orig, 'ven_cuit', None) or (getattr(cliente, 'cuit', None) if cliente else None),
+        ven_razon_social=getattr(venta_orig, 'ven_razon_social', None) or (getattr(cliente, 'razon', None) if cliente else None),
+        ven_idpla=venta_orig.ven_idpla,
+        ven_idvdo=venta_orig.ven_idvdo,
+        ven_copia=1,
+        sesion_caja=sesion_caja,
+    )
+    nd_venta.comprobantes_asociados.set([venta_orig.ven_id])
+
+    VentaDetalleItem.objects.create(
+        vdi_idve=nd_venta,
+        vdi_orden=1,
+        vdi_idsto=None,
+        vdi_idpro=None,
+        vdi_cantidad=Decimal('1'),
+        vdi_costo=monto,
+        vdi_margen=Decimal('0'),
+        vdi_bonifica=Decimal('0'),
+        vdi_precio_unitario_final=monto,
+        vdi_detalle1='Cheque rechazado',
+        vdi_detalle2='',
+        vdi_idaliiva=ALICUOTA_NO_GRAVADO_ID,
+    )
+
+    monto_cargos = None
+    if monto_cargos_administrativos_banco is not None:
+        monto_cargos = Decimal(str(monto_cargos_administrativos_banco)).quantize(Decimal('0.01'))
+    if monto_cargos and monto_cargos > 0:
+        VentaDetalleItem.objects.create(
+            vdi_idve=nd_venta,
+            vdi_orden=2,
+            vdi_idsto=None,
+            vdi_idpro=None,
+            vdi_cantidad=Decimal('1'),
+            vdi_costo=monto_cargos,
+            vdi_margen=Decimal('0'),
+            vdi_bonifica=Decimal('0'),
+            vdi_precio_unitario_final=monto_cargos,
+            vdi_detalle1='Cargos administrativos banco',
+            vdi_detalle2='',
+            vdi_idaliiva=ALICUOTA_NO_GRAVADO_ID,
+        )
+
+    if debe_emitir_arca(comp_nd.tipo):
+        try:
+            emitir_arca_automatico(nd_venta)
+        except Exception as e:
+            logger.exception('Error emitiendo ARCA para ND por cheque rechazado: %s', e)
+            raise
+
+    return nd_venta
+
+
+def registrar_contrasiento_cheque_depositado(cheque: 'Cheque', sesion_caja: SesionCaja, usuario) -> None:
+    """
+    Registra la reversión del depósito en la sesión de caja cuando un cheque
+    que estaba DEPOSITADO se marca como rechazado (contrasiento negativo).
+
+    Parámetros:
+        cheque: Cheque que estaba depositado (monto a revertir).
+        sesion_caja: Sesión de caja actual.
+        usuario: Usuario que ejecuta la acción.
+    """
+    descripcion = f"Reversión depósito cheque rechazado Nº {cheque.numero}"
+    MovimientoCaja.objects.create(
+        sesion_caja=sesion_caja,
+        usuario=usuario,
+        tipo=TIPO_MOVIMIENTO_SALIDA,
+        monto=cheque.monto,
+        descripcion=descripcion,
+    )

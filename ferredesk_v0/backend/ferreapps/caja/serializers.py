@@ -9,10 +9,12 @@ Define los serializadores para la API REST de:
 
 from rest_framework import serializers
 from .models import (
-    SesionCaja, 
-    MovimientoCaja, 
-    MetodoPago, 
+    SesionCaja,
+    MovimientoCaja,
+    MetodoPago,
     PagoVenta,
+    CuentaBanco,
+    Cheque,
     ESTADO_CAJA_ABIERTA,
     ESTADO_CAJA_CERRADA,
 )
@@ -173,6 +175,7 @@ class PagoVentaSerializer(serializers.ModelSerializer):
         source='metodo_pago.codigo',
         read_only=True
     )
+    cuenta_banco_nombre = serializers.CharField(source='cuenta_banco.nombre', read_only=True)
     
     class Meta:
         model = PagoVenta
@@ -182,6 +185,8 @@ class PagoVentaSerializer(serializers.ModelSerializer):
             'metodo_pago',
             'metodo_pago_nombre',
             'metodo_pago_codigo',
+            'cuenta_banco',
+            'cuenta_banco_nombre',
             'monto',
             'es_vuelto',
             'referencia_externa',
@@ -189,6 +194,106 @@ class PagoVentaSerializer(serializers.ModelSerializer):
             'observacion',
         ]
         read_only_fields = ['id', 'fecha_hora']
+
+
+# Longitud estándar de CBU/CVU (Argentina)
+LONGITUD_CLAVE_BANCARIA = 22
+
+
+class CuentaBancoSerializer(serializers.ModelSerializer):
+    """Serializador para cuentas bancarias o billeteras virtuales."""
+
+    class Meta:
+        model = CuentaBanco
+        fields = [
+            'id',
+            'tipo_entidad',
+            'nombre',
+            'alias',
+            'clave_bancaria',
+            'tipo_cuenta',
+            'activo',
+        ]
+        read_only_fields = ['id']
+
+    def validate_clave_bancaria(self, valor):
+        """Exige 22 dígitos si se proporciona clave."""
+        if valor is None or valor == '':
+            return valor
+        valor_limpio = ''.join(c for c in str(valor) if c.isdigit())
+        if len(valor_limpio) != LONGITUD_CLAVE_BANCARIA:
+            raise serializers.ValidationError(
+                f'La clave bancaria (CBU/CVU) debe tener exactamente {LONGITUD_CLAVE_BANCARIA} dígitos.'
+            )
+        return valor_limpio
+
+
+class ChequeSerializer(serializers.ModelSerializer):
+    """Serializador para cheques (valores en cartera e historial)."""
+
+    venta_id = serializers.IntegerField(source='venta.id', read_only=True)
+    pago_venta_id = serializers.IntegerField(source='pago_venta.id', read_only=True)
+    cuenta_banco_deposito_nombre = serializers.CharField(source='cuenta_banco_deposito.nombre', read_only=True)
+    proveedor_nombre = serializers.CharField(source='proveedor.razon', read_only=True)
+    nota_debito_venta_id = serializers.SerializerMethodField()
+    nota_debito_numero_formateado = serializers.SerializerMethodField()
+    cliente_origen = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Cheque
+        fields = [
+            'id',
+            'numero',
+            'banco_emisor',
+            'monto',
+            'cuit_librador',
+            'fecha_emision',
+            'fecha_presentacion',
+            'estado',
+            'venta_id',
+            'pago_venta_id',
+            'cuenta_banco_deposito',
+            'cuenta_banco_deposito_nombre',
+            'proveedor',
+            'proveedor_nombre',
+            'usuario_registro',
+            'fecha_hora_registro',
+            'nota_debito_venta_id',
+            'nota_debito_numero_formateado',
+            'cliente_origen',
+        ]
+        read_only_fields = [
+            'id',
+            'estado',
+            'venta_id',
+            'pago_venta_id',
+            'cuenta_banco_deposito_nombre',
+            'proveedor_nombre',
+            'usuario_registro',
+            'fecha_hora_registro',
+        ]
+
+    def get_nota_debito_venta_id(self, obj):
+        """ID de la venta ND vinculada (usa la FK directa para no depender de la relación cargada)."""
+        return getattr(obj, 'nota_debito_venta_id', None)
+
+    def get_nota_debito_numero_formateado(self, obj):
+        """Número formateado de la ND vinculada (ej. A 0001-00000012) si existe."""
+        nd = obj.nota_debito_venta
+        if not nd:
+            return None
+        letra = (nd.comprobante.letra or '').strip() if nd.comprobante else ''
+        if nd.ven_punto is not None and nd.ven_numero is not None:
+            return f"{letra} {nd.ven_punto:04d}-{nd.ven_numero:08d}".strip()
+        return str(nd.ven_id)
+
+    def get_cliente_origen(self, obj):
+        """Nombre o razón social del cliente de la venta de origen (si existe)."""
+        venta = obj.venta
+        if not venta or not venta.ven_idcli:
+            return None
+        cliente = venta.ven_idcli
+        return getattr(cliente, 'razon', None) or getattr(cliente, 'nombre', None) or str(cliente)
 
 
 class PagoVentaCreateSerializer(serializers.Serializer):
@@ -217,6 +322,11 @@ class PagoVentaCreateSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=100,
         help_text='Referencia externa opcional'
+    )
+
+    cuenta_banco_id = serializers.IntegerField(
+        required=False,
+        help_text='ID de la cuenta bancaria/billetera destino (transferencia/QR)'
     )
     
     def validate(self, data):

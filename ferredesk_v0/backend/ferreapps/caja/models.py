@@ -371,6 +371,18 @@ class PagoVenta(models.Model):
         related_name='pagos',
         help_text='Método de pago utilizado'
     )
+
+    # Cuenta bancaria/billetera destino (solo para transferencia/QR u otros pagos bancarios).
+    # Se usa string para evitar dependencia de orden de declaración de modelos.
+    cuenta_banco = models.ForeignKey(
+        'CuentaBanco',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='cuenta_banco_id',
+        related_name='pagos_venta',
+        help_text='Cuenta bancaria/billetera destino del pago (transferencia/QR)',
+    )
     
     # Monto del pago
     monto = models.DecimalField(
@@ -446,3 +458,187 @@ class PagoVenta(models.Model):
     def __str__(self):
         tipo_str = "(Vuelto)" if self.es_vuelto else ""
         return f"${self.monto} - {self.metodo_pago.nombre} {tipo_str}"
+
+
+# =============================================================================
+# MODELO: CuentaBanco
+# =============================================================================
+
+class CuentaBanco(models.Model):
+    """Cuentas bancarias o billeteras virtuales de la empresa.
+
+    Destino de transferencias, depósitos de cheques, etc.
+    El tipo de entidad se sugiere automáticamente por el 7.º dígito de la clave
+    (CBU = Banco, CVU = Billetera virtual).
+    """
+    id = models.AutoField(primary_key=True, db_column='cuenta_banco_id')
+
+    TIPO_ENTIDAD_BANCO = 'BCO'
+    TIPO_ENTIDAD_BILLETERA = 'VIRT'
+    TIPO_ENTIDAD_CHOICES = [
+        (TIPO_ENTIDAD_BANCO, 'Banco Tradicional'),   # CBU: 7.º dígito = 0
+        (TIPO_ENTIDAD_BILLETERA, 'Billetera Virtual / CVU'),  # CVU: 7.º dígito = 1
+    ]
+    tipo_entidad = models.CharField(
+        max_length=4,
+        choices=TIPO_ENTIDAD_CHOICES,
+        default=TIPO_ENTIDAD_BANCO,
+        db_column='tipo_entidad',
+        help_text='Banco o Billetera; se autocompleta desde la clave (7.º dígito: 0=CBU, 1=CVU)',
+    )
+    nombre = models.CharField(
+        max_length=100,
+        db_column='nombre',
+        help_text='Ej: Banco Galicia, Mercado Pago',
+    )
+    alias = models.CharField(
+        max_length=50,
+        db_column='alias',
+        blank=True,
+        null=True,
+    )
+    clave_bancaria = models.CharField(
+        max_length=22,
+        db_column='clave_bancaria',
+        blank=True,
+        null=True,
+        help_text='CBU o CVU de 22 dígitos',
+    )
+    TIPO_CUENTA_CA = 'CA'
+    TIPO_CUENTA_CC = 'CC'
+    TIPO_CUENTA_CV = 'CV'   # Solo para billeteras virtuales (una sola modalidad)
+    TIPO_CUENTA_CHOICES = [
+        (TIPO_CUENTA_CA, 'Caja de Ahorro'),
+        (TIPO_CUENTA_CC, 'Cuenta Corriente'),
+        (TIPO_CUENTA_CV, 'Cuenta Virtual'),
+    ]
+    tipo_cuenta = models.CharField(
+        max_length=2,
+        choices=TIPO_CUENTA_CHOICES,
+        default=TIPO_CUENTA_CC,
+        db_column='tipo_cuenta',
+    )
+    activo = models.BooleanField(
+        default=True,
+        db_column='activo',
+    )
+
+    class Meta:
+        db_table = 'cuenta_banco'
+        verbose_name = 'Cuenta Bancaria'
+        verbose_name_plural = 'Cuentas Bancarias'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre or f"Cuenta #{self.id}"
+
+
+# =============================================================================
+# MODELO: Cheque
+# =============================================================================
+
+class Cheque(models.Model):
+    """Cheque físico ingresado como forma de cobro.
+
+    Ciclo de vida:
+    - EN_CARTERA: cheque en poder de la empresa (cajón/cartera)
+    - DEPOSITADO: se depositó a una cuenta propia
+    - ENTREGADO: se endosó/entregó a un proveedor
+    - RECHAZADO: el banco lo rechazó (puede volver a EN_CARTERA si el cliente lo rescata y devuelve el valor físico)
+    """
+
+    ESTADO_EN_CARTERA = 'EN_CARTERA'
+    ESTADO_DEPOSITADO = 'DEPOSITADO'
+    ESTADO_ENTREGADO = 'ENTREGADO'
+    ESTADO_RECHAZADO = 'RECHAZADO'
+    ESTADOS = [
+        (ESTADO_EN_CARTERA, 'En cartera'),
+        (ESTADO_DEPOSITADO, 'Depositado'),
+        (ESTADO_ENTREGADO, 'Entregado'),
+        (ESTADO_RECHAZADO, 'Rechazado'),
+    ]
+
+    id = models.AutoField(primary_key=True, db_column='cheque_id')
+
+    numero = models.CharField(max_length=50, db_column='numero')
+    banco_emisor = models.CharField(max_length=100, db_column='banco_emisor')
+    monto = models.DecimalField(max_digits=15, decimal_places=2, db_column='monto')
+
+    # CUIT del librador (11 dígitos sin guiones)
+    cuit_librador = models.CharField(max_length=11, db_column='cuit_librador')
+
+    fecha_emision = models.DateField(db_column='fecha_emision')
+    fecha_presentacion = models.DateField(db_column='fecha_presentacion')
+
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default=ESTADO_EN_CARTERA,
+        db_column='estado',
+    )
+
+    venta = models.ForeignKey(
+        'ventas.Venta',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        db_column='venta_id',
+        related_name='cheques',
+    )
+    pago_venta = models.ForeignKey(
+        'caja.PagoVenta',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        db_column='pago_venta_id',
+        related_name='cheques',
+    )
+
+    cuenta_banco_deposito = models.ForeignKey(
+        'caja.CuentaBanco',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='cuenta_banco_deposito_id',
+        related_name='cheques_depositados',
+    )
+    proveedor = models.ForeignKey(
+        'productos.Proveedor',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='proveedor_id',
+        related_name='cheques_recibidos',
+        help_text='Proveedor al que se entregó el cheque (endoso)',
+    )
+
+    usuario_registro = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        db_column='usuario_registro_id',
+        related_name='cheques_registrados',
+    )
+    fecha_hora_registro = models.DateTimeField(auto_now_add=True, db_column='fecha_hora_registro')
+
+    # Nota de Débito (o Extensión de Contenido) generada al marcar este cheque como rechazado.
+    nota_debito_venta = models.ForeignKey(
+        'ventas.Venta',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='nota_debito_venta_id',
+        related_name='cheques_rechazados_con_nd',
+        help_text='ND/Extensión generada al marcar el cheque como rechazado',
+    )
+
+    class Meta:
+        db_table = 'cheque'
+        ordering = ['-fecha_hora_registro']
+        indexes = [
+            models.Index(fields=['estado']),
+            models.Index(fields=['fecha_presentacion']),
+            models.Index(fields=['venta']),
+        ]
+
+    def __str__(self):
+        return f"Cheque {self.numero} - ${self.monto}"

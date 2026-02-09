@@ -1,6 +1,6 @@
 "use client"
 
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir } from "../../Botones"
+import { BotonEditar, BotonEliminar, BotonDesactivar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir } from "../../Botones"
 import usePortalTooltip from "./usePortalTooltip"
 
 /**
@@ -80,6 +80,7 @@ const AccionesMenu = ({
                           boton.componente === BotonVerDetalle ? 'text-slate-600' :
                           boton.componente === BotonNotaCredito ? 'text-orange-500' :
                           boton.componente === BotonImprimir ? 'text-slate-600' :
+                          boton.componente === BotonDesactivar ? 'text-slate-500' :
                           'text-slate-600'
                         }`}
                       />

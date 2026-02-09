@@ -8,9 +8,15 @@ import CajasHistorialTable from "./CajasHistorialTable"
 import CajaDetalleView from "./CajaDetalleView"
 import CajaActualTab from "./CajaActualTab"
 import ModalAbrirCaja from "./ModalAbrirCaja"
+import MaestroBancos from "./MaestroBancos"
+import ValoresEnCartera from "./ValoresEnCartera"
 
 // Tabs principales que siempre deben estar presentes
-const mainTabs = [{ key: "historial", label: "Historial de Cajas", closable: false }]
+const mainTabs = [
+  { key: "historial", label: "Historial de Cajas", closable: false },
+  { key: "bancos", label: "Bancos", closable: false },
+  { key: "valores-en-cartera", label: "Valores en Cartera", closable: false },
+]
 
 /**
  * Componente principal del módulo de Caja y Tesorería.
@@ -43,10 +49,8 @@ const CajaManager = () => {
         const parsedTabs = JSON.parse(savedTabs)
         // Validar que siempre esté el tab principal
         let restoredTabs = parsedTabs
-        if (!restoredTabs.find((t) => t.key === "historial")) {
-          restoredTabs = [mainTabs[0], ...restoredTabs]
-        }
-        return restoredTabs
+        const otrosTabs = restoredTabs.filter((t) => !mainTabs.some((m) => m.key === t.key))
+        return [...mainTabs, ...otrosTabs]
       }
     } catch (e) {
       console.error("[CAJA] Error restaurando tabs:", e)
@@ -353,6 +357,9 @@ const CajaManager = () => {
                   />
                 )}
 
+                {activeTab === "bancos" && <MaestroBancos />}
+                {activeTab === "valores-en-cartera" && <ValoresEnCartera />}
+
                 {activeTab === "caja-actual" && (
                   <CajaActualTab
                     sesion={sesionActual}
@@ -362,6 +369,7 @@ const CajaManager = () => {
                     onCerrarCaja={handleCerrarCaja}
                     onNuevoMovimiento={handleNuevoMovimiento}
                     loading={loading}
+                    onIrValoresEnCartera={() => setActiveTab("valores-en-cartera")}
                   />
                 )}
 

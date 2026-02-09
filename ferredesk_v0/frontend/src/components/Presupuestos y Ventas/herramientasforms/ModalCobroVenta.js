@@ -10,6 +10,19 @@ const CLIENTE_CONSUMIDOR_FINAL_ID = "1"
 
 /** Tolerancia en pesos para considerar "exacto" el pago (consumidor final) */
 const TOLERANCIA_PESOS = 0.01
+const LONGITUD_CUIT = 11
+
+/**
+ * Formatea un CUIT para mostrarlo como XX-XXXXXXXX-X, manteniendo dígitos.
+ * @param {string} cuit - Solo dígitos (idealmente 11)
+ * @returns {string}
+ */
+const formatearCuitMascara = (cuit) => {
+  const d = String(cuit || "").replace(/\D/g, "").slice(0, LONGITUD_CUIT)
+  if (d.length <= 2) return d
+  if (d.length <= 10) return `${d.slice(0, 2)}-${d.slice(2)}`
+  return `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}`
+}
 
 /**
  * Modal para registrar medios de pago al confirmar una venta.
@@ -33,10 +46,12 @@ const ModalCobroVenta = ({
   onConfirmar,
 }) => {
   const theme = useFerreDeskTheme()
-  const { obtenerMetodosPago } = useCajaAPI()
+  const { obtenerMetodosPago, obtenerCuentasBanco } = useCajaAPI()
 
   const [metodosPago, setMetodosPago] = useState([])
+  const [cuentasBanco, setCuentasBanco] = useState([])
   const [cargandoMetodos, setCargandoMetodos] = useState(false)
+  const [cargandoCuentasBanco, setCargandoCuentasBanco] = useState(false)
   const [lineasPago, setLineasPago] = useState([])
   const [excedenteDestino, setExcedenteDestino] = useState("vuelto")
   const [justificacionDiferencia, setJustificacionDiferencia] = useState("")
@@ -49,20 +64,33 @@ const ModalCobroVenta = ({
   const hayExcedente = diferencia > TOLERANCIA_PESOS
   const hayFaltante = diferencia < -TOLERANCIA_PESOS
   const esConsumidorFinal = String(clienteId) === CLIENTE_CONSUMIDOR_FINAL_ID
+  const esClienteRegular = !esConsumidorFinal
 
   const cargarMetodos = useCallback(async () => {
     setCargandoMetodos(true)
+    setCargandoCuentasBanco(true)
     setError("")
     try {
-      const lista = await obtenerMetodosPago(true)
-      setMetodosPago(Array.isArray(lista) ? lista : [])
+      const listaMetodos = await obtenerMetodosPago(true)
+      setMetodosPago(Array.isArray(listaMetodos) ? listaMetodos : [])
+
+      const listaCuentas = await obtenerCuentasBanco(true)
+      const datosCuentas = Array.isArray(listaCuentas)
+        ? listaCuentas
+        : Array.isArray(listaCuentas?.results)
+        ? listaCuentas.results
+        : []
+      setCuentasBanco(datosCuentas)
     } catch (err) {
+      console.error("Error al cargar métodos o cuentas banco:", err)
       setError(err.message || "Error al cargar métodos de pago")
       setMetodosPago([])
+      setCuentasBanco([])
     } finally {
       setCargandoMetodos(false)
+      setCargandoCuentasBanco(false)
     }
-  }, [obtenerMetodosPago])
+  }, [obtenerMetodosPago, obtenerCuentasBanco])
 
   useEffect(() => {
     if (abierto) {
@@ -76,7 +104,13 @@ const ModalCobroVenta = ({
     if (monto > 0 && metodosPago.length > 0) {
       const efectivo = metodosPago.find((m) => (m.codigo || "").toLowerCase() === "efectivo")
       if (efectivo) {
-        setLineasPago([{ metodo_pago_id: efectivo.id, monto, metodo_nombre: efectivo.nombre }])
+        setLineasPago([{
+          metodo_pago_id: efectivo.id,
+          monto,
+          metodo_nombre: efectivo.nombre,
+          cuenta_banco_id: null,
+          referencia_externa: "",
+        }])
         return
       }
     }
@@ -88,7 +122,18 @@ const ModalCobroVenta = ({
     if (!primerMetodo) return
     setLineasPago((prev) => [
       ...prev,
-      { metodo_pago_id: primerMetodo.id, monto: 0, metodo_nombre: primerMetodo.nombre },
+      {
+        metodo_pago_id: primerMetodo.id,
+        monto: 0,
+        metodo_nombre: primerMetodo.nombre,
+        cuenta_banco_id: null,
+        referencia_externa: "",
+        numero_cheque: "",
+        banco_emisor: "",
+        cuit_librador: "",
+        fecha_emision: "",
+        fecha_presentacion: "",
+      },
     ])
   }
 
@@ -106,10 +151,43 @@ const ModalCobroVenta = ({
     setLineasPago((prev) =>
       prev.map((l, i) =>
         i === indice
-          ? { ...l, metodo_pago_id: metodoPago.id, metodo_nombre: metodoPago.nombre }
+          ? {
+              ...l,
+              metodo_pago_id: metodoPago.id,
+              metodo_nombre: metodoPago.nombre,
+              // Si cambiamos a un método no bancario, limpiamos datos de banco
+              cuenta_banco_id: null,
+              referencia_externa: "",
+              // Si cambiamos fuera de cheque, limpiamos datos de cheque
+              numero_cheque: "",
+              banco_emisor: "",
+              cuit_librador: "",
+              fecha_emision: "",
+              fecha_presentacion: "",
+            }
           : l
       )
     )
+  }
+
+  const esMetodoBancarioPorId = (metodoPagoId) => {
+    const metodo = metodosPago.find((m) => m.id === metodoPagoId)
+    if (!metodo) return false
+    const codigo = (metodo.codigo || "").toLowerCase()
+    return codigo === "transferencia" || codigo === "qr"
+  }
+
+  const esMetodoEfectivoPorId = (metodoPagoId) => {
+    const metodo = metodosPago.find((m) => m.id === metodoPagoId)
+    if (!metodo) return false
+    const codigo = (metodo.codigo || "").toLowerCase()
+    return codigo === "efectivo"
+  }
+
+  const esMetodoChequePorId = (metodoPagoId) => {
+    const metodo = metodosPago.find((m) => m.id === metodoPagoId)
+    if (!metodo) return false
+    return (metodo.codigo || "").toLowerCase() === "cheque"
   }
 
   const handleConfirmar = () => {
@@ -119,9 +197,80 @@ const ModalCobroVenta = ({
       return
     }
 
+    // Validación específica para transferencias/QR: requieren banco destino
+    for (const linea of lineasPago) {
+      if (esMetodoBancarioPorId(linea.metodo_pago_id)) {
+        if (!cuentasBanco.length) {
+          setError("No hay cuentas bancarias configuradas. Configure al menos una cuenta en el Maestro de Bancos antes de cobrar por transferencia/QR.")
+          return
+        }
+        if (!linea.cuenta_banco_id) {
+          setError("Debe seleccionar el banco/billetera de destino para cada pago por transferencia/QR.")
+          return
+        }
+      }
+    }
+
+    // Validación de cheques: campos obligatorios y CUIT 11 dígitos
+    for (const linea of lineasPago) {
+      if (esMetodoChequePorId(linea.metodo_pago_id) && (Number(linea.monto) || 0) > 0) {
+        const numero = (linea.numero_cheque || "").trim()
+        const bancoEmisor = (linea.banco_emisor || "").trim()
+        const cuitLibrador = String(linea.cuit_librador || "").replace(/\D/g, "")
+        const fechaEmision = linea.fecha_emision
+        const fechaPresentacion = linea.fecha_presentacion
+
+        if (!numero || !bancoEmisor || !cuitLibrador || !fechaEmision || !fechaPresentacion) {
+          setError("En pagos con cheque debe completar: número, banco emisor, CUIT librador, fecha de emisión y fecha de presentación.")
+          return
+        }
+        if (cuitLibrador.length !== LONGITUD_CUIT) {
+          setError("El CUIT del librador debe tener 11 dígitos.")
+          return
+        }
+      }
+    }
+
+    // Regla: En pagos mixtos, los métodos NO efectivos no pueden superar el remanente luego de aplicar efectivo.
+    // Ej: total 100, efectivo 50 => no-efectivo máx 50. Si efectivo cubre el total, no-efectivo debe ser 0.
+    const totalEfectivo = lineasPago
+      .filter((l) => esMetodoEfectivoPorId(l.metodo_pago_id))
+      .reduce((s, l) => s + (Number(l.monto) || 0), 0)
+    const totalNoEfectivo = lineasPago
+      .filter((l) => !esMetodoEfectivoPorId(l.metodo_pago_id))
+      .reduce((s, l) => s + (Number(l.monto) || 0), 0)
+
+    const efectivoAplicable = Math.min(totalEfectivo, totalVentaNum)
+    const remanenteNoEfectivo = Math.max(totalVentaNum - efectivoAplicable, 0)
+    if (totalNoEfectivo > remanenteNoEfectivo + TOLERANCIA_PESOS) {
+      setError(
+        `El total en métodos no efectivos no puede superar $${remanenteNoEfectivo.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ` +
+          "Ajuste los montos para que la transferencia/QR/tarjeta completen solo el remanente."
+      )
+      return
+    }
+
     const pagos = lineasPago
-      .map((l) => ({ metodo_pago_id: l.metodo_pago_id, monto: Number(l.monto) || 0 }))
-      .filter((p) => p.monto > 0)
+      .map((l) => {
+        const monto = Number(l.monto) || 0
+        if (monto <= 0) return null
+        const esBancario = esMetodoBancarioPorId(l.metodo_pago_id)
+        const esCheque = esMetodoChequePorId(l.metodo_pago_id)
+        return {
+          metodo_pago_id: l.metodo_pago_id,
+          monto,
+          ...(esBancario && l.cuenta_banco_id ? { cuenta_banco_id: l.cuenta_banco_id } : {}),
+          ...(l.referencia_externa ? { referencia_externa: (l.referencia_externa || "").trim() } : {}),
+          ...(esCheque ? {
+            numero_cheque: (l.numero_cheque || "").trim(),
+            banco_emisor: (l.banco_emisor || "").trim(),
+            cuit_librador: String(l.cuit_librador || "").replace(/\D/g, ""),
+            fecha_emision: l.fecha_emision,
+            fecha_presentacion: l.fecha_presentacion,
+          } : {}),
+        }
+      })
+      .filter((p) => p && p.monto > 0)
 
     const monto_pago = pagos.reduce((s, p) => s + p.monto, 0)
 
@@ -167,7 +316,10 @@ const ModalCobroVenta = ({
       return
     }
 
-    if (hayExcedente && excedenteDestino === "recibo" && !esConsumidorFinal) {
+    // Regla de negocio:
+    // - Cliente genérico (Consumidor Final): el excedente solo puede darse en efectivo (por ejemplo para vuelto/propina).
+    // - Cliente regular: si hay excedente, se notifica y se envía a cuenta corriente (recibo) automáticamente.
+    if (hayExcedente && esClienteRegular) {
       onConfirmar({
         pagos,
         monto_pago,
@@ -341,7 +493,7 @@ const ModalCobroVenta = ({
                   </div>
                 )}
 
-                {cargandoMetodos ? (
+                {cargandoMetodos || cargandoCuentasBanco ? (
                   <p className="text-sm text-slate-500">Cargando métodos de pago...</p>
                 ) : (
                   <>
@@ -380,11 +532,21 @@ const ModalCobroVenta = ({
                                   if (metodo) actualizarMetodoEnLinea(indice, metodo)
                                 }}
                               >
-                                {metodosPago.map((m) => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.nombre || m.codigo}
-                                  </option>
-                                ))}
+                                {metodosPago.map((m) => {
+                                  const codigo = (m.codigo || "").toLowerCase()
+                                  const esBancario = codigo === "transferencia" || codigo === "qr"
+                                  const deshabilitarPorBanco = esBancario && cuentasBanco.length === 0
+                                  return (
+                                    <option
+                                      key={m.id}
+                                      value={m.id}
+                                      disabled={deshabilitarPorBanco}
+                                    >
+                                      {m.nombre || m.codigo}
+                                      {deshabilitarPorBanco ? " (configurar bancos primero)" : ""}
+                                    </option>
+                                  )
+                                })}
                               </select>
                               <input
                                 type="number"
@@ -397,6 +559,97 @@ const ModalCobroVenta = ({
                                   cambiarLinea(indice, "monto", e.target.value)
                                 }
                               />
+                              {esMetodoBancarioPorId(linea.metodo_pago_id) && (
+                                <>
+                                  <select
+                                    className={`${CLASES_INPUT} flex-1 min-w-[140px]`}
+                                    value={linea.cuenta_banco_id || ""}
+                                    onChange={(e) =>
+                                      cambiarLinea(indice, "cuenta_banco_id", e.target.value ? Number(e.target.value) : null)
+                                    }
+                                  >
+                                    <option value="">
+                                      Seleccionar banco/billetera
+                                    </option>
+                                    {cuentasBanco.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.nombre} {c.alias ? `(${c.alias})` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    className={`${CLASES_INPUT} flex-1 min-w-[140px]`}
+                                    placeholder="ID de transacción (opcional)"
+                                    value={linea.referencia_externa || ""}
+                                    onChange={(e) =>
+                                      cambiarLinea(indice, "referencia_externa", e.target.value)
+                                    }
+                                  />
+                                </>
+                              )}
+                              {esMetodoChequePorId(linea.metodo_pago_id) && (
+                                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                                  <input
+                                    type="text"
+                                    className={`${CLASES_INPUT}`}
+                                    placeholder="N° cheque"
+                                    value={linea.numero_cheque || ""}
+                                    onChange={(e) => cambiarLinea(indice, "numero_cheque", e.target.value)}
+                                  />
+                                  <input
+                                    type="text"
+                                    className={`${CLASES_INPUT}`}
+                                    placeholder="Banco emisor"
+                                    value={linea.banco_emisor || ""}
+                                    onChange={(e) => cambiarLinea(indice, "banco_emisor", e.target.value)}
+                                  />
+                                  <input
+                                    type="text"
+                                    className={`${CLASES_INPUT}`}
+                                    placeholder="CUIT librador (XX-XXXXXXXX-X)"
+                                    value={formatearCuitMascara(linea.cuit_librador || "")}
+                                    onChange={(e) => {
+                                      const soloDigitos = String(e.target.value || "").replace(/\D/g, "").slice(0, LONGITUD_CUIT)
+                                      cambiarLinea(indice, "cuit_librador", soloDigitos)
+                                    }}
+                                  />
+                                  <input
+                                    type="date"
+                                    className={`${CLASES_INPUT}`}
+                                    value={linea.fecha_emision || ""}
+                                    onChange={(e) => cambiarLinea(indice, "fecha_emision", e.target.value)}
+                                  />
+                                  <input
+                                    type="date"
+                                    className={`${CLASES_INPUT}`}
+                                    value={linea.fecha_presentacion || ""}
+                                    onChange={(e) => cambiarLinea(indice, "fecha_presentacion", e.target.value)}
+                                  />
+                                  {/* TODO: En Valores en Cartera, mostrar fecha vencimiento = fecha_presentacion + 30 días. */}
+                                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[10px] uppercase tracking-wide text-slate-500">
+                                        Fecha de emisión
+                                      </label>
+                                      <p className="text-[10px] text-slate-500 -mt-0.5">
+                                        Día en que se emitió el cheque.
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] uppercase tracking-wide text-slate-500">
+                                        Fecha de presentación
+                                      </label>
+                                      <p className="text-[10px] text-slate-500 -mt-0.5">
+                                        Día desde el cual se puede cobrar/depositar (liberación).
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 flex items-center md:col-span-2">
+                                    Se registrará en Valores en Cartera.
+                                  </div>
+                                </div>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => quitarLinea(indice)}
@@ -504,26 +757,9 @@ const ModalCobroVenta = ({
                             </>
                           ) : (
                             <>
-                              <label className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="radio"
-                                  name="excedenteDestino"
-                                  checked={excedenteDestino === "vuelto"}
-                                  onChange={() => setExcedenteDestino("vuelto")}
-                                  className="text-orange-600"
-                                />
-                                <span className="text-sm">Vuelto al cliente</span>
-                              </label>
-                              <label className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="radio"
-                                  name="excedenteDestino"
-                                  checked={excedenteDestino === "recibo"}
-                                  onChange={() => setExcedenteDestino("recibo")}
-                                  className="text-orange-600"
-                                />
-                                <span className="text-sm">A cuenta corriente (recibo)</span>
-                              </label>
+                              <div className="mt-1 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-2">
+                                El excedente se registrará automáticamente a cuenta corriente (recibo) para el cliente.
+                              </div>
                             </>
                           )}
                         </div>
