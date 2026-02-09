@@ -7,7 +7,6 @@ import CajaMovimientos from "./CajaMovimientos"
 import ModalCierreX from "./ModalCierreX"
 import ModalCerrarCaja from "./ModalCerrarCaja"
 import ModalNuevoMovimiento from "./ModalNuevoMovimiento"
-import AlertasCheques from "./AlertasCheques"
 
 /**
  * Componente que muestra el contenido del tab "Caja Actual".
@@ -77,7 +76,6 @@ const CajaActualTab = ({
   return (
     <>
       <div className="space-y-3">
-        <AlertasCheques />
         {/* Botones de acción */}
         <div className="flex flex-wrap justify-end gap-2">
           <button

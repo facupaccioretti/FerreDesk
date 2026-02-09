@@ -21,6 +21,7 @@ import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal';
 import ModalCobroVenta from './herramientasforms/ModalCobroVenta';
+import { useListasPrecioAPI } from '../../utils/useListasPrecioAPI';
 
 const ConVentaForm = ({
   onSave,
@@ -60,6 +61,7 @@ const ConVentaForm = ({
 
   const { clientes: clientesConDefecto, loading: loadingClientes, error: errorClientes } = useClientesConDefecto({ soloConMovimientos: false });
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotasIVA, error: errorAlicuotasIVA } = useAlicuotasIVAAPI();
+  const { listas: listasPrecio } = useListasPrecioAPI();
 
   // Hook para consulta de estado CUIT en ARCA
   const {
@@ -142,6 +144,8 @@ const ConVentaForm = ({
   const [esCargaInicial, setEsCargaInicial] = useState(true);
   // Estado para evitar validación ARCA durante proceso de submit
   const [procesandoSubmit, setProcesandoSubmit] = useState(false);
+  // Estado para la lista de precios activa (0 = Minorista por defecto)
+  const [listaPrecioId, setListaPrecioId] = useState(0);
 
   // Efecto de inicialización sincronizada (igual que VentaForm)
   useEffect(() => {
@@ -326,6 +330,9 @@ const ConVentaForm = ({
   // Wrapper para marcar fin de carga inicial al cambiar cliente
   const handleClienteSelect = (cliente) => {
     aplicarSeleccionCliente(cliente);
+    // Actualizar lista de precios según el cliente seleccionado
+    const listaCliente = cliente.lista_precio_id ?? 0;
+    setListaPrecioId(listaCliente);
     setEsCargaInicial(false);
   };
 
@@ -1273,6 +1280,8 @@ const ConVentaForm = ({
                   esConversionFacturaI: esConversionFacturaI
                 })}
                 readOnly={esConversionFacturaI || isReadOnly}
+                listaPrecioId={listaPrecioId}
+                listasPrecio={listasPrecio}
               />
             </div>
 

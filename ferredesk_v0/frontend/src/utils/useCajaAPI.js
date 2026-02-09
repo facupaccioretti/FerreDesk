@@ -288,6 +288,59 @@ export function useCajaAPI() {
         });
     }, [makeRequest]);
 
+    /**
+     * Obtiene el detalle completo de un cheque con historial.
+     * @param {number} chequeId - ID del cheque
+     * @returns {Promise<object>} - Cheque con historial y fechas calculadas
+     */
+    const obtenerDetalleCheque = useCallback(async (chequeId) => {
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/detalle/`);
+    }, [makeRequest]);
+
+    /**
+     * Edita los datos de un cheque que está EN_CARTERA.
+     * @param {number} chequeId - ID del cheque
+     * @param {object} datos - Datos a actualizar (numero, banco_emisor, monto, cuit_librador, fecha_emision, fecha_presentacion)
+     * @returns {Promise<object>} - Cheque actualizado
+     */
+    const editarCheque = useCallback(async (chequeId, datos) => {
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/editar/`, {
+            method: 'PATCH',
+            body: JSON.stringify(datos),
+        });
+    }, [makeRequest]);
+
+    /**
+     * Obtiene alertas de cheques por vencer en los próximos N días.
+     * @param {number} dias - Ventana de alerta en días (default 5)
+     * @returns {Promise<{dias: number, cantidad: number}>}
+     */
+    const obtenerAlertasVencimientoCheques = useCallback(async (dias = 5) => {
+        return makeRequest(`${API_BASE}/cheques/alertas-vencimiento/?dias=${dias}`);
+    }, [makeRequest]);
+
+    /**
+     * Crea un cheque desde caja (caja general o cambio de cheque).
+     * Requiere caja abierta.
+     * @param {object} datosCheque - numero, banco_emisor, monto, cuit_librador, fecha_emision, fecha_presentacion, origen_tipo (CAJA_GENERAL | CAMBIO_CHEQUE), origen_descripcion (opc), origen_cliente_id (opc), monto_efectivo_entregado (si CAMBIO_CHEQUE), comision_cambio (opc)
+     * @returns {Promise<object>} - Cheque creado
+     */
+    const crearChequeCaja = useCallback(async (datosCheque) => {
+        return makeRequest(`${API_BASE}/cheques/`, {
+            method: 'POST',
+            body: JSON.stringify(datosCheque),
+        });
+    }, [makeRequest]);
+
+    /**
+     * Valida un CUIT usando el endpoint de validación.
+     * @param {string} cuit - CUIT a validar
+     * @returns {Promise<object>} - Resultado de la validación
+     */
+    const validarCUIT = useCallback(async (cuit) => {
+        return makeRequest(`/api/clientes/validar-cuit/?cuit=${encodeURIComponent(cuit)}`);
+    }, [makeRequest]);
+
     return {
         // Estado
         loading,
@@ -320,6 +373,11 @@ export function useCajaAPI() {
         endosarCheques,
         marcarChequeRechazado,
         reactivarCheque,
+        obtenerDetalleCheque,
+        editarCheque,
+        obtenerAlertasVencimientoCheques,
+        crearChequeCaja,
+        validarCUIT,
     };
 }
 

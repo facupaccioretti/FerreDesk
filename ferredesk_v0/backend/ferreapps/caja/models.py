@@ -631,6 +631,66 @@ class Cheque(models.Model):
         help_text='ND/Extensión generada al marcar el cheque como rechazado',
     )
 
+    # Origen del cheque cuando no viene de una venta (caja general o cambio de cheque)
+    ORIGEN_VENTA = 'VENTA'
+    ORIGEN_CAJA_GENERAL = 'CAJA_GENERAL'
+    ORIGEN_CAMBIO_CHEQUE = 'CAMBIO_CHEQUE'
+    ORIGENES = [
+        (ORIGEN_VENTA, 'Por venta/recibo'),
+        (ORIGEN_CAJA_GENERAL, 'Por caja general'),
+        (ORIGEN_CAMBIO_CHEQUE, 'Cambio de cheque'),
+    ]
+    origen_tipo = models.CharField(
+        max_length=20,
+        choices=ORIGENES,
+        default=ORIGEN_VENTA,
+        db_column='origen_tipo',
+        help_text='Tipo de origen del cheque',
+    )
+    origen_cliente = models.ForeignKey(
+        'clientes.Cliente',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='origen_cliente_id',
+        related_name='cheques_recibidos_caja',
+        help_text='Cliente del cual se recibió el cheque (cuando origen_tipo != VENTA)',
+    )
+    origen_descripcion = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        db_column='origen_descripcion',
+        help_text='Descripción libre del origen (ej: "Cambio de cheque - Juan Pérez")',
+    )
+    movimiento_caja_entrada = models.ForeignKey(
+        'caja.MovimientoCaja',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='movimiento_caja_entrada_id',
+        related_name='cheques_recibidos',
+        help_text='Movimiento de caja de entrada asociado al cheque recibido',
+    )
+    movimiento_caja_salida = models.ForeignKey(
+        'caja.MovimientoCaja',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='movimiento_caja_salida_id',
+        related_name='cheques_cambiados',
+        help_text='Movimiento de caja de salida (efectivo entregado en cambio de cheque)',
+    )
+    comision_cambio = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='comision_cambio',
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text='Comisión cobrada por cambio de cheque',
+    )
+
     class Meta:
         db_table = 'cheque'
         ordering = ['-fecha_hora_registro']

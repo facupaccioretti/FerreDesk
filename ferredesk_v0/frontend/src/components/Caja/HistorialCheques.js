@@ -4,6 +4,10 @@ import { useEffect, useCallback, useState } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import Tabla from "../Tabla"
 import ModalMarcarChequeRechazado from "./ModalMarcarChequeRechazado"
+import ModalDetalleCheque from "./ModalDetalleCheque"
+import ModalEditarCheque from "./ModalEditarCheque"
+import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
+import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonReactivar } from "../Botones"
 
 const ESTADOS = [
     { value: "", label: "Todos" },
@@ -27,6 +31,8 @@ const HistorialCheques = () => {
     const [busqueda, setBusqueda] = useState("")
     const [procesandoId, setProcesandoId] = useState(null)
     const [modalMarcarRechazadoCheque, setModalMarcarRechazadoCheque] = useState(null)
+    const [modalDetalle, setModalDetalle] = useState(null)
+    const [modalEditar, setModalEditar] = useState(null)
 
     const cargar = useCallback(async () => {
         setCargando(true)
@@ -80,22 +86,22 @@ const HistorialCheques = () => {
     }
 
     const renderDestino = (c) => {
-        if (c.estado === "DEPOSITADO" && c.cuenta_banco_deposito) {
+        if (c.estado === "DEPOSITADO" && c.cuenta_banco_deposito_nombre) {
             return (
                 <div className="flex flex-col">
                     <span className="text-xs text-slate-500">Cuenta Propia</span>
                     <span className="text-sm text-slate-700 font-medium">
-                        {c.cuenta_banco_deposito.nombre || "Banco"}
+                        {c.cuenta_banco_deposito_nombre}
                     </span>
                 </div>
             )
         }
-        if (c.estado === "ENTREGADO" && c.proveedor) {
+        if (c.estado === "ENTREGADO" && c.proveedor_nombre) {
             return (
                 <div className="flex flex-col">
                     <span className="text-xs text-slate-500">Proveedor</span>
                     <span className="text-sm text-slate-700 font-medium">
-                        {c.proveedor.nombre || c.proveedor.razon_social || "Proveedor"}
+                        {c.proveedor_nombre}
                     </span>
                 </div>
             )
@@ -134,6 +140,63 @@ const HistorialCheques = () => {
             .finally(() => setProcesandoId(null))
     }
 
+    const abrirDetalle = (cheque) => {
+        setModalDetalle(cheque)
+    }
+
+    const cerrarDetalle = () => {
+        setModalDetalle(null)
+    }
+
+    const abrirEditar = (cheque) => {
+        setModalEditar(cheque)
+    }
+
+    const cerrarEditar = () => {
+        setModalEditar(null)
+    }
+
+    const confirmarEditar = async (chequeActualizado) => {
+        setModalEditar(null)
+        await cargar() // Recargar lista después de editar
+    }
+
+    // Función para generar botones del menú de acciones para cada cheque
+    const generarBotonesCheque = (cheque) => {
+        const botones = []
+        const estaProcesando = procesandoId === cheque.id
+
+        // Ver detalle - siempre disponible
+        botones.push({
+            componente: BotonVerDetalle,
+            onClick: () => abrirDetalle(cheque),
+            titulo: "Ver detalle",
+            disabled: false,
+        })
+
+        // Editar - solo si está EN_CARTERA
+        if (cheque.estado === "EN_CARTERA") {
+            botones.push({
+                componente: BotonEditar,
+                onClick: () => abrirEditar(cheque),
+                titulo: "Editar",
+                disabled: false,
+            })
+        }
+
+        // Marcar rechazado - solo si puede marcarse como rechazado
+        if (ESTADOS_PUEDEN_MARCAR_RECHAZADO.includes(cheque.estado)) {
+            botones.push({
+                componente: BotonMarcarRechazado,
+                onClick: () => abrirModalMarcarRechazado(cheque),
+                titulo: "Marcar rechazado",
+                disabled: estaProcesando,
+            })
+        }
+
+        return botones
+    }
+
     const columnas = [
         { id: "numero", titulo: "N°", render: (c) => <span className="text-sm font-medium text-slate-800">{c.numero}</span> },
         { id: "banco_emisor", titulo: "BANCO", render: (c) => <span className="text-sm text-slate-700">{c.banco_emisor}</span> },
@@ -149,33 +212,19 @@ const HistorialCheques = () => {
             titulo: "ACCIONES",
             render: (c) => {
                 const estaProcesando = procesandoId === c.id
-                if (ESTADOS_PUEDEN_MARCAR_RECHAZADO.includes(c.estado)) {
-                    return (
-                        <button
-                            type="button"
-                            onClick={() => abrirModalMarcarRechazado(c)}
-                            disabled={estaProcesando}
-                            className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium transition-colors disabled:opacity-50"
-                            title="Marcar como rechazado (genera ND)"
-                        >
-                            {estaProcesando ? "..." : "Marcar rechazado"}
-                        </button>
-                    )
-                }
+                const botones = generarBotonesCheque(c)
+                
+                // Agregar botón de reactivar si está rechazado
                 if (c.estado === "RECHAZADO") {
-                    return (
-                        <button
-                            type="button"
-                            onClick={() => solicitarReactivar(c)}
-                            disabled={estaProcesando}
-                            className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium transition-colors disabled:opacity-50"
-                            title="Reactivar (pasar a En Cartera)"
-                        >
-                            {estaProcesando ? "..." : "Reactivar"}
-                        </button>
-                    )
+                    botones.push({
+                        componente: BotonReactivar,
+                        onClick: () => solicitarReactivar(c),
+                        titulo: "Reactivar",
+                        disabled: estaProcesando,
+                    })
                 }
-                return <span className="text-slate-400">—</span>
+                
+                return <AccionesMenu botones={botones} />
             },
         },
     ]
@@ -223,6 +272,20 @@ const HistorialCheques = () => {
                     onConfirmar={confirmarMarcarRechazado}
                     onCancelar={() => setModalMarcarRechazadoCheque(null)}
                     loading={procesandoId === modalMarcarRechazadoCheque?.id}
+                />
+            )}
+
+            {/* Modal Detalle */}
+            {modalDetalle && (
+                <ModalDetalleCheque cheque={modalDetalle} onCerrar={cerrarDetalle} />
+            )}
+
+            {/* Modal Editar */}
+            {modalEditar && (
+                <ModalEditarCheque
+                    cheque={modalEditar}
+                    onGuardar={confirmarEditar}
+                    onCancelar={cerrarEditar}
                 />
             )}
         </div>

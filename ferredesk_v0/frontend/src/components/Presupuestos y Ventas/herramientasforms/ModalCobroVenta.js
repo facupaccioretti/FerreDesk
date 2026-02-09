@@ -532,21 +532,30 @@ const ModalCobroVenta = ({
                                   if (metodo) actualizarMetodoEnLinea(indice, metodo)
                                 }}
                               >
-                                {metodosPago.map((m) => {
-                                  const codigo = (m.codigo || "").toLowerCase()
-                                  const esBancario = codigo === "transferencia" || codigo === "qr"
-                                  const deshabilitarPorBanco = esBancario && cuentasBanco.length === 0
-                                  return (
-                                    <option
-                                      key={m.id}
-                                      value={m.id}
-                                      disabled={deshabilitarPorBanco}
-                                    >
-                                      {m.nombre || m.codigo}
-                                      {deshabilitarPorBanco ? " (configurar bancos primero)" : ""}
-                                    </option>
-                                  )
-                                })}
+                                {metodosPago
+                                  .filter((m) => {
+                                    // Si es Consumidor Final (ID 1), ocultar Cheque y Cuenta Corriente
+                                    if (esConsumidorFinal) {
+                                      const codigo = (m.codigo || "").toLowerCase()
+                                      return codigo !== "cheque" && codigo !== "cuenta_corriente"
+                                    }
+                                    return true
+                                  })
+                                  .map((m) => {
+                                    const codigo = (m.codigo || "").toLowerCase()
+                                    const esBancario = codigo === "transferencia" || codigo === "qr"
+                                    const deshabilitarPorBanco = esBancario && cuentasBanco.length === 0
+                                    return (
+                                      <option
+                                        key={m.id}
+                                        value={m.id}
+                                        disabled={deshabilitarPorBanco}
+                                      >
+                                        {m.nombre || m.codigo}
+                                        {deshabilitarPorBanco ? " (configurar bancos primero)" : ""}
+                                      </option>
+                                    )
+                                  })}
                               </select>
                               <input
                                 type="number"

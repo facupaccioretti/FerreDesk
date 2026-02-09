@@ -15,7 +15,7 @@ import ValoresEnCartera from "./ValoresEnCartera"
 const mainTabs = [
   { key: "historial", label: "Historial de Cajas", closable: false },
   { key: "bancos", label: "Bancos", closable: false },
-  { key: "valores-en-cartera", label: "Valores en Cartera", closable: false },
+  { key: "valores-en-cartera", label: "Cheques", closable: false },
 ]
 
 /**

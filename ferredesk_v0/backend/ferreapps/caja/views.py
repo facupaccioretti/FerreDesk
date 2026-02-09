@@ -42,6 +42,9 @@ from .serializers import (
     PagoVentaSerializer,
     ChequeSerializer,
     CuentaBancoSerializer,
+    ChequeDetalleSerializer,
+    ChequeUpdateSerializer,
+    CrearChequeCajaSerializer,
 )
 
 
@@ -474,12 +477,18 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
         return queryset.order_by('nombre')
 
 
-class ChequeViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet de solo lectura para cheques (valores en cartera e historial)."""
+class ChequeViewSet(viewsets.ModelViewSet):
+    """ViewSet para cheques: listado/detalle y creación desde caja (caja general o cambio de cheque)."""
 
     queryset = Cheque.objects.all()
     serializer_class = ChequeSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CrearChequeCajaSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
@@ -492,11 +501,75 @@ class ChequeViewSet(viewsets.ReadOnlyModelViewSet):
             'usuario_registro',
             'nota_debito_venta',
             'nota_debito_venta__comprobante',
+            'origen_cliente',
+            'movimiento_caja_entrada',
+            'movimiento_caja_salida',
         )
         estado = self.request.query_params.get('estado')
         if estado:
             queryset = queryset.filter(estado=estado)
         return queryset.order_by('-fecha_hora_registro')
+
+    def create(self, request, *args, **kwargs):
+        """Crea un cheque desde caja (caja general o cambio de cheque). Requiere caja abierta."""
+        sesion_caja = SesionCaja.objects.filter(
+            usuario=request.user,
+            estado=ESTADO_CAJA_ABIERTA,
+        ).first()
+        if not sesion_caja:
+            return Response(
+                {'detail': 'Debe abrir una caja antes de registrar un cheque.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        origen_cliente = None
+        if data.get('origen_cliente_id'):
+            from ferreapps.clientes.models import Cliente
+            origen_cliente = Cliente.objects.filter(id=data['origen_cliente_id']).first()
+
+        with transaction.atomic():
+            desc_entrada = data.get('origen_descripcion') or 'Caja general'
+            movimiento_entrada = MovimientoCaja.objects.create(
+                sesion_caja=sesion_caja,
+                usuario=request.user,
+                tipo=TIPO_MOVIMIENTO_ENTRADA,
+                monto=data['monto'],
+                descripcion=f"Cheque recibido - {desc_entrada}",
+            )
+            movimiento_salida = None
+            if data['origen_tipo'] == Cheque.ORIGEN_CAMBIO_CHEQUE:
+                monto_efectivo = data['monto_efectivo_entregado']
+                desc_salida = data.get('origen_descripcion') or ''
+                movimiento_salida = MovimientoCaja.objects.create(
+                    sesion_caja=sesion_caja,
+                    usuario=request.user,
+                    tipo=TIPO_MOVIMIENTO_SALIDA,
+                    monto=monto_efectivo,
+                    descripcion=f"Efectivo entregado por cambio de cheque - {desc_salida}",
+                )
+            cheque = Cheque.objects.create(
+                numero=data['numero'],
+                banco_emisor=data['banco_emisor'],
+                monto=data['monto'],
+                cuit_librador=data['cuit_librador'],
+                fecha_emision=data['fecha_emision'],
+                fecha_presentacion=data['fecha_presentacion'],
+                estado=Cheque.ESTADO_EN_CARTERA,
+                origen_tipo=data['origen_tipo'],
+                origen_cliente=origen_cliente,
+                origen_descripcion=data.get('origen_descripcion'),
+                movimiento_caja_entrada=movimiento_entrada,
+                movimiento_caja_salida=movimiento_salida,
+                comision_cambio=data.get('comision_cambio'),
+                usuario_registro=request.user,
+            )
+        return Response(
+            ChequeSerializer(cheque).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=['get'], url_path='alertas-vencimiento')
     def alertas_vencimiento(self, request):
@@ -643,4 +716,58 @@ class ChequeViewSet(viewsets.ReadOnlyModelViewSet):
             )
         cheque.estado = Cheque.ESTADO_EN_CARTERA
         cheque.save(update_fields=['estado'])
+        return Response(ChequeSerializer(cheque).data)
+
+    @action(detail=True, methods=['get'], url_path='detalle')
+    def detalle(self, request, pk=None):
+        """Obtiene el detalle completo del cheque con historial de cambios.
+        
+        Retorna el cheque serializado con ChequeDetalleSerializer que incluye:
+        - Todos los campos básicos del cheque
+        - historial_estados: Array con cambios de estado
+        - fecha_vencimiento_calculada: fecha_presentacion + 30 días
+        - dias_hasta_vencimiento: Diferencia en días con la fecha actual
+        """
+        cheque = self.get_object()
+        serializer = ChequeDetalleSerializer(cheque)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['put', 'patch'], url_path='editar')
+    def editar(self, request, pk=None):
+        """Edita los datos de un cheque que está EN_CARTERA.
+        
+        Solo permite editar cheques en estado EN_CARTERA.
+        Campos editables: numero, banco_emisor, monto, cuit_librador, fecha_emision, fecha_presentacion.
+        
+        Validaciones:
+        - Monto > 0
+        - Fecha emisión <= fecha presentación
+        - CUIT válido (formato y dígito verificador)
+        """
+        cheque = self.get_object()
+        
+        # Validar que el cheque esté EN_CARTERA
+        if cheque.estado != Cheque.ESTADO_EN_CARTERA:
+            return Response(
+                {'detail': 'Solo se pueden editar cheques en estado EN_CARTERA.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validar datos con ChequeUpdateSerializer
+        serializer = ChequeUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        
+        # Actualizar campos permitidos
+        campos_permitidos = [
+            'numero', 'banco_emisor', 'monto', 'cuit_librador',
+            'fecha_emision', 'fecha_presentacion'
+        ]
+        
+        for campo in campos_permitidos:
+            if campo in serializer.validated_data:
+                setattr(cheque, campo, serializer.validated_data[campo])
+        
+        cheque.save()
+        
+        # Retornar cheque actualizado con ChequeSerializer
         return Response(ChequeSerializer(cheque).data)

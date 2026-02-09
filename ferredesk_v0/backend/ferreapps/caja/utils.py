@@ -28,6 +28,7 @@ from .models import (
     CODIGO_TRANSFERENCIA,
     CODIGO_QR,
     CODIGO_CHEQUE,
+    CODIGO_CUENTA_CORRIENTE,
     Cheque,
 )
 
@@ -213,6 +214,26 @@ def registrar_pagos_venta(
                 metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
             except MetodoPago.DoesNotExist:
                 raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+
+            # Validación: Consumidor Final (cliente ID 1) no puede usar Cheque ni Cuenta Corriente
+            cliente_id = None
+            if hasattr(venta, 'ven_idcli'):
+                # Si es ForeignKey, obtener el ID
+                cliente_obj = venta.ven_idcli
+                if cliente_obj:
+                    cliente_id = cliente_obj.pk if hasattr(cliente_obj, 'pk') else cliente_obj
+                elif hasattr(venta, 'ven_idcli_id'):
+                    cliente_id = venta.ven_idcli_id
+            
+            if cliente_id == 1:
+                if metodo_pago.codigo == CODIGO_CHEQUE:
+                    raise ValidationError(
+                        'El cliente "Consumidor Final" no puede realizar pagos con cheque.'
+                    )
+                if metodo_pago.codigo == CODIGO_CUENTA_CORRIENTE:
+                    raise ValidationError(
+                        'El cliente "Consumidor Final" no puede abonar a cuenta corriente.'
+                    )
 
             # Transferencia/QR: requiere cuenta banco destino
             cuenta_banco_id = pago_data.get('cuenta_banco_id')

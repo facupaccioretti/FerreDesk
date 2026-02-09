@@ -172,6 +172,7 @@ const ClienteForm = ({
       descu1: initialData?.descu1 || "",
       descu2: initialData?.descu2 || "",
       descu3: initialData?.descu3 || "",
+      lista_precio_id: initialData?.lista_precio_id ?? 0,
     }
   })
 
@@ -985,6 +986,20 @@ const ClienteForm = ({
                   </FilaEditable>
                   <FilaEditable etiqueta="Categoría" onAdd={() => openAddModal('categoria')}>
                     <FilterableSelect compact={true} label={null} name="categoria" options={opcionesCategorias} value={form.categoria} onChange={handleChange} placeholder="Buscar categoría..." />
+                  </FilaEditable>
+                  <FilaEditable etiqueta="Lista de Precios Asignada">
+                    <select
+                      name="lista_precio_id"
+                      value={form.lista_precio_id ?? 0}
+                      onChange={handleChange}
+                      className={CLASES_INPUT}
+                    >
+                      <option value={0}>0 - Minorista</option>
+                      <option value={1}>1 - Mayorista</option>
+                      <option value={2}>2 - Lista 2</option>
+                      <option value={3}>3 - Lista 3</option>
+                      <option value={4}>4 - Lista 4</option>
+                    </select>
                   </FilaEditable>
                   <FilaEditable etiqueta="Línea Crédito" inputProps={{ name: "lineacred", type: "number", min: 0 }} value={form.lineacred} onChange={handleChange} />
                   <FilaEditable etiqueta="Descuentos">
