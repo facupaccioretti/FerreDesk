@@ -23,6 +23,7 @@ import DashboardsManager from './components/DashboardsManager';
 import ComprasManager from './components/Compras/ComprasManager';
 import CargaInicialProveedor from './components/Carga Inicial/CargaInicialProveedor';
 import CuentaCorrienteManager from './components/CuentaCorriente/CuentaCorrienteManager';
+import CuentaCorrienteProveedorManager from './components/CuentaCorrienteProveedor/CuentaCorrienteProveedorManager';
 import CajaManager from './components/Caja/CajaManager';
 
 // Componente principal con rutas
@@ -144,6 +145,22 @@ export default function App() {
           }
         />
         <Route
+          path="/home/cuenta-corriente"
+          element={
+            <PrivateRoute>
+              <CuentaCorrienteManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/home/cuenta-corriente-proveedores"
+          element={
+            <PrivateRoute>
+              <CuentaCorrienteProveedorManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/home/caja"
           element={
             <PrivateRoute>
@@ -156,7 +173,7 @@ export default function App() {
         {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Router>
+    </Router >
   );
 }
 

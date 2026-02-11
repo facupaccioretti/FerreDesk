@@ -611,6 +611,15 @@ class Cheque(models.Model):
         related_name='cheques_recibidos',
         help_text='Proveedor al que se entregó el cheque (endoso)',
     )
+    orden_pago = models.ForeignKey(
+        'cuenta_corriente.OrdenPago',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='orden_pago_id',
+        related_name='cheques_utilizados',
+        help_text='Orden de pago en la que se utilizó este cheque',
+    )
 
     usuario_registro = models.ForeignKey(
         settings.AUTH_USER_MODEL,

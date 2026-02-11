@@ -36,12 +36,16 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
         """Setup de datos compartidos entre tests."""
         cls.usuario = cls.crear_usuario_test(username='pago_user')
         
-        # Crear cliente
+        # Usar el Consumidor Final creado por migración (ID=1) y crear un cliente de test aparte
         from ferreapps.clientes.models import Cliente
-        cls.cliente = Cliente.objects.create(
-            razon='Cliente Pagos Test',
-            cuit='20222222223',
-            domicilio='Pagos 456'
+        cls.cliente_consumidor_final = Cliente.objects.get(id=1)
+        cls.cliente, _ = Cliente.objects.get_or_create(
+            id=9999,
+            defaults={
+                'razon': 'Cliente Pagos Test',
+                'cuit': '20222222223',
+                'domicilio': 'Pagos 456',
+            }
         )
         
         # Asegurar que existe el método de pago EFECTIVO
@@ -82,15 +86,7 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
             }
         )
         
-        # Crear cliente Consumidor Final (ID 1) para tests de restricción
-        cls.cliente_consumidor_final, _ = Cliente.objects.get_or_create(
-            id=1,
-            defaults={
-                'razon': 'Consumidor Final',
-                'cuit': '20222222220',
-                'domicilio': 'Consumidor Final 123'
-            }
-        )
+        
         
         # Asegurar comprobante de factura interna
         from ferreapps.ventas.models import Comprobante
@@ -150,6 +146,11 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
     def tearDown(self):
         """Limpieza después de cada test."""
         from ferreapps.ventas.models import Venta
+        
+        from ..models import Cheque
+        
+        # Eliminar primero los cheques para evitar ProtectedError
+        Cheque.objects.filter(venta__sesion_caja=self.sesion).delete()
         
         PagoVenta.objects.filter(venta__sesion_caja=self.sesion).delete()
         MovimientoCaja.objects.filter(sesion_caja=self.sesion).delete()
@@ -568,10 +569,13 @@ class ResumenCierreExcedentesTests(TestCase, CajaTestMixin):
     def setUpTestData(cls):
         cls.usuario = cls.crear_usuario_test('resumen_exc_user')
         from ferreapps.clientes.models import Cliente
-        cls.cliente = Cliente.objects.create(
-            razon='Cliente Resumen',
-            cuit='20333333334',
-            domicilio='Calle 789',
+        cls.cliente, _ = Cliente.objects.get_or_create(
+            id=9998,
+            defaults={
+                'razon': 'Cliente Resumen',
+                'cuit': '20333333334',
+                'domicilio': 'Calle 789',
+            }
         )
         cls.metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
         if not cls.metodo_efectivo:

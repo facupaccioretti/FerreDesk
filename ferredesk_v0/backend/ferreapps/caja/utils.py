@@ -155,99 +155,85 @@ def normalizar_cobro(
     return copy.deepcopy(pagos), metadata_cobro
 
 
-def registrar_pagos_venta(
-    venta,
+def registrar_valores_y_movimientos(
+    pagos: List[Dict[str, Any]],
     sesion_caja: SesionCaja,
-    pagos: Optional[List[Dict[str, Any]]] = None,
-    monto_pago_legacy: Optional[Decimal] = None,
-    descripcion_base: str = "Pago de venta"
-) -> List[PagoVenta]:
+    direccion: str,
+    descripcion_comprobante: str,
+    descripcion_base: str = "Pago",
+    orden_pago=None,
+) -> List[Dict[str, Any]]:
     """
-    Registra los pagos de una venta y crea movimientos de caja si corresponde.
-    
+    Procesa una lista de medios de pago y genera los movimientos de caja y cheques
+    correspondientes. Función genérica reutilizable para cobros (ventas) y pagos (OPs).
+
     Args:
-        venta: Instancia de Venta para la cual registrar los pagos
-        sesion_caja: Sesión de caja activa
-        pagos: Lista de diccionarios con:
-            - metodo_pago_id: ID del método de pago
-            - monto: Monto del pago
-            - referencia_externa: (opcional) Referencia para tarjetas/transferencias
-            - observacion: (opcional) Observación del pago
-        monto_pago_legacy: (retrocompatibilidad) Monto único de pago.
-            Si se provee y pagos está vacío, se asume pago en efectivo.
-        descripcion_base: Descripción base para los movimientos de caja
-    
+        pagos: Lista de dicts con metodo_pago_id, monto, y datos opcionales
+            (referencia_externa, observacion, cuenta_banco_id, datos de cheque).
+        sesion_caja: Sesión de caja activa.
+        direccion: 'entrada' para cobros o 'salida' para pagos a proveedores.
+        descripcion_comprobante: Texto que identifica al comprobante (ej: "A 0001-00000001").
+        descripcion_base: Prefijo para la descripción del movimiento de caja.
+        orden_pago: (opcional) Instancia de OrdenPago para vincular cheques entregados.
+
     Returns:
-        Lista de PagoVenta creados
-    
+        Lista de dicts procesados con claves:
+            metodo_pago, monto, cuenta_banco_id, datos_cheque, cheque_obj, movimiento_obj,
+            referencia_externa, observacion, monto_recibido.
+
     Raises:
-        ValueError: Si no se encuentra el método de pago especificado
+        ValueError: Si no se encuentra un método de pago.
+        ValidationError: Si faltan datos obligatorios de cheque o transferencia/QR.
     """
-    pagos_creados = []
-    
-    # Si no hay lista de pagos pero hay monto_pago_legacy, crear pago en efectivo
-    if not pagos and monto_pago_legacy and monto_pago_legacy > 0:
-        # Obtener método de pago EFECTIVO
-        metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
-        if not metodo_efectivo:
-            logger.warning("No se encontró método de pago EFECTIVO, no se registra el pago")
-            return []
-        
-        pagos = [{
-            'metodo_pago_id': metodo_efectivo.id,
-            'monto': monto_pago_legacy,
-        }]
-    
-    if not pagos:
-        return []
-    
-    with transaction.atomic():
-        for pago_data in pagos:
-            metodo_pago_id = pago_data.get('metodo_pago_id')
-            monto = Decimal(str(pago_data.get('monto', 0)))
-            
-            if monto <= 0:
-                continue
-            
-            # Obtener método de pago
-            try:
-                metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
-            except MetodoPago.DoesNotExist:
-                raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+    tipo_movimiento = (
+        TIPO_MOVIMIENTO_ENTRADA if direccion == 'entrada'
+        else TIPO_MOVIMIENTO_SALIDA
+    )
+    resultados = []
 
-            # Validación: Consumidor Final (cliente ID 1) no puede usar Cheque ni Cuenta Corriente
-            cliente_id = None
-            if hasattr(venta, 'ven_idcli'):
-                # Si es ForeignKey, obtener el ID
-                cliente_obj = venta.ven_idcli
-                if cliente_obj:
-                    cliente_id = cliente_obj.pk if hasattr(cliente_obj, 'pk') else cliente_obj
-                elif hasattr(venta, 'ven_idcli_id'):
-                    cliente_id = venta.ven_idcli_id
-            
-            if cliente_id == 1:
-                if metodo_pago.codigo == CODIGO_CHEQUE:
-                    raise ValidationError(
-                        'El cliente "Consumidor Final" no puede realizar pagos con cheque.'
-                    )
-                if metodo_pago.codigo == CODIGO_CUENTA_CORRIENTE:
-                    raise ValidationError(
-                        'El cliente "Consumidor Final" no puede abonar a cuenta corriente.'
-                    )
+    for pago_data in pagos:
+        metodo_pago_id = pago_data.get('metodo_pago_id')
+        monto = Decimal(str(pago_data.get('monto', 0)))
 
-            # Transferencia/QR: requiere cuenta banco destino
-            cuenta_banco_id = pago_data.get('cuenta_banco_id')
-            if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR]:
-                if not cuenta_banco_id:
-                    raise ValidationError(
-                        'Debe indicar cuenta_banco_id para pagos por transferencia/QR.'
-                    )
+        if monto <= 0:
+            continue
+
+        try:
+            metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
+        except MetodoPago.DoesNotExist:
+            raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+
+        # Transferencia/QR: requiere cuenta banco destino
+        cuenta_banco_id = pago_data.get('cuenta_banco_id')
+        if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR]:
+            if not cuenta_banco_id:
+                raise ValidationError(
+                    'Debe indicar cuenta_banco_id para pagos por transferencia/QR.'
+                )
+        else:
+            cuenta_banco_id = None
+
+        # Datos de cheque (solo si el método es cheque)
+        datos_cheque = None
+        cheque_obj = None
+        if metodo_pago.codigo == CODIGO_CHEQUE:
+            if direccion == 'salida':
+                # Pago a proveedor: se entrega un cheque de terceros existente
+                cheque_id = pago_data.get('cheque_id')
+                if cheque_id:
+                    try:
+                        cheque_obj = Cheque.objects.get(id=cheque_id, estado=Cheque.ESTADO_EN_CARTERA)
+                        cheque_obj.estado = Cheque.ESTADO_ENTREGADO
+                        cheque_obj.proveedor_id = pago_data.get('proveedor_id')
+                        if orden_pago:
+                            cheque_obj.orden_pago = orden_pago
+                        cheque_obj.save()
+                    except Cheque.DoesNotExist:
+                        raise ValidationError(f'No se encontró cheque en cartera con ID {cheque_id}.')
+                else:
+                    raise ValidationError('Para pagar con cheque debe indicar cheque_id de un cheque en cartera.')
             else:
-                cuenta_banco_id = None
-
-            # Datos de cheque (solo si el método es cheque)
-            datos_cheque = None
-            if metodo_pago.codigo == CODIGO_CHEQUE:
+                # Cobro de venta: se recibe un cheque nuevo
                 numero_cheque = (pago_data.get('numero_cheque') or '').strip()
                 banco_emisor = (pago_data.get('banco_emisor') or '').strip()
                 cuit_librador = (pago_data.get('cuit_librador') or '').strip()
@@ -257,7 +243,6 @@ def registrar_pagos_venta(
                 if not numero_cheque or not banco_emisor or not cuit_librador or not fecha_emision or not fecha_presentacion:
                     raise ValidationError('Faltan datos obligatorios del cheque.')
 
-                # Validación estricta: 11 dígitos numéricos sin guiones
                 if len(cuit_librador) != 11 or not cuit_librador.isdigit():
                     raise ValidationError('El CUIT del librador debe tener 11 dígitos numéricos (sin guiones).')
                 resultado_cuit = validar_cuit(cuit_librador)
@@ -271,61 +256,204 @@ def registrar_pagos_venta(
                     'fecha_emision': fecha_emision,
                     'fecha_presentacion': fecha_presentacion,
                 }
-            
-            monto_recibido = pago_data.get('monto_recibido')
-            if monto_recibido is not None:
-                monto_recibido = Decimal(str(monto_recibido))
-            if monto_recibido is not None and metodo_pago.codigo != CODIGO_EFECTIVO:
-                monto_recibido = None
-            if monto_recibido is not None and monto_recibido < monto:
-                monto_recibido = None
 
+        # Monto recibido (solo relevante en cobros con efectivo)
+        monto_recibido = pago_data.get('monto_recibido')
+        if monto_recibido is not None:
+            monto_recibido = Decimal(str(monto_recibido))
+        if monto_recibido is not None and metodo_pago.codigo != CODIGO_EFECTIVO:
+            monto_recibido = None
+        if monto_recibido is not None and monto_recibido < monto:
+            monto_recibido = None
+
+        # Movimiento de caja (si el método afecta arqueo)
+        movimiento_obj = None
+        if metodo_pago.afecta_arqueo:
+            observacion = (pago_data.get('observacion') or '').strip()
+            descripcion_mov = f"{descripcion_base} {descripcion_comprobante} ({metodo_pago.nombre})"
+            if observacion:
+                descripcion_mov = f"{descripcion_mov} - {observacion}"
+            movimiento_obj = MovimientoCaja.objects.create(
+                sesion_caja=sesion_caja,
+                usuario=sesion_caja.usuario,
+                tipo=tipo_movimiento,
+                monto=monto,
+                descripcion=descripcion_mov,
+            )
+            signo = '+' if direccion == 'entrada' else '-'
+            logger.debug(f"Movimiento de caja creado: {signo}{monto} por pago en {metodo_pago.nombre}")
+
+        resultados.append({
+            'metodo_pago': metodo_pago,
+            'monto': monto,
+            'cuenta_banco_id': cuenta_banco_id,
+            'datos_cheque': datos_cheque,
+            'cheque_obj': cheque_obj,
+            'movimiento_obj': movimiento_obj,
+            'referencia_externa': pago_data.get('referencia_externa', ''),
+            'observacion': pago_data.get('observacion', ''),
+            'monto_recibido': monto_recibido,
+        })
+
+    return resultados
+
+
+def registrar_pagos_venta(
+    venta,
+    sesion_caja: SesionCaja,
+    pagos: Optional[List[Dict[str, Any]]] = None,
+    monto_pago_legacy: Optional[Decimal] = None,
+    descripcion_base: str = "Pago de venta"
+) -> List[PagoVenta]:
+    """
+    Registra los pagos de una venta y crea movimientos de caja si corresponde.
+    Wrapper sobre registrar_valores_y_movimientos() para ventas.
+
+    Args:
+        venta: Instancia de Venta para la cual registrar los pagos
+        sesion_caja: Sesión de caja activa
+        pagos: Lista de diccionarios con:
+            - metodo_pago_id: ID del método de pago
+            - monto: Monto del pago
+            - referencia_externa: (opcional) Referencia para tarjetas/transferencias
+            - observacion: (opcional) Observación del pago
+        monto_pago_legacy: (retrocompatibilidad) Monto único de pago.
+            Si se provee y pagos está vacío, se asume pago en efectivo.
+        descripcion_base: Descripción base para los movimientos de caja
+
+    Returns:
+        Lista de PagoVenta creados
+
+    Raises:
+        ValueError: Si no se encuentra el método de pago especificado
+    """
+    pagos_creados = []
+
+    # Retrocompatibilidad: si no hay lista de pagos pero hay monto_pago_legacy, asumir efectivo
+    if not pagos and monto_pago_legacy and monto_pago_legacy > 0:
+        metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
+        if not metodo_efectivo:
+            logger.warning("No se encontró método de pago EFECTIVO, no se registra el pago")
+            return []
+
+        pagos = [{
+            'metodo_pago_id': metodo_efectivo.id,
+            'monto': monto_pago_legacy,
+        }]
+
+    if not pagos:
+        return []
+
+    # Validaciones específicas de venta antes de procesar
+    for pago_data in pagos:
+        metodo_pago_id = pago_data.get('metodo_pago_id')
+        try:
+            metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
+        except MetodoPago.DoesNotExist:
+            raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+
+        # Consumidor Final (cliente ID 1) no puede usar Cheque ni Cuenta Corriente
+        cliente_id = None
+        if hasattr(venta, 'ven_idcli'):
+            cliente_obj = venta.ven_idcli
+            if cliente_obj:
+                cliente_id = cliente_obj.pk if hasattr(cliente_obj, 'pk') else cliente_obj
+            elif hasattr(venta, 'ven_idcli_id'):
+                cliente_id = venta.ven_idcli_id
+
+        if cliente_id == 1:
+            if metodo_pago.codigo == CODIGO_CHEQUE:
+                raise ValidationError(
+                    'El cliente "Consumidor Final" no puede realizar pagos con cheque.'
+                )
+            if metodo_pago.codigo == CODIGO_CUENTA_CORRIENTE:
+                raise ValidationError(
+                    'El cliente "Consumidor Final" no puede abonar a cuenta corriente.'
+                )
+
+    with transaction.atomic():
+        numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
+
+        resultados = registrar_valores_y_movimientos(
+            pagos=pagos,
+            sesion_caja=sesion_caja,
+            direccion='entrada',
+            descripcion_comprobante=numero_venta,
+            descripcion_base=descripcion_base,
+        )
+
+        for res in resultados:
             pago_venta = PagoVenta(
                 venta=venta,
-                metodo_pago=metodo_pago,
-                cuenta_banco_id=cuenta_banco_id,
-                monto=monto,
+                metodo_pago=res['metodo_pago'],
+                cuenta_banco_id=res['cuenta_banco_id'],
+                monto=res['monto'],
                 es_vuelto=False,
-                referencia_externa=pago_data.get('referencia_externa', ''),
-                observacion=pago_data.get('observacion', ''),
+                referencia_externa=res['referencia_externa'],
+                observacion=res['observacion'],
             )
-            if monto_recibido is not None:
-                pago_venta.monto_recibido = monto_recibido
+            if res['monto_recibido'] is not None:
+                pago_venta.monto_recibido = res['monto_recibido']
             pago_venta.full_clean()
             pago_venta.save()
             pagos_creados.append(pago_venta)
 
-            if datos_cheque is not None:
+            # Si se recibió un cheque nuevo, vincularlo a la venta y al PagoVenta
+            if res['datos_cheque'] is not None:
                 Cheque.objects.create(
-                    numero=datos_cheque['numero'],
-                    banco_emisor=datos_cheque['banco_emisor'],
-                    monto=monto,
-                    cuit_librador=datos_cheque['cuit_librador'],
-                    fecha_emision=datos_cheque['fecha_emision'],
-                    fecha_presentacion=datos_cheque['fecha_presentacion'],
+                    numero=res['datos_cheque']['numero'],
+                    banco_emisor=res['datos_cheque']['banco_emisor'],
+                    monto=res['monto'],
+                    cuit_librador=res['datos_cheque']['cuit_librador'],
+                    fecha_emision=res['datos_cheque']['fecha_emision'],
+                    fecha_presentacion=res['datos_cheque']['fecha_presentacion'],
                     estado=Cheque.ESTADO_EN_CARTERA,
                     venta=venta,
                     pago_venta=pago_venta,
                     usuario_registro=sesion_caja.usuario,
                 )
-            
-            # Si el método de pago afecta arqueo (efectivo), crear movimiento de caja
-            if metodo_pago.afecta_arqueo:
-                numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
-                observacion = (pago_data.get('observacion') or '').strip()
-                descripcion_mov = f"{descripcion_base} {numero_venta} ({metodo_pago.nombre})"
-                if observacion:
-                    descripcion_mov = f"{descripcion_mov} - {observacion}"
-                MovimientoCaja.objects.create(
-                    sesion_caja=sesion_caja,
-                    usuario=sesion_caja.usuario,
-                    tipo=TIPO_MOVIMIENTO_ENTRADA,
-                    monto=monto,
-                    descripcion=descripcion_mov,
-                )
-                logger.debug(f"Movimiento de caja creado: +{monto} por pago en {metodo_pago.nombre}")
-    
+
     return pagos_creados
+
+
+def registrar_pagos_orden_pago(
+    orden_pago,
+    sesion_caja: SesionCaja,
+    pagos: List[Dict[str, Any]],
+    descripcion_base: str = "Pago a proveedor"
+) -> List[Dict[str, Any]]:
+    """
+    Registra los pagos de una orden de pago a proveedor.
+    Crea movimientos de caja de SALIDA y gestiona cheques entregados.
+
+    Args:
+        orden_pago: Instancia de OrdenPago
+        sesion_caja: Sesión de caja activa
+        pagos: Lista de diccionarios con metodo_pago_id, monto, y datos opcionales
+        descripcion_base: Descripción base para los movimientos de caja
+
+    Returns:
+        Lista de dicts con los resultados procesados
+    """
+    if not pagos:
+        return []
+
+    # Inyectar proveedor_id en pagos con cheque para vincular al entregar
+    proveedor_id = orden_pago.op_proveedor_id
+    for pago_data in pagos:
+        pago_data['proveedor_id'] = proveedor_id
+
+    with transaction.atomic():
+        resultados = registrar_valores_y_movimientos(
+            pagos=pagos,
+            sesion_caja=sesion_caja,
+            direccion='salida',
+            descripcion_comprobante=f"OP {orden_pago.op_numero}",
+            descripcion_base=descripcion_base,
+            orden_pago=orden_pago,
+        )
+
+    return resultados
 
 
 def registrar_vuelto(
