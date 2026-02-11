@@ -111,10 +111,9 @@ export default function DetalleComprobanteProveedorModal({ open, onClose, itemBa
                                         {/* Cabecera */}
                                         <div className={`${CLASES_TARJETA} mb-4`}>
                                             <div className={CLASES_ETIQUETA}>Información del comprobante</div>
-                                            <div className="grid grid-cols-3 gap-4 mt-3">
+                                            <div className="grid grid-cols-2 gap-4 mt-3">
                                                 <LabelValor label="Fecha" value={cab.fecha} />
                                                 <LabelValor label="Proveedor" value={cab.proveedor?.razon} />
-                                                <LabelValor label="ID" value={cab.id} />
                                             </div>
                                         </div>
 

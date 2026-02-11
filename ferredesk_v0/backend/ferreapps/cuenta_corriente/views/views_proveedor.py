@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
+from django.core.exceptions import ValidationError
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -271,12 +272,14 @@ def crear_orden_pago(request):
                 'orden_pago': OrdenPagoSerializer(orden_pago).data,
             }, status=status.HTTP_201_CREATED)
 
+    except ValidationError as e:
+        return Response({'detail': str(e.message if hasattr(e, 'message') else e)}, status=status.HTTP_400_BAD_REQUEST)
     except ValueError as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Error al crear orden de pago: {e}")
+        logger.exception(f"Error al crear orden de pago: {e}")
         return Response(
-            {'detail': 'Error interno del servidor'},
+            {'detail': f'Error interno del servidor: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -421,8 +424,13 @@ def detalle_comprobante_proveedor(request, comprobante_id):
         # El frontend mandará el ID que tiene en la tabla.
         # En la vista SQL: id = -op.OP_ID para OPs y id = c.COMP_ID para compras.
         
-        is_op = comprobante_id < 0
-        real_id = abs(comprobante_id)
+        try:
+            cid = int(comprobante_id)
+        except ValueError:
+            return Response({'detail': 'ID de comprobante inválido'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        is_op = cid < 0
+        real_id = abs(cid)
         
         cabecera = {}
         resumen = {'total': '0.00', 'imputado': '0.00', 'restante': '0.00'}
@@ -435,13 +443,13 @@ def detalle_comprobante_proveedor(request, comprobante_id):
                 return Response({'detail': 'Orden de pago no encontrada'}, status=status.HTTP_404_NOT_FOUND)
             
             cabecera = {
-                'id': comprobante_id,
+                'id': cid,
                 'fecha': str(op.op_fecha),
                 'numero_formateado': op.op_numero,
                 'comprobante_nombre': 'Orden de Pago',
                 'proveedor': {
-                    'razon': str(op.op_proveedor),
-                    'id': op.op_proveedor.pk
+                    'razon': op.op_proveedor.razon if op.op_proveedor else 'Sin Proveedor',
+                    'id': op.op_proveedor.pk if op.op_proveedor else None
                 }
             }
             
@@ -470,13 +478,13 @@ def detalle_comprobante_proveedor(request, comprobante_id):
                 return Response({'detail': 'Comprobante no encontrado'}, status=status.HTTP_404_NOT_FOUND)
             
             cabecera = {
-                'id': comprobante_id,
+                'id': cid,
                 'fecha': str(compra.comp_fecha),
                 'numero_formateado': compra.comp_numero_factura or f"Factura {real_id}",
                 'comprobante_nombre': 'Factura de Compra' if 'CREDITO' not in compra.comp_tipo else 'Nota de Crédito',
                 'proveedor': {
-                    'razon': str(compra.comp_idpro),
-                    'id': compra.comp_idpro.pk
+                    'razon': compra.comp_idpro.razon if compra.comp_idpro else 'Sin Proveedor',
+                    'id': compra.comp_idpro.pk if compra.comp_idpro else None
                 }
             }
             

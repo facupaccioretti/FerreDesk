@@ -58,8 +58,8 @@ def imputar_deuda(
             # Obtener entidad de la factura
             if hasattr(factura, 'ven_idcli'):
                 entidad_factura = factura.ven_idcli
-            elif hasattr(factura, 'comp_proveedor'):
-                entidad_factura = factura.comp_proveedor
+            elif hasattr(factura, 'comp_idpro'):
+                entidad_factura = factura.comp_idpro
             else:
                 raise ValueError("La factura no tiene cliente/proveedor asociado")
             

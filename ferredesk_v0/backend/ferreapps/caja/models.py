@@ -644,10 +644,12 @@ class Cheque(models.Model):
     ORIGEN_VENTA = 'VENTA'
     ORIGEN_CAJA_GENERAL = 'CAJA_GENERAL'
     ORIGEN_CAMBIO_CHEQUE = 'CAMBIO_CHEQUE'
+    ORIGEN_PROPIO = 'PROPIO'
     ORIGENES = [
         (ORIGEN_VENTA, 'Por venta/recibo'),
         (ORIGEN_CAJA_GENERAL, 'Por caja general'),
         (ORIGEN_CAMBIO_CHEQUE, 'Cambio de cheque'),
+        (ORIGEN_PROPIO, 'Propio (Emitido)'),
     ]
     origen_tipo = models.CharField(
         max_length=20,

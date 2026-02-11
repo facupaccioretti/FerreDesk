@@ -339,6 +339,9 @@ class Proveedor(models.Model):
     class Meta:
         db_table = 'PROVEEDORES'
 
+    def __str__(self):
+        return self.razon
+
 
 class ContadorCodigoBarras(models.Model):
     """Contador secuencial para generación de códigos de barras internos."""

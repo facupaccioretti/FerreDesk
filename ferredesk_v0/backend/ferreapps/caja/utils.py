@@ -217,23 +217,8 @@ def registrar_valores_y_movimientos(
         datos_cheque = None
         cheque_obj = None
         if metodo_pago.codigo == CODIGO_CHEQUE:
-            if direccion == 'salida':
-                # Pago a proveedor: se entrega un cheque de terceros existente
-                cheque_id = pago_data.get('cheque_id')
-                if cheque_id:
-                    try:
-                        cheque_obj = Cheque.objects.get(id=cheque_id, estado=Cheque.ESTADO_EN_CARTERA)
-                        cheque_obj.estado = Cheque.ESTADO_ENTREGADO
-                        cheque_obj.proveedor_id = pago_data.get('proveedor_id')
-                        if orden_pago:
-                            cheque_obj.orden_pago = orden_pago
-                        cheque_obj.save()
-                    except Cheque.DoesNotExist:
-                        raise ValidationError(f'No se encontró cheque en cartera con ID {cheque_id}.')
-                else:
-                    raise ValidationError('Para pagar con cheque debe indicar cheque_id de un cheque en cartera.')
-            else:
-                # Cobro de venta: se recibe un cheque nuevo
+            def _extraer_datos_cheque():
+                nonlocal datos_cheque
                 numero_cheque = (pago_data.get('numero_cheque') or '').strip()
                 banco_emisor = (pago_data.get('banco_emisor') or '').strip()
                 cuit_librador = (pago_data.get('cuit_librador') or '').strip()
@@ -256,6 +241,27 @@ def registrar_valores_y_movimientos(
                     'fecha_emision': fecha_emision,
                     'fecha_presentacion': fecha_presentacion,
                 }
+
+            if direccion == 'salida':
+                # Pago a proveedor: se entrega un cheque de terceros existente
+                cheque_id = pago_data.get('cheque_id')
+                if cheque_id:
+                    try:
+                        cheque_obj = Cheque.objects.get(id=cheque_id, estado=Cheque.ESTADO_EN_CARTERA)
+                        cheque_obj.estado = Cheque.ESTADO_ENTREGADO
+                        cheque_obj.proveedor_id = pago_data.get('proveedor_id')
+                        if orden_pago:
+                            cheque_obj.orden_pago = orden_pago
+                        cheque_obj.save()
+                    except Cheque.DoesNotExist:
+                        raise ValidationError(f'No se encontró cheque en cartera con ID {cheque_id}.')
+                else:
+                    # Cheque Propio: Validar y asignar datos_cheque
+                    _extraer_datos_cheque()
+                    datos_cheque['es_propio'] = True
+            else:
+                # Cobro de venta: se recibe un cheque nuevo
+                _extraer_datos_cheque()
 
         # Monto recibido (solo relevante en cobros con efectivo)
         monto_recibido = pago_data.get('monto_recibido')
@@ -452,6 +458,23 @@ def registrar_pagos_orden_pago(
             descripcion_base=descripcion_base,
             orden_pago=orden_pago,
         )
+
+        for res in resultados:
+            # Si es un cheque propio nuevo, registrarlo directamente como ENTREGADO
+            if res['datos_cheque'] and res['datos_cheque'].get('es_propio'):
+                Cheque.objects.create(
+                    numero=res['datos_cheque']['numero'],
+                    banco_emisor=res['datos_cheque']['banco_emisor'],
+                    monto=res['monto'],
+                    cuit_librador=res['datos_cheque']['cuit_librador'],
+                    fecha_emision=res['datos_cheque']['fecha_emision'],
+                    fecha_presentacion=res['datos_cheque']['fecha_presentacion'],
+                    estado=Cheque.ESTADO_ENTREGADO,
+                    proveedor=orden_pago.op_proveedor,
+                    orden_pago=orden_pago,
+                    usuario_registro=sesion_caja.usuario,
+                    origen_tipo=Cheque.ORIGEN_PROPIO
+                )
 
     return resultados
 

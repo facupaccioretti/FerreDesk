@@ -26,3 +26,12 @@ ReactDOM.render(<App />, document.getElementById('root'));
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
+
+// Selección automática de texto en inputs numéricos
+document.addEventListener('focus', (event) => {
+    const target = event.target;
+    // Verificamos si es un input de tipo número o tiene un rol/clase numérica
+    if (target.tagName === 'INPUT' && (target.type === 'number' || target.inputMode === 'decimal')) {
+        target.select();
+    }
+}, true); // El 'true' es clave para usar la fase de captura

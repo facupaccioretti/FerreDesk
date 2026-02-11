@@ -54,7 +54,7 @@ urlpatterns = [
     path('proveedores-con-movimientos/', proveedores_con_movimientos, name='proveedores-con-movimientos'),
     path('crear-orden-pago/', crear_orden_pago, name='crear-orden-pago'),
     path('anular-orden-pago/<int:op_id>/', anular_orden_pago, name='anular-orden-pago'),
-    path('comprobante-proveedor/<int:comprobante_id>/detalle/', detalle_comprobante_proveedor, name='detalle-comprobante-proveedor'),
+    path('comprobante-proveedor/<str:comprobante_id>/detalle/', detalle_comprobante_proveedor, name='detalle-comprobante-proveedor'),
     
     # Endpoint de verificación
     path('status/', CuentaCorrienteAPIView.as_view(), name='cuenta-corriente-status'),

@@ -145,17 +145,38 @@ const OrdenPagoModal = ({
 
             // Si cambia el método, actualizar el código también para condicionales
             if (campo === 'metodo_pago_id') {
-                const metodo = metodosPago.find(m => m.id === parseInt(valor))
-                nuevoPago.codigo = metodo ? metodo.codigo : ''
+                const metodo = metodosPago.find(m => String(m.id) === String(valor))
+                const codigo = (metodo?.codigo || "").toUpperCase()
+                nuevoPago.codigo = codigo
+
                 // Limpiar campos específicos al cambiar método
                 delete nuevoPago.cuenta_banco_id
                 delete nuevoPago.cheque_id
                 nuevoPago.monto = 0 // Reset monto por seguridad
+
+                // Si es cheque, inicializar como terceros por defecto
+                if (codigo === 'CHEQUE') {
+                    nuevoPago.es_propio = false
+                }
+            }
+
+            // Si es cheque propio, inicializar campos si no existen
+            if (campo === 'es_propio' && valor === true) {
+                nuevoPago.numero_cheque = ''
+                nuevoPago.banco_emisor = ''
+                nuevoPago.cuit_librador = ''
+                nuevoPago.fecha_emision = new Date().toISOString().split('T')[0]
+                nuevoPago.fecha_presentacion = new Date().toISOString().split('T')[0]
+                nuevoPago.cheque_id = null
+                nuevoPago.monto = 0
+            } else if (campo === 'es_propio' && valor === false) {
+                nuevoPago.cheque_id = null
+                nuevoPago.monto = 0
             }
 
             // Si selecciona un cheque, asignar el monto automáticamente
-            if (campo === 'cheque_id') {
-                const cheque = chequesCartera.find(c => c.id === parseInt(valor))
+            if (campo === 'cheque_id' && (nuevoPago.codigo === 'CHEQUE' && !nuevoPago.es_propio)) {
+                const cheque = chequesCartera.find(c => String(c.id) === String(valor))
                 if (cheque) {
                     nuevoPago.monto = parseFloat(cheque.monto)
                 }
@@ -203,13 +224,25 @@ const OrdenPagoModal = ({
                 setError('Debe seleccionar el método de pago para todos los items')
                 return
             }
-            if (p.codigo === 'TRANSFERENCIA' && !p.cuenta_banco_id) {
+            if ((p.codigo || "").toUpperCase() === 'TRANSFERENCIA' && !p.cuenta_banco_id) {
                 setError('Debe seleccionar la cuenta bancaria para las transferencias')
                 return
             }
-            if (p.codigo === 'CHEQUE' && !p.cheque_id) {
-                setError('Debe seleccionar el cheque para los pagos con cheque')
-                return
+            if ((p.codigo || "").toUpperCase() === 'CHEQUE') {
+                if (!p.es_propio && !p.cheque_id) {
+                    setError('Debe seleccionar el cheque de terceros')
+                    return
+                }
+                if (p.es_propio) {
+                    if (!p.numero_cheque || !p.banco_emisor || !p.cuit_librador || !p.fecha_emision || !p.fecha_presentacion) {
+                        setError('Debe completar todos los datos del cheque propio')
+                        return
+                    }
+                    if (p.cuit_librador.length !== 11) {
+                        setError('El CUIT debe tener 11 dígitos')
+                        return
+                    }
+                }
             }
         }
 
@@ -402,7 +435,7 @@ const OrdenPagoModal = ({
                                                         </div>
 
                                                         {/* Condicionales según tipo */}
-                                                        {pago.codigo === 'TRANSFERENCIA' && (
+                                                        {(pago.codigo || "").toUpperCase() === 'TRANSFERENCIA' && (
                                                             <div className="w-full md:w-1/3">
                                                                 <label className={CLASES_ETIQUETA}>Cuenta Origen</label>
                                                                 <select
@@ -418,21 +451,86 @@ const OrdenPagoModal = ({
                                                             </div>
                                                         )}
 
-                                                        {pago.codigo === 'CHEQUE' && (
-                                                            <div className="w-full md:w-1/3">
-                                                                <label className={CLASES_ETIQUETA}>Cheque en Cartera</label>
-                                                                <select
-                                                                    className={CLASES_INPUT}
-                                                                    value={pago.cheque_id || ''}
-                                                                    onChange={(e) => actualizarPago(idx, 'cheque_id', e.target.value)}
-                                                                >
-                                                                    <option value="">Seleccione cheque...</option>
-                                                                    {chequesCartera.map(c => (
-                                                                        <option key={c.id} value={c.id}>
-                                                                            ${parseFloat(c.monto).toLocaleString()} - #{c.numero} - {c.banco_emisor}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
+                                                        {(pago.codigo || "").toUpperCase() === 'CHEQUE' && (
+                                                            <div className="w-full md:w-1/2 flex flex-col gap-2">
+                                                                <div className="flex items-center justify-between">
+                                                                    <label className={CLASES_ETIQUETA}>Datos del Cheque</label>
+                                                                    <div className="flex bg-slate-200 p-0.5 rounded text-[9px] font-bold border border-slate-300">
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`px-2 py-0.5 rounded ${!pago.es_propio ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}
+                                                                            onClick={() => actualizarPago(idx, 'es_propio', false)}
+                                                                        >TERCEROS</button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`px-2 py-0.5 rounded ${pago.es_propio ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}
+                                                                            onClick={() => actualizarPago(idx, 'es_propio', true)}
+                                                                        >PROPIO</button>
+                                                                    </div>
+                                                                </div>
+
+                                                                {!pago.es_propio ? (
+                                                                    <select
+                                                                        className={CLASES_INPUT}
+                                                                        value={pago.cheque_id || ''}
+                                                                        onChange={(e) => actualizarPago(idx, 'cheque_id', e.target.value)}
+                                                                    >
+                                                                        <option value="">Seleccione cheque...</option>
+                                                                        {chequesCartera.map(c => (
+                                                                            <option key={c.id} value={c.id}>
+                                                                                ${parseFloat(c.monto).toLocaleString()} - #{c.numero} - {c.banco_emisor}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                ) : (
+                                                                    <div className="grid grid-cols-2 gap-2 p-2 bg-white border border-slate-200 rounded-md shadow-inner">
+                                                                        <div className="col-span-2 md:col-span-1">
+                                                                            <input
+                                                                                placeholder="N° Cheque"
+                                                                                className="text-xs w-full border border-slate-200 rounded px-2 py-1"
+                                                                                value={pago.numero_cheque || ''}
+                                                                                onChange={(e) => actualizarPago(idx, 'numero_cheque', e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="col-span-2 md:col-span-1">
+                                                                            <input
+                                                                                placeholder="Banco"
+                                                                                className="text-xs w-full border border-slate-200 rounded px-2 py-1"
+                                                                                value={pago.banco_emisor || ''}
+                                                                                onChange={(e) => actualizarPago(idx, 'banco_emisor', e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="col-span-2 md:col-span-1">
+                                                                            <input
+                                                                                placeholder="CUIT Librador"
+                                                                                className="text-xs w-full border border-slate-200 rounded px-2 py-1"
+                                                                                value={pago.cuit_librador || ''}
+                                                                                onChange={(e) => actualizarPago(idx, 'cuit_librador', e.target.value.replace(/\D/g, ''))}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="col-span-2 md:col-span-1 text-[8px] flex items-center text-slate-400">
+                                                                            11 dígitos sin guiones
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">Emisión</label>
+                                                                            <input
+                                                                                type="date"
+                                                                                className="text-xs w-full border border-slate-200 rounded px-1 py-1"
+                                                                                value={pago.fecha_emision || ''}
+                                                                                onChange={(e) => actualizarPago(idx, 'fecha_emision', e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">Cobro</label>
+                                                                            <input
+                                                                                type="date"
+                                                                                className="text-xs w-full border border-slate-200 rounded px-1 py-1"
+                                                                                value={pago.fecha_presentacion || ''}
+                                                                                onChange={(e) => actualizarPago(idx, 'fecha_presentacion', e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
 
@@ -440,9 +538,9 @@ const OrdenPagoModal = ({
                                                             <label className={CLASES_ETIQUETA}>Monto</label>
                                                             <input
                                                                 type="number"
-                                                                className={`${CLASES_INPUT} ${pago.codigo === 'CHEQUE' ? 'bg-gray-100' : ''}`}
+                                                                className={`${CLASES_INPUT} ${(pago.codigo || "").toUpperCase() === 'CHEQUE' && !pago.es_propio ? 'bg-gray-100' : ''}`}
                                                                 value={pago.monto}
-                                                                readOnly={pago.codigo === 'CHEQUE'}
+                                                                readOnly={(pago.codigo || "").toUpperCase() === 'CHEQUE' && !pago.es_propio}
                                                                 onChange={(e) => actualizarPago(idx, 'monto', parseFloat(e.target.value) || 0)}
                                                             />
                                                         </div>
@@ -453,7 +551,7 @@ const OrdenPagoModal = ({
                                                                 type="text"
                                                                 className={CLASES_INPUT}
                                                                 value={pago.detalle || ''}
-                                                                placeholder={pago.codigo === 'CHEQUE' ? 'Auto-completado' : 'Observación...'}
+                                                                placeholder={(pago.codigo || "").toUpperCase() === 'CHEQUE' ? 'Auto-completado' : 'Observación...'}
                                                                 onChange={(e) => actualizarPago(idx, 'detalle', e.target.value)}
                                                             />
                                                         </div>
