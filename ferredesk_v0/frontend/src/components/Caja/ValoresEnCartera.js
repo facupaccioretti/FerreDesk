@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useCallback, useState } from "react"
+import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import Tabla from "../Tabla"
@@ -43,7 +44,7 @@ const ValoresEnCartera = () => {
   const [modalRegistrarCheque, setModalRegistrarCheque] = useState(false)
   const [cuentasBanco, setCuentasBanco] = useState([])
   const [procesando, setProcesando] = useState(false)
-  
+
   // Alertas de vencimiento
   const [alertasVencimiento, setAlertasVencimiento] = useState({ cantidad: 0, dias: 5 })
 
@@ -98,10 +99,7 @@ const ValoresEnCartera = () => {
 
   // --- VISTA OPERATIVA (EN CARTERA) ---
 
-  const formatearMoneda = (v) => {
-    const num = parseFloat(v) || 0
-    return num.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
+  // Se usan formateadores centralizados de ../../utils/formatters
 
   // Toggle selección de un cheque
   const toggleSeleccion = (chequeId) => {
@@ -176,10 +174,10 @@ const ValoresEnCartera = () => {
     setModalMarcarRechazado({ abierto: true, cheque })
   }
 
-  const confirmarMarcarRechazado = (cargosAdministrativosBanco) => {
+  const confirmarMarcarRechazado = () => {
     if (!modalMarcarRechazado.cheque) return
     setProcesando(true)
-    marcarChequeRechazado(modalMarcarRechazado.cheque.id, { cargosAdministrativosBanco })
+    marcarChequeRechazado(modalMarcarRechazado.cheque.id)
       .then(() => {
         setModalMarcarRechazado({ abierto: false, cheque: null })
         return cargar()
@@ -290,11 +288,20 @@ const ValoresEnCartera = () => {
       ),
     },
     { id: "numero", titulo: "N°", render: (c) => <span className="text-sm font-medium text-slate-800">{c.numero}</span> },
-    { id: "banco_emisor", titulo: "BANCO", render: (c) => <span className="text-sm text-slate-700">{c.banco_emisor}</span> },
+    {
+      id: "tipo",
+      titulo: "TIPO",
+      render: (c) => (
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${c.tipo_cheque === "DIFERIDO" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+          }`}>
+          {c.tipo_cheque === "DIFERIDO" ? "Dif" : "Día"}
+        </span>
+      ),
+    },
+    { id: "librador_nombre", titulo: "LIBRADOR", render: (c) => <span className="text-xs text-slate-700 truncate max-w-[120px]" title={c.librador_nombre}>{c.librador_nombre}</span> },
+    { id: "banco_emisor", titulo: "BANCO", render: (c) => <span className="text-xs text-slate-600 truncate max-w-[100px]" title={c.banco_emisor}>{c.banco_emisor}</span> },
     { id: "monto", titulo: "MONTO", align: "right", render: (c) => <span className="text-sm font-semibold text-slate-800">${formatearMoneda(c.monto)}</span> },
-    { id: "cuit_librador", titulo: "CUIT", render: (c) => <span className="text-xs font-mono text-slate-600">{c.cuit_librador}</span> },
-    { id: "fecha_emision", titulo: "EMISIÓN", render: (c) => <span className="text-xs text-slate-600">{c.fecha_emision}</span> },
-    { id: "fecha_presentacion", titulo: "PRESENT.", render: (c) => <span className="text-xs text-slate-600">{c.fecha_presentacion}</span> },
+    { id: "fecha_pago", titulo: "F. PAGO", render: (c) => <span className="text-xs font-medium text-slate-700">{formatearFecha(c.fecha_pago)}</span> },
     // Columna de acciones
     {
       id: "acciones",
@@ -326,7 +333,7 @@ const ValoresEnCartera = () => {
             className="text-sm px-3 py-1.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium flex items-center gap-1 mr-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 117.78 122.88" className="w-4 h-4" fill="currentColor">
-              <path d="M70.71,116.29H7.46a7.48,7.48,0,0,1-5.27-2.19L2,113.87a7.43,7.43,0,0,1-2-5V7.46A7.45,7.45,0,0,1,2.19,2.19L2.42,2a7.42,7.42,0,0,1,5-2H91.88a7.48,7.48,0,0,1,7.46,7.46V66.63a3.21,3.21,0,0,1-.06.63,28.75,28.75,0,1,1-28.57,49ZM85.18,82.12h2.89a2,2,0,0,1,1.43.59,2.06,2.06,0,0,1,.6,1.44V94.77h9.59a2,2,0,0,1,2,2v3a2.12,2.12,0,0,1-.6,1.44l-.08.07a2,2,0,0,1-1.35.52H84a1,1,0,0,1-1-1V84a2,2,0,0,1,.59-1.29,2,2,0,0,1,1.43-.6Zm7.75-16.47V7.46a1.1,1.1,0,0,0-1.05-1H7.46a1.08,1.08,0,0,0-.66.23l-.08.08a1.06,1.06,0,0,0-.31.74V108.84a1,1,0,0,0,.23.65l.09.08a1,1,0,0,0,.73.32H65A28.75,28.75,0,0,1,89,65.38a28,28,0,0,1,3.9.27Zm12.36,12.22A23,23,0,1,0,112,94.13a22.92,22.92,0,0,0-6.73-16.26Zm-84.5-3.78h9A1.18,1.18,0,0,1,31,75.27v9a1.18,1.18,0,0,1-1.18,1.18h-9a1.18,1.18,0,0,1-1.18-1.18v-9a1.18,1.18,0,0,1,1.18-1.18Zm22,9.28a3.65,3.65,0,0,1,0-7.18h9.58a3.65,3.65,0,0,1,0,7.18Zm-22-61.22h9A1.18,1.18,0,0,1,31,23.33v9a1.18,1.18,0,0,1-1.18,1.18h-9a1.18,1.18,0,0,1-1.18-1.18v-9a1.18,1.18,0,0,1,1.18-1.18Zm22,9.27a3.33,3.33,0,0,1-3-3.58,3.34,3.34,0,0,1,3-3.59H78.25a3.34,3.34,0,0,1,3,3.59,3.33,3.33,0,0,1-3,3.58ZM18.34,54.1a2,2,0,0,1,.38-2.82,2.23,2.23,0,0,1,3-.09l2.1,2.17L29.07,48a1.93,1.93,0,0,1,2.82.3,2.23,2.23,0,0,1,.18,3l-7,7.14a1.94,1.94,0,0,1-2.82-.3l-.16-.19a1.94,1.94,0,0,1-.31-.26L18.34,54.1Zm24.4,2.69a3.34,3.34,0,0,1-3-3.59,3.34,3.34,0,0,1,3-3.59H78.25a3.34,3.34,0,0,1,3,3.59,3.34,3.34,0,0,1-3,3.59Z"/>
+              <path d="M70.71,116.29H7.46a7.48,7.48,0,0,1-5.27-2.19L2,113.87a7.43,7.43,0,0,1-2-5V7.46A7.45,7.45,0,0,1,2.19,2.19L2.42,2a7.42,7.42,0,0,1,5-2H91.88a7.48,7.48,0,0,1,7.46,7.46V66.63a3.21,3.21,0,0,1-.06.63,28.75,28.75,0,1,1-28.57,49ZM85.18,82.12h2.89a2,2,0,0,1,1.43.59,2.06,2.06,0,0,1,.6,1.44V94.77h9.59a2,2,0,0,1,2,2v3a2.12,2.12,0,0,1-.6,1.44l-.08.07a2,2,0,0,1-1.35.52H84a1,1,0,0,1-1-1V84a2,2,0,0,1,.59-1.29,2,2,0,0,1,1.43-.6Zm7.75-16.47V7.46a1.1,1.1,0,0,0-1.05-1H7.46a1.08,1.08,0,0,0-.66.23l-.08.08a1.06,1.06,0,0,0-.31.74V108.84a1,1,0,0,0,.23.65l.09.08a1,1,0,0,0,.73.32H65A28.75,28.75,0,0,1,89,65.38a28,28,0,0,1,3.9.27Zm12.36,12.22A23,23,0,1,0,112,94.13a22.92,22.92,0,0,0-6.73-16.26Zm-84.5-3.78h9A1.18,1.18,0,0,1,31,75.27v9a1.18,1.18,0,0,1-1.18,1.18h-9a1.18,1.18,0,0,1-1.18-1.18v-9a1.18,1.18,0,0,1,1.18-1.18Zm22,9.28a3.65,3.65,0,0,1,0-7.18h9.58a3.65,3.65,0,0,1,0,7.18Zm-22-61.22h9A1.18,1.18,0,0,1,31,23.33v9a1.18,1.18,0,0,1-1.18,1.18h-9a1.18,1.18,0,0,1-1.18-1.18v-9a1.18,1.18,0,0,1,1.18-1.18Zm22,9.27a3.33,3.33,0,0,1-3-3.58,3.34,3.34,0,0,1,3-3.59H78.25a3.34,3.34,0,0,1,3,3.59,3.33,3.33,0,0,1-3,3.58ZM18.34,54.1a2,2,0,0,1,.38-2.82,2.23,2.23,0,0,1,3-.09l2.1,2.17L29.07,48a1.93,1.93,0,0,1,2.82.3,2.23,2.23,0,0,1,.18,3l-7,7.14a1.94,1.94,0,0,1-2.82-.3l-.16-.19a1.94,1.94,0,0,1-.31-.26L18.34,54.1Zm24.4,2.69a3.34,3.34,0,0,1-3-3.59,3.34,3.34,0,0,1,3-3.59H78.25a3.34,3.34,0,0,1,3,3.59,3.34,3.34,0,0,1-3,3.59Z" />
             </svg>
             Ver Historial
           </button>
@@ -353,14 +360,48 @@ const ValoresEnCartera = () => {
 
       {/* Banner de alertas de vencimiento */}
       {alertasVencimiento.cantidad > 0 && (
-        <div className="rounded-md px-4 py-3 bg-yellow-50 border border-yellow-200 text-yellow-800">
-          <div className="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-yellow-600">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0M3.124 7.5A8.969 8.969 0 0 1 5.292 3m13.416 0a8.969 8.969 0 0 1 2.168 4.5" />
-            </svg>
-            <span className="text-sm font-medium">
-              {alertasVencimiento.cantidad} cheque{alertasVencimiento.cantidad !== 1 ? "s" : ""} por vencer en los próximos {alertasVencimiento.dias} días
-            </span>
+        <div className="rounded-md px-4 py-3 bg-yellow-50 border border-yellow-200 text-yellow-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-yellow-600">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0M3.124 7.5A8.969 8.969 0 0 1 5.292 3m13.416 0a8.969 8.969 0 0 1 2.168 4.5" />
+              </svg>
+              <span className="text-sm font-medium">
+                {alertasVencimiento.cantidad} cheque{alertasVencimiento.cantidad !== 1 ? "s" : ""} por vencer en los próximos {alertasVencimiento.dias} días
+              </span>
+            </div>
+          </div>
+          {/* Lista de cheques por vencer */}
+          <div className="mt-2 overflow-x-auto">
+            <table className="min-w-full divide-y divide-yellow-200">
+              <thead>
+                <tr>
+                  <th className="px-1 py-1 text-left text-[10px] uppercase tracking-wider font-bold">N°</th>
+                  <th className="px-1 py-1 text-left text-[10px] uppercase tracking-wider font-bold">Librador</th>
+                  <th className="px-1 py-1 text-right text-[10px] uppercase tracking-wider font-bold">Monto</th>
+                  <th className="px-1 py-1 text-right text-[10px] uppercase tracking-wider font-bold">F. Pago</th>
+                  <th className="px-1 py-1 text-center text-[10px] uppercase tracking-wider font-bold">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-yellow-100">
+                {(alertasVencimiento.cheques || []).map((ch) => (
+                  <tr key={ch.id} className="hover:bg-yellow-100/50">
+                    <td className="px-1 py-1 text-xs whitespace-nowrap">{ch.numero}</td>
+                    <td className="px-1 py-1 text-xs truncate max-w-[120px]" title={ch.librador_nombre}>{ch.librador_nombre}</td>
+                    <td className="px-1 py-1 text-xs text-right whitespace-nowrap font-medium">${formatearMoneda(ch.monto)}</td>
+                    <td className="px-1 py-1 text-xs text-right whitespace-nowrap">{formatearFecha(ch.fecha_pago)}</td>
+                    <td className="px-1 py-1 text-center">
+                      <button
+                        onClick={() => abrirDetalle(ch)}
+                        className="text-[10px] text-yellow-700 hover:text-yellow-900 font-bold underline"
+                      >
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -368,8 +409,8 @@ const ValoresEnCartera = () => {
       {/* Barra de selección */}
       {cheques.length > 0 && (
         <div className={`rounded-md px-3 py-2 flex items-center justify-between text-xs transition-colors duration-200 ${seleccionados.size > 0
-            ? "bg-indigo-50 border border-indigo-200 text-indigo-800"
-            : "bg-slate-50 border border-slate-200 text-slate-600"
+          ? "bg-indigo-50 border border-indigo-200 text-indigo-800"
+          : "bg-slate-50 border border-slate-200 text-slate-600"
           }`}>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer select-none">

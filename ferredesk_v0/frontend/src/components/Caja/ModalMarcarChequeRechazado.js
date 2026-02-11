@@ -1,44 +1,41 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 
 /**
- * Modal para marcar un cheque como rechazado.
- * Pregunta si hubo cargos administrativos del banco y, si corresponde, permite cargar el monto
- * para que se genere un segundo ítem (no gravado) en la Nota de Débito.
+ * Modal para confirmar acciones sobre un cheque (Rechazo o Reactivación).
+ * Informa al usuario que debe generar la documentación manual correspondiente.
+ * Siguiendo la estética estándar de FerreDesk.
  *
- * @param {object} cheque - Cheque a marcar rechazado (numero, banco_emisor, monto, etc.)
+ * @param {object} cheque - Cheque a procesar
+ * @param {string} modo - 'rechazar' | 'reactivar'
  * @param {function} formatearMoneda - Función para formatear montos
- * @param {function} onConfirmar - (cargosAdministrativosBanco: number | null) => void
+ * @param {function} onConfirmar - () => void
  * @param {function} onCancelar - () => void
  * @param {boolean} loading - Deshabilita el botón de confirmar
  */
-const ModalMarcarChequeRechazado = ({ cheque, formatearMoneda, onConfirmar, onCancelar, loading }) => {
+const ModalMarcarChequeRechazado = ({
+  cheque,
+  modo = "rechazar",
+  formatearMoneda,
+  onConfirmar,
+  onCancelar,
+  loading
+}) => {
   const theme = useFerreDeskTheme()
-  const [tieneCargos, setTieneCargos] = useState(false)
-  const [montoCargos, setMontoCargos] = useState("")
-  const [error, setError] = useState("")
+
+  const esRechazo = modo === "rechazar"
+  const titulo = esRechazo ? "Marcar cheque rechazado" : "Reactivar cheque"
+  const labelBoton = esRechazo ? "Marcar rechazado" : "Reactivar cheque"
 
   const handleConfirmar = (e) => {
     e?.preventDefault()
-    setError("")
-    if (tieneCargos && montoCargos.trim() !== "") {
-      const num = parseFloat(montoCargos.replace(",", "."))
-      if (Number.isNaN(num) || num <= 0) {
-        setError("Ingrese un monto válido mayor a cero.")
-        return
-      }
-      onConfirmar(num)
-    } else {
-      onConfirmar(null)
-    }
+    onConfirmar()
   }
 
   const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
-  const CLASES_INPUT =
-    "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
   const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-4"
 
   return (
@@ -71,7 +68,7 @@ const ModalMarcarChequeRechazado = ({ cheque, formatearMoneda, onConfirmar, onCa
                 className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${theme.primario}`}
               >
                 <Dialog.Title className="text-lg font-bold text-white">
-                  Marcar cheque rechazado
+                  {titulo}
                 </Dialog.Title>
                 <button
                   type="button"
@@ -100,52 +97,17 @@ const ModalMarcarChequeRechazado = ({ cheque, formatearMoneda, onConfirmar, onCa
                     {cheque?.banco_emisor && ` (${cheque.banco_emisor})`}
                     {cheque?.monto != null && ` — $${formatearMoneda(cheque.monto)}`}
                   </p>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Se generará una Nota de Débito por el monto del cheque. El cliente queda con saldo en cuenta corriente.
-                  </p>
                 </div>
 
                 <div className={CLASES_TARJETA}>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={tieneCargos}
-                      onChange={(e) => {
-                        setTieneCargos(e.target.checked)
-                        if (!e.target.checked) setMontoCargos("")
-                        setError("")
-                      }}
-                      className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-                    />
-                    <span className="text-sm font-medium text-slate-700">Tuvo cargos administrativos del banco</span>
-                  </label>
-                  {tieneCargos && (
-                    <div className="mt-3 pl-6 space-y-1">
-                      <label htmlFor="monto-cargos" className={CLASES_ETIQUETA}>
-                        Monto debitado por el banco ($)
-                      </label>
-                      <input
-                        id="monto-cargos"
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0,00"
-                        value={montoCargos}
-                        onChange={(e) => {
-                          setMontoCargos(e.target.value)
-                          setError("")
-                        }}
-                        className={CLASES_INPUT}
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Se agregará un ítem &quot;Cargos administrativos banco&quot; (no gravado) en la ND.
-                      </p>
-                    </div>
-                  )}
+                  <div className={CLASES_ETIQUETA}>Acción requerida</div>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                    {esRechazo
+                      ? "Al marcar el cheque como rechazado, deberá generar manualmente una NOTA DE DÉBITO o EXTENSIÓN DE CONTENIDO al cliente para registrar la deuda en su cuenta corriente."
+                      : "Al reactivar el cheque, si ya había generado una Nota de Débito anteriormente, deberá generar manualmente una NOTA DE CRÉDITO o MODIFICACIÓN DE CONTENIDO para anular esa deuda."
+                    }
+                  </p>
                 </div>
-
-                {error && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
-                )}
               </div>
 
               <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
@@ -160,9 +122,9 @@ const ModalMarcarChequeRechazado = ({ cheque, formatearMoneda, onConfirmar, onCa
                   type="button"
                   onClick={handleConfirmar}
                   disabled={loading}
-                  className={`px-4 py-2 rounded-lg font-medium text-sm ${theme.botonPrimario} disabled:opacity-50`}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${theme.botonPrimario} disabled:opacity-50`}
                 >
-                  {loading ? "Guardando..." : "Marcar rechazado"}
+                  {loading ? "Procesando..." : labelBoton}
                 </button>
               </div>
             </Dialog.Panel>

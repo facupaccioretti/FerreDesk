@@ -558,17 +558,65 @@ class Cheque(models.Model):
         (ESTADO_RECHAZADO, 'Rechazado'),
     ]
 
+    TIPO_CHEQUE_AL_DIA = 'AL_DIA'
+    TIPO_CHEQUE_DIFERIDO = 'DIFERIDO'
+    TIPOS_CHEQUE = [
+        (TIPO_CHEQUE_AL_DIA, 'Al día'),
+        (TIPO_CHEQUE_DIFERIDO, 'Diferido'),
+    ]
+
     id = models.AutoField(primary_key=True, db_column='cheque_id')
 
     numero = models.CharField(max_length=50, db_column='numero')
     banco_emisor = models.CharField(max_length=100, db_column='banco_emisor')
     monto = models.DecimalField(max_digits=15, decimal_places=2, db_column='monto')
 
+    # Tipo de cheque (Al día vs Diferido)
+    tipo_cheque = models.CharField(
+        max_length=10,
+        choices=TIPOS_CHEQUE,
+        default=TIPO_CHEQUE_AL_DIA,
+        db_column='tipo_cheque',
+        help_text='Al día (cobrable inmediato) o Diferido (fecha futura)'
+    )
+
+    # Razón social del emisor
+    librador_nombre = models.CharField(
+        max_length=100,
+        db_column='librador_nombre',
+        blank=True,
+        default='',
+        help_text='Nombre o razón social del emisor del cheque'
+    )
+
     # CUIT del librador (11 dígitos sin guiones)
     cuit_librador = models.CharField(max_length=11, db_column='cuit_librador')
 
     fecha_emision = models.DateField(db_column='fecha_emision')
-    fecha_presentacion = models.DateField(db_column='fecha_presentacion')
+    
+    # Fecha de pago (cuando se puede cobrar)
+    fecha_pago = models.DateField(
+        null=True,
+        blank=True,
+        db_column='fecha_pago',
+        help_text='Fecha de cobro del cheque'
+    )
+
+    # Fecha real de presentación al banco
+    fecha_presentacion = models.DateField(
+        db_column='fecha_presentacion',
+        null=True,
+        blank=True,
+        help_text='Fecha real de presentación al banco (se llena al depositar)'
+    )
+
+    # Fecha/hora de depósito para reporte de tesorería
+    fecha_deposito_real = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column='fecha_deposito_real',
+        help_text='Fecha/hora real en que se depositó'
+    )
 
     estado = models.CharField(
         max_length=20,
@@ -624,7 +672,9 @@ class Cheque(models.Model):
     usuario_registro = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        db_column='usuario_registro_id',
+        db_column='usuario_id',
+        null=True,
+        blank=True,
         related_name='cheques_registrados',
     )
     fecha_hora_registro = models.DateTimeField(auto_now_add=True, db_column='fecha_hora_registro')
@@ -713,3 +763,28 @@ class Cheque(models.Model):
 
     def __str__(self):
         return f"Cheque {self.numero} - ${self.monto}"
+
+    def clean(self):
+        """Validaciones de lógica de cheques."""
+        from django.core.exceptions import ValidationError
+        from datetime import timedelta
+        
+        if self.tipo_cheque == self.TIPO_CHEQUE_AL_DIA:
+            # Si es al día, la fecha de pago debe ser igual a emisión
+            if self.fecha_pago and self.fecha_emision and self.fecha_pago != self.fecha_emision:
+                self.fecha_pago = self.fecha_emision
+        
+        elif self.tipo_cheque == self.TIPO_CHEQUE_DIFERIDO:
+            if not self.fecha_pago:
+                raise ValidationError({'fecha_pago': 'Los cheques diferidos requieren una fecha de pago.'})
+            
+            if self.fecha_emision and self.fecha_pago < self.fecha_emision:
+                raise ValidationError({'fecha_pago': 'La fecha de pago no puede ser anterior a la de emisión.'})
+            
+            # Máximo 360 días según Ley 24.452
+            if self.fecha_emision and self.fecha_pago > self.fecha_emision + timedelta(days=360):
+                raise ValidationError({'fecha_pago': 'La fecha de pago no puede exceder los 360 días desde la emisión.'})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)

@@ -45,7 +45,7 @@ def cuenta_corriente_proveedor(request, proveedor_id):
 
         fecha_desde = request.GET.get('fecha_desde')
         fecha_hasta = request.GET.get('fecha_hasta')
-        # completo = request.GET.get('completo', 'false').lower() == 'true' # TODO: Implementar filtro completo/pendientes
+        completo = request.GET.get('completo', 'false').lower() == 'true'
 
         movimientos = CuentaCorrienteProveedor.objects.filter(
             proveedor_id=proveedor_id
@@ -56,6 +56,10 @@ def cuenta_corriente_proveedor(request, proveedor_id):
         
         if fecha_hasta:
             movimientos = movimientos.filter(fecha__lte=fecha_hasta)
+
+        if not completo:
+            # Mostrar solo comprobantes con saldo pendiente
+            movimientos = movimientos.filter(saldo_pendiente__gt=0)
 
         movimientos = movimientos.order_by('fecha', 'id')
 

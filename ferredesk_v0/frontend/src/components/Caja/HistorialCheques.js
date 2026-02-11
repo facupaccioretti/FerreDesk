@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useState } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import Tabla from "../Tabla"
 import ModalMarcarChequeRechazado from "./ModalMarcarChequeRechazado"
 import ModalDetalleCheque from "./ModalDetalleCheque"
@@ -30,7 +31,7 @@ const HistorialCheques = () => {
     const [filtroEstado, setFiltroEstado] = useState("")
     const [busqueda, setBusqueda] = useState("")
     const [procesandoId, setProcesandoId] = useState(null)
-    const [modalMarcarRechazadoCheque, setModalMarcarRechazadoCheque] = useState(null)
+    const [modalAccion, setModalAccion] = useState({ cheque: null, modo: "rechazar" })
     const [modalDetalle, setModalDetalle] = useState(null)
     const [modalEditar, setModalEditar] = useState(null)
 
@@ -53,10 +54,7 @@ const HistorialCheques = () => {
         cargar()
     }, [cargar])
 
-    const formatearMoneda = (v) => {
-        const num = parseFloat(v) || 0
-        return num.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    }
+    // Se usan formateadores centralizados de ../../utils/formatters
 
     const renderEstado = (estado) => {
         let color = "bg-slate-100 text-slate-700"
@@ -110,32 +108,31 @@ const HistorialCheques = () => {
     }
 
     const abrirModalMarcarRechazado = (cheque) => {
-        setModalMarcarRechazadoCheque(cheque)
+        setModalAccion({ cheque, modo: "rechazar" })
     }
 
-    const confirmarMarcarRechazado = (cargosAdministrativosBanco) => {
-        if (!modalMarcarRechazadoCheque) return
-        setProcesandoId(modalMarcarRechazadoCheque.id)
-        marcarChequeRechazado(modalMarcarRechazadoCheque.id, { cargosAdministrativosBanco })
+    const abrirModalReactivar = (cheque) => {
+        setModalAccion({ cheque, modo: "reactivar" })
+    }
+
+    const confirmarAccion = () => {
+        const { cheque, modo } = modalAccion
+        if (!cheque) return
+
+        setProcesandoId(cheque.id)
+
+        const apiCall = modo === "rechazar"
+            ? marcarChequeRechazado(cheque.id)
+            : reactivarCheque(cheque.id)
+
+        apiCall
             .then(() => {
-                setModalMarcarRechazadoCheque(null)
+                setModalAccion({ cheque: null, modo: "rechazar" })
                 return cargar()
             })
             .catch((err) => {
-                console.error("Error marcando cheque rechazado:", err)
-                alert(err.message || "Error al marcar cheque rechazado")
-            })
-            .finally(() => setProcesandoId(null))
-    }
-
-    const solicitarReactivar = (cheque) => {
-        if (!window.confirm(`¿Reactivar el cheque Nº ${cheque.numero}? Pasará de Rechazado a En Cartera.`)) return
-        setProcesandoId(cheque.id)
-        reactivarCheque(cheque.id)
-            .then(() => cargar())
-            .catch((err) => {
-                console.error("Error reactivando cheque:", err)
-                alert(err.message || "Error al reactivar cheque")
+                console.error(`Error en acción ${modo}:`, err)
+                alert(err.message || `Error al ${modo} cheque`)
             })
             .finally(() => setProcesandoId(null))
     }
@@ -199,31 +196,40 @@ const HistorialCheques = () => {
 
     const columnas = [
         { id: "numero", titulo: "N°", render: (c) => <span className="text-sm font-medium text-slate-800">{c.numero}</span> },
+        {
+            id: "tipo",
+            titulo: "TIPO",
+            render: (c) => (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${c.tipo_cheque === "DIFERIDO" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+                    }`}>
+                    {c.tipo_cheque === "DIFERIDO" ? "Dif" : "Día"}
+                </span>
+            ),
+        },
+        { id: "librador_nombre", titulo: "LIBRADOR", render: (c) => <div className="flex flex-col"><span className="text-xs text-slate-700 font-medium truncate max-w-[120px]" title={c.librador_nombre}>{c.librador_nombre}</span><span className="text-[10px] font-mono text-slate-500">{c.cuit_librador}</span></div> },
         { id: "banco_emisor", titulo: "BANCO", render: (c) => <span className="text-sm text-slate-700">{c.banco_emisor}</span> },
         { id: "monto", titulo: "MONTO", align: "right", render: (c) => <span className="text-sm font-semibold text-slate-800">${formatearMoneda(c.monto)}</span> },
-        { id: "librador", titulo: "LIBRADOR", render: (c) => <span className="text-xs font-mono text-slate-600">{c.cuit_librador}</span> },
-        { id: "cliente_origen", titulo: "CLIENTE ORIGEN", render: (c) => <span className="text-xs text-slate-700">{c.cliente_origen || "—"}</span> },
+        { id: "cliente_origen", titulo: "ORIGEN", render: (c) => <span className="text-xs text-slate-700">{c.cliente_origen || "—"}</span> },
         { id: "estado", titulo: "ESTADO", render: (c) => renderEstado(c.estado) },
-        { id: "destino", titulo: "DESTINO / UBICACIÓN", render: (c) => renderDestino(c) },
-        { id: "nota_debito", titulo: "N.D.", render: (c) => <span className="text-xs text-slate-600">{c.nota_debito_numero_formateado || "—"}</span> },
-        { id: "fecha_presentacion", titulo: "PRESENT.", render: (c) => <span className="text-xs text-slate-500">{c.fecha_presentacion}</span> },
+        { id: "destino", titulo: "DESTINO", render: (c) => renderDestino(c) },
+        { id: "fecha_pago", titulo: "F. PAGO", render: (c) => <span className="text-xs font-medium text-slate-700">{formatearFecha(c.fecha_pago)}</span> },
         {
             id: "acciones",
             titulo: "ACCIONES",
             render: (c) => {
                 const estaProcesando = procesandoId === c.id
                 const botones = generarBotonesCheque(c)
-                
+
                 // Agregar botón de reactivar si está rechazado
                 if (c.estado === "RECHAZADO") {
                     botones.push({
                         componente: BotonReactivar,
-                        onClick: () => solicitarReactivar(c),
+                        onClick: () => abrirModalReactivar(c),
                         titulo: "Reactivar",
                         disabled: estaProcesando,
                     })
                 }
-                
+
                 return <AccionesMenu botones={botones} />
             },
         },
@@ -265,13 +271,14 @@ const HistorialCheques = () => {
                 tamañoEncabezado="pequeño"
             />
 
-            {modalMarcarRechazadoCheque && (
+            {modalAccion.cheque && (
                 <ModalMarcarChequeRechazado
-                    cheque={modalMarcarRechazadoCheque}
+                    cheque={modalAccion.cheque}
+                    modo={modalAccion.modo}
                     formatearMoneda={formatearMoneda}
-                    onConfirmar={confirmarMarcarRechazado}
-                    onCancelar={() => setModalMarcarRechazadoCheque(null)}
-                    loading={procesandoId === modalMarcarRechazadoCheque?.id}
+                    onConfirmar={confirmarAccion}
+                    onCancelar={() => setModalAccion({ cheque: null, modo: "rechazar" })}
+                    loading={procesandoId === modalAccion.cheque?.id}
                 />
             )}
 

@@ -8,6 +8,8 @@ import BuscadorCliente from "../BuscadorCliente"
 
 const ORIGEN_CAJA_GENERAL = "CAJA_GENERAL"
 const ORIGEN_CAMBIO_CHEQUE = "CAMBIO_CHEQUE"
+const TIPO_CHEQUE_AL_DIA = "AL_DIA"
+const TIPO_CHEQUE_DIFERIDO = "DIFERIDO"
 
 /**
  * Modal para registrar un cheque desde caja (caja general o cambio de cheque).
@@ -28,9 +30,11 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
     numero: "",
     banco_emisor: "",
     monto: "",
+    tipo_cheque: TIPO_CHEQUE_AL_DIA,
+    librador_nombre: "",
     cuit_librador: "",
     fecha_emision: hoy(),
-    fecha_presentacion: hoy(),
+    fecha_pago: hoy(),
     origen_tipo: ORIGEN_CAJA_GENERAL,
     origen_descripcion: "",
     origen_cliente_id: "",
@@ -48,9 +52,11 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
         numero: "",
         banco_emisor: "",
         monto: "",
+        tipo_cheque: TIPO_CHEQUE_AL_DIA,
+        librador_nombre: "",
         cuit_librador: "",
         fecha_emision: hoy(),
-        fecha_presentacion: hoy(),
+        fecha_pago: hoy(),
         origen_tipo: ORIGEN_CAJA_GENERAL,
         origen_descripcion: "",
         origen_cliente_id: "",
@@ -62,6 +68,13 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
       setClienteSeleccionado(null)
     }
   }, [abierto])
+
+  // Lógica para sincronizar fecha_pago si es AL_DIA
+  useEffect(() => {
+    if (formData.tipo_cheque === TIPO_CHEQUE_AL_DIA) {
+      setFormData(prev => ({ ...prev, fecha_pago: prev.fecha_emision }))
+    }
+  }, [formData.fecha_emision, formData.tipo_cheque])
 
   const formatearCUIT = (cuit) => {
     if (!cuit) return ""
@@ -142,14 +155,21 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
     }
 
     if (!formData.fecha_emision) nuevosErrores.fecha_emision = "La fecha de emisión es obligatoria"
-    if (!formData.fecha_presentacion) {
-      nuevosErrores.fecha_presentacion = "La fecha de presentación es obligatoria"
+    if (!formData.fecha_pago) {
+      nuevosErrores.fecha_pago = "La fecha de pago es obligatoria"
     }
-    if (formData.fecha_emision && formData.fecha_presentacion) {
+    if (formData.fecha_emision && formData.fecha_pago) {
       const fe = new Date(formData.fecha_emision)
-      const fp = new Date(formData.fecha_presentacion)
+      const fp = new Date(formData.fecha_pago)
       if (fe > fp) {
-        nuevosErrores.fecha_emision = "La fecha de emisión debe ser menor o igual a la de presentación"
+        nuevosErrores.fecha_pago = "La fecha de pago no puede ser anterior a la de emisión"
+      }
+
+      // Validar max 360 días
+      const diffTime = Math.abs(fp - fe)
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      if (diffDays > 360) {
+        nuevosErrores.fecha_pago = "La fecha de pago no puede exceder los 360 días"
       }
     }
 
@@ -177,13 +197,19 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
     e?.preventDefault()
     if (!validarFormulario()) return
 
+    if (!window.confirm("¿Está seguro de que desea registrar este cheque?")) {
+      return
+    }
+
     const payload = {
       numero: formData.numero.trim(),
       banco_emisor: formData.banco_emisor.trim(),
       monto: parseFloat(formData.monto),
+      tipo_cheque: formData.tipo_cheque,
+      librador_nombre: formData.librador_nombre.trim(),
       cuit_librador: limpiarCUIT(formData.cuit_librador),
       fecha_emision: formData.fecha_emision,
-      fecha_presentacion: formData.fecha_presentacion,
+      fecha_pago: formData.fecha_pago,
       origen_tipo: formData.origen_tipo,
       origen_descripcion: formData.origen_descripcion?.trim() || undefined,
     }
@@ -299,6 +325,19 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
                 </div>
 
                 <div>
+                  <label htmlFor="librador_nombre" className={CLASES_ETIQUETA}>Razón Social / Librador *</label>
+                  <input
+                    id="librador_nombre"
+                    type="text"
+                    value={formData.librador_nombre}
+                    onChange={(e) => handleChange("librador_nombre", e.target.value)}
+                    placeholder="Ej: Juan Pérez o Empresa S.A."
+                    className={errores.librador_nombre ? CLASES_INPUT_ERROR : CLASES_INPUT}
+                  />
+                  {errores.librador_nombre && <p className="text-xs text-red-600 mt-1">{errores.librador_nombre}</p>}
+                </div>
+
+                <div>
                   <label htmlFor="cuit_librador" className={CLASES_ETIQUETA}>
                     CUIT librador * {validandoCUIT && "(validando…)"}
                     {cuitValido === true && " ✓"}
@@ -317,6 +356,32 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
                   )}
                 </div>
 
+                <div>
+                  <label htmlFor="tipo_cheque" className={CLASES_ETIQUETA}>Tipo *</label>
+                  <div className="flex bg-slate-100 rounded p-1 gap-1 h-9">
+                    <button
+                      type="button"
+                      onClick={() => handleChange("tipo_cheque", TIPO_CHEQUE_AL_DIA)}
+                      className={`flex-1 text-[10px] font-bold rounded transition-all uppercase ${formData.tipo_cheque === TIPO_CHEQUE_AL_DIA
+                        ? "bg-white text-orange-600 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Al día
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleChange("tipo_cheque", TIPO_CHEQUE_DIFERIDO)}
+                      className={`flex-1 text-[10px] font-bold rounded transition-all uppercase ${formData.tipo_cheque === TIPO_CHEQUE_DIFERIDO
+                        ? "bg-white text-orange-600 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Diferido
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="fecha_emision" className={CLASES_ETIQUETA}>Fecha emisión *</label>
@@ -332,18 +397,20 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
                     )}
                   </div>
                   <div>
-                    <label htmlFor="fecha_presentacion" className={CLASES_ETIQUETA}>
-                      Fecha presentación *
+                    <label htmlFor="fecha_pago" className={CLASES_ETIQUETA}>
+                      Fecha de Pago *
                     </label>
                     <input
-                      id="fecha_presentacion"
+                      id="fecha_pago"
                       type="date"
-                      value={formData.fecha_presentacion}
-                      onChange={(e) => handleChange("fecha_presentacion", e.target.value)}
-                      className={errores.fecha_presentacion ? CLASES_INPUT_ERROR : CLASES_INPUT}
+                      value={formData.fecha_pago}
+                      onChange={(e) => handleChange("fecha_pago", e.target.value)}
+                      readOnly={formData.tipo_cheque === TIPO_CHEQUE_AL_DIA}
+                      className={`${errores.fecha_pago ? CLASES_INPUT_ERROR : CLASES_INPUT} ${formData.tipo_cheque === TIPO_CHEQUE_AL_DIA ? "bg-slate-50 cursor-not-allowed text-slate-500 font-medium" : ""
+                        }`}
                     />
-                    {errores.fecha_presentacion && (
-                      <p className="text-xs text-red-600 mt-1">{errores.fecha_presentacion}</p>
+                    {errores.fecha_pago && (
+                      <p className="text-xs text-red-600 mt-1">{errores.fecha_pago}</p>
                     )}
                   </div>
                 </div>

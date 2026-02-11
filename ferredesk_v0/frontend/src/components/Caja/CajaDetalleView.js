@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import CajaMovimientos from "./CajaMovimientos"
 
 /**
@@ -47,27 +48,7 @@ const CajaDetalleView = ({ sesionId }) => {
     cargarDetalles()
   }, [sesionId, obtenerResumenCaja, obtenerMovimientos])
 
-  // Formatear fecha
-  const formatearFecha = (fechaStr) => {
-    if (!fechaStr) return "-"
-    const fecha = new Date(fechaStr)
-    return fecha.toLocaleString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-  // Formatear moneda
-  const formatearMoneda = (valor) => {
-    const num = parseFloat(valor) || 0
-    return num.toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  }
+  // Se usan formateadores centralizados de ../../utils/formatters
 
   if (cargando) {
     return (
@@ -111,7 +92,7 @@ const CajaDetalleView = ({ sesionId }) => {
         <span className="text-slate-400">·</span>
         <span className="text-slate-500">{sesion.usuario_nombre || sesion.usuario?.username || "-"}</span>
         <span className="text-slate-400">·</span>
-        <span className="text-slate-500">{formatearFecha(sesion.fecha_hora_inicio)} → {formatearFecha(sesion.fecha_hora_fin)}</span>
+        <span className="text-slate-500">{formatearFecha(sesion.fecha_hora_inicio, true)} → {formatearFecha(sesion.fecha_hora_fin, true)}</span>
         {sesion.observaciones_cierre && (
           <>
             <span className="text-slate-400">·</span>

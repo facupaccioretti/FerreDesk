@@ -9,6 +9,17 @@ const CuentaCorrienteProveedorManager = () => {
     const theme = useFerreDeskTheme()
 
     const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null)
+    const [fechaDesde, setFechaDesde] = useState(() => {
+        // Default: 30 días atrás
+        const fecha = new Date()
+        fecha.setDate(fecha.getDate() - 30)
+        return fecha.toLocaleDateString('en-CA') // Formato YYYY-MM-DD en zona horaria local
+    })
+    const [fechaHasta, setFechaHasta] = useState(() => {
+        // Default: hoy
+        return new Date().toLocaleDateString('en-CA') // Formato YYYY-MM-DD en zona horaria local
+    })
+    const [completo, setCompleto] = useState(false)
 
     useEffect(() => {
         document.title = "Cuenta Corriente Proveedores - FerreDesk"
@@ -32,7 +43,13 @@ const CuentaCorrienteProveedorManager = () => {
                             <div className="flex-1 p-6">
                                 <CuentaCorrienteProveedorList
                                     proveedorSeleccionado={proveedorSeleccionado}
+                                    fechaDesde={fechaDesde}
+                                    fechaHasta={fechaHasta}
+                                    completo={completo}
                                     onProveedorChange={setProveedorSeleccionado}
+                                    onFechaDesdeChange={setFechaDesde}
+                                    onFechaHastaChange={setFechaHasta}
+                                    onCompletoChange={setCompleto}
                                     theme={theme}
                                 />
                             </div>

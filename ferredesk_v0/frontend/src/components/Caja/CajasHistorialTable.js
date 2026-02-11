@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import Tabla from "../Tabla"
 
@@ -32,7 +33,7 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
       }
 
       const resultado = await obtenerHistorialSesiones(params)
-      
+
       // El backend puede retornar paginado o lista simple
       if (resultado.results) {
         setCajas(resultado.results)
@@ -53,27 +54,7 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
     cargarHistorial()
   }, [cargarHistorial])
 
-  // Formatear fecha
-  const formatearFecha = (fechaStr) => {
-    if (!fechaStr) return "-"
-    const fecha = new Date(fechaStr)
-    return fecha.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-  // Formatear moneda
-  const formatearMoneda = (valor) => {
-    const num = parseFloat(valor) || 0
-    return num.toLocaleString("es-AR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  }
+  // Se usan formateadores centralizados de ../../utils/formatters
 
   // Filtrar cajas por fechas
   const cajasFiltradas = cajas.filter((caja) => {
@@ -102,14 +83,14 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
       id: "fecha_hora_inicio",
       titulo: "FECHA APERTURA",
       render: (caja) => (
-        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_inicio)}</span>
+        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_inicio, true)}</span>
       ),
     },
     {
       id: "fecha_hora_fin",
       titulo: "FECHA CIERRE",
       render: (caja) => (
-        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_fin)}</span>
+        <span className="text-sm text-slate-600">{formatearFecha(caja.fecha_hora_fin, true)}</span>
       ),
     },
     {
@@ -156,8 +137,8 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
           diferencia > 0
             ? "text-green-600"
             : diferencia < 0
-            ? "text-red-600"
-            : "text-slate-600"
+              ? "text-red-600"
+              : "text-slate-600"
         return (
           <span className={`text-sm text-right font-semibold ${diferenciaColor}`}>
             {diferencia !== 0 ? (diferencia > 0 ? "+" : "") : ""}
@@ -289,7 +270,7 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
           columnas={columnas}
           datos={cajasFiltradas}
           valorBusqueda=""
-          onCambioBusqueda={() => {}}
+          onCambioBusqueda={() => { }}
           mostrarBuscador={false}
           mostrarOrdenamiento={false}
           filasPorPaginaInicial={20}

@@ -3,6 +3,7 @@
 import React from "react"
 import Tabla from "../Tabla"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
+import { formatearFecha } from "../../utils/formatters"
 
 const CuentaCorrienteProveedorTable = ({
     items,
@@ -13,15 +14,7 @@ const CuentaCorrienteProveedorTable = ({
     saldoTotal
 }) => {
 
-    const formatearFecha = (fechaStr) => {
-        try {
-            if (!fechaStr) return '-'
-            const fecha = new Date(fechaStr + 'T00:00:00')
-            return fecha.toLocaleDateString('es-AR')
-        } catch {
-            return fechaStr
-        }
-    }
+    // Se usa formateador centralizado de ../../utils/formatters
 
     const formatearMonto = (monto) => {
         return new Intl.NumberFormat('es-AR', {

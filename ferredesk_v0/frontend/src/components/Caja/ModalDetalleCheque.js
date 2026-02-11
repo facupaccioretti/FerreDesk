@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 
 /**
  * Modal para mostrar el detalle completo de un cheque con historial.
@@ -39,16 +40,7 @@ const ModalDetalleCheque = ({ cheque, onCerrar }) => {
     }
   }, [cheque?.id, cargarDetalle])
 
-  const formatearMoneda = (v) => {
-    const num = parseFloat(v) || 0
-    return num.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
-
-  const formatearFecha = (fecha) => {
-    if (!fecha) return "-"
-    const d = new Date(fecha)
-    return d.toLocaleDateString("es-AR", { year: "numeric", month: "2-digit", day: "2-digit" })
-  }
+  // Se usan formateadores centralizados de ../../utils/formatters
 
   const formatearFechaHora = (fechaHora) => {
     if (!fechaHora) return "-"
@@ -178,24 +170,29 @@ const ModalDetalleCheque = ({ cheque, onCerrar }) => {
                           <div className={CLASES_VALOR}>{detalle.numero || "-"}</div>
                         </div>
                         <div>
-                          <div className={CLASES_ETIQUETA}>Banco Emisor</div>
-                          <div className={CLASES_VALOR}>{detalle.banco_emisor || "-"}</div>
-                        </div>
-                        <div>
-                          <div className={CLASES_ETIQUETA}>Monto</div>
-                          <div className={CLASES_VALOR}>${formatearMoneda(detalle.monto)}</div>
+                          <div className={CLASES_ETIQUETA}>Librador</div>
+                          <div className={CLASES_VALOR}>{detalle.librador_nombre || "-"}</div>
                         </div>
                         <div>
                           <div className={CLASES_ETIQUETA}>CUIT Librador</div>
                           <div className={CLASES_VALOR}>{formatearCUIT(detalle.cuit_librador)}</div>
                         </div>
                         <div>
+                          <div className={CLASES_ETIQUETA}>Tipo</div>
+                          <div className={CLASES_VALOR}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${detalle.tipo_cheque === "DIFERIDO" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+                              }`}>
+                              {detalle.tipo_cheque === "DIFERIDO" ? "Diferido" : "Al día"}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
                           <div className={CLASES_ETIQUETA}>Fecha Emisión</div>
                           <div className={CLASES_VALOR}>{formatearFecha(detalle.fecha_emision)}</div>
                         </div>
                         <div>
-                          <div className={CLASES_ETIQUETA}>Fecha Presentación</div>
-                          <div className={CLASES_VALOR}>{formatearFecha(detalle.fecha_presentacion)}</div>
+                          <div className={CLASES_ETIQUETA}>Fecha de Pago</div>
+                          <div className={CLASES_VALOR}>{formatearFecha(detalle.fecha_pago)}</div>
                         </div>
                         {detalle.fecha_vencimiento_calculada && (
                           <div>
@@ -204,13 +201,12 @@ const ModalDetalleCheque = ({ cheque, onCerrar }) => {
                               {formatearFecha(detalle.fecha_vencimiento_calculada)}
                               {detalle.dias_hasta_vencimiento !== null && (
                                 <span
-                                  className={`ml-2 text-xs ${
-                                    detalle.dias_hasta_vencimiento < 0
-                                      ? "text-red-600"
-                                      : detalle.dias_hasta_vencimiento <= 5
+                                  className={`ml-2 text-xs ${detalle.dias_hasta_vencimiento < 0
+                                    ? "text-red-600"
+                                    : detalle.dias_hasta_vencimiento <= 5
                                       ? "text-orange-600"
                                       : "text-slate-500"
-                                  }`}
+                                    }`}
                                 >
                                   ({detalle.dias_hasta_vencimiento > 0 ? "+" : ""}
                                   {detalle.dias_hasta_vencimiento} días)

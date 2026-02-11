@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import BuscadorCliente from "../BuscadorCliente"
 
 /**
  * Modal para editar los datos de un cheque que está EN_CARTERA.
@@ -19,14 +20,20 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
     numero: "",
     banco_emisor: "",
     monto: "",
+    tipo_cheque: "AL_DIA",
+    librador_nombre: "",
     cuit_librador: "",
     fecha_emision: "",
-    fecha_presentacion: "",
+    fecha_pago: "",
+    origen_tipo: "",
+    origen_descripcion: "",
+    origen_cliente_id: "",
   })
   const [errores, setErrores] = useState({})
   const [validandoCUIT, setValidandoCUIT] = useState(false)
   const [cuitValido, setCuitValido] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
 
   useEffect(() => {
     if (cheque) {
@@ -34,14 +41,34 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
         numero: cheque.numero || "",
         banco_emisor: cheque.banco_emisor || "",
         monto: cheque.monto || "",
+        tipo_cheque: cheque.tipo_cheque || "AL_DIA",
+        librador_nombre: cheque.librador_nombre || "",
         cuit_librador: cheque.cuit_librador || "",
         fecha_emision: cheque.fecha_emision || "",
-        fecha_presentacion: cheque.fecha_presentacion || "",
+        fecha_pago: cheque.fecha_pago || "",
+        origen_tipo: cheque.origen_tipo || "",
+        origen_descripcion: cheque.origen_descripcion || "",
+        origen_cliente_id: cheque.origen_cliente_id || "",
       })
+      if (cheque.origen_cliente_id) {
+        setClienteSeleccionado({
+          id: cheque.origen_cliente_id,
+          razon: cheque.origen_cliente_nombre
+        })
+      } else {
+        setClienteSeleccionado(null)
+      }
       setErrores({})
       setCuitValido(null)
     }
   }, [cheque])
+
+  // Sincronizar fecha_pago si es AL_DIA
+  useEffect(() => {
+    if (formData.tipo_cheque === "AL_DIA" && formData.fecha_emision) {
+      setFormData(prev => ({ ...prev, fecha_pago: prev.fecha_emision }))
+    }
+  }, [formData.tipo_cheque, formData.fecha_emision])
 
   const formatearCUIT = (cuit) => {
     if (!cuit) return ""
@@ -142,15 +169,21 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
       nuevosErrores.fecha_emision = "La fecha de emisión es obligatoria"
     }
 
-    if (!formData.fecha_presentacion) {
-      nuevosErrores.fecha_presentacion = "La fecha de presentación es obligatoria"
+    if (!formData.fecha_pago) {
+      nuevosErrores.fecha_pago = "La fecha de pago es obligatoria"
     }
 
-    if (formData.fecha_emision && formData.fecha_presentacion) {
+    if (formData.fecha_emision && formData.fecha_pago) {
       const fechaEmision = new Date(formData.fecha_emision)
-      const fechaPresentacion = new Date(formData.fecha_presentacion)
-      if (fechaEmision > fechaPresentacion) {
-        nuevosErrores.fecha_emision = "La fecha de emisión debe ser menor o igual a la fecha de presentación"
+      const fechaPago = new Date(formData.fecha_pago)
+      if (fechaEmision > fechaPago) {
+        nuevosErrores.fecha_pago = "La fecha de pago no puede ser anterior a la de emisión"
+      }
+
+      const diffTime = Math.abs(fechaPago - fechaEmision)
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      if (diffDays > 360) {
+        nuevosErrores.fecha_pago = "La fecha de pago no puede exceder los 360 días"
       }
     }
 
@@ -170,9 +203,13 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
         numero: formData.numero.trim(),
         banco_emisor: formData.banco_emisor.trim(),
         monto: parseFloat(formData.monto),
+        tipo_cheque: formData.tipo_cheque,
+        librador_nombre: formData.librador_nombre.trim(),
         cuit_librador: limpiarCUIT(formData.cuit_librador),
         fecha_emision: formData.fecha_emision,
-        fecha_presentacion: formData.fecha_presentacion,
+        fecha_pago: formData.fecha_pago,
+        origen_cliente_id: formData.origen_cliente_id || null,
+        origen_descripcion: formData.origen_descripcion?.trim() || "",
       }
 
       const chequeActualizado = await editarCheque(cheque.id, datosEnviar)
@@ -193,7 +230,8 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
       formData.monto &&
       limpiarCUIT(formData.cuit_librador).length === 11 &&
       formData.fecha_emision &&
-      formData.fecha_presentacion &&
+      formData.fecha_pago &&
+      formData.librador_nombre?.trim() &&
       Object.keys(errores).length === 0 &&
       cuitValido !== false
     )
@@ -229,7 +267,7 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
           leaveTo="opacity-0 scale-95"
         >
           <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col">
+            <Dialog.Panel className="w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               {/* Header */}
               <div
                 className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${theme.primario}`}
@@ -311,6 +349,23 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
                   )}
                 </div>
 
+                {/* Librador */}
+                <div>
+                  <label htmlFor="librador_nombre" className={CLASES_ETIQUETA}>
+                    Razón Social / Librador *
+                  </label>
+                  <input
+                    id="librador_nombre"
+                    type="text"
+                    value={formData.librador_nombre}
+                    onChange={(e) => handleChange("librador_nombre", e.target.value)}
+                    className={errores.librador_nombre ? CLASES_INPUT_ERROR : CLASES_INPUT}
+                  />
+                  {errores.librador_nombre && (
+                    <p className="text-xs text-red-600 mt-1">{errores.librador_nombre}</p>
+                  )}
+                </div>
+
                 {/* CUIT Librador */}
                 <div>
                   <label htmlFor="cuit_librador" className={CLASES_ETIQUETA}>
@@ -342,38 +397,119 @@ const ModalEditarCheque = ({ cheque, onGuardar, onCancelar }) => {
                   )}
                 </div>
 
-                {/* Fecha Emisión */}
+                {/* Tipo de Cheque */}
                 <div>
-                  <label htmlFor="fecha_emision" className={CLASES_ETIQUETA}>
-                    Fecha Emisión *
-                  </label>
-                  <input
-                    id="fecha_emision"
-                    type="date"
-                    value={formData.fecha_emision}
-                    onChange={(e) => handleChange("fecha_emision", e.target.value)}
-                    className={errores.fecha_emision ? CLASES_INPUT_ERROR : CLASES_INPUT}
-                  />
-                  {errores.fecha_emision && (
-                    <p className="text-xs text-red-600 mt-1">{errores.fecha_emision}</p>
-                  )}
+                  <label htmlFor="tipo_cheque" className={CLASES_ETIQUETA}>Tipo *</label>
+                  <div className="flex bg-slate-100 rounded p-1 gap-1 h-9">
+                    <button
+                      type="button"
+                      onClick={() => handleChange("tipo_cheque", "AL_DIA")}
+                      className={`flex-1 text-[10px] font-bold rounded transition-all uppercase ${formData.tipo_cheque === "AL_DIA"
+                        ? "bg-white text-orange-600 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Al día
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleChange("tipo_cheque", "DIFERIDO")}
+                      className={`flex-1 text-[10px] font-bold rounded transition-all uppercase ${formData.tipo_cheque === "DIFERIDO"
+                        ? "bg-white text-orange-600 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      Diferido
+                    </button>
+                  </div>
                 </div>
 
-                {/* Fecha Presentación */}
-                <div>
-                  <label htmlFor="fecha_presentacion" className={CLASES_ETIQUETA}>
-                    Fecha Presentación *
-                  </label>
-                  <input
-                    id="fecha_presentacion"
-                    type="date"
-                    value={formData.fecha_presentacion}
-                    onChange={(e) => handleChange("fecha_presentacion", e.target.value)}
-                    className={errores.fecha_presentacion ? CLASES_INPUT_ERROR : CLASES_INPUT}
-                  />
-                  {errores.fecha_presentacion && (
-                    <p className="text-xs text-red-600 mt-1">{errores.fecha_presentacion}</p>
-                  )}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Fecha Emisión */}
+                  <div>
+                    <label htmlFor="fecha_emision" className={CLASES_ETIQUETA}>
+                      Fecha Emisión *
+                    </label>
+                    <input
+                      id="fecha_emision"
+                      type="date"
+                      value={formData.fecha_emision}
+                      onChange={(e) => handleChange("fecha_emision", e.target.value)}
+                      className={errores.fecha_emision ? CLASES_INPUT_ERROR : CLASES_INPUT}
+                    />
+                    {errores.fecha_emision && (
+                      <p className="text-xs text-red-600 mt-1">{errores.fecha_emision}</p>
+                    )}
+                  </div>
+
+                  {/* Fecha de Pago */}
+                  <div>
+                    <label htmlFor="fecha_pago" className={CLASES_ETIQUETA}>
+                      Fecha de Pago *
+                    </label>
+                    <input
+                      id="fecha_pago"
+                      type="date"
+                      value={formData.fecha_pago}
+                      onChange={(e) => handleChange("fecha_pago", e.target.value)}
+                      readOnly={formData.tipo_cheque === "AL_DIA"}
+                      className={`${errores.fecha_pago ? CLASES_INPUT_ERROR : CLASES_INPUT} ${formData.tipo_cheque === "AL_DIA" ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
+                        }`}
+                    />
+                    {errores.fecha_pago && (
+                      <p className="text-xs text-red-600 mt-1">{errores.fecha_pago}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Origen */}
+                <div className="border-t border-slate-100 pt-4 mt-2">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Información de Origen</h4>
+
+                  <div className="mb-4">
+                    <label htmlFor="origen_descripcion" className={CLASES_ETIQUETA}>
+                      Descripción del Origen
+                    </label>
+                    <input
+                      id="origen_descripcion"
+                      type="text"
+                      value={formData.origen_descripcion}
+                      onChange={(e) => handleChange("origen_descripcion", e.target.value)}
+                      placeholder="Ej: Cobro factura duplicada"
+                      className={CLASES_INPUT}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={CLASES_ETIQUETA}>
+                      Cliente de Origen
+                    </label>
+                    {clienteSeleccionado ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-slate-700 bg-slate-100 border border-slate-200 rounded px-2 py-1.5 flex-1 min-w-0">
+                          {clienteSeleccionado.razon || "Cliente #" + clienteSeleccionado.id}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClienteSeleccionado(null)
+                            setFormData((prev) => ({ ...prev, origen_cliente_id: "" }))
+                          }}
+                          className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ) : (
+                      <BuscadorCliente
+                        onSelect={(c) => {
+                          setClienteSeleccionado(c)
+                          setFormData((prev) => ({ ...prev, origen_cliente_id: c.id }))
+                        }}
+                        placeholder="Buscar cliente..."
+                      />
+                    )}
+                  </div>
                 </div>
               </form>
 

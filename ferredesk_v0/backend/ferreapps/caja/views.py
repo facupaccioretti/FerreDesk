@@ -554,11 +554,13 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 numero=data['numero'],
                 banco_emisor=data['banco_emisor'],
                 monto=data['monto'],
-                cuit_librador=data['cuit_librador'],
-                fecha_emision=data['fecha_emision'],
-                fecha_presentacion=data['fecha_presentacion'],
-                estado=Cheque.ESTADO_EN_CARTERA,
-                origen_tipo=data['origen_tipo'],
+                 cuit_librador=data['cuit_librador'],
+                 fecha_emision=data['fecha_emision'],
+                 fecha_pago=data['fecha_pago'],
+                 tipo_cheque=data['tipo_cheque'],
+                 librador_nombre=data['librador_nombre'],
+                 estado=Cheque.ESTADO_EN_CARTERA,
+                 origen_tipo=data['origen_tipo'],
                 origen_cliente=origen_cliente,
                 origen_descripcion=data.get('origen_descripcion'),
                 movimiento_caja_entrada=movimiento_entrada,
@@ -575,9 +577,9 @@ class ChequeViewSet(viewsets.ModelViewSet):
     def alertas_vencimiento(self, request):
         """Devuelve cantidad de cheques por vencer en los próximos N días.
 
-        Regla: vencimiento legal = fecha_presentacion + 30 días.
-        Parámetros:
-        - dias (int): ventana de alerta. Default 5.
+        # Regla: vencimiento legal = fecha_pago + 30 días.
+        # Parámetros:
+        # - dias (int): ventana de alerta. Default 5.
         """
         try:
             dias = int(request.query_params.get('dias', 5))
@@ -595,16 +597,18 @@ class ChequeViewSet(viewsets.ModelViewSet):
         # Solo cheques en cartera (todavía bajo control de la empresa)
         qs = Cheque.objects.filter(estado=Cheque.ESTADO_EN_CARTERA)
 
-        # Fecha de vencimiento = presentacion + 30 días
-        # Filtrar los que vencen dentro de la ventana: (presentacion + 30) <= fecha_limite
-        #  => presentacion <= fecha_limite - 30
-        fecha_presentacion_limite = fecha_limite - timedelta(days=30)
+        # Fecha de vencimiento = pago + 30 días
+        # Filtrar los que vencen dentro de la ventana: (pago + 30) <= fecha_limite
+        #  => pago <= fecha_limite - 30
+        fecha_pago_limite = fecha_limite - timedelta(days=30)
 
-        cantidad = qs.filter(fecha_presentacion__lte=fecha_presentacion_limite).count()
+        cheques_vencer = qs.filter(fecha_pago__lte=fecha_pago_limite)
+        cantidad = cheques_vencer.count()
 
         return Response({
             'dias': dias,
             'cantidad': cantidad,
+            'cheques': ChequeSerializer(cheques_vencer, many=True).data,
         })
 
     @action(detail=True, methods=['post'], url_path='depositar')
@@ -613,15 +617,27 @@ class ChequeViewSet(viewsets.ModelViewSet):
         cheque = self.get_object()
         if cheque.estado != Cheque.ESTADO_EN_CARTERA:
             return Response({'detail': 'Solo cheques EN_CARTERA pueden depositarse.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validación: No permitir depositar cheques diferidos antes de su fecha de pago
+        hoy = timezone.localdate()
+        if cheque.tipo_cheque == Cheque.TIPO_CHEQUE_DIFERIDO and cheque.fecha_pago > hoy:
+            return Response(
+                {'detail': f'No se puede depositar el cheque diferido hasta el {cheque.fecha_pago}.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         cuenta_banco_id = request.data.get('cuenta_banco_id')
         if not cuenta_banco_id:
             return Response({'detail': 'Debe enviar cuenta_banco_id.'}, status=status.HTTP_400_BAD_REQUEST)
         cuenta = CuentaBanco.objects.filter(id=cuenta_banco_id, activo=True).first()
         if not cuenta:
             return Response({'detail': 'Cuenta bancaria no encontrada o inactiva.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         cheque.cuenta_banco_deposito = cuenta
         cheque.estado = Cheque.ESTADO_DEPOSITADO
-        cheque.save(update_fields=['cuenta_banco_deposito', 'estado'])
+        cheque.fecha_presentacion = hoy
+        cheque.fecha_deposito_real = timezone.now()
+        cheque.save(update_fields=['cuenta_banco_deposito', 'estado', 'fecha_presentacion', 'fecha_deposito_real'])
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=False, methods=['post'], url_path='endosar')
@@ -643,7 +659,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='marcar-rechazado')
     def marcar_rechazado(self, request, pk=None):
-        """Marca el cheque como rechazado, genera ND al cliente y opcionalmente contrasiento si estaba depositado."""
+        """Marca el cheque como rechazado y solicita al usuario generar la documentación manual."""
         cheque = self.get_object()
         estados_permitidos = (Cheque.ESTADO_EN_CARTERA, Cheque.ESTADO_DEPOSITADO, Cheque.ESTADO_ENTREGADO)
         if cheque.estado not in estados_permitidos:
@@ -651,10 +667,6 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 {'detail': 'Solo cheques en En cartera, Depositado o Entregado pueden marcarse como rechazados.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not cheque.venta_id:
-            return Response({'detail': 'El cheque debe estar vinculado a una venta.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not cheque.pago_venta_id:
-            return Response({'detail': 'El cheque debe estar vinculado a un pago de venta.'}, status=status.HTTP_400_BAD_REQUEST)
 
         sesion_caja = SesionCaja.objects.filter(
             usuario=request.user,
@@ -666,48 +678,34 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from decimal import Decimal
-        from .utils import generar_nota_debito_cheque_rechazado, registrar_contrasiento_cheque_depositado
-
-        monto_cargos = request.data.get('cargos_administrativos_banco')
-        if monto_cargos is not None:
-            try:
-                monto_cargos = Decimal(str(monto_cargos)).quantize(Decimal('0.01'))
-                if monto_cargos < 0:
-                    return Response(
-                        {'detail': 'Los cargos administrativos del banco no pueden ser negativos.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except (ValueError, TypeError):
-                return Response(
-                    {'detail': 'cargos_administrativos_banco debe ser un número válido.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        from .utils import registrar_contrasiento_cheque_depositado
 
         try:
             with transaction.atomic():
-                nd_venta = generar_nota_debito_cheque_rechazado(
-                    cheque, sesion_caja, request.user,
-                    monto_cargos_administrativos_banco=monto_cargos,
-                )
+                # Si estaba depositado, revertimos el ingreso en la sesión de caja (movimiento de tesorería)
                 if cheque.estado == Cheque.ESTADO_DEPOSITADO:
                     registrar_contrasiento_cheque_depositado(cheque, sesion_caja, request.user)
+                
                 cheque.estado = Cheque.ESTADO_RECHAZADO
-                cheque.nota_debito_venta = nd_venta
+                # Limpiamos la ND si ya tenía una vinculada por error antes
+                cheque.nota_debito_venta = None
                 cheque.save(update_fields=['estado', 'nota_debito_venta'])
-        except ValidationError as e:
-            detail = e.messages[0] if getattr(e, 'messages', None) else str(e)
-            return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Re-obtener el cheque con relaciones para que el serializer exponga nota_debito_venta_id, etc.
+        # Re-obtener el cheque
         cheque = self.get_queryset().get(pk=cheque.pk)
-        return Response(ChequeSerializer(cheque).data)
+        data = ChequeSerializer(cheque).data
+        data['mensaje_siguiente_paso'] = (
+            "El cheque ha sido marcado como RECHAZADO. "
+            "RECUERDE: Debe generar manualmente una Nota de Débito o Extensión de Contenido "
+            "al cliente para registrar la deuda en su cuenta corriente."
+        )
+        return Response(data)
 
     @action(detail=True, methods=['post'], url_path='reactivar')
     def reactivar(self, request, pk=None):
-        """Vuelve un cheque RECHAZADO a EN_CARTERA (cuando el cliente devuelve el cheque y paga en efectivo)."""
+        """Vuelve un cheque RECHAZADO a EN_CARTERA."""
         cheque = self.get_object()
         if cheque.estado != Cheque.ESTADO_RECHAZADO:
             return Response(
@@ -716,7 +714,14 @@ class ChequeViewSet(viewsets.ModelViewSet):
             )
         cheque.estado = Cheque.ESTADO_EN_CARTERA
         cheque.save(update_fields=['estado'])
-        return Response(ChequeSerializer(cheque).data)
+        
+        data = ChequeSerializer(cheque).data
+        data['mensaje_siguiente_paso'] = (
+            "El cheque ha vuelto a estado EN CARTERA. "
+            "RECUERDE: Si ya había generado una Nota de Débito, deberá generar manualmente "
+            "una Nota de Crédito o Modificación de Contenido para anular esa deuda."
+        )
+        return Response(data)
 
     @action(detail=True, methods=['get'], url_path='detalle')
     def detalle(self, request, pk=None):
@@ -759,8 +764,9 @@ class ChequeViewSet(viewsets.ModelViewSet):
         
         # Actualizar campos permitidos
         campos_permitidos = [
-            'numero', 'banco_emisor', 'monto', 'cuit_librador',
-            'fecha_emision', 'fecha_presentacion'
+            'numero', 'banco_emisor', 'monto', 'tipo_cheque',
+            'librador_nombre', 'cuit_librador', 'fecha_emision', 'fecha_pago',
+            'origen_cliente_id', 'origen_descripcion'
         ]
         
         for campo in campos_permitidos:

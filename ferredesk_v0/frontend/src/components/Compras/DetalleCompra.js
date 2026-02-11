@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { IconFactura } from "../ComprobanteIcono"
+import { formatearFecha } from "../../utils/formatters"
 
 // Icono de carrito para compras (usado en navbar)
 const IconCarrito = ({ className = "w-5 h-5 text-white" }) => (
@@ -56,15 +57,7 @@ const formatearMoneda = (valor) => {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(numero)
 }
 
-const formatearFecha = (fechaStr) => {
-  if (!fechaStr) return "-"
-  try {
-    const d = new Date(fechaStr)
-    return d.toLocaleDateString("es-AR")
-  } catch {
-    return fechaStr
-  }
-}
+// Se usa formateador centralizado de ../../utils/formatters
 
 export default function DetalleCompra({ modo = "compra", compra, orden, onClose }) {
   const [detalle, setDetalle] = useState(() => (modo === "compra" ? (compra || null) : (orden || null)))
@@ -89,7 +82,7 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
           try {
             const data = await resp.json()
             msg = data.detail || msg
-          } catch {}
+          } catch { }
           throw new Error(msg)
         }
         const data = await resp.json()
@@ -122,9 +115,9 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
         {/* Header */}
         <div className="bg-slate-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-                         <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center">
-               <IconCarrito />
-             </div>
+            <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center">
+              <IconCarrito />
+            </div>
             <div>
               <h3 className="text-lg font-semibold text-white">{titulo}</h3>
               <div className="text-sm text-slate-300">
@@ -157,14 +150,14 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
 
           {/* Tarjetas informativas */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-                         {/* Proveedor */}
-             <div className="bg-white rounded-lg border border-slate-200 p-4">
-               <div className="flex items-center gap-2 mb-3">
-                 <div className="w-6 h-6 rounded bg-orange-100 flex items-center justify-center">
-                   <IconCamion className="w-3.5 h-3.5 text-orange-600" />
-                 </div>
-                 <h4 className="text-sm font-semibold text-slate-800">Proveedor</h4>
-               </div>
+            {/* Proveedor */}
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded bg-orange-100 flex items-center justify-center">
+                  <IconCamion className="w-3.5 h-3.5 text-orange-600" />
+                </div>
+                <h4 className="text-sm font-semibold text-slate-800">Proveedor</h4>
+              </div>
               <div className="space-y-1">
                 <div className="text-sm font-medium text-slate-800">
                   {detalle?.proveedor_nombre || detalle?.comp_razon_social || detalle?.ord_razon_social || "-"}
@@ -179,9 +172,9 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
             {/* Comprobante */}
             <div className="bg-white rounded-lg border border-slate-200 p-4">
               <div className="flex items-center gap-2 mb-3">
-                                 <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center">
-                   <IconFactura className="w-3.5 h-3.5 text-blue-600" />
-                 </div>
+                <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center">
+                  <IconFactura className="w-3.5 h-3.5 text-blue-600" />
+                </div>
                 <h4 className="text-sm font-semibold text-slate-800">Comprobante</h4>
               </div>
               <div className="space-y-1">
@@ -195,49 +188,49 @@ export default function DetalleCompra({ modo = "compra", compra, orden, onClose 
 
             {/* Totales (solo compras) */}
             {esCompra && (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded bg-emerald-100 flex items-center justify-center">
-                  <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-6 h-6 rounded bg-emerald-100 flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                  <h4 className="text-sm font-semibold text-slate-800">Totales</h4>
                 </div>
-                <h4 className="text-sm font-semibold text-slate-800">Totales</h4>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">Neto</span>
-                  <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_importe_neto)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">IVA 21%</span>
-                  <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_21)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">IVA 10.5%</span>
-                  <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_10_5)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">IVA 27%</span>
-                  <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_27)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">IVA 0%</span>
-                  <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_0)}</span>
-                </div>
-                <div className="border-t border-slate-200 pt-1 mt-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-semibold text-slate-800">Total</span>
-                    <span className="font-bold text-slate-900">{formatearMoneda(detalle?.comp_total_final)}</span>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">Neto</span>
+                    <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_importe_neto)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">IVA 21%</span>
+                    <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_21)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">IVA 10.5%</span>
+                    <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_10_5)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">IVA 27%</span>
+                    <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_27)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600">IVA 0%</span>
+                    <span className="font-medium text-slate-800">{formatearMoneda(detalle?.comp_iva_0)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1 mt-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold text-slate-800">Total</span>
+                      <span className="font-bold text-slate-900">{formatearMoneda(detalle?.comp_total_final)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
             )}
           </div>
 

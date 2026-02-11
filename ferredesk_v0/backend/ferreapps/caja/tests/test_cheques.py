@@ -233,6 +233,32 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
         self.assertEqual(items[1].vdi_detalle1, 'Cargos administrativos banco')
         self.assertEqual(items[1].vdi_precio_unitario_final, Decimal('350.50'))
 
+    def test_marcar_rechazado_sin_venta_caja_general_ok(self):
+        """Verifica que un cheque sin venta (caja general) pueda rechazarse usando origen_cliente."""
+        cheque_sin_vta = Cheque.objects.create(
+            numero='999888',
+            banco_emisor='Banco Sin Venta',
+            monto=Decimal('2000.00'),
+            cuit_librador='20111111112',
+            fecha_emision=timezone.now().date(),
+            fecha_presentacion=timezone.now().date(),
+            estado=Cheque.ESTADO_EN_CARTERA,
+            origen_tipo=Cheque.ORIGEN_CAJA_GENERAL,
+            origen_cliente=self.cliente,
+            usuario_registro=self.usuario,
+        )
+        self.client.force_authenticate(user=self.usuario)
+        url = reverse('cheque-marcar-rechazado', kwargs={'pk': cheque_sin_vta.pk})
+        response = self.client.post(url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        cheque_sin_vta.refresh_from_db()
+        self.assertEqual(cheque_sin_vta.estado, Cheque.ESTADO_RECHAZADO)
+        self.assertIsNotNone(cheque_sin_vta.nota_debito_venta)
+        self.assertEqual(cheque_sin_vta.nota_debito_venta.ven_idcli, self.cliente)
+        self.assertEqual(cheque_sin_vta.nota_debito_venta.ven_punto, 99)
+        self.assertEqual(cheque_sin_vta.nota_debito_venta.items.count(), 1)
+
 
 class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
     """Tests para crear cheques desde caja (caja general y cambio de cheque)."""

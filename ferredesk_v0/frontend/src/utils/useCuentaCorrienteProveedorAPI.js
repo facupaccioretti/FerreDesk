@@ -56,18 +56,15 @@ const useCuentaCorrienteProveedorAPI = () => {
     }, [makeRequest]);
 
     // Obtener cuenta corriente de un proveedor
-    const getCuentaCorrienteProveedor = useCallback(async (proveedorId, fechaDesde, fechaHasta) => {
+    const getCuentaCorrienteProveedor = useCallback(async (proveedorId, fechaDesde, fechaHasta, completo = false) => {
         try {
-            let query = `/api/cuenta-corriente/proveedor/${proveedorId}/`;
-            const params = [];
-            if (fechaDesde) params.push(`fecha_desde=${fechaDesde}`);
-            if (fechaHasta) params.push(`fecha_hasta=${fechaHasta}`);
+            const params = new URLSearchParams();
+            if (fechaDesde) params.append('fecha_desde', fechaDesde);
+            if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+            params.append('completo', completo);
 
-            if (params.length > 0) {
-                query += `?${params.join('&')}`;
-            }
-
-            const data = await makeRequest(query);
+            const url = `/api/cuenta-corriente/proveedor/${proveedorId}/?${params}`;
+            const data = await makeRequest(url);
             return data;
         } catch (err) {
             console.error(`Error fetching cuenta corriente para proveedor ${proveedorId}:`, err);

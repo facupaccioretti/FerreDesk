@@ -27,9 +27,8 @@ class ChequeSerializer(serializers.ModelSerializer):
     nota_debito_numero_formateado = serializers.SerializerMethodField()
     cliente_origen = serializers.SerializerMethodField()
     origen_tipo = serializers.CharField(read_only=True)
-    origen_cliente_nombre = serializers.CharField(
-        source='origen_cliente.razon', read_only=True, allow_null=True
-    )
+    origen_cliente_id = serializers.SerializerMethodField()
+    origen_cliente_nombre = serializers.SerializerMethodField()
     origen_descripcion = serializers.CharField(read_only=True, allow_null=True)
     movimiento_caja_entrada_id = serializers.SerializerMethodField()
     movimiento_caja_salida_id = serializers.SerializerMethodField()
@@ -44,8 +43,11 @@ class ChequeSerializer(serializers.ModelSerializer):
             'numero',
             'banco_emisor',
             'monto',
+            'tipo_cheque',
+            'librador_nombre',
             'cuit_librador',
             'fecha_emision',
+            'fecha_pago',
             'fecha_presentacion',
             'estado',
             'venta_id',
@@ -60,6 +62,7 @@ class ChequeSerializer(serializers.ModelSerializer):
             'nota_debito_numero_formateado',
             'cliente_origen',
             'origen_tipo',
+            'origen_cliente_id',
             'origen_cliente_nombre',
             'origen_descripcion',
             'movimiento_caja_entrada_id',
@@ -92,12 +95,27 @@ class ChequeSerializer(serializers.ModelSerializer):
         return str(nd.ven_id)
 
     def get_cliente_origen(self, obj):
-        """Nombre o razón social del cliente de la venta de origen (si existe)."""
+        """Nombre o razón social del cliente de origen."""
+        # 1. Si viene de una venta/recibo, prioridad al cliente de la venta
         venta = obj.venta
-        if not venta or not venta.ven_idcli:
-            return None
-        cliente = venta.ven_idcli
-        return getattr(cliente, 'razon', None) or getattr(cliente, 'nombre', None) or str(cliente)
+        if venta and venta.ven_idcli:
+            return venta.ven_idcli.razon or venta.ven_idcli.fantasia or f"Cliente #{venta.ven_idcli.id}"
+        
+        # 2. Si no hay venta, usar el origen_cliente (manual)
+        if obj.origen_cliente:
+            return obj.origen_cliente.razon or obj.origen_cliente.fantasia or f"Cliente #{obj.origen_cliente.id}"
+            
+        return None
+
+    def get_origen_cliente_id(self, obj):
+        """ID del cliente de origen (prioridad venta, luego manual)."""
+        if obj.venta and obj.venta.ven_idcli:
+            return obj.venta.ven_idcli.id
+        return obj.origen_cliente_id
+
+    def get_origen_cliente_nombre(self, obj):
+        """Reutiliza la lógica de cliente_origen para consistencia."""
+        return self.get_cliente_origen(obj)
 
     def get_movimiento_caja_entrada_id(self, obj):
         """ID del movimiento de caja de entrada (null si el cheque no viene de caja)."""
@@ -156,8 +174,8 @@ class ChequeDetalleSerializer(ChequeSerializer):
             historial.append({
                 'estado': Cheque.ESTADO_DEPOSITADO,
                 'estado_display': 'Depositado',
-                'fecha': obj.fecha_presentacion,  # Usar fecha_presentacion como aproximación
-                'fecha_hora': None,  # No hay timestamp exacto del depósito
+                'fecha': obj.fecha_presentacion,
+                'fecha_hora': obj.fecha_deposito_real.isoformat() if obj.fecha_deposito_real else None,
                 'usuario': None,
                 'descripcion': f'Depositado en {obj.cuenta_banco_deposito.nombre}',
             })
@@ -197,10 +215,10 @@ class ChequeDetalleSerializer(ChequeSerializer):
         return historial
     
     def get_fecha_vencimiento_calculada(self, obj):
-        """Calcula la fecha de vencimiento legal: fecha_presentacion + 30 días."""
-        if not obj.fecha_presentacion:
+        """Calcula la fecha de vencimiento legal: fecha_pago + 30 días."""
+        if not obj.fecha_pago:
             return None
-        return obj.fecha_presentacion + timedelta(days=30)
+        return obj.fecha_pago + timedelta(days=30)
     
     def get_dias_hasta_vencimiento(self, obj):
         """Calcula los días hasta el vencimiento (puede ser negativo si ya venció)."""
@@ -241,13 +259,34 @@ class ChequeUpdateSerializer(serializers.Serializer):
         required=False,
         help_text='CUIT del librador (11 dígitos, sin guiones)'
     )
+    tipo_cheque = serializers.ChoiceField(
+        choices=Cheque.TIPOS_CHEQUE,
+        required=False,
+        help_text='Al día o Diferido'
+    )
+    librador_nombre = serializers.CharField(
+        max_length=100,
+        required=False,
+        help_text='Nombre del emisor'
+    )
     fecha_emision = serializers.DateField(
         required=False,
         help_text='Fecha de emisión del cheque'
     )
-    fecha_presentacion = serializers.DateField(
+    fecha_pago = serializers.DateField(
         required=False,
-        help_text='Fecha de presentación del cheque'
+        help_text='Fecha de cobro del cheque'
+    )
+    origen_cliente_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text='ID del cliente de origen'
+    )
+    origen_descripcion = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        help_text='Descripción del origen'
     )
     
     def validate_monto(self, valor):
@@ -278,15 +317,25 @@ class ChequeUpdateSerializer(serializers.Serializer):
     
     def validate(self, data):
         """Validaciones cruzadas entre campos."""
+        tipo = data.get('tipo_cheque')
         fecha_emision = data.get('fecha_emision')
-        fecha_presentacion = data.get('fecha_presentacion')
+        fecha_pago = data.get('fecha_pago')
         
-        # Si ambas fechas están presentes, validar que emisión <= presentación
-        if fecha_emision and fecha_presentacion:
-            if fecha_emision > fecha_presentacion:
-                raise serializers.ValidationError({
-                    'fecha_emision': 'La fecha de emisión debe ser menor o igual a la fecha de presentación.'
-                })
+        # Validar lógica Al Día vs Diferido
+        if tipo == Cheque.TIPO_CHEQUE_AL_DIA:
+            if fecha_pago and fecha_emision and fecha_pago != fecha_emision:
+                data['fecha_pago'] = fecha_emision
+        
+        elif tipo == Cheque.TIPO_CHEQUE_DIFERIDO:
+            if fecha_emision and fecha_pago:
+                if fecha_pago < fecha_emision:
+                    raise serializers.ValidationError({
+                        'fecha_pago': 'La fecha de pago no puede ser anterior a la de emisión.'
+                    })
+                if fecha_pago > fecha_emision + timedelta(days=360):
+                    raise serializers.ValidationError({
+                        'fecha_pago': 'La fecha de pago no puede exceder los 360 días desde la emisión.'
+                    })
         
         return data
 
@@ -299,9 +348,11 @@ class CrearChequeCajaSerializer(serializers.Serializer):
     monto = serializers.DecimalField(
         max_digits=15, decimal_places=2, min_value=Decimal('0.01'), required=True
     )
+    tipo_cheque = serializers.ChoiceField(choices=Cheque.TIPOS_CHEQUE, required=True)
+    librador_nombre = serializers.CharField(max_length=100, required=True)
     cuit_librador = serializers.CharField(max_length=11, required=True)
     fecha_emision = serializers.DateField(required=True)
-    fecha_presentacion = serializers.DateField(required=True)
+    fecha_pago = serializers.DateField(required=True)
 
     origen_tipo = serializers.ChoiceField(
         choices=[Cheque.ORIGEN_CAJA_GENERAL, Cheque.ORIGEN_CAMBIO_CHEQUE],
@@ -337,12 +388,23 @@ class CrearChequeCajaSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Validaciones cruzadas: fechas y para cambio de cheque, montos."""
+        tipo = data.get('tipo_cheque')
         fecha_emision = data.get('fecha_emision')
-        fecha_presentacion = data.get('fecha_presentacion')
-        if fecha_emision and fecha_presentacion and fecha_emision > fecha_presentacion:
-            raise serializers.ValidationError({
-                'fecha_emision': 'La fecha de emisión debe ser <= fecha de presentación.'
-            })
+        fecha_pago = data.get('fecha_pago')
+
+        if tipo == Cheque.TIPO_CHEQUE_AL_DIA:
+            if fecha_pago != fecha_emision:
+                data['fecha_pago'] = fecha_emision
+        
+        elif tipo == Cheque.TIPO_CHEQUE_DIFERIDO:
+            if fecha_pago < fecha_emision:
+                raise serializers.ValidationError({
+                    'fecha_pago': 'La fecha de pago no puede ser anterior a la de emisión.'
+                })
+            if fecha_pago > fecha_emision + timedelta(days=360):
+                raise serializers.ValidationError({
+                    'fecha_pago': 'La fecha de pago no puede exceder los 360 días desde la emisión.'
+                })
 
         if data.get('origen_tipo') == Cheque.ORIGEN_CAMBIO_CHEQUE:
             monto_cheque = data.get('monto')

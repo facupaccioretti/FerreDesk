@@ -10,7 +10,13 @@ import ProveedorSelectorModal from "../Compras/ProveedorSelectorModal" // Reutil
 
 const CuentaCorrienteProveedorList = ({
     proveedorSeleccionado,
+    fechaDesde,
+    fechaHasta,
+    completo,
     onProveedorChange,
+    onFechaDesdeChange,
+    onFechaHastaChange,
+    onCompletoChange,
     theme
 }) => {
     const {
@@ -21,9 +27,6 @@ const CuentaCorrienteProveedorList = ({
     } = useCuentaCorrienteProveedorAPI()
 
     const [cuentaCorriente, setCuentaCorriente] = useState(null)
-    const [fechaDesde, setFechaDesde] = useState('')
-    const [fechaHasta, setFechaHasta] = useState('')
-    const [completo, setCompleto] = useState(false)
 
     // Modales
     const [proveedorSelectorModal, setProveedorSelectorModal] = useState({ abierto: false })
@@ -44,7 +47,12 @@ const CuentaCorrienteProveedorList = ({
         if (!proveedorSeleccionado) return
 
         try {
-            const response = await getCuentaCorrienteProveedor(proveedorSeleccionado.id, fechaDesde, fechaHasta, completo)
+            const response = await getCuentaCorrienteProveedor(
+                proveedorSeleccionado.id,
+                fechaDesde,
+                fechaHasta,
+                completo
+            )
             setCuentaCorriente(response)
         } catch (err) {
             console.error('Error al cargar cuenta corriente de proveedor:', err)
@@ -152,7 +160,7 @@ const CuentaCorrienteProveedorList = ({
                         <input
                             type="date"
                             value={fechaDesde}
-                            onChange={(e) => setFechaDesde(e.target.value)}
+                            onChange={(e) => onFechaDesdeChange(e.target.value)}
                             className={CLASES_INPUT}
                             disabled={loading}
                         />
@@ -166,7 +174,7 @@ const CuentaCorrienteProveedorList = ({
                         <input
                             type="date"
                             value={fechaHasta}
-                            onChange={(e) => setFechaHasta(e.target.value)}
+                            onChange={(e) => onFechaHastaChange(e.target.value)}
                             className={CLASES_INPUT}
                             disabled={loading}
                         />
@@ -181,7 +189,7 @@ const CuentaCorrienteProveedorList = ({
                             type="checkbox"
                             id="completo"
                             checked={completo}
-                            onChange={(e) => setCompleto(e.target.checked)}
+                            onChange={(e) => onCompletoChange(e.target.checked)}
                             className="w-3 h-3 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500"
                             disabled={loading}
                         />
