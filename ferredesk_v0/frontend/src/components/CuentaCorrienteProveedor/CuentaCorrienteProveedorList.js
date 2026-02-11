@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import useCuentaCorrienteProveedorAPI from "../../utils/useCuentaCorrienteProveedorAPI"
 import CuentaCorrienteProveedorTable from "./CuentaCorrienteProveedorTable"
-import OrdenPagoModal from "./OrdenPagoModal"
+// import OrdenPagoModal from "./OrdenPagoModal"
+import OrdenPagoReciboModal from "../Caja/OrdenPagoReciboModal"
 import ImputarOrdenPagoModal from "./ImputarOrdenPagoModal"
 import DetalleComprobanteProveedorModal from "./DetalleComprobanteProveedorModal"
 import ProveedorSelectorModal from "../Compras/ProveedorSelectorModal" // Reutilizamos el existente
@@ -283,13 +284,23 @@ const CuentaCorrienteProveedorList = ({
                 error={error}
             />
 
-            {/* Modal nueva orden de pago */}
+            {/* Modal nueva orden de pago (Unified) */}
+            <OrdenPagoReciboModal
+                abierto={ordenPagoModal.abierto}
+                onClose={handleCerrarOrdenPago}
+                onGuardar={handleOrdenPagoGuardada}
+                entidad={proveedorSeleccionado}
+                tipo="ORDEN_PAGO"
+            />
+
+            {/* Legacy Modal (Comentado para preservar según pedido)
             <OrdenPagoModal
                 abierto={ordenPagoModal.abierto}
                 onClose={handleCerrarOrdenPago}
                 onGuardar={handleOrdenPagoGuardada}
                 proveedor={proveedorSeleccionado}
             />
+            */}
 
             {/* Modal imputar orden de pago */}
             <ImputarOrdenPagoModal

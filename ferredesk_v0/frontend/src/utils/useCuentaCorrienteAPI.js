@@ -8,7 +8,7 @@ const useCuentaCorrienteAPI = () => {
     const makeRequest = useCallback(async (url, options = {}) => {
         setLoading(true);
         setError(null);
-        
+
         try {
             const response = await fetch(url, {
                 headers: {
@@ -65,7 +65,7 @@ const useCuentaCorrienteAPI = () => {
             if (fechaDesde) params.append('fecha_desde', fechaDesde);
             if (fechaHasta) params.append('fecha_hasta', fechaHasta);
             params.append('completo', completo);
-            
+
             const url = `/api/cuenta-corriente/cliente/${clienteId}/?${params}`;
             const data = await makeRequest(url);
             return data;
@@ -101,7 +101,7 @@ const useCuentaCorrienteAPI = () => {
             body: JSON.stringify(imputacionData),
         });
     }, [makeRequest]);
-    
+
     // Obtener detalle de comprobante (ver modal detalle)
     const getDetalleComprobante = useCallback(async (venId) => {
         try {
@@ -154,11 +154,44 @@ const useCuentaCorrienteAPI = () => {
     const modificarImputaciones = useCallback(async (comprobanteId, imputaciones) => {
         return await makeRequest('/api/cuenta-corriente/modificar-imputaciones/', {
             method: 'POST',
-            body: JSON.stringify({ 
-                comprobante_id: comprobanteId, 
-                imputaciones 
+            body: JSON.stringify({
+                comprobante_id: comprobanteId,
+                imputaciones
             }),
         });
+    }, [makeRequest]);
+
+    // Obtener métodos de pago
+    const getMetodosPago = useCallback(async () => {
+        try {
+            const data = await makeRequest('/api/caja/metodos-pago/');
+            return data;
+        } catch (err) {
+            console.error("Error fetching metodos pago:", err);
+            return [];
+        }
+    }, [makeRequest]);
+
+    // Obtener cuentas banco
+    const getCuentasBanco = useCallback(async () => {
+        try {
+            const data = await makeRequest('/api/caja/cuentas-banco/');
+            return data;
+        } catch (err) {
+            console.error("Error fetching cuentas banco:", err);
+            return [];
+        }
+    }, [makeRequest]);
+
+    // Obtener cheques en cartera
+    const getChequesEnCartera = useCallback(async () => {
+        try {
+            const data = await makeRequest('/api/caja/cheques/?estado=EN_CARTERA');
+            return Array.isArray(data) ? data : (data.results || []);
+        } catch (err) {
+            console.error("Error fetching cheques en cartera:", err);
+            return [];
+        }
     }, [makeRequest]);
 
     // Exportar cuenta corriente a Excel
@@ -168,9 +201,9 @@ const useCuentaCorrienteAPI = () => {
         if (fechaHasta) params.append('fecha_hasta', fechaHasta);
         params.append('completo', completo);
         params.append('formato', 'excel');
-        
+
         const url = `/api/cuenta-corriente/cliente/${clienteId}/export/?${params}`;
-        
+
         try {
             const response = await fetch(url, {
                 credentials: 'include',
@@ -214,6 +247,9 @@ const useCuentaCorrienteAPI = () => {
         anularRecibo,
         anularAutoimputacion,
         modificarImputaciones,
+        getMetodosPago,
+        getCuentasBanco,
+        getChequesEnCartera,
         exportarCuentaCorriente,
     };
 };

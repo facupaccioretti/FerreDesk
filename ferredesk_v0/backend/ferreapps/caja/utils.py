@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
 import logging
 import copy
+import re
 
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -221,9 +222,11 @@ def registrar_valores_y_movimientos(
                 nonlocal datos_cheque
                 numero_cheque = (pago_data.get('numero_cheque') or '').strip()
                 banco_emisor = (pago_data.get('banco_emisor') or '').strip()
-                cuit_librador = (pago_data.get('cuit_librador') or '').strip()
+                cuit_librador = re.sub(r'\D', '', str(pago_data.get('cuit_librador') or ''))
                 fecha_emision = pago_data.get('fecha_emision')
-                fecha_presentacion = pago_data.get('fecha_presentacion')
+                fecha_presentacion = pago_data.get('fecha_presentacion') or pago_data.get('fecha_pago')
+                librador_nombre = (pago_data.get('librador_nombre') or '').strip()
+                tipo_cheque = (pago_data.get('tipo_cheque') or 'AL_DIA').strip()
 
                 if not numero_cheque or not banco_emisor or not cuit_librador or not fecha_emision or not fecha_presentacion:
                     raise ValidationError('Faltan datos obligatorios del cheque.')
@@ -240,6 +243,8 @@ def registrar_valores_y_movimientos(
                     'cuit_librador': cuit_librador,
                     'fecha_emision': fecha_emision,
                     'fecha_presentacion': fecha_presentacion,
+                    'librador_nombre': librador_nombre,
+                    'tipo_cheque': tipo_cheque,
                 }
 
             if direccion == 'salida':
@@ -412,7 +417,9 @@ def registrar_pagos_venta(
                     monto=res['monto'],
                     cuit_librador=res['datos_cheque']['cuit_librador'],
                     fecha_emision=res['datos_cheque']['fecha_emision'],
-                    fecha_presentacion=res['datos_cheque']['fecha_presentacion'],
+                    fecha_pago=res['datos_cheque']['fecha_presentacion'],
+                    librador_nombre=res['datos_cheque']['librador_nombre'],
+                    tipo_cheque=res['datos_cheque']['tipo_cheque'],
                     estado=Cheque.ESTADO_EN_CARTERA,
                     venta=venta,
                     pago_venta=pago_venta,

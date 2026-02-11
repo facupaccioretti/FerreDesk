@@ -209,6 +209,20 @@ def crear_recibo_con_imputaciones(request):
                 vdi_detalle2=''
             )
             
+            # Registrar medios de pago y movimientos de caja
+            from ferreapps.caja.utils import registrar_pagos_venta
+            pagos = data.get('pagos', [])
+            
+            # Si no vienen pagos, pasamos monto_total por retrocompatibilidad
+            # (registrar_pagos_venta asumirá EFECTIVO si no hay array de pagos)
+            registrar_pagos_venta(
+                venta=recibo,
+                sesion_caja=sesion_caja,
+                pagos=pagos,
+                monto_pago_legacy=monto_total if not pagos else None,
+                descripcion_base="Cobro recibo" if tipo_comprobante == 'recibo' else "Credito"
+            )
+
             imputaciones_creadas = []
             for imp_data in imputaciones_data:
                 imputacion = ImputacionVenta.objects.create(

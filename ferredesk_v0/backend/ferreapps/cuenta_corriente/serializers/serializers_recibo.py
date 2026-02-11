@@ -16,8 +16,16 @@ class ReciboCreateSerializer(serializers.Serializer):
     
     imputaciones = ImputacionCreateSerializer(many=True)
     
+    # Medios de pago utilizados (opcional para retrocompatibilidad)
+    pagos = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text='Lista de pagos: [{metodo_pago_id, monto, ...}]'
+    )
+    
     def validate(self, data):
         imputaciones = data.get('imputaciones', [])
+        pagos = data.get('pagos', [])
         monto_total = data.get('rec_monto_total', Decimal('0'))
         
         pv_raw = (data.get('rec_pv') or '').strip()
@@ -29,6 +37,14 @@ class ReciboCreateSerializer(serializers.Serializer):
 
         data['rec_pv'] = pv_raw.zfill(4)
         data['rec_numero'] = num_raw.zfill(8)
+
+        # Validación de montos de pagos vs total
+        if pagos:
+            monto_pagos = sum(Decimal(str(p.get('monto', 0))) for p in pagos)
+            if abs(monto_pagos - monto_total) > Decimal('0.01'):
+                raise serializers.ValidationError({
+                    'rec_monto_total': f'La suma de los medios de pago ({monto_pagos}) no coincide con el total del recibo ({monto_total})'
+                })
 
         monto_imputaciones = sum(
             imp['imp_monto'] for imp in imputaciones

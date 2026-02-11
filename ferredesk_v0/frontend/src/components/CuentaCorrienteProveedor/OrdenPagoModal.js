@@ -512,7 +512,7 @@ const OrdenPagoModal = ({
                                                                             11 dígitos sin guiones
                                                                         </div>
                                                                         <div>
-                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">Emisión</label>
+                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">F. Emisión</label>
                                                                             <input
                                                                                 type="date"
                                                                                 className="text-xs w-full border border-slate-200 rounded px-1 py-1"
@@ -521,7 +521,7 @@ const OrdenPagoModal = ({
                                                                             />
                                                                         </div>
                                                                         <div>
-                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">Cobro</label>
+                                                                            <label className="text-[8px] text-slate-500 uppercase font-bold block">F. Pago</label>
                                                                             <input
                                                                                 type="date"
                                                                                 className="text-xs w-full border border-slate-200 rounded px-1 py-1"

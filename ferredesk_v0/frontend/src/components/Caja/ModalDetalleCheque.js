@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
-import { formatearFecha, formatearMoneda } from "../../utils/formatters"
+import { formatearFecha } from "../../utils/formatters"
 
 /**
  * Modal para mostrar el detalle completo de un cheque con historial.

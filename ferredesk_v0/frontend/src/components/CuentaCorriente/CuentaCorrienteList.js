@@ -3,18 +3,19 @@
 import { useState, useEffect } from "react"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
 import CuentaCorrienteTable from "./CuentaCorrienteTable"
-import NuevoReciboModal from "./NuevoReciboModal"
+// import NuevoReciboModal from "./NuevoReciboModal"
+import OrdenPagoReciboModal from "../Caja/OrdenPagoReciboModal"
 import ImputarExistenteModal from "./ImputarExistenteModal"
 import ModalDetalleComprobante from "./ModalDetalleComprobante"
 import ModalAnularRecibo from "./ModalAnularRecibo"
 import ModalModificarImputaciones from "./ModalModificarImputaciones"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 
-const CuentaCorrienteList = ({ 
-  clienteSeleccionado, 
-  fechaDesde, 
-  fechaHasta, 
-  completo, 
+const CuentaCorrienteList = ({
+  clienteSeleccionado,
+  fechaDesde,
+  fechaHasta,
+  completo,
   onClienteChange,
   onFechaDesdeChange,
   onFechaHastaChange,
@@ -32,22 +33,22 @@ const CuentaCorrienteList = ({
 
   const [cuentaCorriente, setCuentaCorriente] = useState(null)
   const [detalleModal, setDetalleModal] = useState({ abierto: false, item: null })
-  const [clienteSelectorModal, setClienteSelectorModal] = useState({ 
-    abierto: false 
+  const [clienteSelectorModal, setClienteSelectorModal] = useState({
+    abierto: false
   })
-  const [nuevoReciboModal, setNuevoReciboModal] = useState({ 
+  const [nuevoReciboModal, setNuevoReciboModal] = useState({
     abierto: false,
     clienteId: null
   })
-  const [imputarExistenteModal, setImputarExistenteModal] = useState({ 
+  const [imputarExistenteModal, setImputarExistenteModal] = useState({
     abierto: false,
     comprobante: null
   })
-  const [anularReciboModal, setAnularReciboModal] = useState({ 
+  const [anularReciboModal, setAnularReciboModal] = useState({
     abierto: false,
     item: null
   })
-  const [modificarPagosModal, setModificarPagosModal] = useState({ 
+  const [modificarPagosModal, setModificarPagosModal] = useState({
     abierto: false,
     comprobante: null
   })
@@ -98,7 +99,7 @@ const CuentaCorrienteList = ({
       alert('Debe seleccionar un cliente primero')
       return
     }
-    setNuevoReciboModal({ 
+    setNuevoReciboModal({
       abierto: true,
       clienteId: clienteSeleccionado.id
     })
@@ -120,7 +121,7 @@ const CuentaCorrienteList = ({
       alert('Este comprobante no tiene saldo disponible para imputar')
       return
     }
-    setImputarExistenteModal({ 
+    setImputarExistenteModal({
       abierto: true,
       comprobante: comprobante
     })
@@ -147,13 +148,13 @@ const CuentaCorrienteList = ({
   const handleConfirmarAnularRecibo = async (item) => {
     try {
       const esAutoimputacion = item.comprobante_tipo === 'factura_recibo'
-      
+
       if (esAutoimputacion) {
         await anularAutoimputacion(item.ven_id)
       } else {
         await anularRecibo(item.ven_id)
       }
-      
+
       // Recargar cuenta corriente después de anular
       cargarCuentaCorriente()
       handleCerrarAnularRecibo()
@@ -351,12 +352,22 @@ const CuentaCorrienteList = ({
         error={error}
       />
 
-      {/* Modal nuevo recibo */}
+      {/* Modal nuevo recibo (Unified) */}
+      <OrdenPagoReciboModal
+        abierto={nuevoReciboModal.abierto}
+        onClose={handleCerrarNuevoRecibo}
+        onGuardar={handleNuevoReciboGuardado}
+        entidad={clienteSeleccionado}
+        tipo="RECIBO"
+      />
+
+      {/* Legacy Modal (Comentado para preservar según pedido) 
       <NuevoReciboModal
         modal={nuevoReciboModal}
         onClose={handleCerrarNuevoRecibo}
         onGuardar={handleNuevoReciboGuardado}
       />
+      */}
 
       {/* Modal imputar existente (recibos/NC) */}
       <ImputarExistenteModal
@@ -390,9 +401,9 @@ const CuentaCorrienteList = ({
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mr-3">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="15" y1="9" x2="9" y2="15"/>
-              <line x1="9" y1="9" x2="15" y2="15"/>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
             <span className="text-red-700">{error}</span>
           </div>
