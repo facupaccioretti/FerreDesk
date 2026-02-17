@@ -5,6 +5,7 @@ import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import BuscadorCliente from "../BuscadorCliente"
+import { fechaHoyLocal } from "../../utils/fechas"
 
 const ORIGEN_CAJA_GENERAL = "CAJA_GENERAL"
 const ORIGEN_CAMBIO_CHEQUE = "CAMBIO_CHEQUE"
@@ -24,7 +25,7 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
   const theme = useFerreDeskTheme()
   const { validarCUIT } = useCajaAPI()
 
-  const hoy = () => new Date().toISOString().slice(0, 10)
+  const hoy = fechaHoyLocal
 
   const [formData, setFormData] = useState({
     numero: "",

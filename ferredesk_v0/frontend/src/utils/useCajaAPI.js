@@ -289,6 +289,19 @@ export function useCajaAPI() {
     }, [makeRequest]);
 
     /**
+     * Marca un cheque DEPOSITADO como ACREDITADO (fondos efectivamente ingresados al banco).
+     * @param {number} chequeId - ID del cheque
+     * @param {number} cuentaBancoId - ID de la cuenta bancaria donde se acreditaron los fondos
+     * @returns {Promise<object>} - Cheque actualizado
+     */
+    const acreditarCheque = useCallback(async (chequeId, cuentaBancoId) => {
+        return makeRequest(`${API_BASE}/cheques/${chequeId}/acreditar/`, {
+            method: 'POST',
+            body: JSON.stringify({ cuenta_banco_id: cuentaBancoId }),
+        });
+    }, [makeRequest]);
+
+    /**
      * Obtiene el detalle completo de un cheque con historial.
      * @param {number} chequeId - ID del cheque
      * @returns {Promise<object>} - Cheque con historial y fechas calculadas
@@ -373,6 +386,7 @@ export function useCajaAPI() {
         endosarCheques,
         marcarChequeRechazado,
         reactivarCheque,
+        acreditarCheque,
         obtenerDetalleCheque,
         editarCheque,
         obtenerAlertasVencimientoCheques,

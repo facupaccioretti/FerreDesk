@@ -179,6 +179,7 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
         mostrarBuscador={false}
         mostrarOrdenamiento={false}
         paginadorVisible={false}
+        customKey={(item) => `${item.comprobante_tipo}-${item.ct_id}-${item.id}`}
       />
     </>
   )

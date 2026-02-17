@@ -2,7 +2,7 @@
 Tests para el módulo de Cuenta Corriente de Proveedores.
 
 Verifica:
-- Modelos: OrdenPago, ImputacionCompra
+- Modelos: OrdenPago, Imputacion (unificado)
 - Servicio de imputación genérico aplicado a compras
 - Función registrar_pagos_orden_pago (movimientos de caja de SALIDA)
 - Views: cuenta corriente proveedor, compras pendientes, orden de pago
@@ -11,11 +11,13 @@ Verifica:
 from decimal import Decimal
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Sum
 from django.utils import timezone
 
 from ferreapps.cuenta_corriente.models import (
     OrdenPago,
-    ImputacionCompra,
+    Imputacion,
 )
 from ferreapps.caja.models import (
     SesionCaja,
@@ -120,8 +122,8 @@ class OrdenPagoModelTests(TestCase):
         self.assertEqual(op.op_estado, OrdenPago.ESTADO_ANULADO)
 
 
-class ImputacionCompraModelTests(TestCase):
-    """Tests para el modelo ImputacionCompra."""
+class ImputacionUnificadaCompraTests(TestCase):
+    """Tests para el modelo Imputacion unificado aplicado a compras."""
 
     @classmethod
     def setUpTestData(cls):
@@ -157,29 +159,38 @@ class ImputacionCompraModelTests(TestCase):
 
     def test_crear_imputacion_compra(self):
         """Se puede crear una imputación vinculando una compra a una OP."""
-        imp = ImputacionCompra.objects.create(
-            imp_id_compra=self.compra,
-            imp_id_orden_pago=self.orden_pago,
+        op_ct = ContentType.objects.get_for_model(OrdenPago)
+        compra_ct = ContentType.objects.get_for_model(Compra)
+
+        imp = Imputacion.objects.create(
+            origen_content_type=op_ct,
+            origen_id=self.orden_pago.pk,
+            destino_content_type=compra_ct,
+            destino_id=self.compra.pk,
             imp_fecha='2024-06-15',
             imp_monto=Decimal('5000.00'),
         )
         self.assertEqual(imp.imp_monto, Decimal('5000.00'))
-        self.assertEqual(imp.imp_id_compra, self.compra)
-        self.assertEqual(imp.imp_id_orden_pago, self.orden_pago)
+        self.assertEqual(imp.origen, self.orden_pago)
+        self.assertEqual(imp.destino, self.compra)
 
     def test_imputacion_reduce_saldo_pendiente(self):
         """Múltiples imputaciones reducen el saldo pendiente de la compra."""
-        from django.db.models import Sum
+        op_ct = ContentType.objects.get_for_model(OrdenPago)
+        compra_ct = ContentType.objects.get_for_model(Compra)
 
-        ImputacionCompra.objects.create(
-            imp_id_compra=self.compra,
-            imp_id_orden_pago=self.orden_pago,
+        Imputacion.objects.create(
+            origen_content_type=op_ct,
+            origen_id=self.orden_pago.pk,
+            destino_content_type=compra_ct,
+            destino_id=self.compra.pk,
             imp_fecha='2024-06-15',
             imp_monto=Decimal('3000.00'),
         )
 
-        total_imputado = ImputacionCompra.objects.filter(
-            imp_id_compra=self.compra
+        total_imputado = Imputacion.objects.filter(
+            destino_content_type=compra_ct,
+            destino_id=self.compra.pk
         ).aggregate(total=Sum('imp_monto'))['total'] or Decimal('0')
 
         saldo_pendiente = self.compra.comp_total_final - total_imputado
@@ -368,13 +379,16 @@ class ImputacionServiceComprasTests(TestCase):
                 'factura': compra,
                 'monto': Decimal('5000.00'),
             }],
-            modelo_imputacion=ImputacionCompra,
-            campo_factura='imp_id_compra',
-            campo_pago='imp_id_orden_pago',
             validar_cliente=False,
         )
 
-        imputaciones = ImputacionCompra.objects.filter(imp_id_orden_pago=op)
+        compra_ct = ContentType.objects.get_for_model(Compra)
+        op_ct = ContentType.objects.get_for_model(OrdenPago)
+
+        imputaciones = Imputacion.objects.filter(
+            origen_content_type=op_ct,
+            origen_id=op.pk,
+        )
         self.assertEqual(imputaciones.count(), 1)
         self.assertEqual(imputaciones.first().imp_monto, Decimal('5000.00'))
 
@@ -391,15 +405,13 @@ class ImputacionServiceComprasTests(TestCase):
                 'factura': compra,
                 'monto': Decimal('3000.00'),
             }],
-            modelo_imputacion=ImputacionCompra,
-            campo_factura='imp_id_compra',
-            campo_pago='imp_id_orden_pago',
             validar_cliente=False,
         )
 
-        from django.db.models import Sum
-        total_imputado = ImputacionCompra.objects.filter(
-            imp_id_compra=compra
+        compra_ct = ContentType.objects.get_for_model(Compra)
+        total_imputado = Imputacion.objects.filter(
+            destino_content_type=compra_ct,
+            destino_id=compra.pk,
         ).aggregate(total=Sum('imp_monto'))['total']
 
         self.assertEqual(total_imputado, Decimal('3000.00'))
@@ -421,13 +433,14 @@ class ImputacionServiceComprasTests(TestCase):
                 {'factura': compra1, 'monto': Decimal('3000.00')},
                 {'factura': compra2, 'monto': Decimal('2000.00')},
             ],
-            modelo_imputacion=ImputacionCompra,
-            campo_factura='imp_id_compra',
-            campo_pago='imp_id_orden_pago',
             validar_cliente=False,
         )
 
-        imputaciones = ImputacionCompra.objects.filter(imp_id_orden_pago=op)
+        op_ct = ContentType.objects.get_for_model(OrdenPago)
+        imputaciones = Imputacion.objects.filter(
+            origen_content_type=op_ct,
+            origen_id=op.pk,
+        )
         self.assertEqual(imputaciones.count(), 2)
         total = sum(i.imp_monto for i in imputaciones)
         self.assertEqual(total, Decimal('5000.00'))

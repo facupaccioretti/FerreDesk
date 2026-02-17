@@ -237,8 +237,8 @@ export default function ImputarOrdenPagoModal({
                                                 <tr>
                                                     <th className="px-4 py-2 text-left">Fecha</th>
                                                     <th className="px-4 py-2 text-left">Comprobante</th>
-                                                    <th className="px-4 py-2 text-right">Saldo</th>
-                                                    <th className="px-4 py-2 text-right">Pago</th>
+                                                    <th className="px-4 py-2 text-right">Saldo Pendiente</th>
+                                                    <th className="px-4 py-2 text-center">Pago</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
@@ -248,12 +248,23 @@ export default function ImputarOrdenPagoModal({
                                                         <td className="px-4 py-2 font-medium">{factura.numero_formateado || `Factura ${factura.compra_id}`}</td>
                                                         <td className="px-4 py-2 text-right">${parseFloat(factura.saldo_pendiente).toFixed(2)}</td>
                                                         <td className="px-4 py-2 text-right">
-                                                            <input
-                                                                type="number"
-                                                                className="w-24 border border-slate-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-orange-500"
-                                                                value={imputaciones[index]?.monto || ''}
-                                                                onChange={(e) => handleImputacionChange(index, e.target.value)}
-                                                            />
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    className="w-24 border border-slate-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-orange-500"
+                                                                    value={imputaciones[index]?.monto || ''}
+                                                                    onChange={(e) => handleImputacionChange(index, e.target.value)}
+                                                                />
+                                                                <button
+                                                                    onClick={() => handleImputacionChange(index, factura.saldo_pendiente)}
+                                                                    className="p-1 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                                                    title="Imputar todo"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}

@@ -229,22 +229,27 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         """
         saldo = sesion.saldo_inicial
         
-        # Sumar pagos de ventas que afectan arqueo (efectivo)
-        # TODO: Fase 2 - Cuando Venta.sesion_caja esté conectado,
-        # filtrar por ventas de esta sesión
+        # Sumar pagos que afectan arqueo (efectivo)
+        # Consideramos tanto pagos de Ventas como de Recibos vinculados a esta sesión
         pagos_efectivo = PagoVenta.objects.filter(
-            venta__sesion_caja=sesion,
+            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
             metodo_pago__afecta_arqueo=True,
-            es_vuelto=False,
+            es_vuelto=False
+        ).exclude(
+            venta__ven_estado='AN'
+        ).exclude(
+            recibo__rec_estado='N'
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         saldo += pagos_efectivo
         
-        # Restar vueltos dados
+        # Restar vueltos dados (solo aplica a ventas en este ERP)
         vueltos = PagoVenta.objects.filter(
             venta__sesion_caja=sesion,
             metodo_pago__afecta_arqueo=True,
             es_vuelto=True,
+        ).exclude(
+            venta__ven_estado='AN'
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         saldo -= vueltos
@@ -274,28 +279,37 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         - Cantidad y total de ventas
         - Movimientos manuales
         """
-        # Totales por método de pago
-        # TODO: Fase 2 - Agregar filtro por venta.sesion_caja
+        # Totales por método de pago (Ventas + Recibos)
         totales_por_metodo = PagoVenta.objects.filter(
-            venta__sesion_caja=sesion,
+            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
             es_vuelto=False,
+        ).exclude(
+            venta__ven_estado='AN'
+        ).exclude(
+            recibo__rec_estado='N'
         ).values(
             'metodo_pago__codigo',
             'metodo_pago__nombre',
+            'metodo_pago__orden', # Asegurar que estemos agrupando bien
         ).annotate(
             total=Sum('monto')
         ).order_by('metodo_pago__orden')
 
-        # Transferencias/QR por banco/billetera (solo lectura para Cierre X)
+        # Transferencias/QR por banco/billetera (Ventas + Recibos)
         totales_por_banco = PagoVenta.objects.filter(
-            venta__sesion_caja=sesion,
+            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
             es_vuelto=False,
             metodo_pago__codigo__in=[CODIGO_TRANSFERENCIA, CODIGO_QR],
+        ).exclude(
+            venta__ven_estado='AN'
+        ).exclude(
+            recibo__rec_estado='N'
         ).values(
             'metodo_pago__codigo',
             'metodo_pago__nombre',
             'cuenta_banco__id',
             'cuenta_banco__nombre',
+            'metodo_pago__orden',
         ).annotate(
             total=Sum('monto')
         ).order_by('metodo_pago__orden', 'cuenta_banco__nombre')
@@ -613,11 +627,17 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='depositar')
     def depositar(self, request, pk=None):
-        """Deposita un cheque EN_CARTERA a una cuenta propia (CuentaBanco)."""
+        """Deposita un cheque EN_CARTERA (sale de custodia física)."""
         cheque = self.get_object()
         if cheque.estado != Cheque.ESTADO_EN_CARTERA:
             return Response({'detail': 'Solo cheques EN_CARTERA pueden depositarse.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Validación: Caja abierta requerida para egreso de custodia
+        sesion_abierta = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
+        if not sesion_abierta:
+            return Response({'detail': 'Debe tener una caja abierta para depositar cheques (salida de custodia).'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
         # Validación: No permitir depositar cheques diferidos antes de su fecha de pago
         hoy = timezone.localdate()
         if cheque.tipo_cheque == Cheque.TIPO_CHEQUE_DIFERIDO and cheque.fecha_pago > hoy:
@@ -626,35 +646,101 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        with transaction.atomic():
+            # Movimiento de egreso de custodia
+            from .utils import registrar_movimiento_custodia_cheque
+            registrar_movimiento_custodia_cheque(
+                cheque, sesion_abierta, request.user,
+                Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
+                "depositado"
+            )
+
+            cheque.estado = Cheque.ESTADO_DEPOSITADO
+            cheque.fecha_presentacion = hoy
+            cheque.fecha_deposito_real = timezone.now()
+            cheque.save(update_fields=['estado', 'fecha_presentacion', 'fecha_deposito_real'])
+            
+        return Response(ChequeSerializer(cheque).data)
+
+    @action(detail=True, methods=['post'], url_path='acreditar')
+    def acreditar(self, request, pk=None):
+        """Marca un cheque DEPOSITADO como ACREDITADO (fondos entraron al banco)."""
+        cheque = self.get_object()
+        
+        # Validación: Solo cheques DEPOSITADO pueden acreditarse
+        if cheque.estado != Cheque.ESTADO_DEPOSITADO:
+            return Response(
+                {'detail': f'No se puede acreditar un cheque en estado {cheque.estado}. Debe estar DEPOSITADO.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validación: Cuenta bancaria destino
         cuenta_banco_id = request.data.get('cuenta_banco_id')
         if not cuenta_banco_id:
             return Response({'detail': 'Debe enviar cuenta_banco_id.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         cuenta = CuentaBanco.objects.filter(id=cuenta_banco_id, activo=True).first()
         if not cuenta:
             return Response({'detail': 'Cuenta bancaria no encontrada o inactiva.'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        cheque.cuenta_banco_deposito = cuenta
-        cheque.estado = Cheque.ESTADO_DEPOSITADO
-        cheque.fecha_presentacion = hoy
-        cheque.fecha_deposito_real = timezone.now()
-        cheque.save(update_fields=['cuenta_banco_deposito', 'estado', 'fecha_presentacion', 'fecha_deposito_real'])
+
+        with transaction.atomic():
+            cheque.estado = Cheque.ESTADO_ACREDITADO
+            cheque.cuenta_banco_deposito = cuenta
+            cheque.fecha_acreditacion = timezone.now()
+            cheque.save(update_fields=['estado', 'cuenta_banco_deposito', 'fecha_acreditacion'])
+            
+            # No genera movimiento de caja (ya salió de custodia al depositar)
+            # No requiere caja abierta (es un registro de tesorería bancaria)
+            
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=False, methods=['post'], url_path='endosar')
     def endosar(self, request):
-        """Endosa uno o más cheques EN_CARTERA a un proveedor."""
+        """
+        [LEGACY] Endosa uno o más cheques EN_CARTERA a un proveedor.
+        
+        NOTA: Este endpoint se mantiene como fallback administrativo.
+        El flujo correcto de endoso es a través de una Orden de Pago,
+        donde el endoso ocurre automáticamente al confirmar la OP
+        (ver registrar_valores_y_movimientos en caja/utils.py).
+        La UI de ValoresEnCartera ya NO expone esta funcionalidad directamente.
+        """
         proveedor_id = request.data.get('proveedor_id')
         cheque_ids = request.data.get('cheque_ids') or []
+        
         if not proveedor_id or not cheque_ids:
             return Response({'detail': 'Debe enviar proveedor_id y cheque_ids.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validación: Caja abierta requerida para egreso de custodia
+        sesion_abierta = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
+        if not sesion_abierta:
+            return Response({'detail': 'Debe tener una caja abierta para endosar cheques (salida de custodia).'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
         from ferreapps.productos.models import Proveedor
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
             return Response({'detail': 'Proveedor no encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+            
         cheques = Cheque.objects.filter(id__in=cheque_ids, estado=Cheque.ESTADO_EN_CARTERA)
         if cheques.count() != len(cheque_ids):
             return Response({'detail': 'Solo se pueden endosar cheques EN_CARTERA.'}, status=status.HTTP_400_BAD_REQUEST)
-        cheques.update(estado=Cheque.ESTADO_ENTREGADO, proveedor=proveedor)
+
+        with transaction.atomic():
+            from .utils import registrar_movimiento_custodia_cheque
+            for cheque in cheques:
+                # Movimiento de egreso de custodia
+                movimiento = registrar_movimiento_custodia_cheque(
+                    cheque, sesion_abierta, request.user,
+                    Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
+                    f"endosado a {proveedor.razon}"
+                )
+                
+                cheque.estado = Cheque.ESTADO_ENTREGADO
+                cheque.proveedor = proveedor
+                cheque.movimiento_caja_salida = movimiento
+                cheque.save(update_fields=['estado', 'proveedor', 'movimiento_caja_salida'])
+                
         return Response({'endosados': len(cheque_ids)})
 
     @action(detail=True, methods=['post'], url_path='marcar-rechazado')
@@ -682,10 +768,25 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # Si estaba depositado, revertimos el ingreso en la sesión de caja (movimiento de tesorería)
-                if cheque.estado == Cheque.ESTADO_DEPOSITADO:
+                # Estado original para determinar lógica de movimientos
+                estado_original = cheque.estado
+
+                # 1. Si estaba depositado, revertimos el ingreso en la sesión de caja (movimiento de tesorería)
+                if estado_original == Cheque.ESTADO_DEPOSITADO:
                     registrar_contrasiento_cheque_depositado(cheque, sesion_caja, request.user)
                 
+                # 2. Si estaba en cartera, sale de custodia física (egreso)
+                elif estado_original == Cheque.ESTADO_EN_CARTERA:
+                    from .utils import registrar_movimiento_custodia_cheque
+                    registrar_movimiento_custodia_cheque(
+                        cheque, sesion_caja, request.user,
+                        Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
+                        "rechazado"
+                    )
+                
+                # 3. Si estaba entregado (endosado), ya salió de custodia al endosarse. 
+                # No se requiere movimiento adicional.
+
                 cheque.estado = Cheque.ESTADO_RECHAZADO
                 # Limpiamos la ND si ya tenía una vinculada por error antes
                 cheque.nota_debito_venta = None
@@ -705,19 +806,35 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='reactivar')
     def reactivar(self, request, pk=None):
-        """Vuelve un cheque RECHAZADO a EN_CARTERA."""
+        """Vuelve un cheque RECHAZADO a EN_CARTERA (vuelve a custodia física)."""
         cheque = self.get_object()
         if cheque.estado != Cheque.ESTADO_RECHAZADO:
             return Response(
-                {'detail': 'Solo cheques en estado Rechazado pueden reactivarse.'},
+                {'detail': f'Solo cheques en estado Rechazado pueden reactivarse. Estado actual: {cheque.estado}.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        cheque.estado = Cheque.ESTADO_EN_CARTERA
-        cheque.save(update_fields=['estado'])
+
+        # Validación: Caja abierta requerida para ingreso de custodia
+        sesion_abierta = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
+        if not sesion_abierta:
+            return Response({'detail': 'Debe tener una caja abierta para reactivar cheques (vuelve a custodia).'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            # Movimiento de ingreso de custodia
+            from .utils import registrar_movimiento_custodia_cheque
+            registrar_movimiento_custodia_cheque(
+                cheque, sesion_abierta, request.user,
+                Cheque.TIPO_MOVIMIENTO_ENTRADA if hasattr(Cheque, 'TIPO_MOVIMIENTO_ENTRADA') else 'ENTRADA',
+                "reactivado"
+            )
+
+            cheque.estado = Cheque.ESTADO_EN_CARTERA
+            cheque.save(update_fields=['estado'])
         
         data = ChequeSerializer(cheque).data
         data['mensaje_siguiente_paso'] = (
-            "El cheque ha vuelto a estado EN CARTERA. "
+            "El cheque ha vuelto a estado EN CARTERA y se registró el ingreso a custodia. "
             "RECUERDE: Si ya había generado una Nota de Débito, deberá generar manualmente "
             "una Nota de Crédito o Modificación de Contenido para anular esa deuda."
         )

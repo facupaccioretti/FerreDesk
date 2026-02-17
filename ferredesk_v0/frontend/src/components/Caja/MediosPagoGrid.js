@@ -1,5 +1,6 @@
 import React from 'react';
 import ChequeInlineForm from './ChequeInlineForm';
+import { fechaHoyLocal } from '../../utils/fechas';
 
 //Modal para medios de pago de Ordenes de Pago y recibos
 const MediosPagoGrid = ({
@@ -17,7 +18,7 @@ const MediosPagoGrid = ({
     const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500";
     const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500";
 
-    const hoy = () => new Date().toISOString().split('T')[0];
+    const hoy = fechaHoyLocal;
 
     const agregarPago = () => {
         const efectivo = metodosPago.find(m => m.codigo === 'EFECTIVO');
@@ -83,7 +84,15 @@ const MediosPagoGrid = ({
     const actualizarCampoCheque = (index, campo, valor) => {
         setPagos(prev => prev.map((p, i) => {
             if (i !== index) return p;
-            return { ...p, [campo]: valor };
+            const nuevoPago = { ...p, [campo]: valor };
+            // Auto-fill monto cuando se selecciona cheque de cartera en OP
+            if (campo === 'cheque_id' && p.codigo === 'CHEQUE' && modo === 'ORDEN_PAGO') {
+                const cheque = chequesCartera.find(c => String(c.id) === String(valor));
+                if (cheque) {
+                    nuevoPago.monto = parseFloat(cheque.monto);
+                }
+            }
+            return nuevoPago;
         }));
     };
 

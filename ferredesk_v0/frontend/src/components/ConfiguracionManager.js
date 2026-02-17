@@ -171,9 +171,9 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
           <div className="w-2/3">
             {config.logo_empresa && (
               <div className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                <img 
-                  src={config.logo_empresa} 
-                  alt="Logo actual" 
+                <img
+                  src={config.logo_empresa}
+                  alt="Logo actual"
                   className="w-8 h-8 object-contain rounded"
                 />
                 <span className="text-xs text-slate-600">Logo actual cargado</span>
@@ -224,14 +224,12 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
             <button
               onClick={() => handleToggle("notificaciones_stock_bajo")}
               disabled={loading}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                config.notificaciones_stock_bajo ? "bg-orange-600" : "bg-slate-200"
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.notificaciones_stock_bajo ? "bg-orange-600" : "bg-slate-200"
+                }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  config.notificaciones_stock_bajo ? "translate-x-6" : "translate-x-1"
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.notificaciones_stock_bajo ? "translate-x-6" : "translate-x-1"
+                  }`}
               />
             </button>
           </div>
@@ -266,14 +264,12 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
             <button
               onClick={() => handleToggle("permitir_stock_negativo")}
               disabled={loading}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                config.permitir_stock_negativo ? "bg-orange-600" : "bg-slate-200"
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.permitir_stock_negativo ? "bg-orange-600" : "bg-slate-200"
+                }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  config.permitir_stock_negativo ? "translate-x-6" : "translate-x-1"
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.permitir_stock_negativo ? "translate-x-6" : "translate-x-1"
+                  }`}
               />
             </button>
           </div>
@@ -296,7 +292,7 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
               disabled={loading}
             />
             <p className="mt-1 text-[11px] text-slate-500">
-              {config.prefijo_codigo_barras 
+              {config.prefijo_codigo_barras
                 ? `Los códigos se generarán como: ${config.prefijo_codigo_barras}-00000001`
                 : "Si está vacío, se generará solo el número: 00000001"}
             </p>
@@ -381,7 +377,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
           </svg>
           <span className="text-sm text-blue-700">
-            Configuración interna: {config.arca_habilitado ? 'Habilitado' : 'Deshabilitado'} | 
+            Configuración interna: {config.arca_habilitado ? 'Habilitado' : 'Deshabilitado'} |
             Modo: {config.modo_arca === 'PROD' ? 'Producción' : 'Homologación'}
           </span>
         </div>
@@ -478,7 +474,7 @@ const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
 const ConfiguracionManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
-  
+
   const [user, setUser] = useState(null)
   const [config, setConfig] = useState({})
   const [loading] = useState(false)
@@ -643,39 +639,51 @@ const ConfiguracionManager = () => {
 
     setSaving(true)
     setFeedback("")
-    
+
     try {
       const csrftoken = getCookie("csrftoken")
-      
+
+      // Validar que los archivos no estén vacíos
+      if (config.certificado_arca_file && config.certificado_arca_file.size === 0) {
+        setFeedback("Error: El archivo de certificado seleccionado está vacío.");
+        setSaving(false);
+        return;
+      }
+      if (config.clave_privada_arca_file && config.clave_privada_arca_file.size === 0) {
+        setFeedback("Error: El archivo de clave privada seleccionado está vacío.");
+        setSaving(false);
+        return;
+      }
+
       // Preparar datos para envío
       const formData = new FormData()
-      
+
       // Agregar todos los campos de configuración excepto archivos
       Object.keys(config).forEach(key => {
-        if (key !== 'logo_empresa_file' && key !== 'logo_empresa' && 
-            key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
-            key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca' &&
-            key !== 'no_configurada') {
+        if (key !== 'logo_empresa_file' && key !== 'logo_empresa' &&
+          key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
+          key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca' &&
+          key !== 'no_configurada') {
           if (config[key] !== null && config[key] !== undefined) {
             formData.append(key, config[key])
           }
         }
       })
-      
+
       // Agregar el archivo del logo si existe
       if (config.logo_empresa_file) {
         formData.append('logo_empresa', config.logo_empresa_file)
       }
-      
+
       // Agregar archivos ARCA si existen
       if (config.certificado_arca_file) {
         formData.append('certificado_arca', config.certificado_arca_file)
       }
-      
+
       if (config.clave_privada_arca_file) {
         formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
-      
+
       const esCreacion = esNueva || config?.no_configurada === true
       const res = await fetch("/api/ferreteria/", {
         method: esCreacion ? "POST" : "PATCH",
@@ -686,9 +694,9 @@ const ConfiguracionManager = () => {
         credentials: "include",
         body: formData,
       })
-      
+
       if (!res.ok) throw new Error("Error al guardar configuración")
-      
+
       const data = await res.json()
       setConfig(data)
       setEsNueva(false)
@@ -709,7 +717,7 @@ const ConfiguracionManager = () => {
       }
 
       setFeedback("Configuración guardada correctamente")
-      
+
       // Limpiar feedback después de 3 segundos
       setTimeout(() => setFeedback(""), 3000)
     } catch (error) {
@@ -754,84 +762,84 @@ const ConfiguracionManager = () => {
       setActiveTab("negocio")
       return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
     }
-    
-         switch (activeTab) {
-       case "negocio":
-         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
-       case "fiscal":
-         return <ConfiguracionFiscal config={config} onConfigChange={handleConfigChange} loading={loading} />
-       case "notificaciones":
-         return <Notificaciones config={config} onConfigChange={handleConfigChange} loading={loading} />
-       case "sistema":
-         return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
-       case "arca":
-         return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
-       case "maestros_clientes": {
-         const { datos } = obtenerColeccionActual()
-         const datosVisibles = ocultarInactivos ? datos.filter((d) => d.activo === "S") : datos
 
-         const columnas = [
-           { id: "nombre", titulo: "Nombre" },
-           {
-             id: "estado",
-             titulo: "Estado",
-             render: (fila) => (
-               <span className={`px-2 py-0.5 rounded-full text-[11px] ${fila.activo === "S" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                 {fila.activo === "S" ? "Activo" : "Inactivo"}
-               </span>
-             ),
-             align: "center",
-             ancho: 120,
-           },
-           {
-             id: "acciones",
-             titulo: "Acciones",
-             render: (fila) => (
-               <div className="flex items-center gap-2 justify-end">
-                 <BotonEditar onClick={() => abrirModalEditar(fila)} />
-               </div>
-             ),
-             align: "right",
-             ancho: 100,
-           },
-         ]
+    switch (activeTab) {
+      case "negocio":
+        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "fiscal":
+        return <ConfiguracionFiscal config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "notificaciones":
+        return <Notificaciones config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "sistema":
+        return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "arca":
+        return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
+      case "maestros_clientes": {
+        const { datos } = obtenerColeccionActual()
+        const datosVisibles = ocultarInactivos ? datos.filter((d) => d.activo === "S") : datos
 
-         return (
-           <div className="flex flex-col gap-4">
-             <div className="flex flex-wrap items-center gap-2">
-               <div className="flex flex-wrap gap-2">
-                 {["categorias","provincias","localidades","barrios","transportes","plazos"].map((cat) => (
-                   <button
-                     key={cat}
-                     onClick={() => setCatalogoSeleccionado(cat)}
-                     className={`${catalogoSeleccionado === cat ? theme.tabActiva : `bg-gradient-to-r ${theme.primario} text-white`} px-3 py-1 rounded-lg`}
-                   >
-                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                   </button>
-                 ))}
-               </div>
+        const columnas = [
+          { id: "nombre", titulo: "Nombre" },
+          {
+            id: "estado",
+            titulo: "Estado",
+            render: (fila) => (
+              <span className={`px-2 py-0.5 rounded-full text-[11px] ${fila.activo === "S" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                {fila.activo === "S" ? "Activo" : "Inactivo"}
+              </span>
+            ),
+            align: "center",
+            ancho: 120,
+          },
+          {
+            id: "acciones",
+            titulo: "Acciones",
+            render: (fila) => (
+              <div className="flex items-center gap-2 justify-end">
+                <BotonEditar onClick={() => abrirModalEditar(fila)} />
+              </div>
+            ),
+            align: "right",
+            ancho: 100,
+          },
+        ]
 
-               <div className="ml-auto flex items-center gap-2">
-                 <label className="flex items-center gap-1 text-sm text-slate-700">
-                   <input type="checkbox" checked={ocultarInactivos} onChange={(e) => setOcultarInactivos(e.target.checked)} />
-                   Ocultar inactivos
-                 </label>
-                 <button onClick={abrirModalNuevo} className={theme.botonPrimario}><span className="text-lg">+</span> Nuevo</button>
-               </div>
-             </div>
+        return (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-2">
+                {["categorias", "provincias", "localidades", "barrios", "transportes", "plazos"].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCatalogoSeleccionado(cat)}
+                    className={`${catalogoSeleccionado === cat ? theme.tabActiva : `bg-gradient-to-r ${theme.primario} text-white`} px-3 py-1 rounded-lg`}
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </button>
+                ))}
+              </div>
 
-             <Tabla
-               columnas={columnas}
-               datos={datosVisibles}
-               valorBusqueda={searchMaestros}
-               onCambioBusqueda={setSearchMaestros}
-             />
-           </div>
-         )
-       }
-       default:
-         return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
-     }
+              <div className="ml-auto flex items-center gap-2">
+                <label className="flex items-center gap-1 text-sm text-slate-700">
+                  <input type="checkbox" checked={ocultarInactivos} onChange={(e) => setOcultarInactivos(e.target.checked)} />
+                  Ocultar inactivos
+                </label>
+                <button onClick={abrirModalNuevo} className={theme.botonPrimario}><span className="text-lg">+</span> Nuevo</button>
+              </div>
+            </div>
+
+            <Tabla
+              columnas={columnas}
+              datos={datosVisibles}
+              valorBusqueda={searchMaestros}
+              onCambioBusqueda={setSearchMaestros}
+            />
+          </div>
+        )
+      }
+      default:
+        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+    }
   }
 
   return (
@@ -853,15 +861,14 @@ const ConfiguracionManager = () => {
                 if (tab.key === "arca" && !user?.is_staff) {
                   return null
                 }
-                
+
                 return (
                   <div
                     key={tab.key}
-                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                      activeTab === tab.key
+                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key
                         ? theme.tabActiva
                         : theme.tabInactiva
-                    }`}
+                      }`}
                     onClick={() => setActiveTab(tab.key)}
                     style={{ position: "relative", zIndex: 1 }}
                   >
@@ -870,7 +877,7 @@ const ConfiguracionManager = () => {
                 )
               })}
             </div>
-            
+
             <div className="p-6">
               {/* Tab Content */}
               {renderActiveTab()}
@@ -892,14 +899,14 @@ const ConfiguracionManager = () => {
                       </svg>
                       Guardando...
                     </>
-                                   ) : (
-                     <>
-                       Guardar Configuración
-                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-2">
-                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                       </svg>
-                     </>
-                   )}
+                  ) : (
+                    <>
+                      Guardar Configuración
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                      </svg>
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -921,11 +928,10 @@ const ConfiguracionManager = () => {
 
             {/* Feedback */}
             {feedback && (
-              <div className={`mx-6 mb-6 text-center p-4 rounded-xl ${
-                feedback.includes("Error") 
-                  ? "bg-red-50 border border-red-200 text-red-700" 
+              <div className={`mx-6 mb-6 text-center p-4 rounded-xl ${feedback.includes("Error")
+                  ? "bg-red-50 border border-red-200 text-red-700"
                   : "bg-emerald-50 border border-emerald-200 text-emerald-700"
-              }`}>
+                }`}>
                 {feedback}
               </div>
             )}

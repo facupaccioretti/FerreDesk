@@ -8,6 +8,7 @@ import os
 from decimal import Decimal
 from typing import Dict, Any, BinaryIO
 from datetime import datetime
+from django.utils import timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, BaseDocTemplate, PageTemplate, Frame, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -574,6 +575,6 @@ def obtener_nombre_archivo_orden_compra(orden_compra: Dict[str, Any]) -> str:
         except:
             fecha_formateada = fecha_orden.replace('-', '')
     else:
-        fecha_formateada = datetime.now().strftime('%Y%m%d')
+        fecha_formateada = timezone.localtime().strftime('%Y%m%d')
     
     return f"Orden_Compra_{numero_orden}_{fecha_formateada}.pdf"

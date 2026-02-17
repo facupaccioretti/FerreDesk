@@ -7,13 +7,15 @@ import Tabla from "../Tabla"
 import ModalMarcarChequeRechazado from "./ModalMarcarChequeRechazado"
 import ModalDetalleCheque from "./ModalDetalleCheque"
 import ModalEditarCheque from "./ModalEditarCheque"
+import ModalDepositarCheque from "./ModalDepositarCheque"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
-import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonReactivar } from "../Botones"
+import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonReactivar, BotonAcreditar } from "../Botones"
 
 const ESTADOS = [
     { value: "", label: "Todos" },
     { value: "EN_CARTERA", label: "En Cartera" },
     { value: "DEPOSITADO", label: "Depositado" },
+    { value: "ACREDITADO", label: "Acreditado" },
     { value: "ENTREGADO", label: "Entregado (Endosado)" },
     { value: "RECHAZADO", label: "Rechazado" },
 ]
@@ -25,7 +27,7 @@ const ESTADOS = [
 const ESTADOS_PUEDEN_MARCAR_RECHAZADO = ["EN_CARTERA", "DEPOSITADO", "ENTREGADO"]
 
 const HistorialCheques = () => {
-    const { obtenerCheques, marcarChequeRechazado, reactivarCheque } = useCajaAPI()
+    const { obtenerCheques, marcarChequeRechazado, reactivarCheque, acreditarCheque, obtenerCuentasBanco } = useCajaAPI()
     const [cheques, setCheques] = useState([])
     const [cargando, setCargando] = useState(true)
     const [filtroEstado, setFiltroEstado] = useState("")
@@ -34,6 +36,8 @@ const HistorialCheques = () => {
     const [modalAccion, setModalAccion] = useState({ cheque: null, modo: "rechazar" })
     const [modalDetalle, setModalDetalle] = useState(null)
     const [modalEditar, setModalEditar] = useState(null)
+    const [modalAcreditar, setModalAcreditar] = useState(null)
+    const [cuentasBanco, setCuentasBanco] = useState([])
 
     const cargar = useCallback(async () => {
         setCargando(true)
@@ -77,6 +81,10 @@ const HistorialCheques = () => {
                 color = "bg-red-100 text-red-700"
                 texto = "Rechazado"
                 break
+            case "ACREDITADO":
+                color = "bg-teal-100 text-teal-700"
+                texto = "Acreditado"
+                break
             default:
                 break
         }
@@ -100,6 +108,16 @@ const HistorialCheques = () => {
                     <span className="text-xs text-slate-500">Proveedor</span>
                     <span className="text-sm text-slate-700 font-medium">
                         {c.proveedor_nombre}
+                    </span>
+                </div>
+            )
+        }
+        if (c.estado === "ACREDITADO" && c.cuenta_banco_deposito_nombre) {
+            return (
+                <div className="flex flex-col">
+                    <span className="text-xs text-teal-600">Acreditado en</span>
+                    <span className="text-sm text-slate-700 font-medium">
+                        {c.cuenta_banco_deposito_nombre}
                     </span>
                 </div>
             )
@@ -158,6 +176,34 @@ const HistorialCheques = () => {
         await cargar() // Recargar lista después de editar
     }
 
+    // Acreditar: abrir modal de selección de banco
+    const abrirModalAcreditar = async (cheque) => {
+        try {
+            const res = await obtenerCuentasBanco(true)
+            const lista = res?.results ?? (Array.isArray(res) ? res : [])
+            setCuentasBanco(lista)
+        } catch (err) {
+            console.error("Error cargando cuentas banco:", err)
+            setCuentasBanco([])
+        }
+        setModalAcreditar(cheque)
+    }
+
+    const confirmarAcreditar = async (cuentaBancoId) => {
+        if (!modalAcreditar) return
+        setProcesandoId(modalAcreditar.id)
+        try {
+            await acreditarCheque(modalAcreditar.id, cuentaBancoId)
+            setModalAcreditar(null)
+            await cargar()
+        } catch (err) {
+            console.error("Error al acreditar cheque:", err)
+            alert(err.message || "Error al acreditar cheque")
+        } finally {
+            setProcesandoId(null)
+        }
+    }
+
     // Función para generar botones del menú de acciones para cada cheque
     const generarBotonesCheque = (cheque) => {
         const botones = []
@@ -187,6 +233,16 @@ const HistorialCheques = () => {
                 componente: BotonMarcarRechazado,
                 onClick: () => abrirModalMarcarRechazado(cheque),
                 titulo: "Marcar rechazado",
+                disabled: estaProcesando,
+            })
+        }
+
+        // Acreditar - solo si está DEPOSITADO
+        if (cheque.estado === "DEPOSITADO") {
+            botones.push({
+                componente: BotonAcreditar,
+                onClick: () => abrirModalAcreditar(cheque),
+                titulo: "Acreditar (fondos ingresados)",
                 disabled: estaProcesando,
             })
         }
@@ -293,6 +349,19 @@ const HistorialCheques = () => {
                     cheque={modalEditar}
                     onGuardar={confirmarEditar}
                     onCancelar={cerrarEditar}
+                />
+            )}
+
+            {/* Modal Acreditar (reutiliza ModalDepositarCheque para selección de banco) */}
+            {modalAcreditar && (
+                <ModalDepositarCheque
+                    cuentasBanco={cuentasBanco}
+                    onConfirmar={confirmarAcreditar}
+                    onCancelar={() => setModalAcreditar(null)}
+                    loading={procesandoId === modalAcreditar?.id}
+                    titulo="Acreditar cheque"
+                    textoBoton="Acreditar"
+                    textoLabel="Cuenta bancaria donde se acreditaron los fondos"
                 />
             )}
         </div>

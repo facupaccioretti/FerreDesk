@@ -96,9 +96,16 @@ const useCuentaCorrienteAPI = () => {
 
     // Imputar recibo o nota de crédito existente
     const imputarExistente = useCallback(async (imputacionData) => {
+        // Soporte para ID compuesto
+        const payload = {
+            ...imputacionData,
+            origen_tipo: imputacionData.tipo || imputacionData.comprobante_tipo,
+            origen_id: imputacionData.id || imputacionData.comprobante_id || imputacionData.orden_pago_id
+        };
+
         return await makeRequest('/api/cuenta-corriente/imputar-existente/', {
             method: 'POST',
-            body: JSON.stringify(imputacionData),
+            body: JSON.stringify(payload),
         });
     }, [makeRequest]);
 
@@ -158,6 +165,13 @@ const useCuentaCorrienteAPI = () => {
                 comprobante_id: comprobanteId,
                 imputaciones
             }),
+        });
+    }, [makeRequest]);
+
+    // Anular imputación individual
+    const eliminarImputacion = useCallback(async (impId) => {
+        return await makeRequest(`/api/cuenta-corriente/imputacion/${impId}/eliminar/`, {
+            method: 'POST',
         });
     }, [makeRequest]);
 
@@ -247,6 +261,7 @@ const useCuentaCorrienteAPI = () => {
         anularRecibo,
         anularAutoimputacion,
         modificarImputaciones,
+        eliminarImputacion,
         getMetodosPago,
         getCuentasBanco,
         getChequesEnCartera,

@@ -10,6 +10,7 @@ import CuitStatusBanner from '../Alertas/CuitStatusBanner'
 import ModalCobroVenta from './herramientasforms/ModalCobroVenta'
 import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal'
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme'
+import { fechaHoyLocal } from '../../utils/fechas'
 
 // Constantes descriptivas
 const TIPO_NOTA_DEBITO = 'nota_debito'
@@ -41,7 +42,7 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
     vendedorId: vendedores[0]?.id || '',
     sucursalId: sucursales[0]?.id || '',
     puntoVentaId: puntosVenta[0]?.id || '',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: fechaHoyLocal(),
     copia: 1,
     facturasAsociadas: facturasAsociadas || [],
     exentoIVA: false,

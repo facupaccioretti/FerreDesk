@@ -60,10 +60,23 @@ const OrdenPagoReciboModal = ({
     const [imputaciones, setImputaciones] = useState([])
 
     // Paso 2: Datos Generales
+    // Usamos Intl.DateTimeFormat para asegurar que la fecha sea la de Argentina, incluso si el navegador tiene desfases UTC
+    const getTodayArgentina = () => {
+        try {
+            return new Intl.DateTimeFormat('fr-CA', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (e) {
+            // Fallback si falla Intl (muy raro en navegadores modernos)
+            return new Date().toLocaleDateString('sv-SE');
+        }
+    };
+
     const [formData, setFormData] = useState({
-        fecha: new Date().toISOString().split('T')[0],
-        pv: '0001',
-        numero: '',
+        fecha: getTodayArgentina(),
         observacion: '',
     })
 
@@ -114,13 +127,14 @@ const OrdenPagoReciboModal = ({
             setCuentasBanco(Array.isArray(cuentas) ? cuentas : cuentas.results || [])
             setChequesCartera(Array.isArray(cheques) ? cheques : cheques.results || [])
 
-            // Inicializar imputaciones
+            // Inicializar imputaciones usando el ID genérico (que es único para Compra o Ajuste)
             setImputaciones(docs.map(doc => ({
-                id: tipo === 'RECIBO' ? doc.ven_id : doc.compra_id,
+                id: tipo === 'RECIBO' ? doc.ven_id : doc.id,
                 numero: tipo === 'RECIBO' ? doc.numero_formateado : doc.numero_factura,
                 fecha: tipo === 'RECIBO' ? doc.ven_fecha : doc.fecha,
                 saldo_pendiente: parseFloat(doc.saldo_pendiente) || 0,
-                monto: 0
+                monto: 0,
+                tipo_documento: tipo === 'RECIBO' ? 'venta' : (doc.tipo || 'compra')
             })))
 
         } catch (err) {
@@ -147,7 +161,7 @@ const OrdenPagoReciboModal = ({
     const resetearFormulario = () => {
         setPaso(1)
         setFormData({
-            fecha: new Date().toISOString().split('T')[0],
+            fecha: new Date().toLocaleDateString('sv-SE'),
             pv: '0001',
             numero: '',
             observacion: '',
@@ -182,6 +196,17 @@ const OrdenPagoReciboModal = ({
             return
         }
 
+        if (tipo === 'RECIBO') {
+            if (!formData.pv?.trim()) {
+                window.alert('El punto de venta (PV) es obligatorio')
+                return
+            }
+            if (!formData.numero?.trim()) {
+                window.alert('El número de recibo es obligatorio')
+                return
+            }
+        }
+
         // Validación de coherencia
         if (montoImputaciones > montoPagos) {
             window.alert('El monto total imputado no puede ser mayor al total de medios de pago.')
@@ -202,8 +227,8 @@ const OrdenPagoReciboModal = ({
                 const reciboData = {
                     cliente_id: entidad.id,
                     rec_fecha: formData.fecha,
-                    rec_pv: formData.pv,
-                    rec_numero: formData.numero,
+                    rec_pv: formData.pv || '0001',
+                    rec_numero: formData.numero || '0',
                     rec_observacion: formData.observacion,
                     rec_monto_total: montoPagos,
                     pagos: pagos,
@@ -220,14 +245,14 @@ const OrdenPagoReciboModal = ({
                 const ordenData = {
                     proveedor_id: entidad.id,
                     fecha: formData.fecha,
-                    numero: formData.numero,
                     observacion: formData.observacion,
                     total: montoPagos,
                     pagos: pagos,
                     imputaciones: imputaciones
                         .filter(imp => imp.monto > 0)
                         .map(imp => ({
-                            compra_id: imp.id,
+                            factura_id: imp.id,
+                            tipo: imp.tipo_documento,
                             monto: imp.monto,
                             observacion: ''
                         }))
@@ -391,27 +416,49 @@ const OrdenPagoReciboModal = ({
                                                             onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
                                                         />
                                                     </div>
-                                                    <div>
-                                                        <label className={CLASES_ETIQUETA}>PV</label>
-                                                        <input
-                                                            type="text"
-                                                            maxLength={4}
-                                                            className={CLASES_INPUT}
-                                                            placeholder="0001"
-                                                            value={formData.pv}
-                                                            onChange={(e) => setFormData({ ...formData, pv: e.target.value.padStart(4, '0') })}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className={CLASES_ETIQUETA}>N° Comprobante</label>
-                                                        <input
-                                                            type="text"
-                                                            className={`${CLASES_INPUT} font-mono`}
-                                                            placeholder="Número..."
-                                                            value={formData.numero}
-                                                            onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                                                        />
-                                                    </div>
+                                                    {tipo === 'RECIBO' && (
+                                                        <>
+                                                            <div>
+                                                                <label className={CLASES_ETIQUETA}>PV</label>
+                                                                <input
+                                                                    type="text"
+                                                                    className={CLASES_INPUT}
+                                                                    placeholder="0001"
+                                                                    value={formData.pv}
+                                                                    onChange={(e) => {
+                                                                        const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 4)
+                                                                        setFormData({ ...formData, pv: clean })
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className={CLASES_ETIQUETA}>Número</label>
+                                                                <input
+                                                                    type="text"
+                                                                    className={CLASES_INPUT}
+                                                                    placeholder={tipo === 'RECIBO' ? "Ingrese número..." : "00000000"}
+                                                                    value={formData.numero}
+                                                                    onChange={(e) => {
+                                                                        const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 8)
+                                                                        setFormData({ ...formData, numero: clean })
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    {tipo === 'ORDEN_PAGO' && (
+                                                        <div className="md:col-span-2">
+                                                            <label className={CLASES_ETIQUETA}>N° Comprobante</label>
+                                                            <div className="flex items-center h-8 px-2 bg-slate-50 rounded border border-slate-200">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-slate-400 mr-1.5 flex-shrink-0">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                                                </svg>
+                                                                <span className="text-xs text-slate-500 italic">
+                                                                    Se asigna automáticamente al guardar
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     <div className="md:col-span-3">
                                                         <label className={CLASES_ETIQUETA}>Observaciones internas</label>
                                                         <textarea

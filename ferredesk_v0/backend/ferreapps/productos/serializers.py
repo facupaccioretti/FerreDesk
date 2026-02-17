@@ -169,8 +169,18 @@ class FerreteriaSerializer(serializers.ModelSerializer):
     # Campo escribible para permitir subir archivo vía PATCH
     logo_empresa = serializers.ImageField(required=False, allow_null=True)
     # Aceptar archivos para escritura, pero no exponerlos en la respuesta
-    certificado_arca = serializers.FileField(required=False, allow_null=True, write_only=True)
-    clave_privada_arca = serializers.FileField(required=False, allow_null=True, write_only=True)
+    certificado_arca = serializers.FileField(
+        required=False, 
+        allow_null=True, 
+        write_only=True,
+        error_messages={'empty': 'El archivo del certificado está vacío (0 bytes). Por favor verifique el archivo original.'}
+    )
+    clave_privada_arca = serializers.FileField(
+        required=False, 
+        allow_null=True, 
+        write_only=True,
+        error_messages={'empty': 'El archivo de la clave privada está vacío (0 bytes). Por favor verifique el archivo original.'}
+    )
     # Exponer flags booleanos de presencia
     tiene_certificado_arca = serializers.SerializerMethodField()
     tiene_clave_privada_arca = serializers.SerializerMethodField()

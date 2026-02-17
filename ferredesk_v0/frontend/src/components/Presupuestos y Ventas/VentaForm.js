@@ -25,6 +25,7 @@ import CuitStatusBanner from "../Alertas/CuitStatusBanner"
 import NuevoReciboModal from "../CuentaCorriente/NuevoReciboModal"
 import ModalCobroVenta from "./herramientasforms/ModalCobroVenta"
 import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
+import { fechaHoyLocal } from "../../utils/fechas"
 
 const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   numero: "",
@@ -36,7 +37,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
   vendedorId: "",
   sucursalId: sucursales[0]?.id || "",
   puntoVentaId: puntosVenta[0]?.id || "",
-  fecha: new Date().toISOString().split("T")[0],
+  fecha: fechaHoyLocal(),
   estado: "Abierto",
   tipo: "Cotización",
   items: [],

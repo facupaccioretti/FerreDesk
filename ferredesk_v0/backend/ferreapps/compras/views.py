@@ -25,6 +25,7 @@ from ferreapps.productos.models import Proveedor, Stock, AlicuotaIVA
 from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
+from django.utils import timezone
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
@@ -223,7 +224,6 @@ class CompraViewSet(viewsets.ModelViewSet):
         """Obtener estadísticas de compras"""
         try:
             from django.db.models import Sum, Count
-            from django.utils import timezone
             from datetime import timedelta
             
             # Filtros opcionales

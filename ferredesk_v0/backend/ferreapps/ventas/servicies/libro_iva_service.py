@@ -4,7 +4,7 @@ Consolida datos de las vistas calculadas existentes sin cálculos adicionales.
 """
 
 from decimal import Decimal
-from datetime import datetime
+from django.utils import timezone
 from typing import Dict, List, Optional, Any
 from ferreapps.clientes.models import Cliente
 from ferreapps.ventas.models import VentaCalculada, VentaIVAAlicuota
@@ -92,7 +92,7 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
             'periodo': {
                 'mes': mes,
                 'anio': anio,
-                'fecha_generacion': datetime.now().isoformat()
+                'fecha_generacion': timezone.localtime().isoformat()
             },
             'emisor': {
                 'situacion_iva': situacion_iva_emisor,
@@ -253,7 +253,7 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
         'periodo': {
             'mes': mes,
             'anio': anio,
-            'fecha_generacion': datetime.now().isoformat()
+            'fecha_generacion': timezone.localtime().isoformat()
         },
         'emisor': {
             'situacion_iva': situacion_iva_emisor,

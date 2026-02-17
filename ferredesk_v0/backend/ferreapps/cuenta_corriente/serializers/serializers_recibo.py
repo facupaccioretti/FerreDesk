@@ -1,6 +1,29 @@
 from rest_framework import serializers
 from decimal import Decimal
-from .serializers_imputacion_venta import ImputacionCreateSerializer
+from ..models import Recibo
+
+
+class ReciboSerializer(serializers.ModelSerializer):
+    """Serializer para lectura de recibos."""
+    cliente_nombre = serializers.ReadOnlyField(source='rec_cliente.razon')
+    usuario_nombre = serializers.ReadOnlyField(source='rec_usuario.username')
+
+    class Meta:
+        model = Recibo
+        fields = '__all__'
+
+
+class ImputacionItemSerializer(serializers.Serializer):
+# ... (existing ImputacionItemSerializer) ...
+    """Serializer inline para cada imputación dentro de un recibo."""
+    factura_id = serializers.IntegerField(help_text='ID de la factura/comprobante destino')
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2, help_text='Monto a imputar')
+    observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero')
+        return value
 
 
 class ReciboCreateSerializer(serializers.Serializer):
@@ -14,7 +37,7 @@ class ReciboCreateSerializer(serializers.Serializer):
     
     cliente_id = serializers.IntegerField()
     
-    imputaciones = ImputacionCreateSerializer(many=True)
+    imputaciones = ImputacionItemSerializer(many=True, required=False, default=[])
     
     # Medios de pago utilizados (opcional para retrocompatibilidad)
     pagos = serializers.ListField(
@@ -47,7 +70,7 @@ class ReciboCreateSerializer(serializers.Serializer):
                 })
 
         monto_imputaciones = sum(
-            imp['imp_monto'] for imp in imputaciones
+            imp['monto'] for imp in imputaciones
         )
         
         if monto_total < monto_imputaciones:
@@ -55,13 +78,5 @@ class ReciboCreateSerializer(serializers.Serializer):
                 'rec_monto_total': f'El monto del recibo ({monto_total}) no puede ser menor '
                                  f'al monto de las imputaciones ({monto_imputaciones})'
             })
-        
-        # Validar mismo cliente
-        cliente_id = data.get('cliente_id')
-        for imp in imputaciones:
-            if imp['imp_id_venta'].ven_idcli.id != cliente_id:
-                raise serializers.ValidationError({
-                    'imputaciones': 'Todas las facturas deben pertenecer al cliente seleccionado'
-                })
         
         return data

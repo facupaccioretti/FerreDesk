@@ -33,7 +33,7 @@ const OrdenPagoModal = ({
 
     // Paso 2: Datos generales
     const [formData, setFormData] = useState({
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: new Date().toLocaleDateString('sv-SE'),
         numero: "",
         observacion: '',
     })
@@ -105,7 +105,7 @@ const OrdenPagoModal = ({
     const resetearFormulario = () => {
         setPaso(1)
         setFormData({
-            fecha: new Date().toISOString().split('T')[0],
+            fecha: new Date().toLocaleDateString('sv-SE'),
             numero: "",
             observacion: '',
         })
@@ -165,8 +165,8 @@ const OrdenPagoModal = ({
                 nuevoPago.numero_cheque = ''
                 nuevoPago.banco_emisor = ''
                 nuevoPago.cuit_librador = ''
-                nuevoPago.fecha_emision = new Date().toISOString().split('T')[0]
-                nuevoPago.fecha_presentacion = new Date().toISOString().split('T')[0]
+                nuevoPago.fecha_emision = new Date().toLocaleDateString('sv-SE')
+                nuevoPago.fecha_presentacion = new Date().toLocaleDateString('sv-SE')
                 nuevoPago.cheque_id = null
                 nuevoPago.monto = 0
             } else if (campo === 'es_propio' && valor === false) {

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db import IntegrityError
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 from decimal import Decimal
 import logging
@@ -380,18 +381,17 @@ class VentaViewSet(viewsets.ModelViewSet):
                 
                 # Auto-imputación: solo hasta el total de la venta (no aplicar si hay recibo parcial)
                 if comprobante_pagado and monto_pago > 0 and not data.get('recibo_parcial'):
-                    from ferreapps.cuenta_corriente.models import ImputacionVenta
-                    from datetime import date
+                    from ferreapps.cuenta_corriente.models import Imputacion
                     
                     # El monto de auto-imputación es el mínimo entre monto_pago y total_venta
                     monto_auto_imputacion = min(monto_pago, total_venta)
                     
                     # Crear la auto-imputación: factura se imputa a sí misma
-                    ImputacionVenta.objects.create(
-                        imp_id_venta=venta_creada,      # La factura
-                        imp_id_recibo=venta_creada,     # La misma factura (auto-imputación)
+                    Imputacion.objects.create(
+                        origen=venta_creada,      # El pago (la misma factura)
+                        destino=venta_creada,     # La deuda (la misma factura)
                         imp_monto=monto_auto_imputacion, # Monto del pago (limitado al total)
-                        imp_fecha=date.today(),         # Fecha actual
+                        imp_fecha=timezone.localdate(),         # Fecha actual (hora Argentina)
                         imp_observacion='Factura Recibo - Auto-imputación'
                     )
                     
@@ -403,7 +403,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
                 # Flujo unificado: normalizar_cobro (bruto/neto, excedente) → registrar_pagos_venta → metadata en Venta
                 if sesion_caja and comprobante_pagado:
-                    from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
+                    from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta, registrar_vuelto
                     from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
 
                     pagos_data = list(data.get('pagos') or [])
@@ -434,6 +434,22 @@ class VentaViewSet(viewsets.ModelViewSet):
                                 campos_actualizados.append(clave)
                         if campos_actualizados:
                             venta_creada.save(update_fields=campos_actualizados)
+
+                        # === REGISTRAR EGRESO DE VUELTO EN CAJA ===
+                        # Cuando el destino del excedente es 'vuelto', normalizar_cobro ya neteó
+                        # el efectivo (entrada reducida), pero falta registrar la SALIDA física
+                        # del vuelto en caja para que el arqueo cuadre.
+                        excedente_destino = (data.get('excedente_destino') or '').strip().lower()
+                        monto_excedente = metadata_cobro.get('vuelto_calculado') or Decimal('0')
+                        if excedente_destino == 'vuelto' and monto_excedente > 0:
+                            pago_vuelto = registrar_vuelto(
+                                venta=venta_creada,
+                                sesion_caja=sesion_caja,
+                                monto_vuelto=monto_excedente,
+                            )
+                            if pago_vuelto:
+                                response.data['vuelto_registrado'] = True
+                                response.data['vuelto_monto'] = str(monto_excedente)
                     else:
                         pagos_creados = []
 
@@ -464,9 +480,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                     if recibo_excedente_data.get('imputaciones'):
                         raise ValidationError('El recibo de excedente no debe tener imputaciones')
                     
-                    # Crear el recibo
-                    from datetime import date as datetime_date
-                    
                     # Obtener comprobante de recibo (letra X)
                     comprobante_recibo = Comprobante.objects.filter(
                         tipo='recibo',
@@ -496,7 +509,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     # Crear recibo
                     recibo = Venta.objects.create(
                         ven_sucursal=1,
-                        ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
+                        ven_fecha=recibo_excedente_data.get('rec_fecha', timezone.localdate()),
                         comprobante=comprobante_recibo,
                         ven_punto=rec_pv,
                         ven_numero=rec_num,
@@ -542,8 +555,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # === CREAR RECIBO PARCIAL E IMPUTACIÓN SI EXISTE ===
                 recibo_parcial_data = data.get('recibo_parcial')
                 if recibo_parcial_data:
-                    from ferreapps.cuenta_corriente.models import ImputacionVenta
-                    from datetime import date as datetime_date
+                    from ferreapps.cuenta_corriente.models import Imputacion
 
                     monto_recibo_parcial = Decimal(str(recibo_parcial_data.get('rec_monto_total', 0)))
                     if monto_recibo_parcial <= 0:
@@ -577,7 +589,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
                     recibo_parcial = Venta.objects.create(
                         ven_sucursal=1,
-                        ven_fecha=recibo_parcial_data.get('rec_fecha', datetime_date.today()),
+                        ven_fecha=recibo_parcial_data.get('rec_fecha', timezone.localdate()),
                         comprobante=comprobante_recibo,
                         ven_punto=rec_pv,
                         ven_numero=rec_num,
@@ -613,13 +625,13 @@ class VentaViewSet(viewsets.ModelViewSet):
                         vdi_detalle2=''
                     )
 
-                    fecha_imp = recibo_parcial_data.get('rec_fecha', datetime_date.today())
+                    fecha_imp = recibo_parcial_data.get('rec_fecha', timezone.localdate())
                     if isinstance(fecha_imp, str):
                         from datetime import datetime
                         fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
-                    ImputacionVenta.objects.create(
-                        imp_id_venta=venta_creada,
-                        imp_id_recibo=recibo_parcial,
+                    Imputacion.objects.create(
+                        origen=recibo_parcial,
+                        destino=venta_creada,
                         imp_monto=monto_recibo_parcial,
                         imp_fecha=fecha_imp,
                         imp_observacion='Recibo parcial - Pago al cobro'

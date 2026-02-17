@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react"
+import { fechaHoyLocal } from "../../../utils/fechas"
 
 /**
  * Hook personalizado para gestionar filtros, normalización y paginación de comprobantes
@@ -108,7 +109,7 @@ const useFiltrosComprobantes = ({
           (venta.ven_idcli === 1 || venta.ven_idcli === "1" ? "Cliente Mostrador" : "") ||
           venta.cliente ||
           "",
-        fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
+        fecha: venta.ven_fecha || venta.fecha || fechaHoyLocal(),
         id: venta.ven_id || venta.id || venta.pk,
         items,
         plazoId: venta.ven_idpla || venta.plazoId || "",

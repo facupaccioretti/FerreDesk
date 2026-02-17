@@ -8,7 +8,8 @@ from ferreapps.productos.models import AlicuotaIVA
 from decimal import Decimal
 from ferreapps.clientes.models import Cliente
 from ferreapps.clientes.models import Vendedor
-from datetime import date, timedelta
+from datetime import timedelta
+from django.utils import timezone
 
 class ComprobanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -320,7 +321,7 @@ class VentaSerializer(serializers.ModelSerializer):
         if dias_validez and dias_validez > 0:
             fecha_base = validated_data.get('ven_fecha')
             if fecha_base is None:
-                fecha_base = date.today()
+                fecha_base = timezone.localdate()
             validated_data['ven_vence'] = fecha_base + timedelta(days=dias_validez)
 
         # Si es ND/ND interna y no vienen items, generar ítem genérico servidor
@@ -460,7 +461,7 @@ class VentaSerializer(serializers.ModelSerializer):
             except Exception:
                 dias_validez = None
         if dias_validez and dias_validez > 0:
-            fecha_base = validated_data.get('ven_fecha', instance.ven_fecha or date.today())
+            fecha_base = validated_data.get('ven_fecha', instance.ven_fecha or timezone.localdate())
             instance.ven_vence = fecha_base + timedelta(days=dias_validez)
             instance.save(update_fields=['ven_vence'])
         if items_data:

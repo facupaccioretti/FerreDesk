@@ -12,18 +12,20 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ferreapps.cuenta_corriente.models import (
-    CuentaCorrienteProveedor,
     OrdenPago,
-    ImputacionCompra,
+    Imputacion,
+    AjusteProveedor,
 )
 from ferreapps.cuenta_corriente.serializers import (
-    CuentaCorrienteProveedorSerializer,
+    ImputacionSerializer,
     OrdenPagoSerializer,
     OrdenPagoCreateSerializer,
-    ImputacionCompraSerializer,
     OrdenPagoImputacionSerializer,
+    AjusteProveedorCreateSerializer,
+    AjusteProveedorSerializer,
 )
 from ferreapps.cuenta_corriente.services import imputar_deuda
+from ferreapps.cuenta_corriente.services.cuenta_corriente_service import obtener_movimientos_proveedor
 from ferreapps.productos.models import Proveedor
 from ferreapps.compras.models import Compra
 from ferreapps.caja.models import SesionCaja
@@ -47,35 +49,24 @@ def cuenta_corriente_proveedor(request, proveedor_id):
         fecha_hasta = request.GET.get('fecha_hasta')
         completo = request.GET.get('completo', 'false').lower() == 'true'
 
-        movimientos = CuentaCorrienteProveedor.objects.filter(
-            proveedor_id=proveedor_id
+        movimientos = obtener_movimientos_proveedor(
+            proveedor_id=proveedor_id,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            completo=completo
         )
 
-        if fecha_desde:
-            movimientos = movimientos.filter(fecha__gte=fecha_desde)
+        # El servicio ya devuelve la lista de dicts formateada y con saldo_acumulado
+        # pero necesitamos el saldo_total (el último saldo acumulado histórico)
         
-        if fecha_hasta:
-            movimientos = movimientos.filter(fecha__lte=fecha_hasta)
-
-        if not completo:
-            # Mostrar solo comprobantes con saldo pendiente
-            movimientos = movimientos.filter(saldo_pendiente__gt=0)
-
-        movimientos = movimientos.order_by('fecha', 'id')
-
-        serializer = CuentaCorrienteProveedorSerializer(movimientos, many=True)
-
-        # Calcular saldo total (histórico completo, independiente de los filtros de vista)
-        saldo_total = Decimal('0.00')
-        ultimo = CuentaCorrienteProveedor.objects.filter(proveedor_id=proveedor_id).order_by('fecha', 'id').last()
-        if ultimo:
-            saldo_total = ultimo.saldo_acumulado
+        todos_los_movimientos = obtener_movimientos_proveedor(proveedor_id=proveedor_id, completo=True)
+        saldo_total = todos_los_movimientos[-1]['saldo_acumulado'] if todos_los_movimientos else Decimal('0.00')
 
         return Response({
             'proveedor_id': proveedor_id,
             'proveedor_nombre': str(proveedor),
             'saldo_total': saldo_total,
-            'movimientos': serializer.data,
+            'movimientos': movimientos, # Ya son dicts, no hace falta serializer si el servicio ya mapeó los campos
         })
 
     except Exception as e:
@@ -97,31 +88,70 @@ def compras_pendientes_proveedor(request, proveedor_id):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Obtener compras no anuladas del proveedor
+        # 1. Obtener compras no anuladas del proveedor
         compras = Compra.objects.filter(
             comp_idpro=proveedor_id,
             comp_estado__in=['BORRADOR', 'CERRADA'],
-        ).order_by('comp_fecha')
+        )
+
+        # 2. Obtener Ajustes Débito no anulados del proveedor
+        ajustes_debito = AjusteProveedor.objects.filter(
+            aj_proveedor=proveedor_id,
+            aj_tipo='DEBITO',
+            aj_estado='A'
+        )
+
+        from django.contrib.contenttypes.models import ContentType
+        compra_ct = ContentType.objects.get_for_model(Compra)
+        ajuste_ct = ContentType.objects.get_for_model(AjusteProveedor)
 
         pendientes = []
+
+        # Procesar compras
         for compra in compras:
             total = compra.comp_total_final or Decimal('0.00')
-
-            imputado = ImputacionCompra.objects.filter(
-                imp_id_compra=compra
+            imputado = Imputacion.objects.filter(
+                destino_content_type=compra_ct,
+                destino_id=compra.comp_id
             ).aggregate(total=Sum('imp_monto'))['total'] or Decimal('0.00')
 
             saldo = total - imputado
             if saldo > Decimal('0.00'):
                 pendientes.append({
-                    'compra_id': compra.comp_id,
+                    'id': compra.comp_id, # Usamos 'id' como nombre genérico
+                    'compra_id': compra.comp_id, # Retrocompatibilidad
                     'fecha': compra.comp_fecha,
                     'numero_factura': compra.comp_numero_factura,
-                    'tipo': compra.comp_tipo,
+                    'comprobante_tipo': compra.comp_tipo,
                     'total': total,
                     'imputado': imputado,
                     'saldo_pendiente': saldo,
+                    'tipo': 'compra'
                 })
+
+        # Procesar ajustes débito
+        for aj in ajustes_debito:
+            total = aj.aj_monto or Decimal('0.00')
+            imputado = Imputacion.objects.filter(
+                destino_content_type=ajuste_ct,
+                destino_id=aj.aj_id
+            ).aggregate(total=Sum('imp_monto'))['total'] or Decimal('0.00')
+
+            saldo = total - imputado
+            if saldo > Decimal('0.00'):
+                pendientes.append({
+                    'id': aj.aj_id,
+                    'fecha': aj.aj_fecha,
+                    'numero_factura': aj.aj_numero,
+                    'comprobante_tipo': 'ajuste_debito',
+                    'total': total,
+                    'imputado': imputado,
+                    'saldo_pendiente': saldo,
+                    'tipo': 'ajuste'
+                })
+
+        # Ordenar por fecha
+        pendientes.sort(key=lambda x: x['fecha'])
 
         return Response({
             'proveedor_id': proveedor_id,
@@ -248,16 +278,24 @@ def crear_orden_pago(request):
                     pagos=pagos,
                 )
 
-            # Crear imputaciones a compras
+            # Crear imputaciones a compras o ajustes débito
             imputaciones = data.get('imputaciones', [])
             if imputaciones:
                 facturas_a_imputar = []
                 for imp_data in imputaciones:
-                    compra = Compra.objects.filter(pk=imp_data['compra_id']).first()
-                    if not compra:
-                        raise ValueError(f"Compra {imp_data['compra_id']} no encontrada")
+                    factura_id = imp_data.get('compra_id') or imp_data.get('factura_id')
+                    tipo_destino = imp_data.get('tipo', 'compra')
+                    
+                    if tipo_destino == 'ajuste':
+                        doc_destino = AjusteProveedor.objects.filter(pk=factura_id, aj_proveedor_id=proveedor_id, aj_tipo='DEBITO').first()
+                    else:
+                        doc_destino = Compra.objects.filter(pk=factura_id, comp_idpro=proveedor_id).first()
+                        
+                    if not doc_destino:
+                        raise ValueError(f"Documento destino {factura_id} (tipo: {tipo_destino}) no encontrado o no pertenece al proveedor")
+                        
                     facturas_a_imputar.append({
-                        'factura': compra,
+                        'factura': doc_destino,
                         'monto': imp_data['monto'],
                         'observacion': imp_data.get('observacion', ''),
                     })
@@ -265,10 +303,7 @@ def crear_orden_pago(request):
                 imputar_deuda(
                     comprobante_pago=orden_pago,
                     facturas_a_imputar=facturas_a_imputar,
-                    modelo_imputacion=ImputacionCompra,
-                    campo_factura='imp_id_compra',
-                    campo_pago='imp_id_orden_pago',
-                    validar_cliente=False,  # No aplica validación de mismo proveedor en este flujo
+                    validar_cliente=False,
                 )
 
             return Response({
@@ -307,7 +342,9 @@ def anular_orden_pago(request, op_id):
 
         with transaction.atomic():
             # Eliminar imputaciones asociadas
-            ImputacionCompra.objects.filter(imp_id_orden_pago=orden_pago).delete()
+            from django.contrib.contenttypes.models import ContentType
+            op_ct = ContentType.objects.get_for_model(orden_pago)
+            Imputacion.objects.filter(origen_content_type=op_ct, origen_id=orden_pago.pk).delete()
 
             # Marcar como anulada
             orden_pago.op_estado = OrdenPago.ESTADO_ANULADO
@@ -336,74 +373,76 @@ def imputar_orden_pago(request):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        op_id = data['orden_pago_id']
+        op_id = data.get('orden_pago_id') # Por compatibilidad con serializer actual
         proveedor_id = data['proveedor_id']
         imputaciones = data['imputaciones']
-
-        print(f"IMPUTANDO OP: {op_id} PROVEEDOR: {proveedor_id}") 
-
-        # Buscar Orden de Pago
-        orden_pago = OrdenPago.objects.filter(pk=op_id, op_proveedor_id=proveedor_id).first()
         
-        # Si no es OP, intentar buscar Nota de Crédito (que es una Compra con tipo NC)
-        # OJO: La vista trae 'id', que para compras es positivo.
-        # Si el frontend manda op_id positivo para NC, aquí fallará porque busca en OrdenPago.
-        # Necesitamos saber el tipo origen.
-        # El frontend manda 'op_id || id'.
-        # Si es NC, es una Compra.
-        
+        # Nuevos campos para ID compuesto
+        origen_tipo = request.data.get('origen_tipo')
+        origen_id = request.data.get('origen_id', op_id)
+
+        print(f"IMPUTANDO PROVEEDOR - ORIGEN TIPO: {origen_tipo} ID: {origen_id}") 
+
         comprobante_pago = None
-        modelo_imputacion = None
-        campo_pago = None
         
-        if orden_pago:
-            comprobante_pago = orden_pago
-            modelo_imputacion = ImputacionCompra
-            campo_pago = 'imp_id_orden_pago'
+        if origen_tipo == 'ajuste_credito':
+            comprobante_pago = AjusteProveedor.objects.filter(pk=origen_id, aj_proveedor_id=proveedor_id).first()
+            if comprobante_pago and comprobante_pago.aj_estado != 'A':
+                return Response({'detail': 'El ajuste no está activo'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        elif origen_tipo == 'orden_pago':
+            comprobante_pago = OrdenPago.objects.filter(pk=origen_id, op_proveedor_id=proveedor_id).first()
+            if comprobante_pago and comprobante_pago.op_estado != OrdenPago.ESTADO_ACTIVO:
+                return Response({'detail': 'La orden de pago no está activa'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        elif origen_tipo in ['NOTA_CREDITO', 'NOTA_CREDITO_INTERNA', 'compra_nota_credito']:
+            comprobante_pago = Compra.objects.filter(pk=origen_id, comp_idpro=proveedor_id).first()
+        
         else:
-            # Intentar buscar como Nota de Crédito (Compra)
-            # Para imputar una NC a una Factura, necesitamos una tabla de imputación entre Compras?
-            # En el sistema actual, ¿se pueden imputar NCs de proveedores a Facturas de proveedores?
-            # ImputacionCompra vincula OrdenPago -> Compra.
-            # Si tengo una NC (Compra negativo), ¿cómo la imputo a una Factura (Compra positivo)?
-            # Requiero saber si el modelo admite NC contra Factura.
-            # Por ahora, asumamos solo Orden Pago -> Factura, ya que ImputacionCompra es explícito en OP.
-            return Response(
-                {'detail': 'Orden de pago no encontrada o no pertenece al proveedor'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            # Fallback para no romper si el frontend todavía manda el ID virtual (retrocompatibilidad temporal)
+            if isinstance(origen_id, int) and origen_id < -1000000:
+                real_id = (origen_id * -1) - 1000000
+                comprobante_pago = AjusteProveedor.objects.filter(pk=real_id, aj_proveedor_id=proveedor_id).first()
+            elif isinstance(origen_id, int) and origen_id < 0:
+                real_id = origen_id * -1
+                comprobante_pago = OrdenPago.objects.filter(pk=real_id, op_proveedor_id=proveedor_id).first()
+            else:
+                # Intentar buscar como OP por defecto si no hay tipo (comportamiento anterior)
+                comprobante_pago = OrdenPago.objects.filter(pk=origen_id, op_proveedor_id=proveedor_id).first()
 
-        if orden_pago.op_estado != OrdenPago.ESTADO_ACTIVO:
+        if not comprobante_pago:
             return Response(
-                {'detail': 'La orden de pago no está activa'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'detail': 'Comprobante de origen no encontrado o no pertenece al proveedor'},
+                status=status.HTTP_404_NOT_FOUND
             )
 
         # Preparar datos para el servicio de imputación
         facturas_a_imputar = []
         for imp_data in imputaciones:
-            compra_id = imp_data['factura_id'] # El serializer usa factura_id
-            compra = Compra.objects.filter(pk=compra_id, comp_idpro=proveedor_id).first()
+            factura_id = imp_data['factura_id']
+            tipo_destino = imp_data.get('tipo', 'compra') # El frontend debe mandar esto
             
-            if not compra:
+            if tipo_destino == 'ajuste':
+                doc_destino = AjusteProveedor.objects.filter(pk=factura_id, aj_proveedor_id=proveedor_id, aj_tipo='DEBITO').first()
+            else:
+                doc_destino = Compra.objects.filter(pk=factura_id, comp_idpro=proveedor_id).first()
+            
+            if not doc_destino:
                 return Response(
-                    {'detail': f'Compra {compra_id} no encontrada o no pertenece al proveedor'},
+                    {'detail': f'Documento {factura_id} (tipo: {tipo_destino}) no encontrado o no pertenece al proveedor'},
                     status=status.HTTP_404_NOT_FOUND
                 )
             
             facturas_a_imputar.append({
-                'factura': compra,
+                'factura': doc_destino,
                 'monto': imp_data['monto'],
                 'observacion': imp_data.get('observacion', ''),
             })
 
         with transaction.atomic():
             imputar_deuda(
-                comprobante_pago=orden_pago,
+                comprobante_pago=comprobante_pago,
                 facturas_a_imputar=facturas_a_imputar,
-                modelo_imputacion=ImputacionCompra,
-                campo_factura='imp_id_compra',
-                campo_pago='imp_id_orden_pago',
                 validar_cliente=False,
             )
 
@@ -425,22 +464,53 @@ def detalle_comprobante_proveedor(request, comprobante_id):
     """
     try:
         # Determinar si el ID es de una OP (negativo en la vista) o Compra (positivo)
-        # El frontend mandará el ID que tiene en la tabla.
-        # En la vista SQL: id = -op.OP_ID para OPs y id = c.COMP_ID para compras.
+        # O un Ajuste (ID negativo con offset 1.000.000)
+        
+        tipo_query = request.GET.get('tipo', '')
         
         try:
             cid = int(comprobante_id)
         except ValueError:
             return Response({'detail': 'ID de comprobante inválido'}, status=status.HTTP_400_BAD_REQUEST)
             
-        is_op = cid < 0
         real_id = abs(cid)
+        is_ajuste = tipo_query in ['ajuste_debito', 'ajuste_credito'] or real_id >= 1000000
+        is_op = (cid < 0 and not is_ajuste) or tipo_query == 'orden_pago'
         
         cabecera = {}
         resumen = {'total': '0.00', 'imputado': '0.00', 'restante': '0.00'}
         asociados = []
         
-        if is_op:
+        if is_ajuste:
+            # El ID en la vista viene como -(ID + 1.000.000)
+            ajuste_id = real_id
+            if ajuste_id >= 1000000:
+                ajuste_id -= 1000000
+                
+            ajuste = AjusteProveedor.objects.filter(pk=ajuste_id).first()
+            if not ajuste:
+                return Response({'detail': f'Ajuste {ajuste_id} no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            
+            tipo_label = 'Ajuste Débito' if ajuste.aj_tipo == 'DEBITO' else 'Ajuste Crédito'
+            cabecera = {
+                'id': cid,
+                'fecha': str(ajuste.aj_fecha),
+                'numero_formateado': ajuste.aj_numero,
+                'comprobante_nombre': tipo_label,
+                'proveedor': {
+                    'razon': ajuste.aj_proveedor.razon if ajuste.aj_proveedor else 'Sin Proveedor',
+                    'id': ajuste.aj_proveedor.pk if ajuste.aj_proveedor else None
+                }
+            }
+            resumen = {
+                'total': str(ajuste.aj_monto),
+                'imputado': '0.00',
+                'restante': str(ajuste.aj_monto)
+            }
+            # Por ahora los ajustes no se imputan directamente en esta tabla de la manera que Compra/OP
+            # asociados queda vacío.
+
+        elif is_op:
             # Es una Orden de Pago
             op = OrdenPago.objects.filter(pk=real_id).first()
             if not op:
@@ -457,7 +527,10 @@ def detalle_comprobante_proveedor(request, comprobante_id):
                 }
             }
             
-            imputado = ImputacionCompra.objects.filter(imp_id_orden_pago=op).aggregate(s=Sum('imp_monto'))['s'] or Decimal('0.00')
+            from django.contrib.contenttypes.models import ContentType
+            op_ct = ContentType.objects.get_for_model(op)
+            
+            imputado = Imputacion.objects.filter(origen_content_type=op_ct, origen_id=op.pk).aggregate(s=Sum('imp_monto'))['s'] or Decimal('0.00')
             resumen = {
                 'total': str(op.op_total),
                 'imputado': str(imputado),
@@ -465,15 +538,27 @@ def detalle_comprobante_proveedor(request, comprobante_id):
             }
             
             # Facturas canceladas por esta OP
-            imps = ImputacionCompra.objects.filter(imp_id_orden_pago=op)
+            imps = Imputacion.objects.filter(origen_content_type=op_ct, origen_id=op.pk)
             for imp in imps:
+                destino = imp.destino
+                
+                # Nombre descriptivo según tipo
+                nombre = 'Factura'
+                numero = getattr(destino, 'comp_numero_factura', '')
+                if hasattr(destino, 'aj_numero'):
+                    nombre = 'Ajuste Débito' if destino.aj_tipo == 'DEBITO' else 'Ajuste Crédito'
+                    numero = destino.aj_numero
+                elif 'CREDITO' in getattr(destino, 'comp_tipo', ''):
+                    nombre = 'Nota de Crédito'
+                
                 asociados.append({
-                    'id': imp.imp_id_compra.pk,
-                    'numero_formateado': imp.imp_id_compra.comp_numero_factura or f"Factura {imp.imp_id_compra.pk}",
-                    'comprobante_nombre': 'Factura de Compra',
-                    'fecha': str(imp.imp_id_compra.comp_fecha),
-                    'total': str(imp.imp_id_compra.comp_total_final),
-                    'imputado': str(imp.imp_monto)
+                    'id': destino.pk,
+                    'numero_formateado': numero or f"Doc {destino.pk}",
+                    'comprobante_nombre': nombre,
+                    'fecha': str(imp.imp_fecha), # Fecha de la IMPUTACION
+                    'total': str(_get_total_imputable(destino)),
+                    'imputado': str(imp.imp_monto),
+                    'imp_id': imp.imp_id
                 })
         else:
             # Es una Compra (Factura o Nota de Crédito)
@@ -492,7 +577,10 @@ def detalle_comprobante_proveedor(request, comprobante_id):
                 }
             }
             
-            imputado = ImputacionCompra.objects.filter(imp_id_compra=compra).aggregate(s=Sum('imp_monto'))['s'] or Decimal('0.00')
+            from django.contrib.contenttypes.models import ContentType
+            compra_ct = ContentType.objects.get_for_model(compra)
+            
+            imputado = Imputacion.objects.filter(destino_content_type=compra_ct, destino_id=compra.pk).aggregate(s=Sum('imp_monto'))['s'] or Decimal('0.00')
             resumen = {
                 'total': str(compra.comp_total_final),
                 'imputado': str(imputado),
@@ -500,15 +588,17 @@ def detalle_comprobante_proveedor(request, comprobante_id):
             }
             
             # OPs que imputan a esta factura
-            imps = ImputacionCompra.objects.filter(imp_id_compra=compra)
+            imps = Imputacion.objects.filter(destino_content_type=compra_ct, destino_id=compra.pk)
             for imp in imps:
+                origen = imp.origen
                 asociados.append({
-                    'id': -imp.imp_id_orden_pago.pk,
-                    'numero_formateado': imp.imp_id_orden_pago.op_numero,
+                    'id': -origen.pk,
+                    'numero_formateado': getattr(origen, 'op_numero', f"OP {origen.pk}"),
                     'comprobante_nombre': 'Orden de Pago',
-                    'fecha': str(imp.imp_id_orden_pago.op_fecha),
-                    'total': str(imp.imp_id_orden_pago.op_total),
-                    'imputado': str(imp.imp_monto)
+                    'fecha': str(imp.imp_fecha), # Fecha de la IMPUTACION
+                    'total': str(_get_total_imputable(origen)),
+                    'imputado': str(imp.imp_monto),
+                    'imp_id': imp.imp_id
                 })
 
         return Response({
@@ -519,3 +609,65 @@ def detalle_comprobante_proveedor(request, comprobante_id):
     except Exception as e:
         logger.error(f"Error en detalle_comprobante_proveedor: {e}")
         return Response({'detail': 'Error interno'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def crear_ajuste_proveedor(request):
+    """
+    Crea un ajuste débito/crédito en la cuenta corriente de un proveedor.
+    
+    - Ajuste Débito: aumenta la deuda (DEBE en CC)
+    - Ajuste Crédito: reduce la deuda (HABER en CC)
+    
+    No requiere sesión de caja (es un registro contable, no movimiento de caja).
+    """
+    serializer = AjusteProveedorCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    data = serializer.validated_data
+    
+    try:
+        proveedor = Proveedor.objects.get(pk=data['proveedor_id'])
+    except Proveedor.DoesNotExist:
+        return Response(
+            {'detail': f"Proveedor con ID {data['proveedor_id']} no encontrado."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    try:
+        with transaction.atomic():
+            ajuste = AjusteProveedor.objects.create(
+                aj_tipo=data['tipo'],
+                aj_proveedor=proveedor,
+                aj_fecha=data['fecha'],
+                aj_numero=data['numero'],
+                aj_monto=data['monto'],
+                aj_observacion=data.get('observacion', ''),
+                aj_usuario=request.user,
+            )
+        
+        tipo_label = 'Débito' if data['tipo'] == 'DEBITO' else 'Crédito'
+        logger.info(
+            f"Ajuste {tipo_label} creado: {ajuste.aj_numero} - "
+            f"Proveedor: {proveedor} - Monto: ${ajuste.aj_monto} - "
+            f"Usuario: {request.user.username}"
+        )
+        
+        return Response(
+            AjusteProveedorSerializer(ajuste).data,
+            status=status.HTTP_201_CREATED
+        )
+    except Exception as e:
+        logger.error(f"Error creando ajuste proveedor: {e}")
+        return Response(
+            {'detail': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+def _get_total_imputable(obj):
+    """Retorna el total de un objeto para mostrar en el detalle de CC."""
+    if hasattr(obj, 'op_total'): return obj.op_total
+    if hasattr(obj, 'comp_total_final'): return obj.comp_total_final
+    if hasattr(obj, 'aj_monto'): return obj.aj_monto
+    return Decimal('0.00')

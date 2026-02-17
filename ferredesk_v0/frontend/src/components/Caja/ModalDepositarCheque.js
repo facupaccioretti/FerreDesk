@@ -2,7 +2,15 @@
 
 import { useState } from "react"
 
-const ModalDepositarCheque = ({ cuentasBanco = [], onConfirmar, onCancelar, loading }) => {
+const ModalDepositarCheque = ({
+  cuentasBanco = [],
+  onConfirmar,
+  onCancelar,
+  loading,
+  titulo = "Depositar cheque",
+  textoBoton = "Depositar",
+  textoLabel = "Cuenta bancaria destino",
+}) => {
   const [cuentaId, setCuentaId] = useState("")
   const [error, setError] = useState("")
 
@@ -21,12 +29,12 @@ const ModalDepositarCheque = ({ cuentasBanco = [], onConfirmar, onCancelar, load
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancelar} />
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 text-white text-sm font-semibold">
-          Depositar cheque
+          {titulo}
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
           <div className="space-y-1">
-            <label className="text-xs text-slate-600 font-medium">Cuenta bancaria destino</label>
+            <label className="text-xs text-slate-600 font-medium">{textoLabel}</label>
             <select
               className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               value={cuentaId}
@@ -43,7 +51,7 @@ const ModalDepositarCheque = ({ cuentasBanco = [], onConfirmar, onCancelar, load
               Cancelar
             </button>
             <button type="submit" disabled={loading} className="text-sm px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50">
-              {loading ? "Guardando..." : "Depositar"}
+              {loading ? "Guardando..." : textoBoton}
             </button>
           </div>
         </form>
@@ -53,3 +61,4 @@ const ModalDepositarCheque = ({ cuentasBanco = [], onConfirmar, onCancelar, load
 }
 
 export default ModalDepositarCheque
+

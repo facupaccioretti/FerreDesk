@@ -22,6 +22,7 @@ import SelectorDocumento from './herramientasforms/SelectorDocumento';
 import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal';
 import ModalCobroVenta from './herramientasforms/ModalCobroVenta';
 import { useListasPrecioAPI } from '../../utils/useListasPrecioAPI';
+import { fechaHoyLocal } from '../../utils/fechas';
 
 const ConVentaForm = ({
   onSave,
@@ -194,7 +195,7 @@ const ConVentaForm = ({
         vendedorId: '',
         sucursalId: sucursales[0]?.id || '',
         puntoVentaId: puntosVenta[0]?.id || '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: fechaHoyLocal(),
         estado: 'Abierto',
         tipo: 'Venta',
         items: [],
@@ -245,7 +246,7 @@ const ConVentaForm = ({
         descu2: data.ven_descu2 ?? data.descu2 ?? 0,
         descu3: data.ven_descu3 ?? data.descu3 ?? 0,
         copia: data.ven_copia ?? data.copia ?? 1,
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: fechaHoyLocal(),
         estado: 'Abierto',
         tipo: 'Venta',
         items: itemsNormalizados,

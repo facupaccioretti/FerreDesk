@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fechaHoyLocal } from './fechas';
 
 export const useStockBajoAPI = () => {
   const [productos, setProductos] = useState([]);
@@ -51,7 +52,7 @@ export const useStockBajoAPI = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `informe_stock_bajo_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `informe_stock_bajo_${fechaHoyLocal()}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

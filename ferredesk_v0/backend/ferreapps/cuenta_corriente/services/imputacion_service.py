@@ -1,75 +1,46 @@
 """
-Servicio genérico de imputación para gestión de deudas.
+Servicio unificado de imputación para gestión de deudas.
 
 Proporciona funcionalidad reutilizable para imputar pagos/cobros a facturas/compras,
-siguiendo principios DRY y SOLID.
+utilizando el modelo unificado Imputacion con ContentType.
 """
 from decimal import Decimal
-from typing import List, Dict, Any, Type
+from typing import List, Dict, Any
 from django.db import transaction
 from django.db.models import Model, Sum
 from django.utils import timezone
+from django.contrib.contenttypes.models import ContentType
+from ..models import Imputacion
 
 
 def imputar_deuda(
-    comprobante_pago: Model,
-    facturas_a_imputar: List[Dict[str, Any]],
-    modelo_imputacion: Type[Model],
-    campo_factura: str = 'imp_id_venta',
-    campo_pago: str = 'imp_id_recibo',
+    comprobante_pago: Model,      # El que pone la plata (Recibo/OP/AjusteCredito)
+    facturas_a_imputar: List[Dict[str, Any]], # [{factura: Model, monto: Decimal, observacion: str}]
     validar_cliente: bool = True
-) -> List[Model]:
+) -> List[Imputacion]:
     """
-    Función genérica para imputar un comprobante de pago/cobro a facturas/compras.
-    
-    Args:
-        comprobante_pago: Instancia del comprobante que realiza el pago (Recibo/OrdenPago)
-        facturas_a_imputar: Lista de dicts con 'factura' (instancia), 'monto', 'observacion'
-        modelo_imputacion: Clase del modelo de imputación (ImputacionVenta/ImputacionCompra)
-        campo_factura: Nombre del campo FK a factura en el modelo de imputación
-        campo_pago: Nombre del campo FK a pago en el modelo de imputación
-        validar_cliente: Si True, valida que todas las facturas sean del mismo cliente/proveedor
-    
-    Returns:
-        Lista de imputaciones creadas
-        
-    Raises:
-        ValueError: Si hay errores de validación
+    Función unificada para imputar un comprobante de pago/cobro a facturas/compras.
     """
     imputaciones_creadas = []
     fecha_imputacion = timezone.now().date()
     
     if not facturas_a_imputar:
-        raise ValueError("Debe especificar al menos una factura a imputar")
+        return []
+    
+    origen_ct = ContentType.objects.get_for_model(comprobante_pago)
     
     # Validar mismo cliente/proveedor
     if validar_cliente:
-        # Obtener el campo de cliente/proveedor del comprobante de pago
-        if hasattr(comprobante_pago, 'ven_idcli'):
-            entidad_pago = comprobante_pago.ven_idcli
-        elif hasattr(comprobante_pago, 'op_proveedor'):
-            entidad_pago = comprobante_pago.op_proveedor
-        else:
-            raise ValueError("El comprobante de pago no tiene cliente/proveedor asociado")
-        
+        entidad_pago = _get_entidad(comprobante_pago)
         for item in facturas_a_imputar:
-            factura = item['factura']
-            
-            # Obtener entidad de la factura
-            if hasattr(factura, 'ven_idcli'):
-                entidad_factura = factura.ven_idcli
-            elif hasattr(factura, 'comp_idpro'):
-                entidad_factura = factura.comp_idpro
-            else:
-                raise ValueError("La factura no tiene cliente/proveedor asociado")
-            
+            entidad_factura = _get_entidad(item['factura'])
             if entidad_factura.id != entidad_pago.id:
                 raise ValueError(
-                    f"La factura {factura.pk} no pertenece al mismo "
-                    f"cliente/proveedor del comprobante de pago"
+                    f"El documento {item['factura'].pk} no pertenece a la misma "
+                    f"entidad que el comprobante de pago"
                 )
     
-    # Validar saldos disponibles
+    # Validar saldos disponibles en DESTINOS
     for item in facturas_a_imputar:
         factura = item['factura']
         monto = Decimal(str(item['monto']))
@@ -77,35 +48,23 @@ def imputar_deuda(
         if monto <= 0:
             raise ValueError(f"El monto a imputar debe ser mayor a cero, recibido: {monto}")
         
-        # Calcular saldo pendiente de la factura
-        imputaciones_existentes = modelo_imputacion.objects.filter(
-            **{campo_factura: factura}
+        destino_ct = ContentType.objects.get_for_model(factura)
+        
+        # Calcular saldo pendiente del destino
+        imputaciones_existentes = Imputacion.objects.filter(
+            destino_content_type=destino_ct,
+            destino_id=factura.pk
         ).aggregate(total=Sum('imp_monto'))
         
         total_imputado = imputaciones_existentes['total'] or Decimal('0.00')
+        total_documento = _get_total_documento(factura)
         
-        # Obtener total de la factura
-        if hasattr(factura, 'ven_total'):
-            total_factura = Decimal(str(factura.ven_total))
-        elif hasattr(factura, 'comp_total_final'):
-            total_factura = Decimal(str(factura.comp_total_final))
-        elif hasattr(factura, 'comp_total'):
-            total_factura = Decimal(str(factura.comp_total))
-        else:
-            # Intentar obtener de VentaCalculada/CompraCalculada
-            from ferreapps.ventas.models import VentaCalculada
-            vc = VentaCalculada.objects.filter(ven_id=factura.pk).first()
-            if vc:
-                total_factura = Decimal(str(vc.ven_total))
-            else:
-                raise ValueError(f"No se pudo determinar el total de la factura {factura.pk}")
-        
-        saldo_pendiente = total_factura - total_imputado
+        saldo_pendiente = total_documento - total_imputado
         
         if monto > saldo_pendiente:
             raise ValueError(
                 f"El monto a imputar (${monto}) excede el saldo pendiente "
-                f"de la factura (${saldo_pendiente})"
+                f"del documento (${saldo_pendiente})"
             )
     
     # Crear imputaciones
@@ -113,31 +72,30 @@ def imputar_deuda(
         factura = item['factura']
         monto = Decimal(str(item['monto']))
         observacion = item.get('observacion', '')
+        destino_ct = ContentType.objects.get_for_model(factura)
         
-        # Verificar si ya existe imputación del mismo día
-        imputacion_existente = modelo_imputacion.objects.filter(
-            **{
-                campo_factura: factura,
-                campo_pago: comprobante_pago,
-                'imp_fecha': fecha_imputacion
-            }
+        # Verificar si ya existe imputación idéntica hoy
+        imputacion_existente = Imputacion.objects.filter(
+            origen_content_type=origen_ct,
+            origen_id=comprobante_pago.pk,
+            destino_content_type=destino_ct,
+            destino_id=factura.pk,
+            imp_fecha=fecha_imputacion
         ).first()
         
         if imputacion_existente:
-            # Acumular al monto existente
             imputacion_existente.imp_monto += monto
             imputacion_existente.save()
             imputaciones_creadas.append(imputacion_existente)
         else:
-            # Crear nueva imputación
-            imputacion = modelo_imputacion.objects.create(
-                **{
-                    campo_factura: factura,
-                    campo_pago: comprobante_pago,
-                    'imp_fecha': fecha_imputacion,
-                    'imp_monto': monto,
-                    'imp_observacion': observacion
-                }
+            imputacion = Imputacion.objects.create(
+                origen_content_type=origen_ct,
+                origen_id=comprobante_pago.pk,
+                destino_content_type=destino_ct,
+                destino_id=factura.pk,
+                imp_fecha=fecha_imputacion,
+                imp_monto=monto,
+                imp_observacion=observacion
             )
             imputaciones_creadas.append(imputacion)
     
@@ -147,40 +105,17 @@ def imputar_deuda(
 def validar_saldo_comprobante_pago(
     comprobante_pago: Model,
     monto_a_imputar: Decimal,
-    modelo_imputacion: Type[Model],
-    campo_pago: str = 'imp_id_recibo'
 ) -> Decimal:
     """
     Valida que el comprobante de pago tenga saldo suficiente para imputar.
-    
-    Args:
-        comprobante_pago: Instancia del comprobante de pago
-        monto_a_imputar: Monto que se desea imputar
-        modelo_imputacion: Modelo de imputación
-        campo_pago: Nombre del campo FK al comprobante de pago
-    
-    Returns:
-        Saldo disponible del comprobante
-        
-    Raises:
-        ValueError: Si no hay saldo suficiente
     """
-    # Obtener total del comprobante de pago
-    if hasattr(comprobante_pago, 'ven_total'):
-        total_comprobante = Decimal(str(comprobante_pago.ven_total))
-    elif hasattr(comprobante_pago, 'op_total'):
-        total_comprobante = Decimal(str(comprobante_pago.op_total))
-    else:
-        from ferreapps.ventas.models import VentaCalculada
-        vc = VentaCalculada.objects.filter(ven_id=comprobante_pago.pk).first()
-        if vc:
-            total_comprobante = Decimal(str(vc.ven_total))
-        else:
-            raise ValueError("No se pudo determinar el total del comprobante de pago")
+    total_comprobante = _get_total_documento(comprobante_pago)
+    origen_ct = ContentType.objects.get_for_model(comprobante_pago)
     
     # Calcular ya imputado
-    imputaciones_existentes = modelo_imputacion.objects.filter(
-        **{campo_pago: comprobante_pago}
+    imputaciones_existentes = Imputacion.objects.filter(
+        origen_content_type=origen_ct,
+        origen_id=comprobante_pago.pk
     ).aggregate(total=Sum('imp_monto'))
     
     total_imputado = imputaciones_existentes['total'] or Decimal('0.00')
@@ -193,3 +128,40 @@ def validar_saldo_comprobante_pago(
         )
     
     return saldo_disponible
+
+
+def _get_entidad(obj: Model):
+    """Retorna el cliente o proveedor asociado al objeto."""
+    if hasattr(obj, 'ven_idcli'):
+        return obj.ven_idcli
+    if hasattr(obj, 'rec_cliente'): # Nuevo modelo independiente
+        return obj.rec_cliente
+    if hasattr(obj, 'op_proveedor'):
+        return obj.op_proveedor
+    if hasattr(obj, 'comp_idpro'):
+        return obj.comp_idpro
+    if hasattr(obj, 'aj_proveedor'):
+        return obj.aj_proveedor
+    raise ValueError(f"No se pudo determinar la entidad para {obj}")
+
+
+def _get_total_documento(obj: Model) -> Decimal:
+    """Retorna el total monetario del documento."""
+    if hasattr(obj, 'ven_total'):
+        return Decimal(str(obj.ven_total))
+    if hasattr(obj, 'rec_total'): # Nuevo modelo independiente
+        return Decimal(str(obj.rec_total))
+    if hasattr(obj, 'op_total'):
+        return Decimal(str(obj.op_total))
+    if hasattr(obj, 'comp_total_final'):
+        return Decimal(str(obj.comp_total_final))
+    if hasattr(obj, 'aj_monto'):
+        return Decimal(str(obj.aj_monto))
+        
+    # Fallback para VentaCalculada/CompraCalculada
+    from ferreapps.ventas.models import VentaCalculada
+    vc = VentaCalculada.objects.filter(ven_id=obj.pk).first()
+    if vc:
+        return Decimal(str(vc.ven_total))
+        
+    raise ValueError(f"No se pudo determinar el total para {obj}")

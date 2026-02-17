@@ -105,15 +105,34 @@ const useCuentaCorrienteProveedorAPI = () => {
 
     // Imputar orden de pago o nota de crédito
     const imputarOrdenPago = useCallback(async (datosImputacion) => {
+        // Enviar ID compuesto
+        const payload = {
+            ...datosImputacion,
+            origen_tipo: datosImputacion.tipo || datosImputacion.comprobante_tipo,
+            origen_id: datosImputacion.id || datosImputacion.orden_pago_id
+        };
+
         return await makeRequest(`/api/cuenta-corriente/proveedor/imputar/`, {
             method: 'POST',
-            body: JSON.stringify(datosImputacion)
+            body: JSON.stringify(payload)
+        });
+    }, [makeRequest]);
+
+    // Crear ajuste débito/crédito proveedor
+    const crearAjusteProveedor = useCallback(async (ajusteData) => {
+        return await makeRequest('/api/cuenta-corriente/crear-ajuste-proveedor/', {
+            method: 'POST',
+            body: JSON.stringify(ajusteData),
         });
     }, [makeRequest]);
 
     // Obtener detalle de un comprobante de proveedor
-    const getDetalleComprobanteProveedor = useCallback(async (comprobanteId) => {
-        return await makeRequest(`/api/cuenta-corriente/comprobante-proveedor/${comprobanteId}/detalle/`);
+    const getDetalleComprobanteProveedor = useCallback(async (comprobanteId, tipo = '') => {
+        let url = `/api/cuenta-corriente/comprobante-proveedor/${comprobanteId}/detalle/`;
+        if (tipo) {
+            url += `?tipo=${tipo}`;
+        }
+        return await makeRequest(url);
     }, [makeRequest]);
 
     // Obtener métodos de pago
@@ -150,6 +169,13 @@ const useCuentaCorrienteProveedorAPI = () => {
         }
     }, [makeRequest]);
 
+    // Anular imputación individual
+    const eliminarImputacion = useCallback(async (impId) => {
+        return await makeRequest(`/api/cuenta-corriente/imputacion/${impId}/eliminar/`, {
+            method: 'POST',
+        });
+    }, [makeRequest]);
+
     return {
         loading,
         error,
@@ -164,6 +190,8 @@ const useCuentaCorrienteProveedorAPI = () => {
         getFacturasPendientes,
         imputarOrdenPago,
         getDetalleComprobanteProveedor,
+        crearAjusteProveedor,
+        eliminarImputacion,
     };
 };
 

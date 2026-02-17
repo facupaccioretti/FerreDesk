@@ -1,6 +1,6 @@
 "use client"
 
-import { BotonEditar, BotonEliminar, BotonDesactivar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir, BotonMarcarRechazado, BotonEndosar, BotonDepositar, BotonReactivar } from "../../Botones"
+import { BotonEditar, BotonEliminar, BotonDesactivar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir, BotonMarcarRechazado, BotonEndosar, BotonDepositar, BotonReactivar, BotonAcreditar } from "../../Botones"
 import usePortalTooltip from "./usePortalTooltip"
 
 /**
@@ -69,24 +69,24 @@ const AccionesMenu = ({
                     title={boton.titulo}
                   >
                     <div className="flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center">
-                      <ComponenteBoton 
-                        onClick={() => {}} // El onClick se maneja en el botón padre
+                      <ComponenteBoton
+                        onClick={() => { }} // El onClick se maneja en el botón padre
                         disabled={boton.disabled}
-                        className={`!p-0 !m-0 [&>svg]:w-3.5 [&>svg]:h-3.5 ${
-                          boton.componente === BotonEditar ? 'text-blue-500' :
-                          boton.componente === BotonConvertir ? 'text-violet-500' :
-                          boton.componente === BotonEliminar ? 'text-red-500' :
-                          boton.componente === BotonGenerarPDF ? 'text-red-500' :
-                          boton.componente === BotonVerDetalle ? 'text-slate-600' :
-                          boton.componente === BotonNotaCredito ? 'text-orange-500' :
-                          boton.componente === BotonImprimir ? 'text-slate-600' :
-                          boton.componente === BotonDesactivar ? 'text-slate-500' :
-                          boton.componente === BotonMarcarRechazado ? 'text-red-500' :
-                          boton.componente === BotonEndosar ? 'text-indigo-500' :
-                          boton.componente === BotonDepositar ? 'text-orange-500' :
-                          boton.componente === BotonReactivar ? 'text-green-500' :
-                          'text-slate-600'
-                        }`}
+                        className={`!p-0 !m-0 [&>svg]:w-3.5 [&>svg]:h-3.5 ${boton.componente === BotonEditar ? 'text-blue-500' :
+                            boton.componente === BotonConvertir ? 'text-violet-500' :
+                              boton.componente === BotonEliminar ? 'text-red-500' :
+                                boton.componente === BotonGenerarPDF ? 'text-red-500' :
+                                  boton.componente === BotonVerDetalle ? 'text-slate-600' :
+                                    boton.componente === BotonNotaCredito ? 'text-orange-500' :
+                                      boton.componente === BotonImprimir ? 'text-slate-600' :
+                                        boton.componente === BotonDesactivar ? 'text-slate-500' :
+                                          boton.componente === BotonMarcarRechazado ? 'text-red-500' :
+                                            boton.componente === BotonEndosar ? 'text-indigo-500' :
+                                              boton.componente === BotonDepositar ? 'text-orange-500' :
+                                                boton.componente === BotonReactivar ? 'text-green-500' :
+                                                  boton.componente === BotonAcreditar ? 'text-emerald-500' :
+                                                    'text-slate-600'
+                          }`}
                       />
                     </div>
                     <span className="text-xs text-slate-700 font-medium text-left leading-tight">

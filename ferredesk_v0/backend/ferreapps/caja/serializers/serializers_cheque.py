@@ -68,6 +68,7 @@ class ChequeSerializer(serializers.ModelSerializer):
             'movimiento_caja_entrada_id',
             'movimiento_caja_salida_id',
             'comision_cambio',
+            'fecha_acreditacion',
         ]
         read_only_fields = [
             'id',
@@ -178,6 +179,17 @@ class ChequeDetalleSerializer(ChequeSerializer):
                 'fecha_hora': obj.fecha_deposito_real.isoformat() if obj.fecha_deposito_real else None,
                 'usuario': None,
                 'descripcion': f'Depositado en {obj.cuenta_banco_deposito.nombre}',
+            })
+        
+        # Acreditación (si tiene fecha_acreditacion)
+        if obj.fecha_acreditacion:
+            historial.append({
+                'estado': Cheque.ESTADO_ACREDITADO,
+                'estado_display': 'Acreditado',
+                'fecha': obj.fecha_acreditacion.date(),
+                'fecha_hora': obj.fecha_acreditacion.isoformat(),
+                'usuario': None,
+                'descripcion': f'Fondos acreditados en {obj.cuenta_banco_deposito.nombre if obj.cuenta_banco_deposito else "cuenta"}',
             })
         
         # Endoso (si tiene proveedor)

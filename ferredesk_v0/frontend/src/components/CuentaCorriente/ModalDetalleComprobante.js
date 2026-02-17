@@ -16,7 +16,7 @@ function LabelValor({ label, value }) {
 
 export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
   const theme = useFerreDeskTheme()
-  const { getDetalleComprobante } = useCuentaCorrienteAPI()
+  const { getDetalleComprobante, eliminarImputacion } = useCuentaCorrienteAPI()
   const [, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
@@ -25,7 +25,7 @@ export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
   const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
   const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-4"
 
-  const venId = itemBase?.ven_id
+  const venId = itemBase?.ven_id || itemBase?.id
 
   useEffect(() => {
     let activo = true
@@ -50,7 +50,7 @@ export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
   const cab = data?.cabecera || {
     numero_formateado: itemBase?.numero_formateado,
     comprobante_nombre: itemBase?.comprobante_nombre,
-    ven_fecha: itemBase?.ven_fecha,
+    ven_fecha: itemBase?.ven_fecha || itemBase?.fecha,
     cliente: {},
     observacion: ''
   }
@@ -145,11 +145,12 @@ export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
                           <th className="px-4 py-2 text-[10px] uppercase tracking-wide text-white">Fecha</th>
                           <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wide text-white">Total</th>
                           <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wide text-white">Imputado</th>
+                          <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wide text-white">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {asociados.length === 0 ? (
-                          <tr><td className="py-3 text-slate-400 text-center" colSpan={4}>Sin asociados</td></tr>
+                          <tr><td className="py-3 text-slate-400 text-center" colSpan={5}>Sin asociados</td></tr>
                         ) : asociados.map((a, idx) => (
                           <tr key={idx} className="border-t border-slate-100 hover:bg-slate-50">
                             <td className="px-4 py-2 font-medium">
@@ -158,6 +159,33 @@ export default function ModalDetalleComprobante({ open, onClose, itemBase }) {
                             <td className="px-4 py-2">{a.fecha}</td>
                             <td className="px-4 py-2 text-right">${a.total}</td>
                             <td className="px-4 py-2 text-right">${a.imputado}</td>
+                            <td className="px-4 py-2 text-center">
+                              {a.imp_id && (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm('¿Está seguro de que desea anular esta imputación individual?')) {
+                                      try {
+                                        await eliminarImputacion(a.imp_id);
+                                        // Refrescar datos
+                                        const detalle = await getDetalleComprobante(venId);
+                                        setData(detalle);
+                                      } catch (e) {
+                                        alert(e.message);
+                                      }
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 transition-colors p-1"
+                                  title="Anular esta imputación"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                  </svg>
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

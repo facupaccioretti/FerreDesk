@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 from django.db import transaction
+from django.utils import timezone
 
 from ...models import Venta
 from ferreapps.productos.models import Ferreteria
@@ -226,7 +227,7 @@ class FerreDeskARCA:
                             'resultado': cab_resp.Resultado,
                             'observaciones': observaciones_procesadas if observaciones_procesadas is not None else [],  # Lista procesada para frontend
                             'observaciones_raw': observaciones_raw,     # Estructura completa para debugging
-                            'fecha_emision': datetime.now()
+                            'fecha_emision': timezone.localtime()
                         }
                     else:
                         logger.error(f"CAE no encontrado en la respuesta")

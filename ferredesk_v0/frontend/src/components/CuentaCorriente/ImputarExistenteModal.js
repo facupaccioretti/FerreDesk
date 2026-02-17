@@ -14,16 +14,16 @@ import { useCuentaCorrienteAPI } from '../../utils/useCuentaCorrienteAPI';
  * @param {number} clienteId - ID del cliente
  * @param {function} onImputado - Callback cuando se completa la imputación
  */
-export default function ImputarExistenteModal({ 
-    open, 
-    onClose, 
-    comprobante, 
+export default function ImputarExistenteModal({
+    open,
+    onClose,
+    comprobante,
     clienteId,
-    onImputado 
+    onImputado
 }) {
     const theme = useFerreDeskTheme()
     const { cargarFacturasPendientes, imputarExistente } = useCuentaCorrienteAPI();
-    
+
     const [facturasPendientes, setFacturasPendientes] = useState([]);
     const [imputaciones, setImputaciones] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ export default function ImputarExistenteModal({
     );
 
     // Saldo disponible del comprobante
-    const saldoDisponible = comprobante?.saldo_pendiente || 0;
+    const saldoDisponible = Number(comprobante?.saldo_pendiente) || 0;
 
     const handleImputacionChange = (index, campo, valor) => {
         const nuevasImputaciones = [...imputaciones];
@@ -112,7 +112,8 @@ export default function ImputarExistenteModal({
 
         try {
             await imputarExistente({
-                comprobante_id: comprobante.ven_id,
+                comprobante_id: comprobante.id,
+                comprobante_tipo: comprobante.comprobante_tipo,
                 cliente_id: clienteId,
                 imputaciones: imputacionesValidas
             });
@@ -266,7 +267,9 @@ export default function ImputarExistenteModal({
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
                                                         {facturasPendientes.map((factura, index) => {
-                                                            const imputado = factura.ven_total - factura.saldo_pendiente;
+                                                            const total = Number(factura.ven_total) || 0;
+                                                            const pendiente = Number(factura.saldo_pendiente) || 0;
+                                                            const imputado = total - pendiente;
                                                             return (
                                                                 <tr key={factura.ven_id} className="hover:bg-slate-50">
                                                                     <td className="px-4 py-3 whitespace-nowrap">{factura.ven_fecha}</td>
@@ -274,7 +277,7 @@ export default function ImputarExistenteModal({
                                                                         {factura.comprobante_nombre ? `${factura.comprobante_nombre} ${factura.numero_formateado}` : factura.numero_formateado}
                                                                     </td>
                                                                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                                        ${parseFloat(factura.ven_total).toFixed(2)}
+                                                                        ${total.toFixed(2)}
                                                                     </td>
                                                                     <td className="px-4 py-3 whitespace-nowrap text-right">
                                                                         ${imputado.toFixed(2)}

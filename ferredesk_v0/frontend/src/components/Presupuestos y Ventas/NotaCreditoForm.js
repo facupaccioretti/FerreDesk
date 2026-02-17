@@ -18,6 +18,7 @@ import CuitStatusBanner from '../Alertas/CuitStatusBanner';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 import { esDocumentoEditable } from './herramientasforms/manejoFormulario';
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme';
+import { fechaHoyLocal } from '../../utils/fechas';
 
 const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales = [], puntosVenta = [], vendedores = [], plazos = []) => {
   if (!clienteSeleccionado) return {}; 
@@ -31,7 +32,7 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
     vendedorId: vendedores[0]?.id || '',
     sucursalId: sucursales[0]?.id || '',
     puntoVentaId: puntosVenta[0]?.id || '',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: fechaHoyLocal(),
     estado: 'Abierto',
     items: [],
     bonificacionGeneral: 0,

@@ -44,8 +44,9 @@ const CuentaCorrienteProveedorTable = ({
             })
         }
 
-        // Imputar (Solo para Ordenes de Pago o Notas de Crédito)
-        if (item.comprobante_tipo === 'orden_pago' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna' || item.comprobante_tipo === 'NOTA_CREDITO') {
+        // Imputar (Para deudas/créditos pendientes)
+        const tiposImputables = ['orden_pago', 'nota_credito', 'nota_credito_interna', 'NOTA_CREDITO', 'compra_nota_credito', 'ajuste_credito'];
+        if (tiposImputables.includes(item.comprobante_tipo)) {
             botones.push({
                 componente: () => (
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -102,6 +103,12 @@ const CuentaCorrienteProveedorTable = ({
                 } else if (item.comprobante_tipo === 'saldo_inicial') {
                     tipoLabel = 'Saldo Inicial';
                     tipoColor = 'text-slate-700';
+                } else if (item.comprobante_tipo === 'ajuste_debito') {
+                    tipoLabel = `Ajuste Débito ${item.numero_formateado || ''}`;
+                    tipoColor = 'text-orange-600 font-semibold';
+                } else if (item.comprobante_tipo === 'ajuste_credito') {
+                    tipoLabel = `Ajuste Crédito ${item.numero_formateado || ''}`;
+                    tipoColor = 'text-green-600 font-semibold';
                 } else {
                     tipoLabel = item.comprobante_nombre || item.comprobante_tipo;
                 }
@@ -192,6 +199,7 @@ const CuentaCorrienteProveedorTable = ({
                 mostrarBuscador={false}
                 mostrarOrdenamiento={false}
                 paginadorVisible={false}
+                customKey={(item) => `${item.comprobante_tipo}-${item.id}`}
             />
         </>
     )

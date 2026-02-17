@@ -806,13 +806,6 @@ class FerreteriaAPIView(APIView):
         # Manejar archivos subidos y normalizar datos
         data = request.data.copy()
 
-        if 'logo_empresa' in request.FILES:
-            data['logo_empresa'] = request.FILES['logo_empresa']
-        if 'certificado_arca' in request.FILES:
-            data['certificado_arca'] = request.FILES['certificado_arca']
-        if 'clave_privada_arca' in request.FILES:
-            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
-
         # Remover claves no soportadas por el modelo (compatibilidad UI legacy)
         for legacy_key in [
             'margen_ganancia_por_defecto', 'comprobante_por_defecto',
@@ -836,15 +829,6 @@ class FerreteriaAPIView(APIView):
         
         # Manejar archivos subidos
         data = request.data.copy()
-        if 'logo_empresa' in request.FILES:
-            data['logo_empresa'] = request.FILES['logo_empresa']
-        
-        # Manejar archivos ARCA
-        if 'certificado_arca' in request.FILES:
-            data['certificado_arca'] = request.FILES['certificado_arca']
-        
-        if 'clave_privada_arca' in request.FILES:
-            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
         
         # Remover claves no soportadas por el modelo (legacy UI)
         for legacy_key in [

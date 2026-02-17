@@ -217,6 +217,7 @@ def registrar_valores_y_movimientos(
         # Datos de cheque (solo si el método es cheque)
         datos_cheque = None
         cheque_obj = None
+        movimiento_custodia_obj = None
         if metodo_pago.codigo == CODIGO_CHEQUE:
             def _extraer_datos_cheque():
                 nonlocal datos_cheque
@@ -267,6 +268,31 @@ def registrar_valores_y_movimientos(
             else:
                 # Cobro de venta: se recibe un cheque nuevo
                 _extraer_datos_cheque()
+            
+            # Movimiento de custodia para cheques físicos (terceros)
+            # Entrada: Si recibimos un cheque nuevo (siempre terceros en este flujo)
+            # Salida: Si entregamos un cheque existente de cartera (endoso)
+            movimiento_custodia_obj = None
+            if direccion == 'entrada' and datos_cheque:
+                # Creamos una instancia temporal solo para la descripción del movimiento
+                temp_cheque = Cheque(
+                    numero=datos_cheque['numero'],
+                    banco_emisor=datos_cheque['banco_emisor'],
+                    monto=monto
+                )
+                movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
+                    temp_cheque, sesion_caja, sesion_caja.usuario,
+                    TIPO_MOVIMIENTO_ENTRADA, f"en custodia ({descripcion_comprobante})"
+                )
+            elif direccion == 'salida' and cheque_obj:
+                # Cheque de terceros que sale de cartera (endoso)
+                movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
+                    cheque_obj, sesion_caja, sesion_caja.usuario,
+                    TIPO_MOVIMIENTO_SALIDA, f"entregado de custodia ({descripcion_comprobante})"
+                )
+                # Vincular movimiento de salida al cheque existente
+                cheque_obj.movimiento_caja_salida = movimiento_custodia_obj
+                cheque_obj.save(update_fields=['movimiento_caja_salida', 'estado', 'proveedor', 'orden_pago'])
 
         # Monto recibido (solo relevante en cobros con efectivo)
         monto_recibido = pago_data.get('monto_recibido')
@@ -301,12 +327,16 @@ def registrar_valores_y_movimientos(
             'datos_cheque': datos_cheque,
             'cheque_obj': cheque_obj,
             'movimiento_obj': movimiento_obj,
+            'movimiento_custodia_obj': movimiento_custodia_obj, # Nuevo campo
             'referencia_externa': pago_data.get('referencia_externa', ''),
             'observacion': pago_data.get('observacion', ''),
             'monto_recibido': monto_recibido,
         })
 
     return resultados
+
+
+from ferreapps.cuenta_corriente.models import Recibo
 
 
 def registrar_pagos_venta(
@@ -319,68 +349,18 @@ def registrar_pagos_venta(
     """
     Registra los pagos de una venta y crea movimientos de caja si corresponde.
     Wrapper sobre registrar_valores_y_movimientos() para ventas.
-
-    Args:
-        venta: Instancia de Venta para la cual registrar los pagos
-        sesion_caja: Sesión de caja activa
-        pagos: Lista de diccionarios con:
-            - metodo_pago_id: ID del método de pago
-            - monto: Monto del pago
-            - referencia_externa: (opcional) Referencia para tarjetas/transferencias
-            - observacion: (opcional) Observación del pago
-        monto_pago_legacy: (retrocompatibilidad) Monto único de pago.
-            Si se provee y pagos está vacío, se asume pago en efectivo.
-        descripcion_base: Descripción base para los movimientos de caja
-
-    Returns:
-        Lista de PagoVenta creados
-
-    Raises:
-        ValueError: Si no se encuentra el método de pago especificado
     """
     pagos_creados = []
 
-    # Retrocompatibilidad: si no hay lista de pagos pero hay monto_pago_legacy, asumir efectivo
     if not pagos and monto_pago_legacy and monto_pago_legacy > 0:
         metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
         if not metodo_efectivo:
             logger.warning("No se encontró método de pago EFECTIVO, no se registra el pago")
             return []
-
-        pagos = [{
-            'metodo_pago_id': metodo_efectivo.id,
-            'monto': monto_pago_legacy,
-        }]
+        pagos = [{ 'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago_legacy }]
 
     if not pagos:
         return []
-
-    # Validaciones específicas de venta antes de procesar
-    for pago_data in pagos:
-        metodo_pago_id = pago_data.get('metodo_pago_id')
-        try:
-            metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
-        except MetodoPago.DoesNotExist:
-            raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
-
-        # Consumidor Final (cliente ID 1) no puede usar Cheque ni Cuenta Corriente
-        cliente_id = None
-        if hasattr(venta, 'ven_idcli'):
-            cliente_obj = venta.ven_idcli
-            if cliente_obj:
-                cliente_id = cliente_obj.pk if hasattr(cliente_obj, 'pk') else cliente_obj
-            elif hasattr(venta, 'ven_idcli_id'):
-                cliente_id = venta.ven_idcli_id
-
-        if cliente_id == 1:
-            if metodo_pago.codigo == CODIGO_CHEQUE:
-                raise ValidationError(
-                    'El cliente "Consumidor Final" no puede realizar pagos con cheque.'
-                )
-            if metodo_pago.codigo == CODIGO_CUENTA_CORRIENTE:
-                raise ValidationError(
-                    'El cliente "Consumidor Final" no puede abonar a cuenta corriente.'
-                )
 
     with transaction.atomic():
         numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
@@ -405,11 +385,9 @@ def registrar_pagos_venta(
             )
             if res['monto_recibido'] is not None:
                 pago_venta.monto_recibido = res['monto_recibido']
-            pago_venta.full_clean()
             pago_venta.save()
             pagos_creados.append(pago_venta)
 
-            # Si se recibió un cheque nuevo, vincularlo a la venta y al PagoVenta
             if res['datos_cheque'] is not None:
                 Cheque.objects.create(
                     numero=res['datos_cheque']['numero'],
@@ -424,6 +402,74 @@ def registrar_pagos_venta(
                     venta=venta,
                     pago_venta=pago_venta,
                     usuario_registro=sesion_caja.usuario,
+                    movimiento_caja_entrada=res['movimiento_custodia_obj'],
+                )
+
+    return pagos_creados
+
+
+def registrar_pagos_recibo(
+    recibo: Recibo,
+    sesion_caja: SesionCaja,
+    pagos: Optional[List[Dict[str, Any]]] = None,
+    monto_pago_legacy: Optional[Decimal] = None,
+    descripcion_base: str = "Cobro Recibo"
+) -> List[PagoVenta]:
+    """
+    Registra los pagos para el nuevo modelo independiente Recibo.
+    """
+    pagos_creados = []
+    
+    if not pagos and monto_pago_legacy and monto_pago_legacy > 0:
+        metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
+        if not metodo_efectivo:
+            return []
+        pagos = [{'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago_legacy}]
+
+    if not pagos:
+        return []
+
+    with transaction.atomic():
+        numero_recibo = f"REC {recibo.rec_numero}"
+
+        resultados = registrar_valores_y_movimientos(
+            pagos=pagos,
+            sesion_caja=sesion_caja,
+            direccion='entrada',
+            descripcion_comprobante=numero_recibo,
+            descripcion_base=descripcion_base,
+        )
+
+        for res in resultados:
+            pago_recibo = PagoVenta(
+                recibo=recibo, # Usamos el nuevo FK
+                metodo_pago=res['metodo_pago'],
+                cuenta_banco_id=res['cuenta_banco_id'],
+                monto=res['monto'],
+                es_vuelto=False,
+                referencia_externa=res['referencia_externa'],
+                observacion=res['observacion'],
+            )
+            if res['monto_recibido'] is not None:
+                pago_recibo.monto_recibido = res['monto_recibido']
+            pago_recibo.save()
+            pagos_creados.append(pago_recibo)
+
+            if res['datos_cheque'] is not None:
+                Cheque.objects.create(
+                    numero=res['datos_cheque']['numero'],
+                    banco_emisor=res['datos_cheque']['banco_emisor'],
+                    monto=res['monto'],
+                    cuit_librador=res['datos_cheque']['cuit_librador'],
+                    fecha_emision=res['datos_cheque']['fecha_emision'],
+                    fecha_pago=res['datos_cheque']['fecha_presentacion'],
+                    librador_nombre=res['datos_cheque']['librador_nombre'],
+                    tipo_cheque=res['datos_cheque']['tipo_cheque'],
+                    estado=Cheque.ESTADO_EN_CARTERA,
+                    recibo=recibo, # Nuevo FK
+                    pago_venta=pago_recibo,
+                    usuario_registro=sesion_caja.usuario,
+                    movimiento_caja_entrada=res['movimiento_custodia_obj'],
                 )
 
     return pagos_creados
@@ -581,6 +627,37 @@ def calcular_vuelto_dado(venta) -> Decimal:
     ).aggregate(total=Sum('monto'))['total']
     
     return total or Decimal('0.00')
+
+
+# -----------------------------------------------------------------------------
+# Cheque custodia: movimientos de entrada/salida de valores físicos
+# -----------------------------------------------------------------------------
+
+def registrar_movimiento_custodia_cheque(
+    cheque: Cheque,
+    sesion_caja: SesionCaja,
+    usuario,
+    tipo_movimiento: str,
+    motivo: str
+) -> MovimientoCaja:
+    """
+    Registra un movimiento de caja (ingreso/egreso) para un cheque en custodia.
+    
+    Parámetros:
+        cheque: Instancia de Cheque.
+        sesion_caja: Sesión de caja activa.
+        usuario: Usuario que realiza la acción.
+        tipo_movimiento: TIPO_MOVIMIENTO_ENTRADA o TIPO_MOVIMIENTO_SALIDA.
+        motivo: Descripción corta (ej: "recibido", "depositado", "endosado", "rechazado").
+    """
+    descripcion = f"Cheque {motivo} - Nº {cheque.numero} ({cheque.banco_emisor}) - ${cheque.monto}"
+    return MovimientoCaja.objects.create(
+        sesion_caja=sesion_caja,
+        usuario=usuario,
+        tipo=tipo_movimiento,
+        monto=cheque.monto,
+        descripcion=descripcion,
+    )
 
 
 # -----------------------------------------------------------------------------

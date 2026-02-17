@@ -5,6 +5,7 @@ import ItemsGridCompras from "./ItemsGridCompras"
 import BuscadorProductoCompras from "./BuscadorProductoCompras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
+import { fechaHoyLocal } from "../../utils/fechas"
 
 const OrdenCompraForm = ({
   onSave,
@@ -35,7 +36,7 @@ const OrdenCompraForm = ({
     // Si hay datos iniciales (edición), cargarlos inmediatamente
     if (initialData) {
       initialState.ord_sucursal = initialData.ord_sucursal || sucursales[0]?.id || 1
-      initialState.ord_fecha = initialData.ord_fecha || new Date().toISOString().split("T")[0]
+      initialState.ord_fecha = initialData.ord_fecha || fechaHoyLocal()
       initialState.ord_idpro = initialData.ord_idpro !== undefined && initialData.ord_idpro !== null ? initialData.ord_idpro : initialData.proveedorSeleccionado?.id || null
       initialState.ord_cuit = initialData.ord_cuit || ""
       initialState.ord_razon_social = initialData.ord_razon_social || initialData.proveedorSeleccionado?.razon || ""

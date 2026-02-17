@@ -32,8 +32,22 @@ const NuevoReciboModal = ({
   const [pagos, setPagos] = useState([])
 
   // Estado para la segunda parte: datos del recibo
+  // Usamos Intl.DateTimeFormat para asegurar que la fecha sea la de Argentina
+  const getTodayArgentina = () => {
+    try {
+      return new Intl.DateTimeFormat('fr-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+    } catch (e) {
+      return new Date().toLocaleDateString('sv-SE');
+    }
+  };
+
   const [formData, setFormData] = useState({
-    rec_fecha: new Date().toISOString().split('T')[0],
+    rec_fecha: getTodayArgentina(),
     rec_pv: "",
     rec_numero: "",
     rec_monto_total: montoFijo || 0,  // Usar montoFijo si está disponible
@@ -133,8 +147,8 @@ const NuevoReciboModal = ({
         delete nuevoPago.fecha_presentacion
 
         if (codigo === 'CHEQUE') {
-          nuevoPago.fecha_emision = new Date().toISOString().split('T')[0]
-          nuevoPago.fecha_presentacion = new Date().toISOString().split('T')[0]
+          nuevoPago.fecha_emision = new Date().toLocaleDateString('sv-SE')
+          nuevoPago.fecha_presentacion = new Date().toLocaleDateString('sv-SE')
         }
       }
       return nuevoPago
@@ -281,7 +295,7 @@ const NuevoReciboModal = ({
     setImputaciones([])
     setPagos([])
     setFormData({
-      rec_fecha: new Date().toISOString().split('T')[0],
+      rec_fecha: new Date().toLocaleDateString('sv-SE'),
       rec_pv: "",
       rec_numero: "",
       rec_monto_total: 0,
@@ -504,7 +518,6 @@ const NuevoReciboModal = ({
                               const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 4)
                               setFormData(prev => ({ ...prev, rec_pv: clean }))
                             }}
-                            onBlur={() => setFormData(prev => ({ ...prev, rec_pv: (prev.rec_pv || "").toString().padStart(4, "0") }))}
                             placeholder="0001"
                             className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
                             title="Punto de venta (4 dígitos)"
@@ -520,7 +533,6 @@ const NuevoReciboModal = ({
                               const clean = (e.target.value || "").replace(/\D+/g, "").slice(0, 8)
                               setFormData(prev => ({ ...prev, rec_numero: clean }))
                             }}
-                            onBlur={() => setFormData(prev => ({ ...prev, rec_numero: (prev.rec_numero || "").toString().padStart(8, "0") }))}
                             placeholder="00000001"
                             className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-center"
                             title="Número (8 dígitos)"
@@ -529,7 +541,9 @@ const NuevoReciboModal = ({
                         <div>
                           <label className={CLASES_ETIQUETA}>Vista previa</label>
                           <div className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 bg-slate-50 text-center flex items-center justify-center">
-                            <span className="font-semibold">X {(formData.rec_pv || '').toString().padStart(4, '0')}-{(formData.rec_numero || '').toString().padStart(8, '0')}</span>
+                            <span className="font-semibold">
+                              X {formData.rec_pv ? formData.rec_pv.toString().padStart(4, '0') : '____'}-{formData.rec_numero ? formData.rec_numero.toString().padStart(8, '0') : '________'}
+                            </span>
                           </div>
                         </div>
                         <div>

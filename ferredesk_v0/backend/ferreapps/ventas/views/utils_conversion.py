@@ -2,7 +2,8 @@
 Utilidades para conversión de comprobantes
 """
 from django.db.models import Q
-from ferreapps.cuenta_corriente.models import ImputacionVenta
+from django.contrib.contenttypes.models import ContentType
+from ferreapps.cuenta_corriente.models import Imputacion
 import logging
 
 
@@ -19,10 +20,12 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
         dict: Estadísticas de transferencia
     """
     logger = logging.getLogger(__name__)
+    venta_ct = ContentType.objects.get_for_model(factura_interna)
     
     # Buscar imputaciones relacionadas
-    imputaciones_relacionadas = ImputacionVenta.objects.filter(
-        Q(imp_id_venta=factura_interna) | Q(imp_id_recibo=factura_interna)
+    imputaciones_relacionadas = Imputacion.objects.filter(
+        (Q(destino_content_type=venta_ct) & Q(destino_id=factura_interna.pk)) |
+        (Q(origen_content_type=venta_ct) & Q(origen_id=factura_interna.pk))
     )
     
     if not imputaciones_relacionadas.exists():
@@ -31,20 +34,20 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
     
     # Clasificar imputaciones
     auto_imputaciones = imputaciones_relacionadas.filter(
-        imp_id_venta=factura_interna,
-        imp_id_recibo=factura_interna
+        destino_content_type=venta_ct, destino_id=factura_interna.pk,
+        origen_content_type=venta_ct, origen_id=factura_interna.pk
     )
     
     imputaciones_como_deudor = imputaciones_relacionadas.filter(
-        imp_id_venta=factura_interna
+        destino_content_type=venta_ct, destino_id=factura_interna.pk
     ).exclude(
-        imp_id_recibo=factura_interna
+        origen_content_type=venta_ct, origen_id=factura_interna.pk
     )
     
     imputaciones_como_acreedor = imputaciones_relacionadas.filter(
-        imp_id_recibo=factura_interna
+        origen_content_type=venta_ct, origen_id=factura_interna.pk
     ).exclude(
-        imp_id_venta=factura_interna
+        destino_content_type=venta_ct, destino_id=factura_interna.pk
     )
     
     # Transferir auto-imputaciones (eliminar y recrear)
@@ -55,9 +58,9 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
         obs = imp.imp_observacion or ''
         imp.delete()
         
-        ImputacionVenta.objects.create(
-            imp_id_venta=nueva_factura,
-            imp_id_recibo=nueva_factura,
+        Imputacion.objects.create(
+            origen=nueva_factura,
+            destino=nueva_factura,
             imp_monto=monto,
             imp_fecha=fecha,
             imp_observacion=f'{obs} [Migrada de Cotización #{factura_interna.ven_numero}]'.strip()
@@ -66,12 +69,12 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
     
     # Transferir como deudor (UPDATE directo)
     count_deudor = imputaciones_como_deudor.update(
-        imp_id_venta=nueva_factura
+        destino_id=nueva_factura.pk
     )
     
     # Transferir como acreedor (UPDATE directo)
     count_acreedor = imputaciones_como_acreedor.update(
-        imp_id_recibo=nueva_factura
+        origen_id=nueva_factura.pk
     )
     
     logger.info(

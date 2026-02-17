@@ -1,7 +1,5 @@
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
 from .views import (
-    CuentaCorrienteViewSet,
     cuenta_corriente_cliente,
     facturas_pendientes_cliente,
     crear_recibo_con_imputaciones,
@@ -20,16 +18,10 @@ from .views import (
     anular_orden_pago,
     imputar_orden_pago,
     detalle_comprobante_proveedor,
+    crear_ajuste_proveedor,
+    eliminar_imputacion,
 )
-
-# Configurar el router para las vistas
-router = DefaultRouter()
-router.register(r'cuentas-corrientes', CuentaCorrienteViewSet, basename='cuenta-corriente')
-
 urlpatterns = [
-    # Rutas del router (CRUD básico)
-    path('', include(router.urls)),
-    
     # Endpoints de clientes
     path('cliente/<int:cliente_id>/', cuenta_corriente_cliente, name='cuenta-corriente-cliente'),
     path('cliente/<int:cliente_id>/facturas-pendientes/', facturas_pendientes_cliente, name='facturas-pendientes-cliente'),
@@ -55,6 +47,10 @@ urlpatterns = [
     path('crear-orden-pago/', crear_orden_pago, name='crear-orden-pago'),
     path('anular-orden-pago/<int:op_id>/', anular_orden_pago, name='anular-orden-pago'),
     path('comprobante-proveedor/<str:comprobante_id>/detalle/', detalle_comprobante_proveedor, name='detalle-comprobante-proveedor'),
+    path('crear-ajuste-proveedor/', crear_ajuste_proveedor, name='crear-ajuste-proveedor'),
+    
+    # Endpoint genérico de imputaciones
+    path('imputacion/<int:imp_id>/eliminar/', eliminar_imputacion, name='eliminar-imputacion'),
     
     # Endpoint de verificación
     path('status/', CuentaCorrienteAPIView.as_view(), name='cuenta-corriente-status'),

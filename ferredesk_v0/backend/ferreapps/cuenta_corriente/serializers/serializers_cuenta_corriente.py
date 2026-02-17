@@ -1,54 +1,52 @@
 from rest_framework import serializers
 from decimal import Decimal
 from django.utils import timezone
-from ..models import CuentaCorrienteCliente
 from ferreapps.clientes.models import Cliente
 
 
-class CuentaCorrienteItemSerializer(serializers.ModelSerializer):
-    """Serializer para items de cuenta corriente usando CuentaCorrienteCliente"""
-    debe = serializers.SerializerMethodField()
-    haber = serializers.SerializerMethodField()
-    saldo_acumulado = serializers.SerializerMethodField()
-    saldo_pendiente = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = CuentaCorrienteCliente
-        fields = [
-            'ven_id', 'ven_fecha', 'numero_formateado', 'comprobante_nombre',
-            'comprobante_tipo', 'ven_total', 'debe', 'haber', 'saldo_acumulado',
-            'saldo_pendiente'
-        ]
-
-    def get_debe(self, obj):
-        return obj.debe
-
-    def get_haber(self, obj):
-        return obj.haber
-
-    def get_saldo_acumulado(self, obj):
-        return obj.saldo_acumulado
-
-    def get_saldo_pendiente(self, obj):
-        return obj.saldo_pendiente
+class IdCuentaCorrienteField(serializers.Field):
+    """
+    Acepta id numérico (Venta/Recibo) o string virtual (ej. 'IMP-3' para auto-imputaciones).
+    Evita ValueError cuando el servicio envía 'id': f"IMP-{imp.pk}".
+    """
+    def to_representation(self, value):
+        return value
 
 
-class FacturaPendienteSerializer(serializers.ModelSerializer):
+class CuentaCorrienteItemSerializer(serializers.Serializer):
+    """Serializer para items de cuenta corriente"""
+    id = IdCuentaCorrienteField()
+    ct_id = serializers.IntegerField()
+    fecha = serializers.DateField()
+    numero_formateado = serializers.CharField()
+    comprobante_nombre = serializers.CharField()
+    comprobante_tipo = serializers.CharField()
+    total = serializers.DecimalField(max_digits=15, decimal_places=2)
+    debe = serializers.DecimalField(max_digits=15, decimal_places=2)
+    haber = serializers.DecimalField(max_digits=15, decimal_places=2)
+    # Alias para compatibilidad con frontend legacy (mismo valor que id: int o str)
+    ven_id = IdCuentaCorrienteField(source='id')
+    ven_fecha = serializers.DateField(source='fecha')
+    saldo_acumulado = serializers.DecimalField(max_digits=15, decimal_places=2)
+    saldo_pendiente = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
+class FacturaPendienteSerializer(serializers.Serializer):
     """Serializer para facturas pendientes de imputar"""
+    ven_id = serializers.IntegerField(source='id')
+    ven_fecha = serializers.DateField(source='fecha')
+    numero_formateado = serializers.CharField()
+    comprobante_nombre = serializers.CharField()
+    ven_total = serializers.DecimalField(source='total', max_digits=15, decimal_places=2)
+    saldo_pendiente = serializers.DecimalField(max_digits=15, decimal_places=2)
     dias_vencido = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = CuentaCorrienteCliente
-        fields = [
-            'ven_id', 'ven_fecha', 'numero_formateado', 'comprobante_nombre',
-            'ven_total', 'saldo_pendiente', 'dias_vencido'
-        ]
 
     def get_dias_vencido(self, obj):
-        # Evitar acceso a atributo inexistente en la vista SQL
-        if hasattr(obj, 'ven_vence') and getattr(obj, 'ven_vence'):
+        # obj es un dict
+        vence = obj.get('ven_vence')
+        if vence:
             hoy = timezone.now().date()
-            dias = (hoy - getattr(obj, 'ven_vence')).days
+            dias = (hoy - vence).days
             return max(0, dias)
         return 0
 

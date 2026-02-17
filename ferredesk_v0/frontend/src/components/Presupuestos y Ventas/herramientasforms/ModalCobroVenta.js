@@ -231,8 +231,10 @@ const ModalCobroVenta = ({
     const remanenteNoEfectivo = Math.max(totalVentaNum - efectivoAplicable, 0)
     if (totalNoEfectivo > remanenteNoEfectivo + TOLERANCIA_PESOS) {
       window.alert(
-        `El total en métodos no efectivos no puede superar $${remanenteNoEfectivo.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ` +
-        "Ajuste los montos para que la transferencia/QR/tarjeta completen solo el remanente."
+        "Los medios de pago NO EFECTIVOS no pueden superar el total de la venta.\n\n" +
+        "Revise los importes para que transferencia, QR o tarjeta cubran únicamente el saldo pendiente.\n\n" +
+        "Si el cliente entrega un cheque por un monto mayor al total, no registre el pago en esta venta. " +
+        "Genere un recibo en Cuenta Corriente por el importe correspondiente."
       )
       return
     }
@@ -264,12 +266,10 @@ const ModalCobroVenta = ({
 
     const monto_pago = pagos.reduce((s, p) => s + p.monto, 0)
 
+    // Monto no alcanza: se envía la venta con lo ingresado; el resto queda en cuenta corriente.
+    // Si el cliente quiere emitir un recibo, lo hace desde Cuenta Corriente.
     if (hayFaltante && !esConsumidorFinal) {
-      onConfirmar({
-        crear_recibo_parcial: true,
-        pagos,
-        monto_pago,
-      })
+      onConfirmar({ pagos, monto_pago })
       return
     }
 
@@ -306,19 +306,7 @@ const ModalCobroVenta = ({
       return
     }
 
-    // Regla de negocio:
-    // - Cliente genérico (Consumidor Final): el excedente solo puede darse en efectivo (por ejemplo para vuelto/propina).
-    // - Cliente regular: si hay excedente, se notifica y se envía a cuenta corriente (recibo) automáticamente.
-    if (hayExcedente && esClienteRegular) {
-      onConfirmar({
-        pagos,
-        monto_pago,
-        excedente_destino: "recibo",
-      })
-      return
-    }
-
-    if (hayExcedente && esConsumidorFinal) {
+    if (hayExcedente) {
       if (excedenteDestino === "vuelto_pendiente") {
         const justif = (justificacionExcedente || "").trim()
         if (!justif) {
@@ -367,7 +355,6 @@ const ModalCobroVenta = ({
     setLineasPago([])
     setExcedenteDestino("vuelto")
     setJustificacionDiferencia("")
-    setJustificacionExcedente("")
     setJustificacionExcedente("")
   }, [])
 
@@ -644,68 +631,69 @@ const ModalCobroVenta = ({
                       {hayExcedente && (
                         <div className="mt-3 pt-3 border-t border-slate-200">
                           <div className={CLASES_ETIQUETA}>Destino del excedente</div>
-                          {esConsumidorFinal ? (
-                            <>
-                              <p className="text-sm text-slate-600 mb-2">
-                                Excedente: ${Math.abs(diferencia).toLocaleString("es-AR")}. Elija una opción:
-                              </p>
-                              <label className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="radio"
-                                  name="excedenteDestinoCF"
-                                  checked={excedenteDestino === "vuelto"}
-                                  onChange={() => setExcedenteDestino("vuelto")}
-                                  className="text-orange-600"
-                                />
-                                <span className="text-sm">Dio vuelto al cliente</span>
-                              </label>
-                              <label className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="radio"
-                                  name="excedenteDestinoCF"
-                                  checked={excedenteDestino === "propina"}
-                                  onChange={() => setExcedenteDestino("propina")}
-                                  className="text-orange-600"
-                                />
-                                <span className="text-sm">Cliente deja diferencia (propina/redondeo)</span>
-                              </label>
-                              <label className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="radio"
-                                  name="excedenteDestinoCF"
-                                  checked={excedenteDestino === "vuelto_pendiente"}
-                                  onChange={() => setExcedenteDestino("vuelto_pendiente")}
-                                  className="text-orange-600"
-                                />
-                                <span className="text-sm">Vuelto pendiente</span>
-                              </label>
-                              {(excedenteDestino === "propina" || excedenteDestino === "vuelto_pendiente") && (
-                                <div className="mt-2">
-                                  <label className={CLASES_ETIQUETA}>
-                                    Justificación {excedenteDestino === "vuelto_pendiente" ? "(obligatorio)" : "(opcional)"}
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className={`${CLASES_INPUT} mt-1`}
-                                    placeholder={
-                                      excedenteDestino === "vuelto_pendiente"
-                                        ? "Ej: Cliente retira mañana"
-                                        : "Ej: Redondeo a favor del local"
-                                    }
-                                    value={justificacionExcedente}
-                                    onChange={(e) => {
-                                      setJustificacionExcedente(e.target.value)
-                                    }}
-                                  />
+                          <p className="text-sm text-slate-600 mb-2">
+                            Excedente: ${Math.abs(diferencia).toLocaleString("es-AR")}. Elija una opción:
+                          </p>
+                          <label className="flex items-center gap-2 mt-1">
+                            <input
+                              type="radio"
+                              name="excedenteDestino"
+                              checked={excedenteDestino === "vuelto"}
+                              onChange={() => setExcedenteDestino("vuelto")}
+                              className="text-orange-600"
+                            />
+                            <span className="text-sm">Dio vuelto al cliente</span>
+                          </label>
+                          <label className="flex items-center gap-2 mt-1 group relative">
+                            <input
+                              type="radio"
+                              name="excedenteDestino"
+                              checked={excedenteDestino === "propina"}
+                              onChange={() => setExcedenteDestino("propina")}
+                              className="text-orange-600"
+                            />
+                            <span className="text-sm">Cliente deja diferencia (propina/redondeo)</span>
+                            {esClienteRegular && (
+                              <div className="inline-block ml-1 text-slate-400 group-hover:text-slate-600 cursor-help">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                                </svg>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60]">
+                                  Si el cliente está abonando deudas, se deberá registrar un recibo en su cuenta corriente para que se vea reflejado.
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800" />
                                 </div>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <div className="mt-1 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-2">
-                                El excedente se registrará automáticamente a cuenta corriente (recibo) para el cliente.
                               </div>
-                            </>
+                            )}
+                          </label>
+                          <label className="flex items-center gap-2 mt-1">
+                            <input
+                              type="radio"
+                              name="excedenteDestino"
+                              checked={excedenteDestino === "vuelto_pendiente"}
+                              onChange={() => setExcedenteDestino("vuelto_pendiente")}
+                              className="text-orange-600"
+                            />
+                            <span className="text-sm">Vuelto pendiente</span>
+                          </label>
+                          {(excedenteDestino === "propina" || excedenteDestino === "vuelto_pendiente") && (
+                            <div className="mt-2">
+                              <label className={CLASES_ETIQUETA}>
+                                Justificación {excedenteDestino === "vuelto_pendiente" ? "(obligatorio)" : "(opcional)"}
+                              </label>
+                              <input
+                                type="text"
+                                className={`${CLASES_INPUT} mt-1`}
+                                placeholder={
+                                  excedenteDestino === "vuelto_pendiente"
+                                    ? "Ej: Cliente retira mañana"
+                                    : "Ej: Redondeo a favor del local"
+                                }
+                                value={justificacionExcedente}
+                                onChange={(e) => {
+                                  setJustificacionExcedente(e.target.value)
+                                }}
+                              />
+                            </div>
                           )}
                         </div>
                       )}

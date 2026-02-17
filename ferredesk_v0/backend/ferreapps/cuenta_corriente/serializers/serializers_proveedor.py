@@ -1,50 +1,14 @@
-"""
-Serializers para la cuenta corriente de proveedores
-y órdenes de pago.
-"""
 from rest_framework import serializers
 from decimal import Decimal
 
 from ferreapps.cuenta_corriente.models import (
-    CuentaCorrienteProveedor,
     OrdenPago,
-    ImputacionCompra,
+    Imputacion,
+    AjusteProveedor,
 )
 
 
-class CuentaCorrienteProveedorSerializer(serializers.ModelSerializer):
-    """Serializer de solo lectura para la vista de CC de proveedores."""
-    op_id = serializers.SerializerMethodField()
-    comp_id = serializers.SerializerMethodField()
 
-    class Meta:
-        model = CuentaCorrienteProveedor
-        fields = [
-            'id',
-            'fecha',
-            'proveedor_id',
-            'comprobante_nombre',
-            'comprobante_tipo',
-            'debe',
-            'haber',
-            'saldo_acumulado',
-            'saldo_pendiente',
-            'total',
-            'numero_formateado',
-            'op_id',
-            'comp_id',
-        ]
-        read_only_fields = fields
-
-    def get_op_id(self, obj):
-        if obj.comprobante_tipo == 'orden_pago':
-            return abs(obj.id)
-        return None
-
-    def get_comp_id(self, obj):
-        if obj.comprobante_tipo != 'orden_pago':
-            return obj.id
-        return None
 
 
 class OrdenPagoSerializer(serializers.ModelSerializer):
@@ -101,8 +65,9 @@ class OrdenPagoCreateSerializer(serializers.Serializer):
         if not value:
             return value
         for imp in value:
-            if 'compra_id' not in imp:
-                raise serializers.ValidationError('Cada imputación debe tener compra_id')
+            # Soportar tanto compra_id como factura_id (ID genérico)
+            if 'compra_id' not in imp and 'factura_id' not in imp:
+                raise serializers.ValidationError('Cada imputación debe tener compra_id o factura_id')
             if 'monto' not in imp:
                 raise serializers.ValidationError('Cada imputación debe tener monto')
             if Decimal(str(imp['monto'])) <= 0:
@@ -132,17 +97,45 @@ class OrdenPagoImputacionSerializer(serializers.Serializer):
         return value
 
 
-class ImputacionCompraSerializer(serializers.ModelSerializer):
-    """Serializer de lectura para imputaciones de compras."""
+class AjusteProveedorCreateSerializer(serializers.Serializer):
+    """Serializer para la creación de ajustes débito/crédito de proveedor."""
+    tipo = serializers.ChoiceField(choices=['DEBITO', 'CREDITO'])
+    proveedor_id = serializers.IntegerField()
+    fecha = serializers.DateField()
+    numero = serializers.CharField(max_length=30, help_text='Número del comprobante externo (PV-Número)')
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2)
+    observacion = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero')
+        return value
+
+
+class AjusteProveedorSerializer(serializers.ModelSerializer):
+    """Serializer de lectura para ajustes de proveedor."""
+    proveedor_nombre = serializers.SerializerMethodField()
+    tipo_display = serializers.SerializerMethodField()
 
     class Meta:
-        model = ImputacionCompra
+        model = AjusteProveedor
         fields = [
-            'imp_id',
-            'imp_id_compra',
-            'imp_id_orden_pago',
-            'imp_fecha',
-            'imp_monto',
-            'imp_observacion',
+            'aj_id',
+            'aj_tipo',
+            'tipo_display',
+            'aj_proveedor',
+            'proveedor_nombre',
+            'aj_fecha',
+            'aj_numero',
+            'aj_monto',
+            'aj_observacion',
+            'aj_estado',
+            'aj_fecha_registro',
         ]
         read_only_fields = fields
+
+    def get_proveedor_nombre(self, obj):
+        return str(obj.aj_proveedor) if obj.aj_proveedor else ''
+
+    def get_tipo_display(self, obj):
+        return 'Ajuste Débito' if obj.aj_tipo == 'DEBITO' else 'Ajuste Crédito'

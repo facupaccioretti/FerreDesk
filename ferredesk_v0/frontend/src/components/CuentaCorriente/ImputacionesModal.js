@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
+import { fechaHoyLocal } from "../../utils/fechas"
 
 const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
   const theme = useFerreDeskTheme()
   const { crearReciboConImputaciones } = useCuentaCorrienteAPI()
-  
+
   const [formData, setFormData] = useState({
-    rec_fecha: new Date().toISOString().split('T')[0],
+    rec_fecha: fechaHoyLocal(),
     rec_monto_total: 0,
     rec_observacion: '',
     rec_tipo: 'recibo',
@@ -32,8 +33,8 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
   const handleImputacionChange = (facturaId, monto) => {
     setFormData(prev => ({
       ...prev,
-      imputaciones: prev.imputaciones.map(imp => 
-        imp.factura_id === facturaId 
+      imputaciones: prev.imputaciones.map(imp =>
+        imp.factura_id === facturaId
           ? { ...imp, monto: parseFloat(monto) || 0 }
           : imp
       )
@@ -70,11 +71,11 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
       }
 
       const response = await crearReciboConImputaciones(reciboData)
-      
+
       // Mostrar mensaje de éxito
       const tipoComprobante = formData.rec_tipo === 'credito' ? 'Nota de Crédito' : 'Recibo'
       alert(`${tipoComprobante} creado exitosamente: ${response.numero_recibo}`)
-      
+
       // Cerrar modal y recargar datos
       onGuardar()
     } catch (err) {
@@ -117,8 +118,8 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
               className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
@@ -226,7 +227,7 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
                 Comprobantes a Imputar
               </h3>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50">
@@ -241,9 +242,9 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
                       Importe
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      Imputado
+                      Saldo Pendiente
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
                       Pago Actual
                     </th>
                   </tr>
@@ -261,19 +262,30 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
                         ${imputacion.monto_original.toLocaleString('es-AR')}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-slate-900">
-                        ${(imputacion.monto_original - imputacion.saldo_pendiente).toLocaleString('es-AR')}
+                        ${imputacion.saldo_pendiente.toLocaleString('es-AR')}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-right">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max={imputacion.saldo_pendiente}
-                          value={imputacion.monto}
-                          onChange={(e) => handleImputacionChange(imputacion.factura_id, e.target.value)}
-                          className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
-                          placeholder="0"
-                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={imputacion.saldo_pendiente}
+                            value={imputacion.monto}
+                            onChange={(e) => handleImputacionChange(imputacion.factura_id, e.target.value)}
+                            className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                            placeholder="0"
+                          />
+                          <button
+                            onClick={() => handleImputacionChange(imputacion.factura_id, imputacion.saldo_pendiente)}
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Imputar todo"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -299,9 +311,9 @@ const ImputacionesModal = ({ modal, onClose, onGuardar }) => {
             <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mr-3">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
                 </svg>
                 <span className="text-red-700">{error}</span>
               </div>

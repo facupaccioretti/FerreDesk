@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Fragment } from "react"
+import { Menu, Transition as MenuTransition } from "@headlessui/react"
 import useCuentaCorrienteProveedorAPI from "../../utils/useCuentaCorrienteProveedorAPI"
 import CuentaCorrienteProveedorTable from "./CuentaCorrienteProveedorTable"
 // import OrdenPagoModal from "./OrdenPagoModal"
 import OrdenPagoReciboModal from "../Caja/OrdenPagoReciboModal"
 import ImputarOrdenPagoModal from "./ImputarOrdenPagoModal"
 import DetalleComprobanteProveedorModal from "./DetalleComprobanteProveedorModal"
+import AjusteProveedorModal from "./AjusteProveedorModal"
 import ProveedorSelectorModal from "../Compras/ProveedorSelectorModal" // Reutilizamos el existente
 
 const CuentaCorrienteProveedorList = ({
@@ -25,6 +27,7 @@ const CuentaCorrienteProveedorList = ({
         error,
         getCuentaCorrienteProveedor,
         anularOrdenPago,
+        crearAjusteProveedor,
     } = useCuentaCorrienteProveedorAPI()
 
     const [cuentaCorriente, setCuentaCorriente] = useState(null)
@@ -34,6 +37,7 @@ const CuentaCorrienteProveedorList = ({
     const [ordenPagoModal, setOrdenPagoModal] = useState({ abierto: false })
     const [imputarOrdenModal, setImputarOrdenModal] = useState({ abierto: false, comprobante: null })
     const [detalleModal, setDetalleModal] = useState({ abierto: false, item: null })
+    const [ajusteModal, setAjusteModal] = useState({ abierto: false, tipo: 'DEBITO' })
 
     // Cargar cuenta corriente cuando cambia el proveedor seleccionado o filtros
     useEffect(() => {
@@ -125,6 +129,25 @@ const CuentaCorrienteProveedorList = ({
         }
     }
 
+    const handleAbrirAjuste = (tipo) => {
+        if (!proveedorSeleccionado) {
+            alert('Debe seleccionar un proveedor primero')
+            return
+        }
+        setAjusteModal({ abierto: true, tipo })
+    }
+
+    const handleConfirmarAjuste = async (ajusteData) => {
+        try {
+            await crearAjusteProveedor(ajusteData)
+            setAjusteModal({ ...ajusteModal, abierto: false })
+            cargarCuentaCorriente()
+        } catch (err) {
+            console.error('Error al crear ajuste:', err)
+            alert('Error al crear ajuste: ' + err.message)
+        }
+    }
+
     // Constantes de clases para el formato compacto
     const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
     const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -200,20 +223,83 @@ const CuentaCorrienteProveedorList = ({
                     </div>
                 </div>
 
-                {/* Botón Nueva Orden de Pago */}
+                {/* Dropdown de Acciones (Nueva OP / Ajustes) */}
                 <div className={`${CLASES_FILTRO} flex-1`}>
                     <div className={CLASES_ETIQUETA}>Acciones</div>
-                    <div className="mt-0.5">
-                        <button
-                            onClick={handleNuevaOrdenPago}
-                            disabled={loading || !proveedorSeleccionado}
-                            className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white text-xs font-medium py-1 px-3 rounded transition-colors duration-200 flex items-center justify-center space-x-1"
-                        >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            <span>Nueva Orden Pago</span>
-                        </button>
+                    <div className="mt-0.5 relative">
+                        <Menu as="div" className="relative inline-block w-full text-left">
+                            <Menu.Button
+                                disabled={loading || !proveedorSeleccionado}
+                                className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition-all flex items-center justify-center space-x-1.5"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>Nuevo...</span>
+                                <svg className="w-3 h-3 ml-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </Menu.Button>
+
+                            <MenuTransition
+                                as={Fragment}
+                                enter="transition ease-out duration-100"
+                                enterFrom="transform opacity-0 scale-95"
+                                enterTo="transform opacity-100 scale-100"
+                                leave="transition ease-in duration-75"
+                                leaveFrom="transform opacity-100 scale-100"
+                                leaveTo="transform opacity-0 scale-95"
+                            >
+                                <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right divide-y divide-slate-100 rounded-md bg-white shadow-xl ring-1 ring-black/5 focus:outline-none z-50">
+                                    <div className="px-1 py-1">
+                                        <Menu.Item>
+                                            {({ active }) => (
+                                                <button
+                                                    onClick={handleNuevaOrdenPago}
+                                                    className={`${active ? 'bg-orange-500 text-white' : 'text-slate-700'
+                                                        } group flex w-full items-center rounded-md px-3 py-2 text-xs font-medium`}
+                                                >
+                                                    <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    Nueva Orden de Pago
+                                                </button>
+                                            )}
+                                        </Menu.Item>
+                                    </div>
+                                    <div className="px-1 py-1">
+                                        <Menu.Item>
+                                            {({ active }) => (
+                                                <button
+                                                    onClick={() => handleAbrirAjuste('DEBITO')}
+                                                    className={`${active ? 'bg-slate-800 text-white' : 'text-slate-700'
+                                                        } group flex w-full items-center rounded-md px-3 py-2 text-xs font-medium`}
+                                                >
+                                                    <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                    </svg>
+                                                    Generar Ajuste Débito
+                                                </button>
+                                            )}
+                                        </Menu.Item>
+                                        <Menu.Item>
+                                            {({ active }) => (
+                                                <button
+                                                    onClick={() => handleAbrirAjuste('CREDITO')}
+                                                    className={`${active ? 'bg-blue-600 text-white' : 'text-slate-700'
+                                                        } group flex w-full items-center rounded-md px-3 py-2 text-xs font-medium`}
+                                                >
+                                                    <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                    </svg>
+                                                    Generar Ajuste Crédito
+                                                </button>
+                                            )}
+                                        </Menu.Item>
+                                    </div>
+                                </Menu.Items>
+                            </MenuTransition>
+                        </Menu>
                     </div>
                 </div>
             </div>
@@ -291,6 +377,16 @@ const CuentaCorrienteProveedorList = ({
                 onGuardar={handleOrdenPagoGuardada}
                 entidad={proveedorSeleccionado}
                 tipo="ORDEN_PAGO"
+            />
+
+            {/* Modal para Ajustes Débito/Crédito */}
+            <AjusteProveedorModal
+                abierto={ajusteModal.abierto}
+                onClose={() => setAjusteModal({ ...ajusteModal, abierto: false })}
+                onConfirmar={handleConfirmarAjuste}
+                tipo={ajusteModal.tipo}
+                proveedor={proveedorSeleccionado}
+                loading={loading}
             />
 
             {/* Legacy Modal (Comentado para preservar según pedido)

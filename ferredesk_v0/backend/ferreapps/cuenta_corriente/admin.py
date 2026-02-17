@@ -1,22 +1,21 @@
 from django.contrib import admin
-from .models import ImputacionVenta
+from .models import Imputacion
 
 
-@admin.register(ImputacionVenta)
-class ImputacionVentaAdmin(admin.ModelAdmin):
+@admin.register(Imputacion)
+class ImputacionAdmin(admin.ModelAdmin):
     """
-    Admin para el modelo ImputacionVenta
+    Admin para el modelo unificado Imputacion
     """
     list_display = [
-        'imp_id', 'imp_fecha', 'imp_monto', 'factura_numero', 
-        'recibo_numero', 'cliente_nombre'
+        'imp_id', 'imp_fecha', 'imp_monto', 
+        'origen_display', 'flecha', 'destino_display'
     ]
     list_filter = [
-        'imp_fecha', 'imp_id_venta__comprobante__tipo'
+        'imp_fecha', 'origen_content_type', 'destino_content_type'
     ]
     search_fields = [
-        'imp_id_venta__numero_formateado', 'imp_id_recibo__numero_formateado',
-        'imp_id_venta__ven_razon_social'
+        'imp_id', 'imp_observacion', 'origen_id', 'destino_id'
     ]
     readonly_fields = ['imp_id']
     date_hierarchy = 'imp_fecha'
@@ -25,28 +24,27 @@ class ImputacionVentaAdmin(admin.ModelAdmin):
         ('Información General', {
             'fields': ('imp_id', 'imp_fecha', 'imp_monto', 'imp_observacion')
         }),
-        ('Relaciones', {
-            'fields': ('imp_id_venta', 'imp_id_recibo')
+        ('Origen (El Pago)', {
+            'fields': ('origen_content_type', 'origen_id')
+        }),
+        ('Destino (La Deuda)', {
+            'fields': ('destino_content_type', 'destino_id')
         }),
     )
     
-    def factura_numero(self, obj):
-        """Mostrar número formateado de la factura"""
-        return obj.imp_id_venta.numero_formateado if obj.imp_id_venta else '-'
-    factura_numero.short_description = 'Factura'
-    
-    def recibo_numero(self, obj):
-        """Mostrar número formateado del recibo"""
-        return obj.imp_id_recibo.numero_formateado if obj.imp_id_recibo else '-'
-    recibo_numero.short_description = 'Recibo'
-    
-    def cliente_nombre(self, obj):
-        """Mostrar nombre del cliente"""
-        return obj.imp_id_venta.ven_razon_social if obj.imp_id_venta else '-'
-    cliente_nombre.short_description = 'Cliente'
-    
+    def origen_display(self, obj):
+        return f"{obj.origen_content_type.model.title()}: {obj.origen}"
+    origen_display.short_description = 'Origen'
+
+    def destino_display(self, obj):
+        return f"{obj.destino_content_type.model.title()}: {obj.destino}"
+    destino_display.short_description = 'Destino'
+
+    def flecha(self, obj):
+        return "→"
+    flecha.short_description = ""
+
     def get_queryset(self, request):
-        """Optimizar consultas con select_related"""
         return super().get_queryset(request).select_related(
-            'imp_id_venta', 'imp_id_recibo'
+            'origen_content_type', 'destino_content_type'
         )

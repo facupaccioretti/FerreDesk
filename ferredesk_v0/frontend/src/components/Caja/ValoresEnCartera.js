@@ -6,7 +6,6 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import Tabla from "../Tabla"
 import ModalDepositarCheque from "./ModalDepositarCheque"
-import ModalEndosarCheques from "./ModalEndosarCheques"
 import ModalMarcarChequeRechazado from "./ModalMarcarChequeRechazado"
 import ModalDetalleCheque from "./ModalDetalleCheque"
 import ModalEditarCheque from "./ModalEditarCheque"
@@ -23,7 +22,7 @@ const ESTADO_EN_CARTERA = "EN_CARTERA"
  */
 const ValoresEnCartera = () => {
   const theme = useFerreDeskTheme()
-  const { obtenerCheques, obtenerCuentasBanco, depositarCheque, endosarCheques, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja } = useCajaAPI()
+  const { obtenerCheques, obtenerCuentasBanco, depositarCheque, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja } = useCajaAPI()
 
   // Estado de vista: false = Operativo (En Cartera), true = Historial
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
@@ -32,12 +31,8 @@ const ValoresEnCartera = () => {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState("")
 
-  // Selección múltiple para endoso
-  const [seleccionados, setSeleccionados] = useState(new Set())
-
   // Modales
   const [modalDepositar, setModalDepositar] = useState({ abierto: false, cheque: null })
-  const [modalEndosar, setModalEndosar] = useState(false)
   const [modalMarcarRechazado, setModalMarcarRechazado] = useState({ abierto: false, cheque: null })
   const [modalDetalle, setModalDetalle] = useState(null)
   const [modalEditar, setModalEditar] = useState(null)
@@ -64,7 +59,6 @@ const ValoresEnCartera = () => {
       setCheques(lista)
       setCuentasBanco(bancos)
       setAlertasVencimiento(resAlertas || { cantidad: 0, dias: 5 })
-      setSeleccionados(new Set()) // limpiar selección al recargar
     } catch (err) {
       console.error("Error cargando cheques:", err)
       alert(err.message || "Error al cargar cheques")
@@ -101,27 +95,7 @@ const ValoresEnCartera = () => {
 
   // Se usan formateadores centralizados de ../../utils/formatters
 
-  // Toggle selección de un cheque
-  const toggleSeleccion = (chequeId) => {
-    setSeleccionados((prev) => {
-      const nuevo = new Set(prev)
-      if (nuevo.has(chequeId)) {
-        nuevo.delete(chequeId)
-      } else {
-        nuevo.add(chequeId)
-      }
-      return nuevo
-    })
-  }
 
-  // Seleccionar/deseleccionar todos
-  const toggleTodos = () => {
-    if (seleccionados.size === cheques.length) {
-      setSeleccionados(new Set())
-    } else {
-      setSeleccionados(new Set(cheques.map((c) => c.id)))
-    }
-  }
 
   // Abrir modal de depósito
   const abrirDepositar = (cheque) => {
@@ -144,31 +118,7 @@ const ValoresEnCartera = () => {
     }
   }
 
-  // Abrir modal de endoso
-  const abrirEndosar = () => {
-    if (seleccionados.size === 0) {
-      alert("Seleccione al menos un cheque para endosar.")
-      return
-    }
-    setModalEndosar(true)
-  }
 
-  // Confirmar endoso
-  const confirmarEndoso = async (proveedorId) => {
-    setProcesando(true)
-    try {
-      const ids = Array.from(seleccionados)
-      await endosarCheques(proveedorId, ids)
-      setModalEndosar(false)
-      setSeleccionados(new Set())
-      await cargar() // recargar lista
-    } catch (err) {
-      console.error("Error endosando cheques:", err)
-      alert(err.message || "Error al endosar cheques")
-    } finally {
-      setProcesando(false)
-    }
-  }
 
   const abrirModalMarcarRechazado = (cheque) => {
     setModalMarcarRechazado({ abierto: true, cheque })
@@ -224,8 +174,6 @@ const ValoresEnCartera = () => {
     }
   }
 
-  // Obtener cheques seleccionados para el modal
-  const chequesSeleccionados = cheques.filter((c) => seleccionados.has(c.id))
 
   // Función para generar botones del menú de acciones para cada cheque
   const generarBotonesCheque = (cheque) => {
@@ -273,20 +221,6 @@ const ValoresEnCartera = () => {
   }
 
   const columnas = [
-    // Checkbox de selección (título vacío, el "seleccionar todos" está en el banner)
-    {
-      id: "seleccionar",
-      titulo: "",
-      ancho: "40px",
-      render: (c) => (
-        <input
-          type="checkbox"
-          checked={seleccionados.has(c.id)}
-          onChange={() => toggleSeleccion(c.id)}
-          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-        />
-      ),
-    },
     { id: "numero", titulo: "N°", render: (c) => <span className="text-sm font-medium text-slate-800">{c.numero}</span> },
     {
       id: "tipo",
@@ -337,20 +271,6 @@ const ValoresEnCartera = () => {
             </svg>
             Ver Historial
           </button>
-
-          {/* Botón Endosar (múltiple - solo si hay selección) */}
-          {seleccionados.size > 0 && (
-            <button
-              type="button"
-              onClick={abrirEndosar}
-              className="text-sm px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 font-medium flex items-center gap-1 shadow-sm transition-all"
-            >
-              <span>Endosar</span>
-              <span className="bg-indigo-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                {seleccionados.size}
-              </span>
-            </button>
-          )}
 
           <button type="button" onClick={cargar} className={theme.botonPrimario} disabled={cargando}>
             {cargando ? "Cargando..." : "Actualizar"}
@@ -406,39 +326,6 @@ const ValoresEnCartera = () => {
         </div>
       )}
 
-      {/* Barra de selección */}
-      {cheques.length > 0 && (
-        <div className={`rounded-md px-3 py-2 flex items-center justify-between text-xs transition-colors duration-200 ${seleccionados.size > 0
-          ? "bg-indigo-50 border border-indigo-200 text-indigo-800"
-          : "bg-slate-50 border border-slate-200 text-slate-600"
-          }`}>
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={cheques.length > 0 && seleccionados.size === cheques.length}
-                onChange={toggleTodos}
-                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span>Seleccionar todos</span>
-            </label>
-            {seleccionados.size > 0 && (
-              <>
-                <span className="text-indigo-600 font-medium">
-                  {seleccionados.size} cheque{seleccionados.size !== 1 ? "s" : ""} seleccionado{seleccionados.size !== 1 ? "s" : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSeleccionados(new Set())}
-                  className="underline hover:no-underline text-indigo-700"
-                >
-                  Limpiar
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       <Tabla
         columnas={columnas}
@@ -465,15 +352,6 @@ const ValoresEnCartera = () => {
         />
       )}
 
-      {/* Modal Endosar */}
-      {modalEndosar && (
-        <ModalEndosarCheques
-          chequesSeleccionados={chequesSeleccionados}
-          onConfirmar={confirmarEndoso}
-          onCancelar={() => setModalEndosar(false)}
-          loading={procesando}
-        />
-      )}
 
       {modalMarcarRechazado.abierto && modalMarcarRechazado.cheque && (
         <ModalMarcarChequeRechazado

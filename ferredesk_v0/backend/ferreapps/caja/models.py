@@ -360,7 +360,20 @@ class PagoVenta(models.Model):
         on_delete=models.PROTECT,
         db_column='PAG_VENTA_ID',
         related_name='pagos',
+        null=True,
+        blank=True,
         help_text='Venta a la que corresponde este pago'
+    )
+    
+    # Recibo al que pertenece este pago (Modelo independiente)
+    recibo = models.ForeignKey(
+        'cuenta_corriente.Recibo',
+        on_delete=models.PROTECT,
+        db_column='PAG_RECIBO_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Recibo al que corresponde este pago'
     )
     
     # Método de pago utilizado
@@ -549,11 +562,13 @@ class Cheque(models.Model):
 
     ESTADO_EN_CARTERA = 'EN_CARTERA'
     ESTADO_DEPOSITADO = 'DEPOSITADO'
+    ESTADO_ACREDITADO = 'ACREDITADO'
     ESTADO_ENTREGADO = 'ENTREGADO'
     ESTADO_RECHAZADO = 'RECHAZADO'
     ESTADOS = [
         (ESTADO_EN_CARTERA, 'En cartera'),
         (ESTADO_DEPOSITADO, 'Depositado'),
+        (ESTADO_ACREDITADO, 'Acreditado'),
         (ESTADO_ENTREGADO, 'Entregado'),
         (ESTADO_RECHAZADO, 'Rechazado'),
     ]
@@ -618,6 +633,14 @@ class Cheque(models.Model):
         help_text='Fecha/hora real en que se depositó'
     )
 
+    # Fecha/hora de acreditación (banco confirmó los fondos)
+    fecha_acreditacion = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column='fecha_acreditacion',
+        help_text='Fecha/hora en que el banco confirmó la acreditación'
+    )
+
     estado = models.CharField(
         max_length=20,
         choices=ESTADOS,
@@ -631,6 +654,15 @@ class Cheque(models.Model):
         null=True,
         blank=True,
         db_column='venta_id',
+        related_name='cheques',
+    )
+    # Recibo independiente
+    recibo = models.ForeignKey(
+        'cuenta_corriente.Recibo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='recibo_id',
         related_name='cheques',
     )
     pago_venta = models.ForeignKey(
@@ -759,6 +791,7 @@ class Cheque(models.Model):
             models.Index(fields=['estado']),
             models.Index(fields=['fecha_presentacion']),
             models.Index(fields=['venta']),
+            models.Index(fields=['recibo']),
         ]
 
     def __str__(self):

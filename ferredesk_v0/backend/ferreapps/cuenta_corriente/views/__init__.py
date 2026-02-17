@@ -1,13 +1,10 @@
 """
 Paquete de views modularizadas para el módulo de Cuenta Corriente.
 
-Re-exporta todas las views para mantener compatibilidad con código existente.
 Las views están organizadas en archivos específicos siguiendo principios SOLID y DRY.
 """
 
 from .views_cliente import (
-    CuentaCorrienteFilter,
-    CuentaCorrienteViewSet,
     cuenta_corriente_cliente,
     facturas_pendientes_cliente,
     clientes_con_movimientos,
@@ -35,11 +32,14 @@ from .views_proveedor import (
     anular_orden_pago,
     imputar_orden_pago,
     detalle_comprobante_proveedor,
+    crear_ajuste_proveedor,
+)
+
+from .views_imputacion import (
+    eliminar_imputacion,
 )
 
 __all__ = [
-    'CuentaCorrienteFilter',
-    'CuentaCorrienteViewSet',
     'cuenta_corriente_cliente',
     'facturas_pendientes_cliente',
     'clientes_con_movimientos',
@@ -58,4 +58,6 @@ __all__ = [
     'anular_orden_pago',
     'imputar_orden_pago',
     'detalle_comprobante_proveedor',
+    'crear_ajuste_proveedor',
+    'eliminar_imputacion',
 ]
