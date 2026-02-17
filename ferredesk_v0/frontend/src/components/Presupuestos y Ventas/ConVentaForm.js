@@ -453,7 +453,7 @@ const ConVentaForm = ({
   const handleChangeBase = manejarCambioFormulario(setFormulario);
   const handleChange = (e) => {
     handleChangeBase(e);
-    
+
     const nombreCampo = e?.target?.name;
     if (nombreCampo === 'cuit' || nombreCampo === 'domicilio' || nombreCampo === 'clienteId') {
       setEsCargaInicial(false);
@@ -523,7 +523,7 @@ const ConVentaForm = ({
         items: items.map((item, idx) => mapearCamposItem(item, idx)),
         // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
       };
-      
+
       // Campos para "Factura Recibo" (se establecen desde el modal de cobro)
       payload.comprobante_pagado = false
       payload.monto_pago = 0
@@ -687,7 +687,7 @@ const ConVentaForm = ({
     if (!window.confirm("¿Está seguro de guardar los cambios?")) {
       return
     }
-    
+
     setMostrarModalCobro(false)
     if (datos.enviar_cuenta_corriente) {
       enviarVentaConPagos(datos, null)
@@ -956,19 +956,19 @@ const ConVentaForm = ({
   // UseEffect para consultar estado CUIT en ARCA cuando aplique (solo letra fiscal A real)
   const debounceRef = useRef(null);
   useEffect(() => {
-    // Evitar en carga inicial, si aún no se inicializó el formulario, o durante submit
-    if (!inicializado || esCargaInicial || procesandoSubmit) return;
+    // Evitar si aún no se inicializó el formulario o durante submit
+    if (!inicializado || procesandoSubmit) return;
 
-    // Solo consultar si es comprobante de tipo factura (fiscal)
-    if (tipoComprobante !== 'factura') {
+    // Solo consultar si es un comprobante fiscal (Factura, NC, ND)
+    const esFiscal = ['factura', 'nota_credito', 'nota_debito'].includes(tipoComprobante);
+    if (!esFiscal) {
       setMostrarBannerCuit(false);
       limpiarEstadosARCAStatus();
       return;
     }
 
-    // Esperar a que la lógica fiscal resuelva el comprobante (como en VentaForm)
-    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? fiscal.letra : null;
-    if (letraFiscal !== 'A') {
+    // Solo consultar si el cliente no es Consumidor Final (ID 1)
+    if (String(formulario.clienteId) === '1') {
       setMostrarBannerCuit(false);
       limpiarEstadosARCAStatus();
       return;
@@ -1040,31 +1040,28 @@ const ConVentaForm = ({
 
           <div className="px-8 pt-4 pb-6">
 
-            {/* Banner de estado CUIT para conversiones a factura fiscal A */}
-            {mostrarBannerCuit && !procesandoSubmit && tipoComprobante === 'factura' && (() => {
-              const comprobanteSeleccionado = comprobantesVenta.find(c => c.id === comprobanteId);
-              return comprobanteSeleccionado?.letra === 'A';
-            })() && (
-                <CuitStatusBanner
-                  cuit={formulario.cuit}
-                  estado={(() => {
-                    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
-                    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                      return 'error';
-                    }
-                    return estadoARCAStatus || 'ok';
-                  })()}
-                  mensajes={(() => {
-                    const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
-                    if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
-                      return ['CUIT faltante o inválido. Verificar datos del cliente.'];
-                    }
-                    return mensajesARCAStatus || [];
-                  })()}
-                  onDismiss={ocultarBannerCuit}
-                  isLoading={isLoadingARCAStatus}
-                />
-              )}
+            {/* Banner de estado CUIT para conversiones a comprobantes fiscales */}
+            {mostrarBannerCuit && !procesandoSubmit && tipoComprobante === 'factura' && (
+              <CuitStatusBanner
+                cuit={formulario.cuit}
+                estado={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return 'error';
+                  }
+                  return estadoARCAStatus || 'ok';
+                })()}
+                mensajes={(() => {
+                  const cuitLimpio = (formulario.cuit || '').replace(/[-\s]/g, '');
+                  if (!cuitLimpio || cuitLimpio.length !== 11 || !/^\d{11}$/.test(cuitLimpio)) {
+                    return ['CUIT faltante o inválido. Verificar datos del cliente.'];
+                  }
+                  return mensajesARCAStatus || [];
+                })()}
+                onDismiss={ocultarBannerCuit}
+                isLoading={isLoadingARCAStatus}
+              />
+            )}
 
             {/* Badge de letra del comprobante */}
             {letraComprobanteMostrar && (

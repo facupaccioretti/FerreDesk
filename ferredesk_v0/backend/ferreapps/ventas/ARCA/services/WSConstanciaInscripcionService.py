@@ -9,8 +9,12 @@ Mantiene compatibilidad con el manejo de errores del sistema original.
 
 import logging
 import json
+import urllib3
 from typing import Dict, Any
 from zeep import Client, exceptions
+
+# Silenciar advertencias de SSL inseguro (AFIP)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from zeep.transports import Transport
 from zeep.helpers import serialize_object
 from requests import Session

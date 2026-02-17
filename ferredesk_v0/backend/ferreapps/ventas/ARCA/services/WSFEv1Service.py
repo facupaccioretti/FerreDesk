@@ -9,12 +9,16 @@ Mantiene compatibilidad con el manejo de errores del sistema original.
 
 import logging
 import time
+import urllib3
 from typing import Dict, Any, Optional
 from zeep import Client, exceptions
 from zeep.transports import Transport
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.ssl_ import create_urllib3_context
+
+# Silenciar advertencias de SSL inseguro (AFIP)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from ..auth.FerreDeskAuth import FerreDeskAuth
 from ..utils.ConfigManager import ConfigManager

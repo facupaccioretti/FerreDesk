@@ -420,16 +420,16 @@ const VentaForm = ({
     // Solo consultar si no es carga inicial y hay datos necesarios
     if (esCargaInicial) return
 
-    // Solo consultar si es factura fiscal
-    if (tipoComprobante !== 'factura') {
+    // Solo consultar si es un comprobante fiscal (Factura, NC, ND)
+    const esFiscal = ['factura', 'nota_credito', 'nota_debito'].includes(tipoComprobante)
+    if (!esFiscal) {
       setMostrarBannerCuit(false)
       limpiarEstadosARCAStatus()
       return
     }
 
-    // Solo consultar si la letra fiscal es A
-    const letraFiscal = usarFiscal && fiscal.comprobanteFiscal ? fiscal.letra : null
-    if (letraFiscal !== 'A') {
+    // Solo consultar si el cliente no es Consumidor Final (ID 1)
+    if (String(formulario.clienteId) === '1') {
       setMostrarBannerCuit(false)
       limpiarEstadosARCAStatus()
       return
@@ -525,7 +525,7 @@ const VentaForm = ({
     const items = itemsGridRef.current.getItems()
     const tipoComprobanteSeleccionado =
       comprobantesVenta.find((c) => c.id === comprobanteId) &&
-      (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
+        (comprobantesVenta.find((c) => c.id === comprobanteId).tipo || "").toLowerCase() === "factura"
         ? "factura"
         : "factura_interna"
     const ESTADO_VENTA_CERRADA = "CE"
@@ -602,7 +602,7 @@ const VentaForm = ({
     if (!window.confirm("¿Está seguro de guardar los cambios?")) {
       return
     }
-    
+
     setMostrarModalCobro(false)
     if (datos.enviar_cuenta_corriente) {
       enviarVentaConPagos(datos, null)
@@ -869,8 +869,8 @@ const VentaForm = ({
               </div>
             )}
 
-            {/* Banner de estado CUIT para facturas fiscales A (oculto durante envío/espera ARCA) */}
-            {mostrarBannerCuit && !esperandoArca && tipoComprobante === 'factura' && usarFiscal && fiscal.letra === 'A' && (
+            {/* Banner de estado CUIT para comprobantes fiscales (oculto durante envío/espera ARCA) */}
+            {mostrarBannerCuit && !esperandoArca && tipoComprobante === 'factura' && usarFiscal && (
               <CuitStatusBanner
                 cuit={formulario.cuit}
                 estado={(() => {

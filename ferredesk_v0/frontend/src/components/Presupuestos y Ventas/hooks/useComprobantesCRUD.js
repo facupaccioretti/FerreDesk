@@ -41,7 +41,7 @@ const useComprobantesCRUD = ({
    */
   const handleEdit = async (presupuesto) => {
     if (!presupuesto || !presupuesto.id) return
-    
+
     try {
       // Obtener cabecera completa con items desde el endpoint de detalle
       const [cabecera, itemsDetalle] = await Promise.all([
@@ -67,7 +67,7 @@ const useComprobantesCRUD = ({
       const key = `editar-${presupuesto.id}`
       const label = `Editar ${presupuesto.numero || presupuesto.id}`
       openTab(key, label, presupuestoCompleto)
-      
+
     } catch (error) {
       console.error('Error al cargar presupuesto para edición:', error)
       alert('Error al cargar el presupuesto: ' + error.message)
@@ -80,12 +80,12 @@ const useComprobantesCRUD = ({
    */
   const handleImprimir = async (presupuesto) => {
     if (!presupuesto || !presupuesto.id) return;
-    
+
     if (loadingFerreteria) {
       alert("Cargando configuración de la empresa, por favor espere...");
       return;
     }
-    
+
     try {
       // Obtener datos reales de las vistas SQL usando useVentaDetalleAPI
       const [cabecera, itemsDetalle, ivaDiscriminado, todasAlicuotas] = await Promise.all([
@@ -119,7 +119,7 @@ const useComprobantesCRUD = ({
         emisor_cuit: ferreteria?.cuit,
         emisor_ingresos_brutos: ferreteria?.ingresos_brutos,
         emisor_inicio_actividad: ferreteria?.inicio_actividad,
-        
+
         // Datos del comprobante (desde VENTA_CALCULADO)
         comprobante: {
           letra: cabecera.comprobante_letra,
@@ -130,7 +130,7 @@ const useComprobantesCRUD = ({
         numero_formateado: cabecera.numero_formateado,
         fecha: cabecera.ven_fecha,
         hora_creacion: cabecera.hora_creacion,
-        
+
         // Datos del cliente (desde VENTA_CALCULADO)
         cliente: cabecera.cliente_razon,
         domicilio: cabecera.cliente_domicilio,
@@ -139,12 +139,12 @@ const useComprobantesCRUD = ({
         localidad: cabecera.cliente_localidad,
         provincia: cabecera.cliente_provincia,
         telefono_cliente: cabecera.cliente_telefono,
-        
+
         // Items reales (desde VENTADETALLEITEM_CALCULADO)
         items: itemsDetalle.map(item => ({
           ...item // Incluir absolutamente todos los campos del ítem original
         })),
-        
+
         // Totales reales (desde VENTA_CALCULADO)
         ven_total: cabecera.ven_total,
         ven_impneto: cabecera.ven_impneto,
@@ -158,26 +158,26 @@ const useComprobantesCRUD = ({
           .filter(ali => ali.porce > 0) // Solo alícuotas con porcentaje > 0
           .map(ali => {
             // Buscar si existe esta alícuota en la factura
-            const ivaEnFactura = ivaDiscriminado.find(iva => 
+            const ivaEnFactura = ivaDiscriminado.find(iva =>
               parseFloat(iva.ali_porce) === parseFloat(ali.porce)
             );
-            
+
             return {
               ali_porce: ali.porce,
               neto_gravado: ivaEnFactura ? ivaEnFactura.neto_gravado : 0,
               iva_total: ivaEnFactura ? ivaEnFactura.iva_total : 0
             };
           }),
-        
+
         // Información AFIP (desde VENTA_CALCULADO)
         ven_cae: cabecera.ven_cae,
         ven_caevencimiento: cabecera.ven_caevencimiento ? new Date(cabecera.ven_caevencimiento).toLocaleDateString('es-AR') : '',
         ven_qr: cabecera.ven_qr, // Agregar el QR desde la cabecera
       };
-      
+
       // Generar y descargar PDF usando el hook del componente, pasando la configuración
       await descargarPDF(datosComprobante, cabecera.comprobante_letra, ferreteria);
-      
+
     } catch (err) {
       console.error("Error al imprimir:", err);
       alert("Error al generar PDF: " + (err.message || ""))
@@ -242,15 +242,15 @@ const useComprobantesCRUD = ({
   const handleConversionConfirm = (selectedItems) => {
     const datos = conversionModal.presupuesto
     const itemsSeleccionadosObjs = (datos.items || []).filter((item) => selectedItems.includes(item.id))
-    
+
     // Detectar tipo de conversión
     const esConversionFacturaI = datos.tipoConversion === 'factura_i_factura'
     const tipoTab = esConversionFacturaI ? 'conv-factura-i' : 'conventa'
     const labelPrefix = esConversionFacturaI ? 'Conv. Cotización' : 'Conversión a Factura'
-    
+
     const tabKey = `${tipoTab}-${datos.id}`
     const label = `${labelPrefix} #${datos.numero || datos.id}`
-    
+
     const tabData = {
       [esConversionFacturaI ? 'facturaInternaOrigen' : 'presupuestoOrigen']: datos,
       itemsSeleccionados: itemsSeleccionadosObjs.map(item => ({
@@ -263,7 +263,7 @@ const useComprobantesCRUD = ({
       itemsSeleccionadosIds: selectedItems,
       tipoConversion: datos.tipoConversion || 'presupuesto_venta'
     }
-    
+
     updateTabData(tabKey, label, tabData, tipoTab)
     setConversionModal({ open: false, presupuesto: null })
   }
@@ -292,12 +292,12 @@ const useComprobantesCRUD = ({
         let msg = "No se pudo convertir"
         try {
           msg = data.detail || msg
-        } catch {}
+        } catch { }
         throw new Error(msg)
       }
 
       await fetchVentas()
-      
+
       // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
       return data
     } catch (err) {
@@ -340,7 +340,7 @@ const useComprobantesCRUD = ({
           // Construir mensaje detallado y prolijo
           let mensaje = `${data.detail}\n\n`
           mensaje += `Comprobantes relacionados:\n\n\n`
-          
+
           data.imputaciones.forEach((imp, idx) => {
             if (imp.tipo === 'auto_imputacion') {
               mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`
@@ -359,24 +359,24 @@ const useComprobantesCRUD = ({
               mensaje += `   Fecha: ${imp.fecha}\n\n\n`
             }
           })
-          
+
           mensaje += `Total de imputaciones: ${data.total_imputaciones}\n\n`
           mensaje += 'Para continuar, elimine estas imputaciones desde Cuenta Corriente antes de realizar la conversión.'
-          
+
           // No usar alert - dejar que el error sea manejado por manejarErrorArca
           throw new Error(mensaje)
         }
-        
+
         // Otros errores
         let msg = "No se pudo convertir la cotización"
         try {
           msg = data.detail || msg
-        } catch {}
+        } catch { }
         throw new Error(msg)
       }
 
       await fetchVentas()
-      
+
       // Devolver la respuesta del backend para que ConVentaForm pueda procesar los datos de ARCA
       return data
     } catch (err) {
@@ -441,35 +441,35 @@ const useComprobantesCRUD = ({
       // === NUEVA VALIDACIÓN: Verificar imputaciones ANTES de abrir modal ===
       const validacionResponse = await fetch(`/api/verificar-imputaciones/${facturaInterna.id}/`);
       const validacionData = await validacionResponse.json();
-      
+
       if (validacionData.tiene_imputaciones && !validacionData.puede_convertir) {
-        
+
         // CASO ESPECIAL: Cliente genérico con auto-imputaciones (requiere confirmación)
         if (validacionData.requiere_confirmacion && validacionData.es_cliente_generico && validacionData.puede_eliminar_auto) {
           // Construir mensaje de confirmación específico
           let mensajeConfirmacion = `${validacionData.detail}\n\n`;
           mensajeConfirmacion += `Pagos registrados:\n\n`;
-          
+
           validacionData.imputaciones.forEach((imp, idx) => {
             if (imp.tipo === 'auto_imputacion') {
               mensajeConfirmacion += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
               mensajeConfirmacion += `   Monto: $${imp.monto} - Fecha: ${imp.fecha}\n\n`;
             }
           });
-          
+
           mensajeConfirmacion += `Total: ${validacionData.total_imputaciones} pago(s) registrado(s)\n\n`;
           mensajeConfirmacion += `${validacionData.mensaje_confirmacion}\n\n`;
           mensajeConfirmacion += `NOTA: Esta opción solo está disponible para ventas del cliente Consumidor Final.`;
-          
-          
+
+
           // Mostrar confirmación
           const confirmarEliminacion = window.confirm(mensajeConfirmacion);
-          
+
           if (!confirmarEliminacion) {
             // Usuario canceló: no hacer nada
             return;
           }
-          
+
           // Usuario confirmó: ELIMINAR AUTO-IMPUTACIONES INMEDIATAMENTE
           try {
             const responseEliminar = await fetch(
@@ -481,67 +481,67 @@ const useComprobantesCRUD = ({
                 },
               }
             );
-            
+
             const dataEliminar = await responseEliminar.json();
-            
+
             if (!dataEliminar.success) {
               window.alert(`Error al eliminar auto-imputaciones: ${dataEliminar.detail}`);
               return;
             }
-            
-          console.log(`Auto-imputaciones eliminadas: ${dataEliminar.num_eliminadas}`);
-          
-          // ✅ Obtener datos y abrir formulario inmediatamente después de eliminar
-          const [cabecera, itemsDetalle] = await Promise.all([
-            fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
-              if (!res.ok) {
-                const err = await res.json().catch(() => ({ detail: "Error cabecera" }));
-                throw new Error(err.detail);
-              }
-              return res.json();
-            }),
-            fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${facturaInterna.id}`).then(async (res) => {
-              if (!res.ok) return [];
-              return res.json();
-            }),
-          ]);
 
-          const facturaInternaConDetalle = {
-            ...(cabecera.venta || facturaInterna),
-            items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
-          };
+            console.log(`Auto-imputaciones eliminadas: ${dataEliminar.num_eliminadas}`);
 
-          const itemsConId = facturaInternaConDetalle.items.map((it, idx) => ({
-            ...it,
-            id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
-          }));
+            // ✅ Obtener datos y abrir formulario inmediatamente después de eliminar
+            const [cabecera, itemsDetalle] = await Promise.all([
+              fetch(`/api/venta-calculada/${facturaInterna.id}/`).then(async (res) => {
+                if (!res.ok) {
+                  const err = await res.json().catch(() => ({ detail: "Error cabecera" }));
+                  throw new Error(err.detail);
+                }
+                return res.json();
+              }),
+              fetch(`/api/venta-detalle-item-calculado/?vdi_idve=${facturaInterna.id}`).then(async (res) => {
+                if (!res.ok) return [];
+                return res.json();
+              }),
+            ]);
 
-          const key = `conversion-factura-i-${facturaInterna.id}`
-          const label = `Convertir ${facturaInterna.numero || facturaInterna.id}`
+            const facturaInternaConDetalle = {
+              ...(cabecera.venta || facturaInterna),
+              items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
+            };
 
-          const tabData = {
-            facturaInternaOrigen: {
-              ...facturaInternaConDetalle, 
-              items: itemsConId,
-              tipoConversion: 'factura_i_factura',
-            },
-            itemsSeleccionados: itemsConId,
-            itemsSeleccionadosIds: itemsConId.map(item => item.id),
-            tipoConversion: 'factura_i_factura'
+            const itemsConId = facturaInternaConDetalle.items.map((it, idx) => ({
+              ...it,
+              id: it.id || it.vdi_idve || it.vdi_id || idx + 1,
+            }));
+
+            const key = `conversion-factura-i-${facturaInterna.id}`
+            const label = `Convertir ${facturaInterna.numero || facturaInterna.id}`
+
+            const tabData = {
+              facturaInternaOrigen: {
+                ...facturaInternaConDetalle,
+                items: itemsConId,
+                tipoConversion: 'factura_i_factura',
+              },
+              itemsSeleccionados: itemsConId,
+              itemsSeleccionadosIds: itemsConId.map(item => item.id),
+              tipoConversion: 'factura_i_factura'
+            }
+
+            updateTabData(key, label, tabData, 'conv-factura-i');
+            return; // Salir después de abrir el formulario
+
+          } catch (error) {
+            window.alert(`Error al eliminar auto-imputaciones: ${error.message}`);
+            return;
           }
-          
-          updateTabData(key, label, tabData, 'conv-factura-i');
-          return; // Salir después de abrir el formulario
-          
-        } catch (error) {
-          window.alert(`Error al eliminar auto-imputaciones: ${error.message}`);
-          return;
-        }
         } else {
           // CASO GENERAL: Imputaciones que no se pueden eliminar automáticamente
           let mensaje = `${validacionData.detail}\n\n`;
           mensaje += `Comprobantes relacionados:\n\n`;
-          
+
           validacionData.imputaciones.forEach((imp, idx) => {
             if (imp.tipo === 'auto_imputacion') {
               mensaje += `${idx + 1}. ${imp.nombre} ${imp.numero}\n`;
@@ -560,10 +560,10 @@ const useComprobantesCRUD = ({
               mensaje += `   Fecha: ${imp.fecha}\n\n`;
             }
           });
-          
+
           mensaje += `Total de imputaciones: ${validacionData.total_imputaciones}\n\n`;
           mensaje += 'Para continuar, elimine estas imputaciones desde Cuenta Corriente antes de realizar la conversión.';
-          
+
           // Mostrar error con alert del navegador (no abrir formulario)
           window.alert(mensaje);
           return;
@@ -602,7 +602,7 @@ const useComprobantesCRUD = ({
 
       const tabData = {
         facturaInternaOrigen: {
-          ...facturaInternaConDetalle, 
+          ...facturaInternaConDetalle,
           items: itemsConId,
           tipoConversion: 'factura_i_factura',
         },
@@ -610,7 +610,7 @@ const useComprobantesCRUD = ({
         itemsSeleccionadosIds: itemsConId.map(item => item.id),
         tipoConversion: 'factura_i_factura'
       }
-      
+
       updateTabData(key, label, tabData, 'conv-factura-i');
     } catch (error) {
       console.error("Error al obtener detalle para conversión:", error);
@@ -627,35 +627,36 @@ const useComprobantesCRUD = ({
    */
   const handleNotaCredito = async (factura) => {
     if (!factura || !factura.id) return;
-    
+
     // Validar que sea una factura válida para NC
-    const esFacturaValida = factura.comprobante?.tipo === 'factura' || 
-                           factura.comprobante?.tipo === 'venta' || 
-                           factura.comprobante?.tipo === 'factura_interna';
+    const esFacturaValida = factura.comprobante?.tipo === 'factura' ||
+      factura.comprobante?.tipo === 'venta' ||
+      factura.comprobante?.tipo === 'factura_interna';
     const letraValida = ['A', 'B', 'C', 'I'].includes(factura.comprobante?.letra);
     const estaCerrada = factura.estado === 'Cerrado';
-    
+
     if (!esFacturaValida || !letraValida) {
       alert('Esta factura no puede tener una nota de crédito asociada.');
       return;
     }
-    
+
     if (!estaCerrada) {
       alert('Solo se pueden crear notas de crédito para facturas cerradas.');
       return;
     }
-    
+
     // Obtener datos del cliente
-    // Robustez: poblar datos del cliente con múltiples posibles campos
+    // Robustez: poblar datos del cliente con múltiples posibles campos para asegurar visibilidad en NC.
+    // Usamos factura.cliente (que se muestra en la tabla) y todos los fallbacks posibles.
     const cliente = {
-      id: factura.ven_idcli,
-      razon: factura.cliente_nombre || factura.cliente,
-      nombre: factura.cliente_nombre || factura.cliente,
-      cuit: factura.cuit || factura.ven_cuit || '',
-      domicilio: factura.domicilio || factura.ven_domicilio || '',
-      plazo_id: factura.ven_idpla
+      id: factura.ven_idcli || factura.cliente_id || factura.idcli,
+      razon: factura.cliente || factura.cliente_nombre || factura.cliente_razon || factura.nombre_cliente || '',
+      nombre: factura.cliente || factura.cliente_nombre || factura.cliente_razon || factura.nombre_cliente || '',
+      cuit: factura.cuit || factura.ven_cuit || factura.cliente_cuit || '',
+      domicilio: factura.domicilio || factura.ven_domicilio || factura.cliente_domicilio || '',
+      plazo_id: factura.ven_idpla || factura.plazo_id
     };
-    
+
     // Crear tab de nota de crédito con datos pre-seleccionados
     const newKey = `nota-credito-${Date.now()}`;
     const esInterna = factura.comprobante?.tipo === 'factura_interna' || factura.comprobante?.letra === 'I';
@@ -664,7 +665,7 @@ const useComprobantesCRUD = ({
       cliente: cliente,
       facturas: [factura]
     };
-    
+
     updateTabData(newKey, label, data, "nota-credito");
   }
 
@@ -674,25 +675,25 @@ const useComprobantesCRUD = ({
     isFetchingForConversion,
     fetchingPresupuestoId,
     vistaModal, // Exponer el estado del modal de vista
-    
+
     // Funciones CRUD
     handleEdit,
     handleImprimir,
     handleConvertir,
     handleDelete,
     openVistaTab,
-    
+
     // Funciones de conversión
     handleConversionConfirm,
     handleConVentaFormSave,
     handleConVentaFormCancel,
     handleConVentaFormSaveFacturaI,
     handleConvertirFacturaI,
-    
+
     // Funciones de utilidad
     esFacturaInternaConvertible,
     handleNotaCredito,
-    
+
     // Setters para estados
     setConversionModal,
     setVistaModal, // Exponer el setter para el modal de vista

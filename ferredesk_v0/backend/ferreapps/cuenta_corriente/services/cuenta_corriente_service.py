@@ -186,8 +186,8 @@ def obtener_movimientos_proveedor(proveedor_id, fecha_desde=None, fecha_hasta=No
             'saldo_pendiente': item.mov_saldo_pendiente
         })
     
-    # Ordenar por fecha, luego prioridad (Debe antes que Haber), luego hora, luego ID
-    movimientos.sort(key=lambda x: (x['fecha'], x['prioridad'], x['hora'], x['id']))
+    # Ordenar por fecha, luego hora, luego ID (Orden Cronológico Natural)
+    movimientos.sort(key=lambda x: (x['fecha'], x['hora'], x['id']))
     
     saldo_acumulado = Decimal('0.00')
     final_movimientos = []
@@ -380,9 +380,9 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             'orden_auto_imputacion': 0
         })
 
-    # Ordenar por fecha, luego prioridad (Debe antes que Haber), luego hora, luego ID (como string)
+    # Ordenar por fecha, luego hora, luego ID (como string) (Orden Cronológico Natural)
     # Fix de ordenamiento: str(x['id']) para evitar TypeError entre int y str
-    movimientos.sort(key=lambda x: (x['fecha'], x['prioridad'], x['hora'], str(x['id'])))
+    movimientos.sort(key=lambda x: (x['fecha'], x['hora'], str(x['id'])))
     
     saldo_acumulado = Decimal('0.00')
     final_movimientos = []

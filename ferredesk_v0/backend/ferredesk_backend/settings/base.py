@@ -94,6 +94,7 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
+    'EXCEPTION_HANDLER': 'ferredesk_backend.utils.exceptions.custom_exception_handler',
 }
 
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
