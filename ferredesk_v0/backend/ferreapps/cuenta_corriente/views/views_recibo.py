@@ -109,11 +109,11 @@ def crear_recibo_con_imputaciones(request):
             facturas_a_imputar = []
             for imp in data['imputaciones']:
                 # El serializer devuelve el ID de venta destino
-                factura_destino = get_object_or_404(Venta, ven_id=imp['factura_id'])
+                factura_destino = get_object_or_404(Venta, ven_id=imp['imp_id_venta'])
                 facturas_a_imputar.append({
                     'factura': factura_destino,
-                    'monto': imp['monto'],
-                    'observacion': imp.get('observacion', '')
+                    'monto': imp['imp_monto'],
+                    'observacion': imp.get('imp_observacion', '')
                 })
             
             if facturas_a_imputar:

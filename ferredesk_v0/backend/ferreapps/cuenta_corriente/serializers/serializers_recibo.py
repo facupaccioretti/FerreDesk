@@ -16,11 +16,11 @@ class ReciboSerializer(serializers.ModelSerializer):
 class ImputacionItemSerializer(serializers.Serializer):
 # ... (existing ImputacionItemSerializer) ...
     """Serializer inline para cada imputación dentro de un recibo."""
-    factura_id = serializers.IntegerField(help_text='ID de la factura/comprobante destino')
-    monto = serializers.DecimalField(max_digits=15, decimal_places=2, help_text='Monto a imputar')
-    observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    imp_id_venta = serializers.IntegerField(help_text='ID de la factura/comprobante destino')
+    imp_monto = serializers.DecimalField(max_digits=15, decimal_places=2, help_text='Monto a imputar')
+    imp_observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
 
-    def validate_monto(self, value):
+    def validate_imp_monto(self, value):
         if value <= 0:
             raise serializers.ValidationError('El monto debe ser mayor a cero')
         return value
@@ -70,7 +70,7 @@ class ReciboCreateSerializer(serializers.Serializer):
                 })
 
         monto_imputaciones = sum(
-            imp['monto'] for imp in imputaciones
+            imp['imp_monto'] for imp in imputaciones
         )
         
         if monto_total < monto_imputaciones:

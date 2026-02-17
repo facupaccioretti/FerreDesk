@@ -211,12 +211,13 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
     """
     Reemplaza la lógica de la vista SQL CUENTA_CORRIENTE_CLIENTE usando Django ORM.
     Unifica Facturas (Venta) y Recibos (Modelo Independiente).
+    Optimizado para evitar consultas N+1 y corregir problemas de ordenamiento y zona horaria.
     """
     # ContentTypes
     venta_ct = ContentType.objects.get_for_model(Venta)
     recibo_ct = ContentType.objects.get_for_model(Recibo)
     
-    # Subqueries para saldos pendientes
+    # Subqueries para saldos pendientes (Igual que en Proveedores)
     imp_destino_sq = Imputacion.objects.filter(
         destino_content_type=venta_ct,
         destino_id=OuterRef('pk')
@@ -229,16 +230,38 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
     ).values('origen_id').annotate(total=Sum('imp_monto')).values('total')
 
     from ferreapps.ventas.models import VentaCalculada
+    
     # 1. Facturas y Notas de Débito (Deudas)
+    # Optimizamos trayendo el monto imputado en la misma consulta
     qs_calc = VentaCalculada.objects.filter(
         ven_idcli=cliente_id
     ).exclude(
         ven_estado='AN'
     ).exclude(
         comprobante_tipo='presupuesto'
+    ).annotate(
+        total_imputado=Coalesce(Subquery(imp_destino_sq), Value(0, output_field=DecimalField()))
     )
     
+    # --- BATCH FETCHING PARA AUTO-IMPUTACIONES ---
+    # En lugar de consultar por cada venta, traemos todas las imputaciones relevantes de una vez
+    ids_ventas = [v.ven_id for v in qs_calc]
+    
+    imputaciones_batch = {}
+    if ids_ventas:
+        imputaciones_db = Imputacion.objects.filter(
+            destino_content_type=venta_ct,
+            destino_id__in=ids_ventas,
+            origen_content_type=venta_ct # Solo nos interesan las auto-imputaciones o notas de crédito aplicadas aquí
+        ).select_related('origen_content_type')
+        
+        for imp in imputaciones_db:
+            if imp.destino_id not in imputaciones_batch:
+                imputaciones_batch[imp.destino_id] = []
+            imputaciones_batch[imp.destino_id].append(imp)
+
     movimientos = []
+    
     for item in qs_calc:
         # Qué tipo de movimiento base es
         es_deuda = item.comprobante_tipo in [
@@ -254,12 +277,22 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             debe = Decimal('0.00')
             haber = item.ven_total
             
+        # Helper para obtener hora local de forma segura
+        hora_str = '00:00:00'
+        if item.hora_creacion:
+            # Verificación robusta mediante Django is_aware
+            if timezone.is_aware(item.hora_creacion):
+                hora_str = timezone.localtime(item.hora_creacion).strftime('%H:%M:%S')
+            else:
+                # Si es time o datetime naive, lo usamos directo
+                hora_str = item.hora_creacion.strftime('%H:%M:%S')
+
         # Agregamos el movimiento base
         movimientos.append({
             'ct_id': venta_ct.id,
             'id': item.ven_id,
             'fecha': item.ven_fecha,
-            'hora': item.hora_creacion.strftime('%H:%M:%S') if item.hora_creacion else '00:00:00',
+            'hora': hora_str,
             'prioridad': 0 if debe > 0 else 1,
             'proveedor_id': item.ven_idcli, 
             'comprobante_nombre': item.comprobante_nombre,
@@ -268,28 +301,18 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             'haber': haber,
             'total': item.ven_total,
             'numero_formateado': item.numero_formateado,
-            'saldo_pendiente': item.ven_total, # Valor base, se ajustará abajo
+            'saldo_pendiente': item.ven_total - item.total_imputado, # Usamos el valor anotado
             'orden_auto_imputacion': 0
         })
 
-        # --- NUEVO: Manejo de "Factura Recibo", "Auto-imputaciones" y "Aplicación de NC" ---
-        # Buscamos si este documento fue pagado por sí mismo o por otra Venta (ej: NC)
-        imputaciones_vencida = Imputacion.objects.filter(
-            destino_content_type=venta_ct,
-            destino_id=item.ven_id
-        ).select_related('origen_content_type')
-
-        monto_imputado_total = Decimal('0.00')
-
-        _imp_count = 0
-        for imp in imputaciones_vencida:
-            monto_imputado_total += imp.imp_monto
-            
-            # Si el origen es una VENTA (no un Recibo), debemos generar un movimiento de Haber
-            # porque los Recibos se procesan en su propio loop más abajo.
-            if imp.origen_content_type == venta_ct:
+        # --- AUTO-IMPUTACIONES DESDE BATCH ---
+        if item.ven_id in imputaciones_batch:
+            for imp in imputaciones_batch[item.ven_id]:
+                # Si el origen es una VENTA (no un Recibo), generamos movimiento de Haber
+                # (Ya filtramos por origen_content_type=venta_ct en la query batch)
+                
                 es_auto = (imp.origen_id == item.ven_id)
-                # Aplicamos los nombres exactos pedidos por el usuario para las auto-imputaciones
+                # Aplicamos los nombres exactos para las auto-imputaciones
                 if es_auto:
                     # Cotización Recibo si viene de cotización; Factura Recibo si viene de factura
                     es_cotizacion = (
@@ -300,11 +323,19 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
                 else:
                     nombre_pago = f"Aplicación {imp.origen_id}"
                 
+                # Fix Timezone para fecha de imputación
+                hora_imp = '23:59:59'
+                if item.hora_creacion:
+                    if timezone.is_aware(item.hora_creacion):
+                        hora_imp = timezone.localtime(item.hora_creacion).strftime('%H:%M:%S')
+                    else:
+                        hora_imp = item.hora_creacion.strftime('%H:%M:%S')
+
                 movimientos.append({
                     'ct_id': venta_ct.id,
                     'id': f"IMP-{imp.pk}", # ID virtual
                     'fecha': imp.imp_fecha or item.ven_fecha,
-                    'hora': item.hora_creacion.strftime('%H:%M:%S') if item.hora_creacion else '23:59:59',
+                    'hora': hora_imp,
                     'prioridad': 2, # Los cobros automáticos van después de la factura
                     'proveedor_id': item.ven_idcli,
                     'comprobante_nombre': nombre_pago,
@@ -316,12 +347,6 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
                     'saldo_pendiente': Decimal('0.00'), # Los cobros no tienen saldo pendiente propio
                     'orden_auto_imputacion': 1
                 })
-                _imp_count += 1
-
-        # Actualizamos el saldo pendiente del movimiento base de deuda
-        if es_deuda:
-            # El movimiento base es el que agregamos justo antes de las imputaciones
-            movimientos[-1 - _imp_count]['saldo_pendiente'] = item.ven_total - monto_imputado_total
 
     # 2. Nuevos Recibos (Pagos)
     recibos_qs = Recibo.objects.filter(
@@ -332,11 +357,18 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
     )
 
     for r in recibos_qs:
+        hora_rec = '23:59:59'
+        if r.rec_fecha_creacion:
+            if timezone.is_aware(r.rec_fecha_creacion):
+                hora_rec = timezone.localtime(r.rec_fecha_creacion).strftime('%H:%M:%S')
+            else:
+                hora_rec = r.rec_fecha_creacion.strftime('%H:%M:%S')
+
         movimientos.append({
             'ct_id': recibo_ct.id,
             'id': r.rec_id,
             'fecha': r.rec_fecha,
-            'hora': timezone.localtime(r.rec_fecha_creacion).strftime('%H:%M:%S') if r.rec_fecha_creacion else '23:59:59',
+            'hora': hora_rec,
             'prioridad': 1, # Pagos después
             'comprobante_nombre': 'Recibo',
             'comprobante_tipo': 'recibo',
@@ -348,8 +380,9 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             'orden_auto_imputacion': 0
         })
 
-    # Ordenar por fecha, luego prioridad (Debe antes que Haber), luego hora, luego ID
-    movimientos.sort(key=lambda x: (x['fecha'], x['prioridad'], x['hora'], x['id']))
+    # Ordenar por fecha, luego prioridad (Debe antes que Haber), luego hora, luego ID (como string)
+    # Fix de ordenamiento: str(x['id']) para evitar TypeError entre int y str
+    movimientos.sort(key=lambda x: (x['fecha'], x['prioridad'], x['hora'], str(x['id'])))
     
     saldo_acumulado = Decimal('0.00')
     final_movimientos = []
@@ -363,22 +396,9 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
         cumple_filtro = True
         if fecha_desde and str(mov['fecha']) < fecha_desde: cumple_filtro = False
         if fecha_hasta and str(mov['fecha']) > fecha_hasta: cumple_filtro = False
+        # Corregido: convertir Decimal a float comparativo o usar lógica directa
         if not completo and mov['saldo_pendiente'] <= 0: cumple_filtro = False
             
         if cumple_filtro: final_movimientos.append(mov)
             
     return final_movimientos
-
-def format_item(item):
-    return {
-        'id': item.mov_id,
-        'fecha': item.mov_fecha,
-        'proveedor_id': item.mov_proveedor_id,
-        'comprobante_nombre': item.mov_comprobante_nombre,
-        'comprobante_tipo': item.mov_comprobante_tipo,
-        'debe': item.mov_debe,
-        'haber': item.mov_haber,
-        'total': item.mov_total,
-        'numero_formateado': item.mov_numero,
-        'saldo_pendiente': item.mov_saldo_pendiente
-    }
