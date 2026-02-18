@@ -7,7 +7,7 @@ import usePortalTooltip from './usePortalTooltip'
 
 const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCredito, onNuevaModificacionContenido, onNuevaNotaDebito, onNuevaExtensionContenido }) => {
   const theme = useFerreDeskTheme()
-  
+
   // Hook para manejar el portal del dropdown
   const { visible, TooltipPortal, triggerProps } = usePortalTooltip({
     placement: 'bottom', // El dropdown aparece debajo del botón
@@ -76,10 +76,10 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
         <span>Nuevo</span>
-        <svg 
-          className={`w-3 h-3 transition-transform duration-200 ${visible ? 'rotate-180' : ''}`} 
-          fill="none" 
-          viewBox="0 0 24 24" 
+        <svg
+          className={`w-3 h-3 transition-transform duration-200 ${visible ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
           stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -88,10 +88,10 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
 
       {/* Portal del dropdown */}
       <TooltipPortal
-        className="w-48 bg-white rounded-lg shadow-lg border border-slate-200"
+        className="w-44 bg-white rounded-lg shadow-lg border border-slate-200"
         role="menu"
       >
-        <div className="py-2">
+        <div className="py-1">
           {opciones.map((opcion) => (
             <button
               key={opcion.id}
@@ -100,12 +100,12 @@ const BotonNuevoComprobante = ({ onNuevoPresupuesto, onNuevaVenta, onNuevaNotaCr
                 opcion.onClick()
                 triggerProps.onClick(e) // Cierra el dropdown después de la acción
               }}
-              className="w-full px-4 py-3 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 transition-colors duration-150"
+              className="w-full px-3 py-1.5 text-left hover:bg-orange-500 hover:text-white flex items-center space-x-2 text-slate-700 transition-colors duration-150 group"
             >
-              <div className="text-slate-400">
+              <div className="text-slate-400 group-hover:text-white transition-colors scale-90">
                 {opcion.icon}
               </div>
-              <span className="font-medium">{opcion.label}</span>
+              <span className="text-xs font-medium">{opcion.label}</span>
             </button>
           ))}
         </div>

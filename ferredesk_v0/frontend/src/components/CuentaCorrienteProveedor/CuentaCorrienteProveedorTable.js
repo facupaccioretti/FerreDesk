@@ -105,10 +105,10 @@ const CuentaCorrienteProveedorTable = ({
                     tipoColor = 'text-slate-700';
                 } else if (item.comprobante_tipo === 'ajuste_debito') {
                     tipoLabel = `Ajuste Débito ${item.numero_formateado || ''}`;
-                    tipoColor = 'text-orange-600 font-semibold';
+                    tipoColor = 'text-slate-700';
                 } else if (item.comprobante_tipo === 'ajuste_credito') {
                     tipoLabel = `Ajuste Crédito ${item.numero_formateado || ''}`;
-                    tipoColor = 'text-green-600 font-semibold';
+                    tipoColor = 'text-slate-700';
                 } else {
                     tipoLabel = item.comprobante_nombre || item.comprobante_tipo;
                 }

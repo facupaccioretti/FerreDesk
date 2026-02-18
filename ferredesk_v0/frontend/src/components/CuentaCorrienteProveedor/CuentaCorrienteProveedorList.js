@@ -272,7 +272,7 @@ const CuentaCorrienteProveedorList = ({
                                             {({ active }) => (
                                                 <button
                                                     onClick={() => handleAbrirAjuste('DEBITO')}
-                                                    className={`${active ? 'bg-slate-800 text-white' : 'text-slate-700'
+                                                    className={`${active ? 'bg-orange-500 text-white' : 'text-slate-700'
                                                         } group flex w-full items-center rounded-md px-3 py-2 text-xs font-medium`}
                                                 >
                                                     <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -286,7 +286,7 @@ const CuentaCorrienteProveedorList = ({
                                             {({ active }) => (
                                                 <button
                                                     onClick={() => handleAbrirAjuste('CREDITO')}
-                                                    className={`${active ? 'bg-blue-600 text-white' : 'text-slate-700'
+                                                    className={`${active ? 'bg-orange-500 text-white' : 'text-slate-700'
                                                         } group flex w-full items-center rounded-md px-3 py-2 text-xs font-medium`}
                                                 >
                                                     <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

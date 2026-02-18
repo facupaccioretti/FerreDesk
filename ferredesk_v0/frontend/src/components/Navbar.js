@@ -199,6 +199,65 @@ export default function Navbar({ user, onLogout }) {
             </span>
           </div>
 
+          {/* Caja, Banco y Cheques */}
+          <div className="relative group">
+            <a
+              href="/home/caja"
+              onClick={(e) => handleLinkClick(e, "/home/caja")}
+              className="p-2 rounded-xl hover:bg-cyan-500/20 transition-all duration-300 shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer block"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-cyan-400">
+                <path d="M21 15h-2.5c-.398 0 -.779 .158 -1.061 .439c-.281 .281 -.439 .663 -.439 1.061c0 .398 .158 .779 .439 1.061c.281 .281 .663 .439 1.061 .439h1c.398 0 .779 .158 1.061 .439c.281 .281 .439 .663 .439 1.061c0 .398 -.158 .779 -.439 1.061c-.281 .281 -.663 .439 -1.061 .439h-2.5" />
+                <path d="M19 21v1m0 -8v1" />
+                <path d="M13 21h-7c-.53 0 -1.039 -.211 -1.414 -.586c-.375 -.375 -.586 -.884 -.586 -1.414v-10c0 -.53 .211 -1.039 .586 -1.414c.375 -.375 .884 -.586 1.414 -.586h2m12 3.12v-1.12c0 -.53 -.211 -1.039 -.586 -1.414c-.375 -.375 -.884 -.586 -1.414 -.586h-2" />
+                <path d="M16 10v-6c0 -.53 -.211 -1.039 -.586 -1.414c-.375 -.375 -.884 -.586 -1.414 -.586h-4c-.53 0 -1.039 .211 -1.414 .586c-.375 .375 -.586 .884 -.586 1.414v6m8 0h-8m8 0h1m-9 0h-1" />
+                <path d="M8 14v.01" />
+                <path d="M8 17v.01" />
+                <path d="M12 13.99v.01" />
+                <path d="M12 17v.01" />
+              </svg>
+            </a>
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50 pointer-events-none">
+              Caja, Banco y Cheques
+            </span>
+          </div>
+
+          {/* C.C. Clientes */}
+          <div className="relative group">
+            <a
+              href="/home/cuenta-corriente"
+              onClick={(e) => handleLinkClick(e, "/home/cuenta-corriente")}
+              className="p-2 rounded-xl hover:bg-indigo-500/20 transition-all duration-300 shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer block"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-indigo-400">
+                <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+                <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+              </svg>
+            </a>
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50 pointer-events-none">
+              C.C. Clientes
+            </span>
+          </div>
+
+          {/* C.C. Proveedor */}
+          <div className="relative group">
+            <a
+              href="/home/cuenta-corriente-proveedores"
+              onClick={(e) => handleLinkClick(e, "/home/cuenta-corriente-proveedores")}
+              className="p-2 rounded-xl hover:bg-rose-500/20 transition-all duration-300 shadow-sm hover:shadow-md transform hover:scale-105 cursor-pointer block"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-rose-400">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+            </a>
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-3 px-3 py-2 bg-slate-800/95 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl border border-slate-600 z-50 pointer-events-none">
+              C.C. Proveedor
+            </span>
+          </div>
+
           {/* Menú Más Herramientas */}
           <div className="relative group">
             <button
@@ -250,47 +309,25 @@ export default function Navbar({ user, onLogout }) {
                 </a>
 
                 <a
-                  href="/home/cuenta-corriente"
-                  onClick={(e) => handleLinkClick(e, "/home/cuenta-corriente")}
+                  href="/home/carga-inicial-proveedor"
+                  onClick={(e) => handleLinkClick(e, "/home/carga-inicial-proveedor")}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-teal-400 group-hover:text-teal-300">
-                    <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
-                    <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-4 h-4 text-teal-400 group-hover:text-teal-300"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                    />
                   </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Cuentas Corrientes (Clientes)</span>
-                </a>
-
-                <a
-                  href="/home/cuenta-corriente-proveedores"
-                  onClick={(e) => handleLinkClick(e, "/home/cuenta-corriente-proveedores")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-teal-400 group-hover:text-teal-300">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="8.5" cy="7" r="4" />
-                    <line x1="20" y1="8" x2="20" y2="14" />
-                    <line x1="23" y1="11" x2="17" y2="11" />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">C.C. Proveedores</span>
-                </a>
-
-                <a
-                  href="/home/caja"
-                  onClick={(e) => handleLinkClick(e, "/home/caja")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-teal-400 group-hover:text-teal-300">
-                    <path d="M21 15h-2.5c-.398 0 -.779 .158 -1.061 .439c-.281 .281 -.439 .663 -.439 1.061c0 .398 .158 .779 .439 1.061c.281 .281 .663 .439 1.061 .439h1c.398 0 .779 .158 1.061 .439c.281 .281 .439 .663 .439 1.061c0 .398 -.158 .779 -.439 1.061c-.281 .281 -.663 .439 -1.061 .439h-2.5" />
-                    <path d="M19 21v1m0 -8v1" />
-                    <path d="M13 21h-7c-.53 0 -1.039 -.211 -1.414 -.586c-.375 -.375 -.586 -.884 -.586 -1.414v-10c0 -.53 .211 -1.039 .586 -1.414c.375 -.375 .884 -.586 1.414 -.586h2m12 3.12v-1.12c0 -.53 -.211 -1.039 -.586 -1.414c-.375 -.375 -.884 -.586 -1.414 -.586h-2" />
-                    <path d="M16 10v-6c0 -.53 -.211 -1.039 -.586 -1.414c-.375 -.375 -.884 -.586 -1.414 -.586h-4c-.53 0 -1.039 .211 -1.414 .586c-.375 .375 -.586 .884 -.586 1.414v6m8 0h-8m8 0h1m-9 0h-1" />
-                    <path d="M8 14v.01" />
-                    <path d="M8 17v.01" />
-                    <path d="M12 13.99v.01" />
-                    <path d="M12 17v.01" />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Caja y Tesorería (En Desarrollo)</span>
+                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Carga Inicial</span>
                 </a>
 
                 <a
