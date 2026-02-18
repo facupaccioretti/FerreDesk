@@ -12,7 +12,7 @@ import logging
 from ..models import Imputacion, Recibo
 from ..serializers import ReciboCreateSerializer
 from ..services.imputacion_service import imputar_deuda, validar_saldo_comprobante_pago
-from ferreapps.ventas.models import Venta, VentaCalculada, Comprobante
+from ferreapps.ventas.models import Venta, Comprobante
 from ferreapps.clientes.models import Cliente
 from ferreapps.caja.utils import registrar_pagos_recibo
 
@@ -82,7 +82,10 @@ def crear_recibo_con_imputaciones(request):
         from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
         sesion_caja = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
         if not sesion_caja:
-            return Response({'detail': 'Debe abrir una caja antes de crear un recibo.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'detail': 'Debe abrir una caja antes de crear un recibo.',
+                'error_code': 'CAJA_NO_ABIERTA'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
         cliente = get_object_or_404(Cliente, id=data['cliente_id'])

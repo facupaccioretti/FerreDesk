@@ -10,7 +10,7 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from io import BytesIO
 from django.utils import timezone
-from ferreapps.productos.models import VistaStockProducto
+from ferreapps.productos.models import Stock
 
 # Create your views here.
 
@@ -19,8 +19,8 @@ class StockBajoView(APIView):
     
     def get(self, request):
         try:
-            # Obtener productos con stock bajo (necesita_reposicion = 1)
-            productos_stock_bajo = VistaStockProducto.objects.filter(
+            # Obtener productos con stock bajo usando el manager anotado
+            productos_stock_bajo = Stock.objects.con_stock_total().filter(
                 necesita_reposicion=1
             ).order_by('denominacion')
             
@@ -56,8 +56,8 @@ class StockBajoPDFView(APIView):
     
     def get(self, request):
         try:
-            # Obtener productos con stock bajo
-            productos_stock_bajo = VistaStockProducto.objects.filter(
+            # Obtener productos con stock bajo usando el manager anotado
+            productos_stock_bajo = Stock.objects.con_stock_total().filter(
                 necesita_reposicion=1
             ).order_by('denominacion')
             

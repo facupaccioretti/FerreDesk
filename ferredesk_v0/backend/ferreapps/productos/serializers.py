@@ -127,10 +127,12 @@ class StockSerializer(serializers.ModelSerializer):
         return resultado
 
     def get_stock_total(self, obj):
-        """Obtiene el stock total desde la vista VISTA_STOCK_PRODUCTO para el producto dado."""
-        from .models import VistaStockProducto  # Import local para evitar dependencias circulares en migraciones
-        vista = VistaStockProducto.objects.filter(id=obj.id).values_list('stock_total', flat=True).first()
-        return vista if vista is not None else 0
+        """Obtiene el stock total priorizando la anotación del manager (optimizado)."""
+        if hasattr(obj, 'stock_total'):
+            return obj.stock_total
+        # Fallback por si el objeto no fue anotado
+        res = obj.__class__.objects.con_stock_total().filter(pk=obj.pk).values_list('stock_total', flat=True).first()
+        return res if res is not None else 0
 
     def validate_codvta(self, value):
         """
@@ -231,13 +233,14 @@ class FerreteriaSerializer(serializers.ModelSerializer):
         return rep
 
 class VistaStockProductoSerializer(serializers.ModelSerializer):
+    """Serializador para listado de stock anotado (reemplaza a la antigua vista SQL)"""
     class Meta:
-        model = VistaStockProducto
+        model = Stock
         fields = [
             'id',
-            'denominacion',
-            'codigo_venta',
-            'cantidad_minima',
-            'stock_total',
-            'necesita_reposicion',
-        ] 
+            'denominacion',       # Anotación (alias de sto_deno)
+            'codigo_venta',       # Anotación (alias de sto_codvta)
+            'cantidad_minima',    # Anotación (alias de sto_cantmin)
+            'stock_total',        # Anotación por subquery Sum
+            'necesita_reposicion', # Anotación calculada
+        ]

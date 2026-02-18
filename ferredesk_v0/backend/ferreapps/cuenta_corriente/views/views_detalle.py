@@ -9,7 +9,7 @@ from decimal import Decimal
 import logging
 
 from ..models import Imputacion, Recibo
-from ferreapps.ventas.models import VentaCalculada, Venta
+from ferreapps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ def detalle_comprobante(request, ven_id: int):
     """
     try:
         # Detectar si es un Recibo (nuevo modelo) o Venta (legacy/factura)
-        # Por simplicidad, si no está en VentaCalculada, probamos Recibo
-        cab = VentaCalculada.objects.filter(ven_id=ven_id).first()
+        cab = Venta.objects.con_calculos().filter(ven_id=ven_id).first()
         recibo_obj = None
         
         if not cab:
@@ -56,7 +55,7 @@ def detalle_comprobante(request, ven_id: int):
                 did = f['destino_id']
                 dct = ContentType.objects.get_for_id(f['destino_content_type'])
                 if dct.model == 'venta':
-                    vcalc = VentaCalculada.objects.filter(ven_id=did).first()
+                    vcalc = Venta.objects.con_calculos().filter(ven_id=did).first()
                     asociados.append({
                         'id': did,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {did}"),
@@ -127,7 +126,7 @@ def detalle_comprobante(request, ven_id: int):
                         'imp_id': f['imp_id']
                     })
                 elif oct.model == 'venta':
-                    vcalc = VentaCalculada.objects.filter(ven_id=oid).first()
+                    vcalc = Venta.objects.con_calculos().filter(ven_id=oid).first()
                     asociados.append({
                         'id': oid,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {oid}"),
@@ -148,7 +147,7 @@ def detalle_comprobante(request, ven_id: int):
                 did = f['destino_id']
                 dct = ContentType.objects.get_for_id(f['destino_content_type'])
                 if dct.model == 'venta':
-                    vcalc = VentaCalculada.objects.filter(ven_id=did).first()
+                    vcalc = Venta.objects.con_calculos().filter(ven_id=did).first()
                     asociados.append({
                         'id': did,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {did}"),
@@ -166,8 +165,8 @@ def detalle_comprobante(request, ven_id: int):
                 'numero_formateado': getattr(cab, 'numero_formateado', ''),
                 'comprobante_nombre': getattr(cab, 'comprobante_nombre', ''),
                 'cliente': {
-                    'razon': getattr(cab, 'cliente_razon', ''),
-                    'cuit': getattr(cab, 'cliente_cuit', ''),
+                    'razon': getattr(cab, 'ven_razon_social', ''), # ven_razon_social está en el modelo
+                    'cuit': getattr(cab, 'ven_cuit', ''),    # ven_cuit está en el modelo
                 },
             },
             'resumen_comprobante': {

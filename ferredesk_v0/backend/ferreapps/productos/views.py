@@ -112,9 +112,9 @@ class StockViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Aplicar filtro de productos activos por defecto y búsqueda general.
+        Aplicar filtro de productos activos por defecto, búsqueda general y cálculos de stock.
         """
-        queryset = super().get_queryset()
+        queryset = Stock.objects.con_stock_total()
 
         # Búsqueda unificada por código (para el grid): param "codigo" busca en codvta O código de barras.
         # No usamos "codvta" aquí para evitar que DjangoFilterBackend aplique filtro extra y anule el OR.
@@ -845,8 +845,8 @@ class FerreteriaAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
-    """Provee list y retrieve para la vista de stock total por producto."""
-    queryset = VistaStockProducto.objects.all()
+    """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""
+    queryset = Stock.objects.con_stock_total()
     serializer_class = VistaStockProductoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']

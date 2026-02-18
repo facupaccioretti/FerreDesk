@@ -367,6 +367,22 @@ def registrar_pagos_venta(
     if not pagos:
         return []
 
+    # Validación: Consumidor Final (ID=1) no puede pagar con cheque ni cuenta corriente
+    cliente_id = getattr(venta, 'ven_idcli_id', None)
+    if cliente_id == 1:
+        metodos_prohibidos = MetodoPago.objects.filter(
+            codigo__in=[CODIGO_CHEQUE, CODIGO_CUENTA_CORRIENTE]
+        ).values_list('id', flat=True)
+        for pago_data in pagos:
+            mid = pago_data.get('metodo_pago_id')
+            if mid in metodos_prohibidos:
+                metodo = MetodoPago.objects.filter(id=mid).first()
+                nombre = metodo.nombre if metodo else 'desconocido'
+                raise ValidationError(
+                    f'El Consumidor Final no puede realizar pagos con {nombre.lower()}. '
+                    f'Seleccione un cliente distinto para usar cheque o cuenta corriente.'
+                )
+
     with transaction.atomic():
         numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
 

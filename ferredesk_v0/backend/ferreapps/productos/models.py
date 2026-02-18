@@ -1,5 +1,9 @@
 from django.db import models, transaction
 from django.conf import settings
+import logging
+from .managers_productos_stock import ProductosStockQuerySet
+
+logger = logging.getLogger(__name__)
 
 class Ferreteria(models.Model):
     nombre = models.CharField(max_length=100)
@@ -470,6 +474,8 @@ class Stock(models.Model):
         db_column='STO_IMP_INTERNO_PORCE',
         help_text='Porcentaje nominal del impuesto interno que ya viene en el costo (ej. 70 cigarrillos, 26 destilados, 14 cerveza, 8 gaseosas). Solo informativo.'
     )
+
+    objects = ProductosStockQuerySet.as_manager()
 
     class Meta:
         db_table = 'STOCK'

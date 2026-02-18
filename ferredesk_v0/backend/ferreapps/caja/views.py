@@ -329,16 +329,16 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         # Saldo teórico
         saldo_teorico = self._calcular_saldo_teorico(sesion)
 
-        # Cantidad y total de ventas de esta sesión (ven_total viene de VentaCalculada)
-        from ferreapps.ventas.models import Venta, VentaCalculada
+        # Cantidad y total de ventas de esta sesión (usando con_calculos() del manager)
+        from ferreapps.ventas.models import Venta, Comprobante
 
         ventas_ids = list(Venta.objects.filter(sesion_caja=sesion).values_list('ven_id', flat=True))
         cantidad_ventas = len(ventas_ids)
 
         if ventas_ids:
-            total_ventas = VentaCalculada.objects.filter(
+            total_ventas = Venta.objects.con_calculos().filter(
                 ven_id__in=ventas_ids
-            ).aggregate(total=Sum('ven_total'))['total'] or Decimal('0.00')
+            ).aggregate(total=Sum('_ven_total'))['total'] or Decimal('0.00')
         else:
             total_ventas = Decimal('0.00')
 

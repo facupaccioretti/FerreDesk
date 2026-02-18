@@ -25,10 +25,13 @@ class ReciboRequiereCajaTests(APITestCase, CajaTestMixin):
         
         # Crear cliente para los recibos
         from ferreapps.clientes.models import Cliente
-        cls.cliente = Cliente.objects.create(
+        cls.cliente, _ = Cliente.objects.get_or_create(
             razon='Cliente Test CC',
-            cuit='20111111112',
-            domicilio='Test 123'
+            defaults={
+                'id': 9998,
+                'cuit': '20111111112',
+                'domicilio': 'Test 123'
+            }
         )
         
         # Asegurarse de que existe el comprobante de recibo tipo X
@@ -52,9 +55,20 @@ class ReciboRequiereCajaTests(APITestCase, CajaTestMixin):
     def tearDown(self):
         """Limpieza después de cada test."""
         # Primero eliminar ventas/recibos vinculados a la sesión de caja (para evitar ProtectedError)
+        from ferreapps.caja.models import PagoVenta
+        from ferreapps.cuenta_corriente.models import Recibo
         from ferreapps.ventas.models import Venta
+        # Primero eliminar pagos de ventas/recibos vinculados (evita ProtectedError hacia Recibo/Venta)
         sesiones_usuario = SesionCaja.objects.filter(usuario=self.usuario)
+        # Nota: PagoVenta tiene FK a Venta o Recibo. Al borrar SesionCaja, queremos que todo se vaya limpio.
+        # Pero Django protege Recibo -> PagoVenta.
+        # Buscamos pagos de recibos de estas sesiones
+        recibos_sesion = Recibo.objects.filter(sesion_caja__in=sesiones_usuario)
+        PagoVenta.objects.filter(recibo__in=recibos_sesion).delete()
+
+        # Ahora sí eliminar ventas y recibos
         Venta.objects.filter(sesion_caja__in=sesiones_usuario).delete()
+        recibos_sesion.delete()
         
         # Luego eliminar movimientos y sesiones
         MovimientoCaja.objects.filter(sesion_caja__usuario=self.usuario).delete()
@@ -93,7 +107,7 @@ class ReciboRequiereCajaTests(APITestCase, CajaTestMixin):
         }, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('recibo', response.data)
+        self.assertIn('rec_id', response.data)
     
     def test_recibo_vinculado_a_sesion_caja(self):
         """Verifica que el recibo creado queda vinculado a la sesión de caja."""
@@ -119,7 +133,7 @@ class ReciboRequiereCajaTests(APITestCase, CajaTestMixin):
                          f"Error al crear recibo: {response.data}")
         
         # Verificar que el recibo está vinculado a la sesión de caja
-        from ferreapps.ventas.models import Venta
-        recibo = Venta.objects.get(ven_id=response.data['recibo']['ven_id'])
+        from ferreapps.cuenta_corriente.models import Recibo
+        recibo = Recibo.objects.get(rec_id=response.data['rec_id'])
         self.assertIsNotNone(recibo.sesion_caja)
         self.assertEqual(recibo.sesion_caja.id, sesion_id)

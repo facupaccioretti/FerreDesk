@@ -37,22 +37,13 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
     @classmethod
     def setUpTestData(cls):
         cls.usuario = cls.crear_usuario_test(username='cheque_nd_user')
-        from ferreapps.clientes.models import Cliente, Plazo, Vendedor
         from ferreapps.ventas.models import Comprobante
+        from .utils_tests import TestDataHelper
 
-        # Evitar colisión con cliente id=1 (Consumidor final u otro de datos iniciales)
-        from django.db.models import Max
-        max_id = Cliente.objects.aggregate(Max('id'))['id__max'] or 0
-        cls.cliente, _ = Cliente.objects.get_or_create(
-            razon='Cliente Cheque ND Test',
-            defaults={
-                'id': max_id + 1,
-                'cuit': '20111111112',
-                'domicilio': 'Calle Test 123',
-            },
-        )
-        cls.plazo, _ = Plazo.objects.get_or_create(id=1, defaults={'nombre': 'Contado', 'activo': 'S'})
-        cls.vendedor, _ = Vendedor.objects.get_or_create(id=1, defaults={'nombre': 'Vendedor', 'activo': 'S'})
+        # Usar TestDataHelper para evitar duplicados de clave primaria
+        cls.cliente = TestDataHelper.obtener_consumidor_final()
+        cls.plazo = TestDataHelper.obtener_plazo_contado()
+        cls.vendedor = TestDataHelper.obtener_vendedor_mostrador()
         # Factura interna (I) para que la ND generada sea Extensión de Contenido (sin ARCA)
         cls.comprobante_factura_i, _ = Comprobante.objects.get_or_create(
             codigo_afip='9999',
@@ -101,8 +92,8 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente,
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion,
         )
@@ -400,15 +391,13 @@ class ChequeCustodiaTests(APITestCase, CajaTestMixin):
         """Al registrar una venta con cheque, debe generarse un MovimientoCaja de ENTRADA."""
         from ferreapps.ventas.models import Venta, Comprobante
         from ferreapps.clientes.models import Cliente, Plazo, Vendedor
-        from django.db.models import Max
         comp, _ = Comprobante.objects.get_or_create(
             codigo_afip='1001',
             defaults={'nombre': 'Factura A', 'letra': 'A', 'tipo': 'factura', 'activo': True},
         )
-        max_id = Cliente.objects.aggregate(Max('id'))['id__max'] or 0
         cli, _ = Cliente.objects.get_or_create(
             razon='Cliente Custodia Test',
-            defaults={'id': max_id + 1, 'cuit': '20222222223', 'domicilio': 'Calle X'},
+            defaults={'cuit': '20222222223', 'domicilio': 'Calle X'},
         )
         plazo, _ = Plazo.objects.get_or_create(id=1, defaults={'nombre': 'Contado', 'activo': 'S'})
         vendedor, _ = Vendedor.objects.get_or_create(id=1, defaults={'nombre': 'Vendedor', 'activo': 'S'})
@@ -416,7 +405,7 @@ class ChequeCustodiaTests(APITestCase, CajaTestMixin):
             ven_sucursal=1, ven_fecha=timezone.now().date(), comprobante=comp,
             ven_punto=99, ven_numero=200, ven_descu1=0, ven_descu2=0, ven_descu3=0,
             ven_vdocomvta=0, ven_vdocomcob=0, ven_estado='CO',
-            ven_idcli=cli, ven_idpla=plazo.id, ven_idvdo=vendedor.id, ven_copia=1,
+            ven_idcli=cli, ven_idpla=plazo, ven_idvdo=vendedor, ven_copia=1,
             sesion_caja=self.sesion,
         )
         from ..utils import registrar_pagos_venta

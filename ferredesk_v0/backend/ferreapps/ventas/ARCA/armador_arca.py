@@ -224,7 +224,7 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
         })
         
         # Incluir alícuotas de IVA si existen
-        if alicuotas_venta and alicuotas_venta.exists():
+        if alicuotas_venta:
             alicuotas_afip = _construir_alicuotas_afip(alicuotas_venta)
             datos_comprobante['Iva'] = {'AlicIva': alicuotas_afip}
     
@@ -254,7 +254,7 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
             })
             
             # Incluir alícuotas de IVA si existen y si ImpNeto > 0 (solo para Factura B, no C)
-            if alicuotas_venta and alicuotas_venta.exists() and float(venta_calculada.ven_total) > 0:
+            if alicuotas_venta and float(venta_calculada.ven_total) > 0:
                 alicuotas_afip = _construir_alicuotas_afip(alicuotas_venta)
                 datos_comprobante['Iva'] = {'AlicIva': alicuotas_afip}
                 logger.info(f"Objeto IVA agregado para comprobante tipo {tipo_cbte} con ImpNeto > 0")

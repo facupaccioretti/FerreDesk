@@ -99,9 +99,8 @@ class QRGenerator:
         # Obtener datos del comprobante
         comprobante = venta.comprobante
         
-        # Obtener datos completos desde la vista para el QR
-        from ...models import VentaCalculada
-        venta_calculada = VentaCalculada.objects.get(ven_id=venta.ven_id)
+        # Usar las propiedades dinámicas de la venta para el QR
+        venta_calculada = venta
         
         # Validar que CAE y fecha de vencimiento no sean None
         if not cae or not fecha_vencimiento:

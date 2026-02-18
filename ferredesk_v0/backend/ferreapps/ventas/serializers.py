@@ -33,11 +33,18 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
         return None
     
     def get_ven_total(self, obj):
+        # Si el objeto ya viene anotado desde el manager, lo usamos directamente.
+        # Si no, caemos en una consulta (aunque idealmente siempre debería venir anotado)
+        if hasattr(obj, 'ven_total'):
+            return obj.ven_total
+        
+        # Fallback seguro para evitar romper si no está anotado
         try:
-            # Busca el total en la vista calculada para evitar N+1 queries
-            venta_calculada = VentaCalculada.objects.get(ven_id=obj.ven_id)
-            return venta_calculada.ven_total
-        except VentaCalculada.DoesNotExist:
+            from .managers_ventas_calculos import VentaQuerySet
+            # Esto es ineficiente en listados, pero asegura que no devuelva None si falta la anotación
+            venta_con_totales = Venta.objects.filter(pk=obj.pk).con_calculos().first()
+            return venta_con_totales.ven_total if venta_con_totales else None
+        except Exception:
             return None
 
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
@@ -48,6 +55,45 @@ class VentaDetalleItemSerializer(serializers.ModelSerializer):
             'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
             'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final',
             'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
+        ]
+
+
+class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
+    """Serializer para VentaDetalleItem enriquecido con .con_calculos()"""
+    # Campos anotados por el manager
+    ali_porce = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    codigo = serializers.CharField(read_only=True, allow_null=True)
+    unidad = serializers.CharField(read_only=True, allow_null=True)
+    precio_unitario_sin_iva = serializers.DecimalField(max_digits=15, decimal_places=4, read_only=True)
+    iva_unitario = serializers.DecimalField(max_digits=15, decimal_places=4, read_only=True)
+    bonif_monto_unit_neto = serializers.DecimalField(max_digits=15, decimal_places=4, read_only=True)
+    precio_unit_bonif_sin_iva = serializers.DecimalField(max_digits=15, decimal_places=4, read_only=True)
+    precio_unitario_bonif_desc_sin_iva = serializers.DecimalField(max_digits=15, decimal_places=4, read_only=True)
+    precio_unitario_bonificado_con_iva = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    precio_unitario_bonificado = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    subtotal_neto = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    iva_monto = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    total_item = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    margen_monto = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    margen_porcentaje = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    ven_descu1 = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    ven_descu2 = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = VentaDetalleItem
+        fields = [
+            'id', 'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro',
+            'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica',
+            'vdi_precio_unitario_final', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva',
+            # Campos anotados
+            'ali_porce', 'codigo', 'unidad',
+            'precio_unitario_sin_iva', 'iva_unitario',
+            'bonif_monto_unit_neto', 'precio_unit_bonif_sin_iva',
+            'precio_unitario_bonif_desc_sin_iva',
+            'precio_unitario_bonificado_con_iva', 'precio_unitario_bonificado',
+            'subtotal_neto', 'iva_monto', 'total_item',
+            'margen_monto', 'margen_porcentaje',
+            'ven_descu1', 'ven_descu2',
         ]
 
 class VentaSerializer(serializers.ModelSerializer):
@@ -113,10 +159,14 @@ class VentaSerializer(serializers.ModelSerializer):
         return obj.ven_estado
 
     def get_numero_formateado(self, obj):
+        # Primero intentamos usar la anotación del manager (más eficiente)
+        if hasattr(obj, '_numero_formateado') and obj._numero_formateado:
+            return obj._numero_formateado
+        # Fallback: formatear manualmente con padding de ceros
         if obj.ven_punto is not None and obj.ven_numero is not None:
-            letra = getattr(obj.comprobante, 'letra', '')
-            # Quitamos el espacio si no hay letra, para evitar " 0001-00000001"
-            return f"{letra} {obj.ven_punto:04d}-{obj.ven_numero:08d}".lstrip()
+            letra = getattr(obj.comprobante, 'letra', '') if obj.comprobante else ''
+            prefix = f"{letra} " if letra else ""
+            return f"{prefix}{obj.ven_punto:04d}-{obj.ven_numero:08d}"
         return None
 
     def get_cliente_nombre(self, obj):
@@ -135,8 +185,7 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def get_vendedor_nombre(self, obj):
         try:
-            vendedor = Vendedor.objects.get(id=obj.ven_idvdo)
-            return vendedor.nombre if hasattr(vendedor, 'nombre') else str(vendedor)
+            return obj.ven_idvdo.nombre if obj.ven_idvdo else ''
         except Exception:
             return ''
 
@@ -422,6 +471,12 @@ class VentaSerializer(serializers.ModelSerializer):
             # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
             for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
                 item_data.pop(campo_calculado, None)
+            # Convertir IDs numéricos de FK a la forma _id (Django espera instancias o _id)
+            for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
+                if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
+                    val = item_data.pop(fk_field)
+                    if val is not None:
+                        item_data[f'{fk_field}_id'] = val
             VentaDetalleItem.objects.create(**item_data)
         return venta
 
@@ -579,15 +634,6 @@ class VentaRemPedSerializer(serializers.ModelSerializer):
         model = VentaRemPed
         fields = '__all__'
 
-class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VentaDetalleItemCalculado
-        fields = '__all__'
-
-class VentaIVAAlicuotaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VentaIVAAlicuota
-        fields = ['id', 'vdi_idve', 'ali_porce', 'neto_gravado', 'iva_total']
 
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()
@@ -599,9 +645,15 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
     factura_fiscal_info = serializers.SerializerMethodField()
     # Campo personalizado para el QR
     ven_qr = serializers.SerializerMethodField()
+    numero_formateado = serializers.SerializerMethodField()
+    # Campos calculados (properties/anotaciones, no columnas DB)
+    ven_total = serializers.SerializerMethodField()
+    ven_impneto = serializers.SerializerMethodField()
+    iva_global = serializers.SerializerMethodField()
+    subtotal_bruto = serializers.SerializerMethodField()
 
     class Meta:
-        model = VentaCalculada
+        model = Venta # Cambiamos de VentaCalculada a Venta
         fields = '__all__'
 
     def get_ven_qr(self, obj):
@@ -625,31 +677,63 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
                 return None
         return None
 
+    def get_numero_formateado(self, obj):
+        # Primero intentamos usar la anotación del manager (más eficiente)
+        if hasattr(obj, '_numero_formateado') and obj._numero_formateado:
+            return obj._numero_formateado
+        # Fallback: formatear manualmente con padding de ceros
+        if obj.ven_punto is not None and obj.ven_numero is not None:
+            letra = getattr(obj.comprobante, 'letra', '') if obj.comprobante else ''
+            prefix = f"{letra} " if letra else ""
+            return f"{prefix}{obj.ven_punto:04d}-{obj.ven_numero:08d}"
+        return None
+
+    def get_ven_total(self, obj):
+        """Total de la venta (anotación ORM o property del modelo)."""
+        return str(getattr(obj, '_ven_total', None) or obj.ven_total or 0)
+
+    def get_ven_impneto(self, obj):
+        """Importe neto gravado (anotación ORM o property del modelo)."""
+        return str(getattr(obj, '_ven_impneto', None) or obj.ven_impneto or 0)
+
+    def get_iva_global(self, obj):
+        """IVA total (anotación ORM o property del modelo)."""
+        return str(getattr(obj, '_iva_global', None) or obj.iva_global or 0)
+
+    def get_subtotal_bruto(self, obj):
+        """Subtotal bruto antes de descuentos (anotación ORM)."""
+        return str(getattr(obj, 'subtotal_bruto', None) or 0)
+
     def get_iva_desglose(self, obj):
-        from .models import VentaIVAAlicuota
-        # Filtra por la venta y excluye alícuotas de 0%
-        desglose_qs = VentaIVAAlicuota.objects.filter(vdi_idve=obj.ven_id).exclude(ali_porce=0)
+        # Refactorización: Usamos el manager de item para obtener el desglose por alícuota
+        from .models import VentaDetalleItem
+        items_anotados = VentaDetalleItem.objects.filter(vdi_idve=obj.pk).con_calculos()
         
-        # Construye el diccionario con el formato que espera el frontend
-        desglose_final = {}
-        for item in desglose_qs:
-            # La clave es el porcentaje, el valor es un objeto con neto e iva
+        # Agrupamos por alícuota en Python (más sencillo para el formato de dict esperado)
+        desglose_agrupado = {}
+        for item in items_anotados:
+            if item.ali_porce == 0:
+                continue
+            
             porcentaje_str = str(item.ali_porce)
-            desglose_final[porcentaje_str] = {
-                "neto": item.neto_gravado,
-                "iva": item.iva_total
-            }
-        return desglose_final
+            if porcentaje_str not in desglose_agrupado:
+                desglose_agrupado[porcentaje_str] = {"neto": Decimal('0'), "iva": Decimal('0')}
+            
+            desglose_agrupado[porcentaje_str]["neto"] += item.subtotal_neto
+            desglose_agrupado[porcentaje_str]["iva"] += item.iva_monto
+            
+        return desglose_agrupado
 
     def get_comprobante(self, obj):
+        # Usar anotaciones del manager (prefijo _) con fallback al FK directo
         return {
-            'id': obj.comprobante_id,
-            'nombre': obj.comprobante_nombre,
-            'letra': obj.comprobante_letra,
-            'tipo': obj.comprobante_tipo,
-            'codigo_afip': obj.comprobante_codigo_afip,
-            'descripcion': obj.comprobante_descripcion,
-            'activo': obj.comprobante_activo,
+            'id': obj.comprobante_id if hasattr(obj, 'comprobante_id') else None,
+            'nombre': getattr(obj, '_comprobante_nombre', None) or (obj.comprobante.nombre if obj.comprobante else None),
+            'letra': getattr(obj, '_comprobante_letra', None) or (obj.comprobante.letra if obj.comprobante else None),
+            'tipo': getattr(obj, 'comprobante_tipo', None) or (obj.comprobante.tipo if obj.comprobante else None),
+            'codigo_afip': getattr(obj, '_comprobante_codigo_afip', None) or (obj.comprobante.codigo_afip if obj.comprobante else None),
+            'descripcion': getattr(obj, 'comprobante_descripcion', None) or (obj.comprobante.descripcion if obj.comprobante else None),
+            'activo': getattr(obj, 'comprobante_activo', None) if hasattr(obj, 'comprobante_activo') else (obj.comprobante.activo if obj.comprobante else None),
         }
 
     def get_factura_fiscal_info(self, obj):

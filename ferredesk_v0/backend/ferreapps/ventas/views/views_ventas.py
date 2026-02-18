@@ -11,16 +11,15 @@ from django.db import IntegrityError
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 from decimal import Decimal
+from django.db.models import Sum
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
-    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
 )
 from ..serializers import (
     VentaSerializer, VentaDetalleItemSerializer, VentaDetalleManSerializer,
-    VentaRemPedSerializer, VentaDetalleItemCalculadoSerializer,
-    VentaIVAAlicuotaSerializer, VentaCalculadaSerializer
+    VentaRemPedSerializer, VentaCalculadaSerializer, VentaDetalleItemCalculadoSerializer
 )
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
@@ -78,7 +77,6 @@ class VentaFilter(FilterSet):
     comprobante_tipo = CharFilter(field_name='comprobante__tipo', lookup_expr='iexact')
     comprobante_letra = CharFilter(field_name='comprobante__letra', lookup_expr='iexact')
     ven_sucursal = NumberFilter(field_name='ven_sucursal')
-    ven_total = DateFromToRangeFilter(field_name='ven_total')
     ven_punto = NumberFilter(field_name='ven_punto')
     ven_numero = NumberFilter(field_name='ven_numero')
 
@@ -86,7 +84,7 @@ class VentaFilter(FilterSet):
         model = Venta
         fields = [
             'ven_fecha', 'ven_idcli', 'ven_idvdo', 'ven_estado', 'comprobante',
-            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_total', 'ven_punto', 'ven_numero'
+            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_punto', 'ven_numero'
         ]
 
 
@@ -124,7 +122,7 @@ class VentaCalculadaFilter(FilterSet):
         return queryset
 
     class Meta:
-        model = VentaCalculada  # Vista SQL (managed = False)
+        model = Venta  # Cambiamos de VentaCalculada a Venta
         fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra', 'para_nota_credito']
 
 
@@ -146,8 +144,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         if getattr(self, 'action', None) == 'list':
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
-            # Orden inverso por fecha e ID para traer los más recientes primero
-            return VentaCalculada.objects.all().order_by('-ven_fecha', '-ven_id')
+            # Usamos el manager personalizado con todas las anotaciones necesarias
+            return Venta.objects.con_calculos()
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()
@@ -359,25 +357,12 @@ class VentaViewSet(viewsets.ModelViewSet):
                 comprobante_pagado = data.get('comprobante_pagado', False)
                 monto_pago = Decimal(str(data.get('monto_pago', 0)))
                 
-                # Obtener total de la venta desde VentaCalculada
-                venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
-                total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                # Obtener total de la venta usando el manager ORM con_calculos
+                venta_con_totales = Venta.objects.con_calculos().filter(pk=venta_creada.pk).first()
+                total_venta = venta_con_totales.ven_total if venta_con_totales else Decimal('0')
 
-                # Permitir monto_pago < total: (1) recibo parcial (se crea recibo e imputación), o (2) Consumidor Final con justificación
-                CLIENTE_CONSUMIDOR_FINAL_ID = 1
-                if (
-                    comprobante_pagado
-                    and monto_pago > 0
-                    and monto_pago < total_venta - Decimal('0.01')
-                    and not data.get('recibo_parcial')
-                ):
-                    justificacion = (data.get('justificacion_diferencia') or '').strip()
-                    cliente_id = venta_creada.ven_idcli_id
-                    if cliente_id != CLIENTE_CONSUMIDOR_FINAL_ID or not justificacion:
-                        raise ValidationError(
-                            'El monto pagado no alcanza al total. Solo el cliente generico puede registrar '
-                            'una diferencia menor con justificación obligatoria.'
-                        )
+                # NOTA: Si monto_pago < total_venta, la diferencia va a cuenta corriente del cliente.
+                # No se bloquea la venta por esto (la deuda queda pendiente en CC).
                 
                 # Auto-imputación: solo hasta el total de la venta (no aplicar si hay recibo parcial)
                 if comprobante_pagado and monto_pago > 0 and not data.get('recibo_parcial'):
@@ -537,7 +522,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         vdi_idpro=None,
                         vdi_cantidad=1,
                         vdi_precio_unitario_final=monto_recibo,
-                        vdi_idaliiva=3,  # Alícuota 0%
+                        vdi_idaliiva_id=3,  # Alícuota 0%
                         vdi_orden=1,
                         vdi_bonifica=0,
                         vdi_costo=0,
@@ -616,7 +601,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         vdi_idpro=None,
                         vdi_cantidad=1,
                         vdi_precio_unitario_final=monto_recibo_parcial,
-                        vdi_idaliiva=3,
+                        vdi_idaliiva_id=3,
                         vdi_orden=1,
                         vdi_bonifica=0,
                         vdi_costo=0,
@@ -706,7 +691,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if errores_stock:
                     payload = {'detail': 'Error de stock', 'errores': errores_stock}
                     return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-                cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
+                cliente = venta.ven_idcli  # Ya es objeto FK
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
                 tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
                 comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
@@ -788,12 +773,13 @@ class VentaDetalleItemCalculadoFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
     
     class Meta:
-        model = VentaDetalleItemCalculado
+        model = VentaDetalleItem
         fields = ['vdi_idve']
 
 
 class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaDetalleItemCalculado.objects.all()
+    """ViewSet para ver detalles con cálculos (reemplaza a la antigua vista SQL)"""
+    queryset = VentaDetalleItem.objects.con_calculos()
     serializer_class = VentaDetalleItemCalculadoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter
@@ -803,17 +789,38 @@ class VentaIVAAlicuotaFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
     
     class Meta:
-        model = VentaIVAAlicuota
+        model = VentaDetalleItem
         fields = ['vdi_idve']
 
 
 class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaIVAAlicuota.objects.all()
-    serializer_class = VentaIVAAlicuotaSerializer
+    """ViewSet para ver desglose de IVA (reemplaza a la antigua vista SQL)"""
+    queryset = VentaDetalleItem.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaIVAAlicuotaFilter
+    
+    def get_queryset(self):
+        # Replicamos la lógica de agrupación de la vista VENTAIVA_ALICUOTA
+        return VentaDetalleItem.objects.con_calculos().values(
+            'vdi_idve', 'ali_porce'
+        ).annotate(
+            neto_gravado=Sum('subtotal_neto'),
+            iva_total=Sum('iva_monto')
+        ).order_by('vdi_idve', 'ali_porce')
+
+    def list(self, request, *args, **kwargs):
+        # El frontend espera un formato específico para este ViewSet
+        queryset = self.filter_queryset(self.get_queryset())
+        data = list(queryset)
+        # Añadir un ID ficticio para compatibilidad con React keys si es necesario
+        for i, item in enumerate(data):
+            item['id'] = i 
+        return Response(data)
 
 
 class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaCalculada.objects.all()
+    """ViewSet de compatibilidad para la antigua VentaCalculada"""
+    queryset = Venta.objects.con_calculos()
     serializer_class = VentaCalculadaSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaCalculadaFilter

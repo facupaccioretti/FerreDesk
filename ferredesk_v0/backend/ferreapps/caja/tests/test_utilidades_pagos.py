@@ -137,8 +137,8 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente,
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion
         )
@@ -281,8 +281,8 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente_consumidor_final,  # ID 1
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion
         )
@@ -328,8 +328,8 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente_consumidor_final,  # ID 1
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion
         )
@@ -632,8 +632,8 @@ class ResumenCierreExcedentesTests(TestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente,
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion,
             excedente_destino='propina',
@@ -652,8 +652,8 @@ class ResumenCierreExcedentesTests(TestCase, CajaTestMixin):
             ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=self.cliente,
-            ven_idpla=self.plazo.id,
-            ven_idvdo=self.vendedor.id,
+            ven_idpla=self.plazo,
+            ven_idvdo=self.vendedor,
             ven_copia=1,
             sesion_caja=self.sesion,
             excedente_destino='vuelto_pendiente',

@@ -228,18 +228,16 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
         origen_id=OuterRef('pk')
     ).values('origen_id').annotate(total=Sum('imp_monto')).values('total')
 
-    from ferreapps.ventas.models import VentaCalculada
-    
-    # 1. Facturas y Notas de Débito (Deudas)
-    # Optimizamos trayendo el monto imputado en la misma consulta
-    qs_calc = VentaCalculada.objects.filter(
+    # 1. Facturas y Notas de Débito (Deudas) - USANDO ORM CON CÁLCULOS
+    # Reemplazamos VentaCalculada (vista SQL) por el manager con_calculos()
+    qs_calc = Venta.objects.con_calculos().filter(
         ven_idcli=cliente_id
     ).exclude(
         ven_estado='AN'
     ).exclude(
-        comprobante_tipo='presupuesto'
+        comprobante__tipo='presupuesto'
     ).annotate(
-        total_imputado=Coalesce(Subquery(imp_destino_sq), Value(0, output_field=DecimalField()))
+        total_imputado=Coalesce(Subquery(imp_destino_sq), Value(0, output_field=DecimalField())),
     )
     
     # --- BATCH FETCHING PARA AUTO-IMPUTACIONES ---

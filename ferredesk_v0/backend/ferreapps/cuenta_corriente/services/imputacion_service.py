@@ -158,10 +158,5 @@ def _get_total_documento(obj: Model) -> Decimal:
     if hasattr(obj, 'aj_monto'):
         return Decimal(str(obj.aj_monto))
         
-    # Fallback para VentaCalculada/CompraCalculada
-    from ferreapps.ventas.models import VentaCalculada
-    vc = VentaCalculada.objects.filter(ven_id=obj.pk).first()
-    if vc:
-        return Decimal(str(vc.ven_total))
         
     raise ValueError(f"No se pudo determinar el total para {obj}")

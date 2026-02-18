@@ -314,9 +314,12 @@ class FerreDeskARCA:
             cliente = venta.ven_idcli
             comprobante = venta.comprobante
             
-            from ...models import VentaCalculada, VentaIVAAlicuota
-            venta_calculada = VentaCalculada.objects.get(ven_id=venta.ven_id)
-            alicuotas_venta = VentaIVAAlicuota.objects.filter(vdi_idve=venta.ven_id)
+            from ...models import Venta
+            
+            # Usar la instancia de venta directamente (que ahora tiene propiedades de cálculo)
+            # como venta_calculada y obtener el desglose de IVA con el nuevo método
+            venta_calculada = venta
+            alicuotas_venta = venta.get_iva_breakdown()
             
             # Preparar datos usando el armador
             datos_arca = armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_venta)

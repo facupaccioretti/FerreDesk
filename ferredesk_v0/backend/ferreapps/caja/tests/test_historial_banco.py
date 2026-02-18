@@ -98,8 +98,8 @@ class HistorialBancoTests(TestCase, CajaTestMixin):
             ven_vdocomvta=0, ven_vdocomcob=0,
             ven_estado='CO',
             ven_idcli=base_data['cliente'],
-            ven_idpla=base_data['plazo'].id,
-            ven_idvdo=base_data['vendedor'].id,
+            ven_idpla=base_data['plazo'],
+            ven_idvdo=base_data['vendedor'],
             ven_copia=1
         )
         PagoVenta.objects.create(

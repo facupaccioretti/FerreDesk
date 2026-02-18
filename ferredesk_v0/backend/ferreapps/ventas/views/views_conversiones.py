@@ -15,7 +15,7 @@ from django.utils import timezone
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaCalculada
+    Comprobante, Venta, VentaDetalleItem
 )
 from ..serializers import VentaSerializer
 from ferreapps.productos.models import Ferreteria, StockProve
@@ -199,8 +199,8 @@ def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
     if not (comprobante_pagado and monto_pago > 0):
         return
     
-    # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    # Obtener total usando el manager con calculos (reemplaza VentaCalculada)
+    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
     monto_auto_imputacion = min(monto_pago, total_venta)
     
@@ -228,7 +228,7 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_ca
         return
     
     # Total pagado: fuente de verdad es suma de pagos; fallback monto_pago
-    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
     _pagos = data.get('pagos') or []
     total_pagado = (
@@ -308,7 +308,7 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_ca
         vdi_idpro=None,
         vdi_cantidad=1,
         vdi_precio_unitario_final=monto_recibo,
-        vdi_idaliiva=3,  # Alícuota 0%
+        vdi_idaliiva_id=3,  # Alícuota 0%
         vdi_orden=1,
         vdi_bonifica=0,
         vdi_costo=0,
@@ -393,7 +393,7 @@ def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja
         vdi_idpro=None,
         vdi_cantidad=1,
         vdi_precio_unitario_final=monto_recibo_parcial,
-        vdi_idaliiva=3,
+        vdi_idaliiva_id=3,
         vdi_orden=1,
         vdi_bonifica=0,
         vdi_costo=0,
@@ -670,8 +670,8 @@ def convertir_presupuesto_a_venta(request):
                     
                     print(f"LOG: Venta creada con ID {venta_creada.ven_id}")
                     
-                    # Obtener total desde VentaCalculada para imputación, pagos y excedente
-                    venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
+                    # Obtener total usando con_calculos() para imputación, pagos y excedente
+                    venta_calculada = Venta.objects.con_calculos().filter(ven_id=venta_creada.ven_id).first()
                     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
                     
                     # === CREAR AUTO-IMPUTACIÓN SI ES FACTURA PAGADA (no si hay recibo parcial) ===
@@ -798,7 +798,7 @@ def convertir_presupuesto_a_venta(request):
                             vdi_idpro=None,
                             vdi_cantidad=1,
                             vdi_precio_unitario_final=monto_recibo,
-                            vdi_idaliiva=3,  # Alícuota 0%
+                            vdi_idaliiva_id=3,  # Alícuota 0%
                             vdi_orden=1,
                             vdi_bonifica=0,
                             vdi_costo=0,
@@ -857,7 +857,7 @@ def convertir_presupuesto_a_venta(request):
                             vdi_idpro=None,
                             vdi_cantidad=1,
                             vdi_precio_unitario_final=monto_recibo_parcial,
-                            vdi_idaliiva=3,
+                            vdi_idaliiva_id=3,
                             vdi_orden=1,
                             vdi_bonifica=0,
                             vdi_costo=0,
@@ -1155,7 +1155,7 @@ def convertir_factura_interna_a_fiscal(request):
                     # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
                     comprobante_pagado = venta_data.get('comprobante_pagado', False)
                     monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
-                    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+                    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
                     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
                     if sesion_caja and comprobante_pagado:
                         from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
@@ -1282,7 +1282,7 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
             if (imp.origen_content_type == venta_ct and imp.origen_id == imp.destino_id and 
                 imp.origen_content_type == imp.destino_content_type):
                 # Auto-imputación
-                vc = VentaCalculada.objects.filter(ven_id=imp.destino_id).first()
+                vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
                 if vc:
                     comprobantes_relacionados.append({
                         'tipo': 'auto_imputacion',
@@ -1295,7 +1295,7 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                 # Esta cotización está siendo pagada
                 # El origen es el recibo
                 if imp.origen_content_type == venta_ct:
-                    vc = VentaCalculada.objects.filter(ven_id=imp.origen_id).first()
+                    vc = Venta.objects.con_calculos().filter(ven_id=imp.origen_id).first()
                     if vc:
                         comprobantes_relacionados.append({
                             'tipo': 'recibo_pago',
@@ -1308,7 +1308,7 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                 # Esta cotización está pagando otra factura
                 # El destino es la factura pagada
                 if imp.destino_content_type == venta_ct:
-                    vc = VentaCalculada.objects.filter(ven_id=imp.destino_id).first()
+                    vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
                     if vc:
                         comprobantes_relacionados.append({
                             'tipo': 'factura_pagada',
