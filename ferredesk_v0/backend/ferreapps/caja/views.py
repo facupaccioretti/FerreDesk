@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from decimal import Decimal
 from django.utils import timezone
+from datetime import timedelta
 
 from .models import (
     SesionCaja,
@@ -44,7 +45,9 @@ from .serializers import (
     CuentaBancoSerializer,
     ChequeDetalleSerializer,
     ChequeUpdateSerializer,
+    ChequeUpdateSerializer,
     CrearChequeCajaSerializer,
+    MovimientoBancoSerializer,
 )
 
 
@@ -489,6 +492,155 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
         if solo_activas:
             queryset = queryset.filter(activo=True)
         return queryset.order_by('nombre')
+
+    def destroy(self, request, *args, **kwargs):
+        """Evita la eliminación si hay movimientos bancarios."""
+        instance = self.get_object()
+
+        # Verificar PagoVenta vinculados
+        if instance.pagos_venta.exists():
+            return Response(
+                {"error": "No se puede eliminar un banco con movimientos registrados. Desactívelo en su lugar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Verificar Cheques acreditados vinculados
+        if instance.cheques_depositados.exists():
+            return Response(
+                {"error": "No se puede eliminar un banco con cheques acreditados. Desactívelo en su lugar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'], url_path='historial')
+    def historial(self, request, pk=None):
+        """Retorna el historial unificado de movimientos del banco."""
+        banco = self.get_object()
+
+        # Filtros de fecha (default: últimos 30 días)
+        fecha_hasta_str = request.query_params.get('fecha_hasta')
+        fecha_desde_str = request.query_params.get('fecha_desde')
+
+        if fecha_hasta_str:
+            fecha_hasta = timezone.datetime.strptime(fecha_hasta_str, '%Y-%m-%d').replace(
+                hour=23, minute=59, second=59, tzinfo=timezone.get_current_timezone()
+            )
+        else:
+            fecha_hasta = timezone.now()
+
+        if fecha_desde_str:
+            fecha_desde = timezone.datetime.strptime(fecha_desde_str, '%Y-%m-%d').replace(
+                hour=0, minute=0, second=0, tzinfo=timezone.get_current_timezone()
+            )
+        else:
+            fecha_desde = fecha_hasta - timedelta(days=30)
+
+        movimientos = []
+
+        # 1. Obtener PagoVenta (Ingresos/Egresos por transferencia/QR/etc)
+        # Excluir ventas y recibos anulados
+        pagos = banco.pagos_venta.filter(
+            fecha_hora__range=(fecha_desde, fecha_hasta)
+        ).select_related('venta', 'venta__comprobante', 'recibo', 'orden_pago', 'metodo_pago')
+
+        for pago in pagos:
+            # Determinar si es INGRESO o EGRESO
+            # Ventas y Recibos son INGRESO (entrada a banco)
+            # Ordenes de Pago son EGRESO (salida de banco)
+            if pago.orden_pago:
+                tipo = 'EGRESO'
+                origen = 'Orden de Pago'
+                desc = f"Pago a {pago.orden_pago.op_proveedor.razon}"
+                comp_num = pago.orden_pago.op_numero
+                comp_tipo = 'OP'
+                # Excluir si la OP está anulada
+                if pago.orden_pago.op_estado == 'N':
+                    continue
+            elif pago.recibo:
+                tipo = 'INGRESO'
+                origen = 'Recibo'
+                desc = f"Cobro a {pago.recibo.rec_cliente.razon}"
+                comp_num = pago.recibo.rec_numero
+                comp_tipo = 'REC'
+                # Excluir si el recibo está anulado
+                if pago.recibo.rec_estado == 'N':
+                    continue
+            elif pago.venta:
+                tipo = 'INGRESO'
+                origen = 'Venta'
+                desc = f"Cobro a {pago.venta.ven_idcli.razon}"
+                comp_num = f"{pago.venta.ven_punto:04d}-{pago.venta.ven_numero:08d}"
+                comp_tipo = pago.venta.comprobante.nombre
+                # Excluir si la venta está anulada
+                if pago.venta.ven_estado == 'AN':
+                    continue
+            else:
+                # Caso genérico (no debería ocurrir con los flujos actuales)
+                tipo = 'INGRESO'
+                origen = 'Otro'
+                desc = pago.observacion or 'Movimiento bancario'
+                comp_num = ''
+                comp_tipo = ''
+
+            movimientos.append({
+                'fecha': pago.fecha_hora,
+                'tipo': tipo,
+                'monto': pago.monto,
+                'metodo_pago': pago.metodo_pago.nombre,
+                'descripcion': desc,
+                'comprobante_numero': comp_num,
+                'comprobante_tipo': comp_tipo,
+                'origen': origen
+            })
+
+        # 2. Obtener Cheques (Ingresos por acreditación)
+        cheques = banco.cheques_depositados.filter(
+            estado='ACREDITADO',
+            fecha_pago__range=(fecha_desde.date(), fecha_hasta.date())
+        ).select_related('venta', 'recibo', 'orden_pago')
+
+        for cheque in cheques:
+            # La acreditación de un cheque siempre es un INGRESO al banco
+            desc = f"Acreditación cheque {cheque.numero} ({cheque.banco_emisor})"
+            
+            # Origen del cheque
+            if cheque.recibo:
+                origen_cheque = f"Recibo {cheque.recibo.rec_numero}"
+            elif cheque.venta:
+                origen_cheque = f"Venta {cheque.venta.ven_punto:04d}-{cheque.venta.ven_numero:08d}"
+            else:
+                origen_cheque = "Cartera"
+
+            movimientos.append({
+                'fecha': timezone.make_aware(timezone.datetime.combine(cheque.fecha_pago, timezone.datetime.min.time())),
+                'tipo': 'INGRESO',
+                'monto': cheque.monto,
+                'metodo_pago': 'Cheque',
+                'descripcion': desc,
+                'comprobante_numero': cheque.numero,
+                'comprobante_tipo': 'CH',
+                'origen': f"Cheque ({origen_cheque})"
+            })
+
+        # Ordenar por fecha descendente
+        movimientos.sort(key=lambda x: x['fecha'], reverse=True)
+
+        # Calcular totales
+        total_ingresos = sum(m['monto'] for m in movimientos if m['tipo'] == 'INGRESO')
+        total_egresos = sum(m['monto'] for m in movimientos if m['tipo'] == 'EGRESO')
+
+        return Response({
+            'movimientos': MovimientoBancoSerializer(movimientos, many=True).data,
+            'total_ingresos': total_ingresos,
+            'total_egresos': total_egresos,
+            'saldo_periodo': total_ingresos - total_egresos,
+            'banco': CuentaBancoSerializer(banco).data,
+            'rango': {
+                'desde': fecha_desde.strftime('%Y-%m-%d'),
+                'hasta': fecha_hasta.strftime('%Y-%m-%d')
+            }
+        })
 
 
 class ChequeViewSet(viewsets.ModelViewSet):

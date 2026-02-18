@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { getCookie } from "../../utils/csrf"
-import { BotonEditar, BotonDesactivar } from "../Botones"
+import { BotonEditar, BotonDesactivar, BotonHistorial } from "../Botones"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 import Tabla from "../Tabla"
+import ModalHistorialBanco from "./ModalHistorialBanco"
 
 const LONGITUD_CLAVE_BANCARIA = 22
 const TIPO_ENTIDAD_BANCO = "BCO"
@@ -251,6 +252,7 @@ const MaestroBancos = () => {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [cuentaEditar, setCuentaEditar] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [bancoHistorial, setBancoHistorial] = useState(null)
 
   const cargarLista = useCallback(async () => {
     setCargando(true)
@@ -279,6 +281,10 @@ const MaestroBancos = () => {
   const handleEditar = (c) => {
     setCuentaEditar(c)
     setModalAbierto(true)
+  }
+
+  const handleVerHistorial = (c) => {
+    setBancoHistorial(c)
   }
 
   const handleGuardar = async (payload) => {
@@ -337,7 +343,8 @@ const MaestroBancos = () => {
 
   const generarBotonesCuenta = (c) => {
     const items = [
-      { componente: BotonEditar, onClick: () => handleEditar(c), titulo: "Editar" },
+      { componente: BotonHistorial, onClick: () => handleVerHistorial(c), titulo: "Ver historial de movimientos" },
+      { componente: BotonEditar, onClick: () => handleEditar(c), titulo: "Editar datos" },
     ]
     if (c.activo) {
       items.push({
@@ -415,7 +422,7 @@ const MaestroBancos = () => {
           columnas={columnas}
           datos={lista}
           valorBusqueda=""
-          onCambioBusqueda={() => {}}
+          onCambioBusqueda={() => { }}
           mostrarBuscador={true}
           mostrarOrdenamiento={false}
           filasPorPaginaInicial={20}
@@ -433,6 +440,13 @@ const MaestroBancos = () => {
             setCuentaEditar(null)
           }}
           loading={guardando}
+        />
+      )}
+
+      {bancoHistorial && (
+        <ModalHistorialBanco
+          banco={bancoHistorial}
+          onCerrar={() => setBancoHistorial(null)}
         />
       )}
     </div>

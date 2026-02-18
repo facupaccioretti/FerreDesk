@@ -217,6 +217,23 @@ export function useCajaAPI() {
         return makeRequest(url);
     }, [makeRequest]);
 
+    /**
+     * Obtiene el historial de movimientos de una cuenta bancaria específica.
+     * @param {number} cuentaId - ID de la cuenta bancaria
+     * @param {string} fechaDesde - Fecha desde (YYYY-MM-DD)
+     * @param {string} fechaHasta - Fecha hasta (YYYY-MM-DD)
+     * @returns {Promise<object>} - { movimientos: [], total_ingresos, total_egresos, saldo_periodo, banco }
+     */
+    const obtenerHistorialBanco = useCallback(async (cuentaId, fechaDesde = '', fechaHasta = '') => {
+        const params = new URLSearchParams();
+        if (fechaDesde) params.append('fecha_desde', fechaDesde);
+        if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+
+        const queryString = params.toString();
+        const url = `${API_BASE}/cuentas-banco/${cuentaId}/historial/${queryString ? '?' + queryString : ''}`;
+        return makeRequest(url);
+    }, [makeRequest]);
+
     // ========================================
     // CHEQUES (VALORES EN CARTERA)
     // ========================================
@@ -379,6 +396,7 @@ export function useCajaAPI() {
 
         // Cuentas banco
         obtenerCuentasBanco,
+        obtenerHistorialBanco,
 
         // Cheques
         obtenerCheques,

@@ -162,7 +162,7 @@ const ModalCobroVenta = ({
     const metodo = metodosPago.find((m) => m.id === metodoPagoId)
     if (!metodo) return false
     const codigo = (metodo.codigo || "").toLowerCase()
-    return codigo === "transferencia" || codigo === "qr"
+    return ["transferencia", "qr", "tarjeta_debito", "tarjeta_credito"].includes(codigo)
   }
 
   const esMetodoEfectivoPorId = (metodoPagoId) => {
@@ -192,7 +192,7 @@ const ModalCobroVenta = ({
           return
         }
         if (!linea.cuenta_banco_id) {
-          window.alert("Debe seleccionar el banco/billetera de destino para cada pago por transferencia/QR.")
+          window.alert("Debe seleccionar el banco/billetera de destino para cada pago bancario (Transferencia, QR, Tarjetas).")
           return
         }
       }

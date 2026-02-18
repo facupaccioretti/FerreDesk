@@ -40,9 +40,8 @@ def obtener_movimientos_proveedor(proveedor_id, fecha_desde=None, fecha_hasta=No
     
     # Compras
     compras = Compra.objects.filter(
-        comp_idpro=proveedor_id
-    ).exclude(
-        comp_estado='ANULADA'
+        comp_idpro=proveedor_id,
+        comp_estado='CERRADA'
     ).annotate(
         ct_id=Value(compra_ct.id),
         mov_id=F('pk'),

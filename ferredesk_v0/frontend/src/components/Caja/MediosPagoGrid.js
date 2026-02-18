@@ -168,8 +168,8 @@ const MediosPagoGrid = ({
                             </div>
                         </div>
 
-                        {/* Fila Condicional: Transferencia */}
-                        {pago.codigo === 'TRANSFERENCIA' && (
+                        {/* Fila Condicional: Transferencia, QR o Tarjetas */}
+                        {['TRANSFERENCIA', 'QR', 'TARJETA_DEBITO', 'TARJETA_CREDITO'].includes(pago.codigo) && (
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
                                 <div>
                                     <label className={CLASES_ETIQUETA}>{modo === 'RECIBO' ? 'Cuenta Destino' : 'Cuenta Origen'}</label>

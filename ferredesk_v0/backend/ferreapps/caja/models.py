@@ -375,6 +375,17 @@ class PagoVenta(models.Model):
         blank=True,
         help_text='Recibo al que corresponde este pago'
     )
+
+    # Orden de Pago a la que pertenece este pago (Modelo independiente)
+    orden_pago = models.ForeignKey(
+        'cuenta_corriente.OrdenPago',
+        on_delete=models.PROTECT,
+        db_column='PAG_ORDEN_PAGO_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Orden de Pago a la que corresponde este pago'
+    )
     
     # Método de pago utilizado
     metodo_pago = models.ForeignKey(

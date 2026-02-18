@@ -26,6 +26,8 @@ from .models import (
     TIPO_MOVIMIENTO_ENTRADA,
     TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
+    CODIGO_TARJETA_DEBITO,
+    CODIGO_TARJETA_CREDITO,
     CODIGO_TRANSFERENCIA,
     CODIGO_QR,
     CODIGO_CHEQUE,
@@ -204,14 +206,17 @@ def registrar_valores_y_movimientos(
         except MetodoPago.DoesNotExist:
             raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
 
-        # Transferencia/QR: requiere cuenta banco destino
+        # Métodos bancarios (Transferencia, QR, Tarjetas): permiten/requieren cuenta banco
         cuenta_banco_id = pago_data.get('cuenta_banco_id')
-        if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR]:
-            if not cuenta_banco_id:
+        metodos_bancarios = [CODIGO_TRANSFERENCIA, CODIGO_QR, CODIGO_TARJETA_DEBITO, CODIGO_TARJETA_CREDITO]
+        
+        if metodo_pago.codigo in metodos_bancarios:
+            if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR] and not cuenta_banco_id:
                 raise ValidationError(
-                    'Debe indicar cuenta_banco_id para pagos por transferencia/QR.'
+                    f'Debe indicar cuenta_banco_id para pagos por {metodo_pago.nombre}.'
                 )
         else:
+            # Para otros métodos (efectivo, etc.), no asignamos cuenta banco
             cuenta_banco_id = None
 
         # Datos de cheque (solo si el método es cheque)
@@ -513,7 +518,20 @@ def registrar_pagos_orden_pago(
         )
 
         for res in resultados:
+            # Persistir el pago para que quede en el historial
+            # Nota: dirección 'salida' implica un egreso bancario si tiene cuenta_banco
+            pago_op = PagoVenta.objects.create(
+                orden_pago=orden_pago,
+                metodo_pago=res['metodo_pago'],
+                cuenta_banco_id=res['cuenta_banco_id'],
+                monto=res['monto'],
+                es_vuelto=False,
+                referencia_externa=res['referencia_externa'],
+                observacion=res['observacion'],
+            )
+
             # Si es un cheque propio nuevo, registrarlo directamente como ENTREGADO
+            # y vincularlo al pago recién creado
             if res['datos_cheque'] and res['datos_cheque'].get('es_propio'):
                 Cheque.objects.create(
                     numero=res['datos_cheque']['numero'],
@@ -525,6 +543,7 @@ def registrar_pagos_orden_pago(
                     estado=Cheque.ESTADO_ENTREGADO,
                     proveedor=orden_pago.op_proveedor,
                     orden_pago=orden_pago,
+                    pago_venta=pago_op,
                     usuario_registro=sesion_caja.usuario,
                     origen_tipo=Cheque.ORIGEN_PROPIO
                 )

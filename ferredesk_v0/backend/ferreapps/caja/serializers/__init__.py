@@ -41,6 +41,9 @@ from .serializers_cheque import (
     CrearChequeCajaSerializer,
 )
 
+# Serializer de historial bancario
+from .serializers_historial_banco import MovimientoBancoSerializer
+
 __all__ = [
     # Métodos de pago
     'MetodoPagoSerializer',
@@ -62,4 +65,6 @@ __all__ = [
     'ChequeDetalleSerializer',
     'ChequeUpdateSerializer',
     'CrearChequeCajaSerializer',
+    # Historial bancario
+    'MovimientoBancoSerializer',
 ]
