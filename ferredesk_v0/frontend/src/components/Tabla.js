@@ -270,12 +270,4 @@ const Tabla = ({
   )
 }
 
-Tabla.defaultProps = {
-  columnas: [],
-  datos: [],
-  valorBusqueda: "",
-  onCambioBusqueda: () => { },
-  mostrarBuscador: true,
-}
-
 export default Tabla

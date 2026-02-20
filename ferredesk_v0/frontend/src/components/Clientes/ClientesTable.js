@@ -13,8 +13,8 @@ const ClientesTable = ({
   onDelete,
   search,
   setSearch,
-  expandedClientId,
-  setExpandedClientId,
+  expandedClientId = null,
+  setExpandedClientId = () => { },
   barrios,
   localidades,
   provincias,
@@ -142,16 +142,15 @@ const ClientesTable = ({
                         Información Básica
                       </h5>
                       <div className="space-y-1 text-xs">
-                        
+
                         {(() => {
                           const estado = cli.activo === "A" ? "Activo" : "Inactivo"
                           return (
                             <div className="flex justify-between items-center">
                               <span className="text-slate-500">Estado:</span>
                               <span
-                                className={`font-medium px-2 py-0.5 rounded-full text-xs ${
-                                  estado === "Activo" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                                }`}
+                                className={`font-medium px-2 py-0.5 rounded-full text-xs ${estado === "Activo" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                  }`}
                               >
                                 {estado}
                               </span>
@@ -369,11 +368,6 @@ const ClientesTable = ({
       cargando={cargando}
     />
   )
-}
-
-ClientesTable.defaultProps = {
-  expandedClientId: null,
-  setExpandedClientId: () => {},
 }
 
 export default ClientesTable;
