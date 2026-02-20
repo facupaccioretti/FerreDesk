@@ -117,7 +117,7 @@ const CajaManager = () => {
   }, [obtenerMiCaja, obtenerEstadoCaja, obtenerMovimientos])
 
   useEffect(() => {
-    document.title = "Caja y Tesorería - FerreDesk"
+    document.title = "Caja, Banco y Cheques - FerreDesk"
     cargarEstadoCaja()
   }, [cargarEstadoCaja])
 
@@ -283,7 +283,7 @@ const CajaManager = () => {
           <div className="max-w-[1400px] w-full mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Caja y Tesorería</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Caja, Banco y Cheques</h2>
             </div>
 
             {/* Mensaje de feedback */}

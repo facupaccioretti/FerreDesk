@@ -29,7 +29,7 @@ const OrdenCompraList = ({
   cargando = false,
 }) => {
   // Función para generar los botones de acciones para órdenes de compra
-  const generarBotonesOrdenCompra = (orden) => {
+  const generarBotonesOrdenCompra = useCallback((orden) => {
     return [
       {
         componente: BotonGenerarPDF,
@@ -57,7 +57,7 @@ const OrdenCompraList = ({
         titulo: "Eliminar orden"
       }
     ]
-  }
+  }, [onGenerarPDF, onVerOrdenCompra, onEditarOrdenCompra, onConvertirOrdenCompra, onEliminarOrdenCompra])
 
   const formatDate = (dateString) => {
     if (!dateString) return "-"
@@ -92,7 +92,7 @@ const OrdenCompraList = ({
         </div>
       </td>
     </tr>
-  ), [onVerOrdenCompra, onEditarOrdenCompra, onConvertirOrdenCompra, onEliminarOrdenCompra, onGenerarPDF])
+  ), [generarBotonesOrdenCompra])
 
   // Los errores se manejan con alertas del navegador, no se muestran en la UI
 

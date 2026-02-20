@@ -272,6 +272,7 @@ const NotaCreditoForm = ({
     formulario.cuit,
     formulario.clienteId,
     facturasAsociadas,
+    esInterna,
     consultarARCAStatus,
     limpiarEstadosARCAStatus
   ]);

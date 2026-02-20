@@ -98,7 +98,7 @@ const PresupuestoForm = ({
 
   // Hook para listas de precios
   const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
-  
+
   // Estado para la lista de precios activa (0 = Minorista por defecto)
   const [listaPrecioId, setListaPrecioId] = useState(0)
 
@@ -106,9 +106,9 @@ const PresupuestoForm = ({
     () =>
       Array.isArray(alicuotas)
         ? alicuotas.reduce((acc, ali) => {
-            acc[ali.id] = Number.parseFloat(ali.porce) || 0
-            return acc
-          }, {})
+          acc[ali.id] = Number.parseFloat(ali.porce) || 0
+          return acc
+        }, {})
         : {},
     [alicuotas],
   )
@@ -166,7 +166,7 @@ const PresupuestoForm = ({
   useEffect(() => {
     if (formulario.cuit) {
       const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
-      
+
       if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
         setDocumentoInfo({
           tipo: 'cuit',
@@ -193,7 +193,7 @@ const PresupuestoForm = ({
   useEffect(() => {
     if (formulario.cuit) {
       const cuitLimpio = formulario.cuit.replace(/[-\s]/g, '')
-      
+
       if (cuitLimpio.length === 11 && /^\d{11}$/.test(cuitLimpio)) {
         setDocumentoInfo({
           tipo: 'cuit',
@@ -236,7 +236,7 @@ const PresupuestoForm = ({
   // Manejo simple de errores (sin ARCA)
   const mostrarError = useCallback((error, mensajePorDefecto = "Error al procesar el presupuesto") => {
     const mensaje = (error && error.message) ? error.message : mensajePorDefecto
-    try { window.alert(mensaje) } catch (_) {}
+    try { window.alert(mensaje) } catch (_) { }
   }, [])
 
   // Función para agregar producto a la grilla desde el buscador
@@ -335,7 +335,7 @@ const PresupuestoForm = ({
   const handleCancel = () => {
     const confirmado = window.confirm('¿Está seguro de cancelar? Se perderán todos los cambios no guardados.');
     if (!confirmado) return;
-    
+
     limpiarBorrador() // Usar limpiarBorrador en lugar de localStorage.removeItem
     onCancel()
   }
@@ -348,11 +348,11 @@ const PresupuestoForm = ({
   const handleClienteSelect = useCallback((clienteSeleccionado) => {
     // Usar la función estándar para autocompletar todos los campos del cliente
     manejarSeleccionClienteObjeto(setFormulario)(clienteSeleccionado)
-    
+
     // Usar la función centralizada para validar y actualizar el documento
     const documentoValidado = validarDocumentoCliente(clienteSeleccionado)
     setDocumentoInfo(documentoValidado)
-    
+
     // Actualizar lista de precios según el cliente seleccionado
     const listaCliente = clienteSeleccionado.lista_precio_id ?? 0
     setListaPrecioId(listaCliente)
@@ -446,258 +446,258 @@ const PresupuestoForm = ({
           </div>
           {initialData ? (isReadOnly ? "Ver Presupuesto" : "Editar Presupuesto") : "Nuevo Presupuesto"}
         </h3>
-      {isReadOnly && (
-        <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span className="font-medium">Este presupuesto está cerrado y no puede ser editado. Solo lectura.</span>
+        {isReadOnly && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span className="font-medium">Este presupuesto está cerrado y no puede ser editado. Solo lectura.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Una sola tarjeta con campos organizados en grid (igual a VentaForm) */}
+        <div className="mb-6">
+          <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
+            {/* Primera fila: 6 campos */}
+            <div className="grid grid-cols-6 gap-4 mb-3">
+              {/* Cliente */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
+                {loadingClientes ? (
+                  <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
+                    Cargando...
+                  </div>
+                ) : errorClientes ? (
+                  <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
+                    {errorClientes}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={(() => {
+                        const cli = clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
+                        return cli ? (cli.razon || cli.nombre) : ""
+                      })()}
+                      readOnly
+                      disabled
+                      className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                    />
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={abrirSelector}
+                        className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
+                        title="Buscar en lista completa"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Documento */}
+              <div>
+                <SelectorDocumento
+                  tipoComprobante={"presupuesto"}
+                  esObligatorio={false}
+                  valorInicial={documentoInfo.valor}
+                  tipoInicial={documentoInfo.tipo}
+                  onChange={handleDocumentoChange}
+                  readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Domicilio */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
+                <input
+                  name="domicilio"
+                  type="text"
+                  value={formulario.domicilio}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  readOnly={isReadOnly}
+                />
+              </div>
+
+              {/* Fecha */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
+                <input
+                  name="fecha"
+                  type="date"
+                  value={formulario.fecha}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                  readOnly={isReadOnly}
+                />
+              </div>
+
+              {/* Plazo */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
+                <select
+                  name="plazoId"
+                  value={formulario.plazoId}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                  disabled={isReadOnly}
+                >
+                  <option value="">Seleccionar...</option>
+                  {(() => {
+                    const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
+                    const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                    const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
+                    return visibles.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))
+                  })()}
+                </select>
+              </div>
+
+              {/* Vendedor */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
+                <select
+                  name="vendedorId"
+                  value={formulario.vendedorId}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                  disabled={isReadOnly}
+                >
+                  <option value="">Seleccionar...</option>
+                  {vendedores.map((v) => (
+                    <option key={v.id} value={v.id}>{v.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Segunda fila: 4 campos */}
+            <div className="grid grid-cols-4 gap-4 mb-3">
+              {/* Buscador */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
+                <BuscadorProducto
+                  productos={productos}
+                  onSelect={handleAddItemToGrid}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Tipo de Comprobante */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                <ComprobanteDropdown
+                  opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
+                  value={'presupuesto'}
+                  onChange={() => { }}
+                  disabled={true}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Acción por defecto */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
+                <SumarDuplicar
+                  autoSumarDuplicados={autoSumarDuplicados}
+                  setAutoSumarDuplicados={setAutoSumarDuplicados}
+                  disabled={isReadOnly}
+                  showLabel={false}
+                />
+              </div>
+
+              {/* Lista de Precios */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 mb-1">Lista de Precios</label>
+                <select
+                  value={listaPrecioId}
+                  onChange={(e) => setListaPrecioId(Number(e.target.value))}
+                  disabled={isReadOnly || loadingListas}
+                  className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  {listasPrecio.map((lista) => (
+                    <option key={lista.numero} value={lista.numero}>
+                      {lista.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Una sola tarjeta con campos organizados en grid (igual a VentaForm) */}
-      <div className="mb-6">
-        <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
-          {/* Primera fila: 6 campos */}
-          <div className="grid grid-cols-6 gap-4 mb-3">
-            {/* Cliente */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Cliente *</label>
-              {loadingClientes ? (
-                <div className="flex items-center gap-2 text-slate-500 bg-slate-100 rounded-none px-2 py-1 text-xs h-8">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div>
-                  Cargando...
-                </div>
-              ) : errorClientes ? (
-                <div className="text-red-600 bg-red-50 rounded-none px-2 py-1 text-xs border border-red-200 h-8">
-                  {errorClientes}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={(() => {
-                      const cli = clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
-                      return cli ? (cli.razon || cli.nombre) : ""
-                    })()}
-                    readOnly
-                    disabled
-                    className="flex-1 border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
-                  />
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={abrirSelector}
-                      className="p-1 rounded-none border border-slate-300 bg-white hover:bg-slate-100 transition-colors h-8 w-8 flex items-center justify-center"
-                      title="Buscar en lista completa"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-slate-600"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Documento */}
-            <div>
-              <SelectorDocumento
-                tipoComprobante={"presupuesto"}
-                esObligatorio={false}
-                valorInicial={documentoInfo.valor}
-                tipoInicial={documentoInfo.tipo}
-                onChange={handleDocumentoChange}
-                readOnly={!esDocumentoEditable(formulario.clienteId, isReadOnly)}
-                className="w-full"
-              />
-            </div>
-
-            {/* Domicilio */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Domicilio</label>
-              <input
-                name="domicilio"
-                type="text"
-                value={formulario.domicilio}
-                onChange={handleChange}
-                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                readOnly={isReadOnly}
-              />
-            </div>
-
-            {/* Fecha */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Fecha</label>
-              <input
-                name="fecha"
-                type="date"
-                value={formulario.fecha}
-                onChange={handleChange}
-                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                required
-                readOnly={isReadOnly}
-              />
-            </div>
-
-            {/* Plazo */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Plazo *</label>
-              <select
-                name="plazoId"
-                value={formulario.plazoId}
-                onChange={handleChange}
-                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                required
-                disabled={isReadOnly}
-              >
-                <option value="">Seleccionar...</option>
-                {(() => {
-                  const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
-                  const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
-                  const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
-                  return visibles.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                  ))
-                })()}
-              </select>
-            </div>
-
-            {/* Vendedor */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Vendedor *</label>
-              <select
-                name="vendedorId"
-                value={formulario.vendedorId}
-                onChange={handleChange}
-                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                required
-                disabled={isReadOnly}
-              >
-                <option value="">Seleccionar...</option>
-                {vendedores.map((v) => (
-                  <option key={v.id} value={v.id}>{v.nombre}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Segunda fila: 4 campos */}
-          <div className="grid grid-cols-4 gap-4 mb-3">
-            {/* Buscador */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-              <BuscadorProducto 
-                productos={productos} 
-                onSelect={handleAddItemToGrid} 
-                disabled={isReadOnly}
-                readOnly={isReadOnly}
-                className="w-full"
-              />
-            </div>
-
-            {/* Tipo de Comprobante */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
-              <ComprobanteDropdown
-                opciones={[{ value: 'presupuesto', label: 'Presupuesto', icon: 'document', codigo_afip: '9997' }]}
-                value={'presupuesto'}
-                onChange={() => {}}
-                disabled={true}
-                className="w-full"
-              />
-            </div>
-
-            {/* Acción por defecto */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Acción por defecto</label>
-              <SumarDuplicar
-                autoSumarDuplicados={autoSumarDuplicados}
-                setAutoSumarDuplicados={setAutoSumarDuplicados}
-                disabled={isReadOnly}
-                showLabel={false}
-              />
-            </div>
-
-            {/* Lista de Precios */}
-            <div>
-              <label className="block text-[12px] font-semibold text-slate-700 mb-1">Lista de Precios</label>
-              <select
-                value={listaPrecioId}
-                onChange={(e) => setListaPrecioId(Number(e.target.value))}
-                disabled={isReadOnly || loadingListas}
-                className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              >
-                {listasPrecio.map((lista) => (
-                  <option key={lista.numero} value={lista.numero}>
-                    {lista.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+        <div className="mb-8">
+          {(loadingProductos || loadingFamilias || loadingProveedores) && (
+            <div className="text-center text-gray-500 py-2">Cargando productos, familias y proveedores...</div>
+          )}
+          {errorProductos && (
+            <div className="text-center text-red-600 py-2">{errorProductos}</div>
+          )}
+          {errorFamilias && (
+            <div className="text-center text-red-600 py-2">{errorFamilias}</div>
+          )}
+          {errorProveedores && (
+            <div className="text-center text-red-600 py-2">{errorProveedores}</div>
+          )}
+          <ItemsGrid
+            ref={itemsGridRef}
+            autoSumarDuplicados={autoSumarDuplicados}
+            setAutoSumarDuplicados={setAutoSumarDuplicados}
+            bonificacionGeneral={formulario.bonificacionGeneral}
+            setBonificacionGeneral={setBonificacionGeneral}
+            descu1={formulario.descu1}
+            descu2={formulario.descu2}
+            descu3={formulario.descu3}
+            setDescu1={setDescu1}
+            setDescu2={setDescu2}
+            setDescu3={setDescu3}
+            totales={totales}
+            modo="presupuesto"
+            alicuotas={alicuotasMap}
+            onRowsChange={handleRowsChange}
+            initialItems={formulario.items}
+            listaPrecioId={listaPrecioId}
+            listasPrecio={listasPrecio}
+          />
         </div>
-      </div>
-      <div className="mb-8">
-        {(loadingProductos || loadingFamilias || loadingProveedores) && (
-          <div className="text-center text-gray-500 py-2">Cargando productos, familias y proveedores...</div>
-        )}
-        {errorProductos && (
-          <div className="text-center text-red-600 py-2">{errorProductos}</div>
-        )}
-        {errorFamilias && (
-          <div className="text-center text-red-600 py-2">{errorFamilias}</div>
-        )}
-        {errorProveedores && (
-          <div className="text-center text-red-600 py-2">{errorProveedores}</div>
-        )}
-        <ItemsGrid
-          ref={itemsGridRef}
-          autoSumarDuplicados={autoSumarDuplicados}
-          setAutoSumarDuplicados={setAutoSumarDuplicados}
-          bonificacionGeneral={formulario.bonificacionGeneral}
-          setBonificacionGeneral={setBonificacionGeneral}
-          descu1={formulario.descu1}
-          descu2={formulario.descu2}
-          descu3={formulario.descu3}
-          setDescu1={setDescu1}
-          setDescu2={setDescu2}
-          setDescu3={setDescu3}
-          totales={totales}
-          modo="presupuesto"
-          alicuotas={alicuotasMap}
-          onRowsChange={handleRowsChange}
-          initialItems={formulario.items}
-          listaPrecioId={listaPrecioId}
-          listasPrecio={listasPrecio}
-        />
-      </div>
-      <div className="mt-8 flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-        >
-          {isReadOnly ? "Cerrar" : "Cancelar"}
-        </button>
-        {!isReadOnly && (
+        <div className="mt-8 flex justify-end space-x-4">
           <button
-            type="submit"
-            className={`px-6 py-3 rounded-xl transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${theme.botonPrimario}`}
+            type="button"
+            onClick={handleCancel}
+            className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
           >
-            {initialData ? "Guardar Cambios" : "Crear Presupuesto"}
+            {isReadOnly ? "Cerrar" : "Cancelar"}
           </button>
-        )}
-      </div>
-      {/* Modal selector clientes */}
-      <ClienteSelectorModal
-        abierto={selectorAbierto}
-        onCerrar={cerrarSelector}
-        clientes={clientesConDefecto}
-        onSeleccionar={handleClienteSelect}
-        cargando={loadingClientes}
-        error={errorClientes}
-      />
+          {!isReadOnly && (
+            <button
+              type="submit"
+              className={`px-6 py-3 rounded-xl transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${theme.botonPrimario}`}
+            >
+              {initialData ? "Guardar Cambios" : "Crear Presupuesto"}
+            </button>
+          )}
+        </div>
+        {/* Modal selector clientes */}
+        <ClienteSelectorModal
+          abierto={selectorAbierto}
+          onCerrar={cerrarSelector}
+          clientes={clientesConDefecto}
+          onSeleccionar={handleClienteSelect}
+          cargando={loadingClientes}
+          error={errorClientes}
+        />
       </div>
     </form>
   )

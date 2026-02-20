@@ -37,7 +37,7 @@ const CuentaCorrienteManager = () => {
         <div className="py-8 px-4">
           <div className="max-w-[1400px] w-full mx-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Cuentas Corrientes</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Cuenta Corriente Clientes</h2>
             </div>
 
             {/* Área principal: contenido */}

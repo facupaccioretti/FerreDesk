@@ -68,7 +68,7 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
       setCuitValido(null)
       setClienteSeleccionado(null)
     }
-  }, [abierto])
+  }, [abierto, hoy])
 
   // Lógica para sincronizar fecha_pago si es AL_DIA
   useEffect(() => {

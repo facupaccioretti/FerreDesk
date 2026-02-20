@@ -7,8 +7,6 @@ import { useArcaEstado } from '../../utils/useArcaEstado'
 import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler'
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay'
 import CuitStatusBanner from '../Alertas/CuitStatusBanner'
-import ModalCobroVenta from './herramientasforms/ModalCobroVenta'
-import NuevoReciboModal from '../CuentaCorriente/NuevoReciboModal'
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme'
 import { fechaHoyLocal } from '../../utils/fechas'
 
@@ -114,7 +112,7 @@ const NotaDebitoForm = ({
   } = useArcaEstado()
 
   // Estados para manejar el envío
-  const [isSaving, setIsSaving] = useState(false)
+  const [, setIsSaving] = useState(false)
 
   const {
     procesarResultadoArca,

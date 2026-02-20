@@ -1,5 +1,5 @@
 /**
- * Módulo de Caja y Tesorería
+ * Módulo de Caja, Banco y Cheques
  * 
  * Exporta los componentes del módulo de caja:
  * - CajaManager: Componente principal

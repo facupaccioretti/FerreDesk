@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -29,21 +29,17 @@ const VentasPorDia = () => {
   const [error, setError] = useState(null);
   const [periodo, setPeriodo] = useState('7d'); // '7d', '30d', '90d', '1y'
 
-  useEffect(() => {
-    fetchVentasPorDia();
-  }, [periodo]);
-
-  const fetchVentasPorDia = async () => {
+  const fetchVentasPorDia = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/home/ventas-por-dia/?periodo=${periodo}`, {
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         throw new Error('Error al cargar los datos');
       }
-      
+
       const result = await response.json();
       setData(result);
     } catch (err) {
@@ -52,7 +48,11 @@ const VentasPorDia = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [periodo]);
+
+  useEffect(() => {
+    fetchVentasPorDia();
+  }, [fetchVentasPorDia]);
 
   const options = {
     responsive: true,
@@ -86,7 +86,7 @@ const VentasPorDia = () => {
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             return `Ventas: $${context.parsed.y.toLocaleString()}`;
           }
         }
@@ -111,7 +111,7 @@ const VentasPorDia = () => {
           font: {
             size: 11
           },
-          callback: function(value) {
+          callback: function (value) {
             return `$${value.toLocaleString()}`;
           }
         },
@@ -128,14 +128,14 @@ const VentasPorDia = () => {
 
   const calcularEstadisticas = () => {
     if (!data?.datasets[0]?.data) return null;
-    
+
     const ventas = data.datasets[0].data;
     const total = ventas.reduce((sum, venta) => sum + venta, 0);
     const promedio = total / ventas.length;
     const maximo = Math.max(...ventas);
     const minimo = Math.min(...ventas);
     const tendencia = ventas[ventas.length - 1] - ventas[0];
-    
+
     return {
       total,
       promedio,
@@ -168,7 +168,7 @@ const VentasPorDia = () => {
             </svg>
           </div>
           <p className="text-slate-600">Error: {error}</p>
-          <button 
+          <button
             onClick={fetchVentasPorDia}
             className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
@@ -187,7 +187,7 @@ const VentasPorDia = () => {
           <h3 className="@container text-base @container/md:text-lg @container/lg:text-xl font-bold text-slate-800">Evolución de Ventas</h3>
           <p className="@container text-xs @container/md:text-sm text-slate-600">Análisis temporal de las ventas diarias</p>
         </div>
-        
+
         {/* Selector de período */}
         <div className="flex items-center space-x-2">
           <span className="@container text-xs @container/md:text-sm font-medium text-slate-700">Período:</span>
