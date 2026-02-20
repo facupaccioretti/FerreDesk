@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { fechaHoyLocal } from "../../utils/fechas"
 import Tabla from "../Tabla"
 
 /**
@@ -19,9 +20,13 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
   const [cargando, setCargando] = useState(true)
 
   // Filtros locales
-  const [fechaDesde, setFechaDesde] = useState("")
-  const [fechaHasta, setFechaHasta] = useState("")
-  const [soloMias, setSoloMias] = useState(false)
+  const [fechaDesde, setFechaDesde] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 30)
+    return d.toLocaleDateString("en-CA") // Formato YYYY-MM-DD local
+  })
+  const [fechaHasta, setFechaHasta] = useState(() => fechaHoyLocal())
+  const [soloMias, setSoloMias] = useState(filtros.solo_mias || false)
 
   // Cargar historial de cajas
   const cargarHistorial = useCallback(async () => {
@@ -60,13 +65,16 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
   const cajasFiltradas = cajas.filter((caja) => {
     if (fechaDesde) {
       const fechaInicio = new Date(caja.fecha_hora_inicio)
-      const desde = new Date(fechaDesde)
+      // Parsear YYYY-MM-DD como local y no UTC
+      const [y, m, d] = fechaDesde.split("-").map(Number)
+      const desde = new Date(y, m - 1, d, 0, 0, 0, 0)
       if (fechaInicio < desde) return false
     }
     if (fechaHasta) {
       const fechaInicio = new Date(caja.fecha_hora_inicio)
-      const hasta = new Date(fechaHasta)
-      hasta.setHours(23, 59, 59, 999) // Incluir todo el día
+      // Parsear YYYY-MM-DD como local y no UTC
+      const [y, m, d] = fechaHasta.split("-").map(Number)
+      const hasta = new Date(y, m - 1, d, 23, 59, 59, 999)
       if (fechaInicio > hasta) return false
     }
     return true
@@ -177,41 +185,45 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
 
   return (
     <div className="space-y-4">
-      {/* Botón Abrir Caja si no hay caja abierta */}
+      {/* Banner Abrir Caja compacto si no hay caja abierta */}
       {!tieneCajaAbierta && (
-        <div className="bg-white rounded-lg p-6 border border-slate-200 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-            <svg
-              className="w-10 h-10 text-slate-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-              />
-            </svg>
+        <div className="bg-gradient-to-r from-slate-100 to-slate-200/50 rounded-lg p-3 border border-slate-300 shadow-sm flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-slate-300 shadow-inner">
+              <svg
+                className="w-5 h-5 text-slate-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">No hay caja abierta</h3>
+              <p className="text-[11px] text-slate-600">
+                Para registrar ventas y movimientos, primero debe abrir una caja.
+              </p>
+            </div>
           </div>
-          <h3 className="text-lg font-semibold text-slate-700 mb-2">No hay caja abierta</h3>
-          <p className="text-slate-500 mb-4">
-            Para registrar ventas y movimientos, primero debe abrir una caja.
-          </p>
           <button
             onClick={onAbrirCaja}
-            className={`${theme.botonPrimario} inline-flex items-center gap-2`}
+            className={`${theme.botonPrimario} inline-flex items-center gap-2 px-4 py-2 text-sm shadow-md transition-all active:scale-95`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 d="M12 6v6m0 0v6m0-6h6m-6 0H6"
               />
             </svg>
-            Abrir Caja
+            Abrir Caja Ahora
           </button>
         </div>
       )}

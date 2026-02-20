@@ -9,13 +9,15 @@ import { X, ClipboardList, Info } from "lucide-react"
  * Modal para revisar observaciones de trámites (ventas y recibos) 
  * capturadas durante el cobro. Utiliza Headless UI para consistencia.
  */
-const ModalObservacionesCaja = ({ tramites, onCerrar }) => {
+const ModalObservacionesCaja = ({ tramites, onCerrar, titulo }) => {
     const theme = useFerreDeskTheme()
 
     const formatMoney = (value) => {
         const num = parseFloat(value) || 0
         return num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     }
+
+    const titleText = titulo || `Revisiones Pendientes (${tramites?.length || 0})`
 
     return (
         <Transition show={!!tramites} as={Fragment} appear>
@@ -48,7 +50,7 @@ const ModalObservacionesCaja = ({ tramites, onCerrar }) => {
                             <div className={`bg-gradient-to-r ${theme.primario} px-4 py-2.5 flex-shrink-0 flex justify-between items-center`}>
                                 <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
                                     <ClipboardList className="w-5 h-5" strokeWidth={2.5} />
-                                    Revisiones Pendientes ({tramites?.length || 0})
+                                    {titleText}
                                 </Dialog.Title>
                                 <button
                                     onClick={onCerrar}
@@ -78,24 +80,29 @@ const ModalObservacionesCaja = ({ tramites, onCerrar }) => {
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-xs font-bold text-slate-800">${formatMoney(t.monto)}</p>
+                                                        {t.diferencia && (
+                                                            <p className="text-[10px] font-bold text-amber-600">Dif: ${formatMoney(t.diferencia)}</p>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-1.5 font-medium">
-                                                    {t.observaciones.map((obs, oIdx) => (
-                                                        <div key={oIdx} className="flex gap-2 text-xs">
-                                                            <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-                                                            <p className="text-slate-600 leading-tight italic">{obs}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                {t.observaciones && t.observaciones.length > 0 && (
+                                                    <div className="space-y-1.5 font-medium">
+                                                        {t.observaciones.map((obs, oIdx) => (
+                                                            <div key={oIdx} className="flex gap-2 text-xs">
+                                                                <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                                                <p className="text-slate-600 leading-tight italic">{obs}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="py-12 text-center">
                                         <Info className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                                        <p className="text-sm text-slate-400">No hay observaciones pendientes.</p>
+                                        <p className="text-sm text-slate-400">No hay información para mostrar.</p>
                                     </div>
                                 )}
                             </div>

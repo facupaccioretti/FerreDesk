@@ -5,6 +5,7 @@ import { useCajaAPI } from "../../utils/useCajaAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { formatearFecha, formatearMoneda } from "../../utils/formatters"
 import CajaMovimientos from "./CajaMovimientos"
+import ModalObservacionesCaja from "./ModalObservacionesCaja"
 
 /**
  * Componente que muestra los detalles completos de una caja cerrada.
@@ -19,6 +20,7 @@ const CajaDetalleView = ({ sesionId }) => {
   const [movimientos, setMovimientos] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(null)
+  const [modalExcedentesVisible, setModalExcedentesVisible] = useState(false)
 
   // Cargar detalles de la caja
   useEffect(() => {
@@ -152,31 +154,62 @@ const CajaDetalleView = ({ sesionId }) => {
         </div>
       )}
 
-      {/* Línea 4: Excedentes compacto */}
-      {(parseFloat(resumen?.excedente_no_facturado_propina) > 0 || parseFloat(resumen?.vuelto_pendiente) > 0) && (
-        <div className="bg-amber-50 rounded border border-amber-200 px-2 py-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-            {parseFloat(resumen?.excedente_no_facturado_propina) > 0 && (
-              <span className="text-amber-700">
-                Excedente: <strong className="text-amber-900">${formatearMoneda(resumen.excedente_no_facturado_propina)}</strong>
-              </span>
-            )}
-            {parseFloat(resumen?.vuelto_pendiente) > 0 && (
-              <span className="text-amber-700">
-                Vuelto pend: <strong className="text-amber-900">${formatearMoneda(resumen.vuelto_pendiente)}</strong>
-              </span>
-            )}
-            {resumen?.ventas_con_excedente?.length > 0 && (
-              <span className="text-amber-600 text-[10px]">
-                ({resumen.ventas_con_excedente.length} comprobante{resumen.ventas_con_excedente.length > 1 ? "s" : ""})
-              </span>
-            )}
+      {/* Línea 4: Excedentes y Observaciones */}
+      {(parseFloat(resumen?.excedente_no_facturado_propina) > 0 ||
+        parseFloat(resumen?.vuelto_pendiente) > 0 ||
+        resumen?.tramites_con_observaciones?.length > 0) && (
+          <div className="bg-amber-50 rounded border border-amber-200 px-2 py-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+              {parseFloat(resumen?.excedente_no_facturado_propina) > 0 && (
+                <span className="text-amber-700">
+                  Excedente: <strong className="text-amber-900">${formatearMoneda(resumen.excedente_no_facturado_propina)}</strong>
+                </span>
+              )}
+              {parseFloat(resumen?.vuelto_pendiente) > 0 && (
+                <span className="text-amber-700">
+                  Vuelto pend: <strong className="text-amber-900">${formatearMoneda(resumen.vuelto_pendiente)}</strong>
+                </span>
+              )}
+              {/* Botón para ver observaciones/detalles */}
+              {(resumen?.tramites_con_observaciones?.length > 0 || resumen?.ventas_con_excedente?.length > 0) && (
+                <button
+                  onClick={() => setModalExcedentesVisible(true)}
+                  className="text-amber-600 hover:text-amber-800 text-[10px] font-bold underline decoration-dotted transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Ver {resumen?.tramites_con_observaciones?.length || resumen?.ventas_con_excedente?.length} revisiones
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Lista de movimientos (tabla compacta) */}
       <CajaMovimientos movimientos={movimientos} theme={theme} />
+
+      {/* Modal de Observaciones/Excedentes Detallados */}
+      {modalExcedentesVisible && (
+        <ModalObservacionesCaja
+          titulo="Revisiones y Observaciones de Caja"
+          tramites={resumen?.tramites_con_observaciones?.length > 0
+            ? resumen.tramites_con_observaciones
+            : resumen?.ventas_con_excedente?.map(v => ({
+              tipo: 'VENTA',
+              id: v.id,
+              numero: v.numero,
+              cliente: v.cliente_nombre || 'Cliente Mostrador',
+              monto: v.total || v.monto || v.total_cobrado || 0,
+              diferencia: v.excedente,
+              observaciones: v.excedente > 0
+                ? [`Pago en exceso registrado como ${v.tipo_excedente === 'propina' ? 'propina/redondeo' : 'vuelto'}`]
+                : (v.observaciones || [])
+            }))
+          }
+          onCerrar={() => setModalExcedentesVisible(false)}
+        />
+      )}
     </div>
   )
 }
