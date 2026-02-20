@@ -369,6 +369,95 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
                 'justificacion_excedente': v.justificacion_excedente or '',
             })
 
+        # Listado de trámites con observaciones (Ventas y Recibos)
+        # 1. Ventas con justificación de excedente
+        ventas_obs = Venta.objects.filter(
+            sesion_caja=sesion,
+        ).filter(
+            Q(justificacion_excedente__isnull=False) & ~Q(justificacion_excedente='') |
+            Q(ven_observacion__isnull=False) & ~Q(ven_observacion='')
+        ).select_related('comprobante', 'ven_idcli').order_by('ven_fecha', 'ven_id')
+
+        # 2. Pagos de ventas con observaciones (faltantes o notas manuales)
+        pagos_ventas_obs = PagoVenta.objects.filter(
+            venta__sesion_caja=sesion,
+        ).filter(
+            Q(observacion__isnull=False) & ~Q(observacion='')
+        ).select_related('venta', 'venta__comprobante', 'venta__ven_idcli').order_by('fecha_hora')
+
+        # 3. Pagos de recibos con observaciones
+        pagos_recibos_obs = PagoVenta.objects.filter(
+            recibo__sesion_caja=sesion,
+        ).filter(
+            Q(observacion__isnull=False) & ~Q(observacion='')
+        ).select_related('recibo', 'recibo__rec_cliente').order_by('fecha_hora')
+
+        tramites_con_observaciones = []
+        vistos_ids = {'venta': set(), 'recibo': set()}
+
+        # Consolidar Ventas (nivel modelo)
+        for v in ventas_obs:
+            letra = (v.comprobante.letra or '').strip()
+            numero = f"{letra} {v.ven_punto:04d}-{v.ven_numero:08d}".strip() if v.ven_punto is not None and v.ven_numero is not None else str(v.ven_id)
+            obs_list = []
+            if v.justificacion_excedente:
+                obs_list.append(f"Excedente ({v.excedente_destino}): {v.justificacion_excedente}")
+            if v.ven_observacion:
+                obs_list.append(f"Nota: {v.ven_observacion}")
+            
+            tramites_con_observaciones.append({
+                'tipo': 'VENTA',
+                'id': v.ven_id,
+                'numero': numero,
+                'cliente': v.ven_idcli.razon if v.ven_idcli else 'S/C',
+                'observaciones': obs_list,
+                'monto': str(v.ven_total) if hasattr(v, 'ven_total') else '0.00'
+            })
+            vistos_ids['venta'].add(v.ven_id)
+
+        # Consolidar Pagos de Ventas (si no se agregaron por el nivel modelo)
+        for p in pagos_ventas_obs:
+            v = p.venta
+            if v.ven_id in vistos_ids['venta']:
+                # Agregar observación al trámite existente
+                for t in tramites_con_observaciones:
+                    if t['tipo'] == 'VENTA' and t['id'] == v.ven_id:
+                        if p.observacion not in t['observaciones']:
+                            t['observaciones'].append(f"Pago: {p.observacion}")
+                continue
+            
+            letra = (v.comprobante.letra or '').strip()
+            numero = f"{letra} {v.ven_punto:04d}-{v.ven_numero:08d}".strip() if v.ven_punto is not None and v.ven_numero is not None else str(v.ven_id)
+            tramites_con_observaciones.append({
+                'tipo': 'VENTA',
+                'id': v.ven_id,
+                'numero': numero,
+                'cliente': v.ven_idcli.razon if v.ven_idcli else 'S/C',
+                'observaciones': [f"Pago: {p.observacion}"],
+                'monto': str(v.ven_total) if hasattr(v, 'ven_total') else '0.00'
+            })
+            vistos_ids['venta'].add(v.ven_id)
+
+        # Consolidar Recibos (vía PagoVenta)
+        for p in pagos_recibos_obs:
+            r = p.recibo
+            if r.id in vistos_ids['recibo']:
+                for t in tramites_con_observaciones:
+                    if t['tipo'] == 'RECIBO' and t['id'] == r.id:
+                        if p.observacion not in t['observaciones']:
+                            t['observaciones'].append(f"Pago: {p.observacion}")
+                continue
+            
+            tramites_con_observaciones.append({
+                'tipo': 'RECIBO',
+                'id': r.id,
+                'numero': f"REC {r.rec_numero}",
+                'cliente': r.rec_cliente.razon if r.rec_cliente else 'S/C',
+                'observaciones': [f"Pago: {p.observacion}"],
+                'monto': str(r.rec_monto) if hasattr(r, 'rec_monto') else '0.00'
+            })
+            vistos_ids['recibo'].add(r.id)
+
         return {
             'saldo_inicial': str(sesion.saldo_inicial),
             'saldo_teorico_efectivo': str(saldo_teorico),
@@ -381,6 +470,8 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             'excedente_no_facturado_propina': str(excedente_propina),
             'vuelto_pendiente': str(excedente_vuelto_pendiente),
             'ventas_con_excedente': ventas_con_excedente,
+            'tramites_con_observaciones': tramites_con_observaciones,
+            'cantidad_observaciones': len(tramites_con_observaciones),
         }
 
 

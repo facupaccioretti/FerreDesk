@@ -7,6 +7,7 @@ import CajaMovimientos from "./CajaMovimientos"
 import ModalCierreX from "./ModalCierreX"
 import ModalCerrarCaja from "./ModalCerrarCaja"
 import ModalNuevoMovimiento from "./ModalNuevoMovimiento"
+import ModalObservacionesCaja from "./ModalObservacionesCaja"
 
 /**
  * Componente que muestra el contenido del tab "Caja Actual".
@@ -27,6 +28,7 @@ const CajaActualTab = ({
   const [modalCierreXVisible, setModalCierreXVisible] = useState(false)
   const [modalCerrarVisible, setModalCerrarVisible] = useState(false)
   const [modalMovimientoVisible, setModalMovimientoVisible] = useState(false)
+  const [modalObservacionesVisible, setModalObservacionesVisible] = useState(false)
   const [tipoMovimiento, setTipoMovimiento] = useState("ENTRADA")
 
   // Abrir modal de movimiento
@@ -127,13 +129,24 @@ const CajaActualTab = ({
         </div>
 
         {/* Estado de la caja */}
-        <CajaEstado sesion={sesion} resumen={resumen} theme={theme} />
+        <CajaEstado
+          sesion={sesion}
+          resumen={resumen}
+          theme={theme}
+          onVerObservaciones={() => setModalObservacionesVisible(true)}
+        />
 
         {/* Lista de movimientos */}
         <CajaMovimientos movimientos={movimientos} theme={theme} />
       </div>
 
       {/* Modales */}
+      {modalObservacionesVisible && (
+        <ModalObservacionesCaja
+          tramites={resumen?.tramites_con_observaciones || []}
+          onCerrar={() => setModalObservacionesVisible(false)}
+        />
+      )}
       {modalCierreXVisible && (
         <ModalCierreX
           sesion={sesion}

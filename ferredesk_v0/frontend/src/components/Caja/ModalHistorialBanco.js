@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
-import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { X, TrendingUp, TrendingDown, DollarSign } from "lucide-react"
 import Tabla from "../Tabla"
 
 const ModalHistorialBanco = ({ banco, onCerrar }) => {
-    const theme = useFerreDeskTheme()
     const { obtenerHistorialBanco, loading } = useCajaAPI()
 
     const [data, setData] = useState({
@@ -118,48 +116,48 @@ const ModalHistorialBanco = ({ banco, onCerrar }) => {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={onCerrar} />
 
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-6xl overflow-hidden flex flex-col max-h-[92vh] border border-slate-200">
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30`}>
-                            <TrendingUp className="w-5 h-5" />
+                <div className="px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 flex justify-between items-center">
+                    <div className="flex items-center gap-2.5">
+                        <div className={`p-1.5 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30`}>
+                            <TrendingUp className="w-4 h-4" />
                         </div>
                         <div>
-                            <h3 className="text-white font-bold text-lg">Historial: {banco.nombre}</h3>
-                            <p className="text-slate-400 text-xs font-medium">
+                            <h3 className="text-white font-bold text-base leading-tight">Historial: {banco.nombre}</h3>
+                            <p className="text-slate-400 text-[10px] font-medium leading-tight">
                                 {banco.tipo_entidad === 'BCO' ? 'Banco' : 'Billetera Virtual'} • {banco.alias || 'Sin alias'}
                             </p>
                         </div>
                     </div>
                     <button
                         onClick={onCerrar}
-                        className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                        className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Filters & Summary */}
-                <div className="p-6 bg-slate-50 border-b border-slate-200 space-y-6">
-                    <div className="flex flex-wrap items-end justify-between gap-6">
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
                         {/* Date Filters */}
-                        <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Desde</label>
+                        <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Desde</label>
                                 <input
                                     type="date"
-                                    className="block w-full text-sm border-none focus:ring-0 text-slate-700 bg-transparent p-1"
+                                    className="block text-xs border-none focus:ring-0 text-slate-700 bg-transparent p-0"
                                     value={fechaDesde}
                                     onChange={(e) => setFechaDesde(e.target.value)}
                                 />
                             </div>
-                            <div className="w-px h-8 bg-slate-200" />
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Hasta</label>
+                            <div className="w-px h-6 bg-slate-200 mx-1" />
+                            <div className="flex items-center gap-2">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Hasta</label>
                                 <input
                                     type="date"
-                                    className="block w-full text-sm border-none focus:ring-0 text-slate-700 bg-transparent p-1"
+                                    className="block text-xs border-none focus:ring-0 text-slate-700 bg-transparent p-0"
                                     value={fechaHasta}
                                     onChange={(e) => setFechaHasta(e.target.value)}
                                 />
@@ -167,34 +165,34 @@ const ModalHistorialBanco = ({ banco, onCerrar }) => {
                         </div>
 
                         {/* Metrics */}
-                        <div className="flex items-center gap-4">
-                            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 min-w-[160px]">
-                                <div className="p-2 rounded-lg bg-green-50 text-green-600">
-                                    <TrendingUp className="w-4 h-4" />
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2.5 min-w-[130px]">
+                                <div className="p-1.5 rounded-md bg-green-50 text-green-600">
+                                    <TrendingUp className="w-3.5 h-3.5" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Ingresos</p>
-                                    <p className="text-sm font-bold text-green-600">{formatCurrency(data.total_ingresos)}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Ingresos</p>
+                                    <p className="text-[13px] font-bold text-green-600 leading-none">{formatCurrency(data.total_ingresos)}</p>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 min-w-[160px]">
-                                <div className="p-2 rounded-lg bg-red-50 text-red-600">
-                                    <TrendingDown className="w-4 h-4" />
+                            <div className="bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2.5 min-w-[130px]">
+                                <div className="p-1.5 rounded-md bg-red-50 text-red-600">
+                                    <TrendingDown className="w-3.5 h-3.5" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Egresos</p>
-                                    <p className="text-sm font-bold text-red-600">{formatCurrency(data.total_egresos)}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Egresos</p>
+                                    <p className="text-[13px] font-bold text-red-600 leading-none">{formatCurrency(data.total_egresos)}</p>
                                 </div>
                             </div>
 
-                            <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg flex items-center gap-3 min-w-[180px] ring-2 ring-orange-500/20">
-                                <div className="p-2 rounded-lg bg-orange-500 text-white">
-                                    <DollarSign className="w-4 h-4" />
+                            <div className="bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 shadow-lg flex items-center gap-2.5 min-w-[150px] ring-1 ring-orange-500/20">
+                                <div className="p-1.5 rounded-md bg-orange-500 text-white">
+                                    <DollarSign className="w-3.5 h-3.5" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Saldo Período</p>
-                                    <p className="text-sm font-bold text-white">{formatCurrency(data.saldo_periodo)}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Saldo Período</p>
+                                    <p className="text-[13px] font-bold text-white leading-none">{formatCurrency(data.saldo_periodo)}</p>
                                 </div>
                             </div>
                         </div>
@@ -202,7 +200,7 @@ const ModalHistorialBanco = ({ banco, onCerrar }) => {
                 </div>
 
                 {/* Table Area */}
-                <div className="flex-1 overflow-hidden p-6 flex flex-col">
+                <div className="flex-1 overflow-hidden p-4 flex flex-col">
                     {error ? (
                         <div className="flex flex-col items-center justify-center h-full text-red-600 space-y-2">
                             <p className="font-bold">{error}</p>
@@ -219,16 +217,18 @@ const ModalHistorialBanco = ({ banco, onCerrar }) => {
                             datos={data.movimientos}
                             cargando={loading}
                             mostrarOrdenamiento={true}
-                            filasPorPaginaInicial={8}
+                            filasPorPaginaInicial={12}
+                            filasCompactas={true}
+                            tamañoEncabezado="pequeño"
                         />
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+                <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex justify-end">
                     <button
                         onClick={onCerrar}
-                        className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg text-sm"
+                        className="px-5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg text-xs"
                     >
                         Cerrar Historial
                     </button>
