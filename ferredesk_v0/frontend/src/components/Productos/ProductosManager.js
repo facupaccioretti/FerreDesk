@@ -24,7 +24,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 const ProductosManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
-  
+
   useEffect(() => {
     document.title = "Productos FerreDesk"
   }, [])
@@ -70,7 +70,15 @@ const ProductosManager = () => {
     return savedActiveTab || "lista"
   })
 
-  const [editStates, setEditStates] = useState({})
+  const [editStates, setEditStates] = useState(() => {
+    const savedStates = localStorage.getItem("productosEditStates")
+    return savedStates ? JSON.parse(savedStates) : {}
+  })
+
+  // Guardar editStates en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem("productosEditStates", JSON.stringify(editStates))
+  }, [editStates])
   const [expandedId, setExpandedId] = useState(null)
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null })
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
@@ -84,7 +92,7 @@ const ProductosManager = () => {
   // Estado de paginación
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
-  
+
   // Estado de ordenamiento
   const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
 
@@ -113,6 +121,19 @@ const ProductosManager = () => {
       delete newStates[key]
       return newStates
     })
+    // También limpiar el borrador del form
+    // También limpiar el borrador del form y estados relacionados
+    const claveBorrador = key.startsWith("editar-")
+      ? `stockFormDraft_${key.split("-")[1]}`
+      : `stockFormDraft_${key}`
+    try {
+      localStorage.removeItem(claveBorrador)
+      localStorage.removeItem(`${claveBorrador}_precios`)
+      localStorage.removeItem(`${claveBorrador}_spPendientes`)
+      localStorage.removeItem(`${claveBorrador}_codPendientes`)
+      localStorage.removeItem(`${claveBorrador}_provAgregados`)
+      localStorage.removeItem(`${claveBorrador}_codPendEdic`)
+    } catch (_) { }
   }
 
   // Guardar producto (alta o edición)
@@ -144,7 +165,7 @@ const ProductosManager = () => {
         const detalle = await res.json()
         setEditStates((prev) => ({ ...prev, [editKey]: detalle }))
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Actualizar stock de un proveedor específico
@@ -206,7 +227,7 @@ const ProductosManager = () => {
     }
     return productos.filter((p) => p.acti === "S")
   }, [productos])
-  
+
   const productosInactivosBase = useMemo(() => {
     if (productos.length > 0 && productos[0].acti === undefined) {
       // Si el campo acti no está presente, no mostrar productos inactivos
@@ -276,7 +297,7 @@ const ProductosManager = () => {
     <div className={theme.fondo}>
       <div className={theme.patron}></div>
       <div className={theme.overlay}></div>
-      
+
       <div className="relative z-10">
         <Navbar user={user} onLogout={handleLogout} />
 
@@ -287,156 +308,155 @@ const ProductosManager = () => {
               <h2 className="text-2xl font-bold text-slate-800">Gestión de Productos y Stock</h2>
             </div>
 
-          {/* Área principal: pestañas y contenido */}
-          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
-            {/* Tabs tipo browser - Encabezado azul oscuro */}
-            <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.key}
-                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                    activeTab === tab.key
+            {/* Área principal: pestañas y contenido */}
+            <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
+              {/* Tabs tipo browser - Encabezado azul oscuro */}
+              <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.key}
+                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key
                       ? theme.tabActiva
                       : theme.tabInactiva
-                  }`}
-                  onClick={() => setActiveTab(tab.key)}
-                  style={{ position: "relative", zIndex: 1 }}
-                >
-                  {tab.label}
-                  {tab.closable && (
+                      }`}
+                    onClick={() => setActiveTab(tab.key)}
+                    style={{ position: "relative", zIndex: 1 }}
+                  >
+                    {tab.label}
+                    {tab.closable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab.key)
+                        }}
+                        className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                        title="Cerrar"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex-1 p-6">
+                {/* Botones de acción solo en la tab de lista */}
+                {activeTab === "lista" && (
+                  <div className="mb-4 flex gap-2">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        closeTab(tab.key)
-                      }}
-                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                      title="Cerrar"
+                      onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Producto")}
+                      className={theme.botonPrimario}
                     >
-                      ×
+                      <span className="text-lg">+</span> Nuevo Producto
                     </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            
-            <div className="flex-1 p-6">
-              {/* Botones de acción solo en la tab de lista */}
-              {activeTab === "lista" && (
-                <div className="mb-4 flex gap-2">
-                  <button
-                    onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Producto")}
-                    className={theme.botonPrimario}
-                  >
-                    <span className="text-lg">+</span> Nuevo Producto
-                  </button>
-                  <button
-                    onClick={() => setShowFamiliasModal(true)}
-                    className={theme.botonPrimario}
-                  >
-                    Gestionar Familias
-                  </button>
-                  <button
-                    onClick={() => setShowListasPrecioModal(true)}
-                    className={theme.botonPrimario}
-                  >
-                    Actualizar Listas
-                  </button>
-                </div>
-              )}
-              {/* Contenido de pestañas */}
-              {activeTab === "lista" && (
-                <ProductosTable
-                  productos={productosActivos}
-                  familias={familias}
-                  proveedores={proveedores}
-                  setProveedores={addProveedor}
-                  expandedId={expandedId}
-                  setExpandedId={setExpandedId}
-                  fam1Filtro={fam1Filtro}
-                  setFam1Filtro={setFam1Filtro}
-                  fam2Filtro={fam2Filtro}
-                  setFam2Filtro={setFam2Filtro}
-                  fam3Filtro={fam3Filtro}
-                  setFam3Filtro={setFam3Filtro}
-                  addFamilia={addFamilia}
-                  updateFamilia={updateFamilia}
-                  deleteFamilia={deleteFamilia}
-                  addProveedor={addProveedor}
-                  updateProveedor={updateProveedor}
-                  deleteProveedor={deleteProveedor}
-                  deleteProducto={deleteProducto}
-                  onEdit={handleEditProducto}
-                  onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
-                  onUpdateStock={handleUpdateStock}
-                  searchProductos={searchProductos}
-                  setSearchProductos={setSearchProductos}
-                  paginacionControlada={true}
-                  paginaActual={pagina}
-                  onPageChange={setPagina}
-                  itemsPerPage={itemsPorPagina}
-                  onItemsPerPageChange={setItemsPorPagina}
-                  totalRemoto={total}
-                  busquedaRemota={true}
-                  onOrdenamientoChange={handleOrdenamientoChange}
-                  ordenamientoControlado={ordenamiento === 'asc'}
-                  cargando={loadingProductos}
-                />
-              )}
-              {activeTab === "inactivos" && (
-                <ProductosTable
-                  productos={productosInactivos}
-                  familias={familias}
-                  proveedores={proveedores}
-                  setProveedores={addProveedor}
-                  expandedId={expandedId}
-                  setExpandedId={setExpandedId}
-                  fam1Filtro={fam1Filtro}
-                  setFam1Filtro={setFam1Filtro}
-                  fam2Filtro={fam2Filtro}
-                  setFam2Filtro={setFam2Filtro}
-                  fam3Filtro={fam3Filtro}
-                  setFam3Filtro={setFam3Filtro}
-                  addFamilia={addFamilia}
-                  updateFamilia={updateFamilia}
-                  deleteFamilia={deleteFamilia}
-                  addProveedor={addProveedor}
-                  updateProveedor={updateProveedor}
-                  deleteProveedor={deleteProveedor}
-                  deleteProducto={deleteProducto}
-                  onEdit={handleEditProducto}
-                  onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
-                  onUpdateStock={handleUpdateStock}
-                  searchProductos={searchProductos}
-                  setSearchProductos={setSearchProductos}
-                  paginacionControlada={true}
-                  paginaActual={pagina}
-                  onPageChange={setPagina}
-                  itemsPerPage={itemsPorPagina}
-                  onItemsPerPageChange={setItemsPorPagina}
-                  totalRemoto={total}
-                  busquedaRemota={true}
-                  onOrdenamientoChange={handleOrdenamientoChange}
-                  ordenamientoControlado={ordenamiento === 'asc'}
-                  cargando={loadingProductos}
-                />
-              )}
-              {activeTab !== "lista" && activeTab !== "inactivos" && (
-                <StockForm
-                  key={activeTab}
-                  stock={editStates[activeTab]}
-                  modo={activeTab.startsWith("nuevo") ? "nuevo" : "editar"}
-                  tabKey={activeTab}
-                  onSave={(data) => handleSaveProducto(data, activeTab)}
-                  onCancel={() => closeTab(activeTab)}
-                  proveedores={proveedores.filter((p) => !!p.id)}
-                  familias={familias.filter((f) => !!f.id)}
-                />
-              )}
+                    <button
+                      onClick={() => setShowFamiliasModal(true)}
+                      className={theme.botonPrimario}
+                    >
+                      Gestionar Familias
+                    </button>
+                    <button
+                      onClick={() => setShowListasPrecioModal(true)}
+                      className={theme.botonPrimario}
+                    >
+                      Actualizar Listas
+                    </button>
+                  </div>
+                )}
+                {/* Contenido de pestañas */}
+                {activeTab === "lista" && (
+                  <ProductosTable
+                    productos={productosActivos}
+                    familias={familias}
+                    proveedores={proveedores}
+                    setProveedores={addProveedor}
+                    expandedId={expandedId}
+                    setExpandedId={setExpandedId}
+                    fam1Filtro={fam1Filtro}
+                    setFam1Filtro={setFam1Filtro}
+                    fam2Filtro={fam2Filtro}
+                    setFam2Filtro={setFam2Filtro}
+                    fam3Filtro={fam3Filtro}
+                    setFam3Filtro={setFam3Filtro}
+                    addFamilia={addFamilia}
+                    updateFamilia={updateFamilia}
+                    deleteFamilia={deleteFamilia}
+                    addProveedor={addProveedor}
+                    updateProveedor={updateProveedor}
+                    deleteProveedor={deleteProveedor}
+                    deleteProducto={deleteProducto}
+                    onEdit={handleEditProducto}
+                    onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
+                    onUpdateStock={handleUpdateStock}
+                    searchProductos={searchProductos}
+                    setSearchProductos={setSearchProductos}
+                    paginacionControlada={true}
+                    paginaActual={pagina}
+                    onPageChange={setPagina}
+                    itemsPerPage={itemsPorPagina}
+                    onItemsPerPageChange={setItemsPorPagina}
+                    totalRemoto={total}
+                    busquedaRemota={true}
+                    onOrdenamientoChange={handleOrdenamientoChange}
+                    ordenamientoControlado={ordenamiento === 'asc'}
+                    cargando={loadingProductos}
+                  />
+                )}
+                {activeTab === "inactivos" && (
+                  <ProductosTable
+                    productos={productosInactivos}
+                    familias={familias}
+                    proveedores={proveedores}
+                    setProveedores={addProveedor}
+                    expandedId={expandedId}
+                    setExpandedId={setExpandedId}
+                    fam1Filtro={fam1Filtro}
+                    setFam1Filtro={setFam1Filtro}
+                    fam2Filtro={fam2Filtro}
+                    setFam2Filtro={setFam2Filtro}
+                    fam3Filtro={fam3Filtro}
+                    setFam3Filtro={setFam3Filtro}
+                    addFamilia={addFamilia}
+                    updateFamilia={updateFamilia}
+                    deleteFamilia={deleteFamilia}
+                    addProveedor={addProveedor}
+                    updateProveedor={updateProveedor}
+                    deleteProveedor={deleteProveedor}
+                    deleteProducto={deleteProducto}
+                    onEdit={handleEditProducto}
+                    onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
+                    onUpdateStock={handleUpdateStock}
+                    searchProductos={searchProductos}
+                    setSearchProductos={setSearchProductos}
+                    paginacionControlada={true}
+                    paginaActual={pagina}
+                    onPageChange={setPagina}
+                    itemsPerPage={itemsPorPagina}
+                    onItemsPerPageChange={setItemsPorPagina}
+                    totalRemoto={total}
+                    busquedaRemota={true}
+                    onOrdenamientoChange={handleOrdenamientoChange}
+                    ordenamientoControlado={ordenamiento === 'asc'}
+                    cargando={loadingProductos}
+                  />
+                )}
+                {activeTab !== "lista" && activeTab !== "inactivos" && (
+                  <StockForm
+                    key={activeTab}
+                    stock={editStates[activeTab]}
+                    modo={activeTab.startsWith("nuevo") ? "nuevo" : "editar"}
+                    tabKey={activeTab}
+                    onSave={(data) => handleSaveProducto(data, activeTab)}
+                    onCancel={() => closeTab(activeTab)}
+                    proveedores={proveedores.filter((p) => !!p.id)}
+                    familias={familias.filter((f) => !!f.id)}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
       {/* Modal para actualizar stock */}
       {updateStockModal.show && (
         <div className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center backdrop-blur-sm">

@@ -449,7 +449,7 @@ class PrecioProductoProveedorAPIView(APIView):
                     'origen': 'manual',
                     'precio': precio_manual,
                     'fecha': fecha_manual,
-                    'denominacion': None,  # Los precios manuales no tienen denominación
+                    'denominacion': stockprove.stock.deno if stockprove and stockprove.stock else None,
                 })
             elif precio_excel_val:
                 return Response({

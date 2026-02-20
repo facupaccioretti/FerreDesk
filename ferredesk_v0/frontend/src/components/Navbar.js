@@ -329,28 +329,6 @@ export default function Navbar({ user, onLogout }) {
                   </svg>
                   <span className="text-slate-200 text-sm font-medium group-hover:text-white">Carga Inicial</span>
                 </a>
-
-                <a
-                  href="/home/carga-inicial-proveedor"
-                  onClick={(e) => handleLinkClick(e, "/home/carga-inicial-proveedor")}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-500/10 transition-all duration-200 text-left group cursor-pointer"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-4 h-4 text-teal-400 group-hover:text-teal-300"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
-                    />
-                  </svg>
-                  <span className="text-slate-200 text-sm font-medium group-hover:text-white">Carga Inicial</span>
-                </a>
               </div>
             )}
           </div>

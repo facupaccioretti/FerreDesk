@@ -37,6 +37,14 @@ function stockAFormulario(stock) {
     ? (typeof provHab === "object" && "id" in provHab ? String(provHab.id) : String(provHab))
     : ""
 
+  // Normalizar stock_proveedores para tener una estructura plana y predecible
+  const stockProveedores = Array.isArray(stock.stock_proveedores)
+    ? stock.stock_proveedores.map(sp => ({
+      ...sp,
+      proveedor_id: sp.proveedor_id || (typeof sp.proveedor === "object" ? sp.proveedor.id : sp.proveedor),
+    }))
+    : []
+
   return {
     ...stock,
     id: stock.id,
@@ -46,11 +54,12 @@ function stockAFormulario(stock) {
     idfam3: idFam3 ?? null,
     proveedor_habitual_id: proveedorHabitualId,
     impuesto_interno_porcentaje: stock.impuesto_interno_porcentaje != null ? stock.impuesto_interno_porcentaje : null,
+    stock_proveedores: stockProveedores,
   }
 }
 
 const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
-// Claves para almacenar borradores de stock
+  // Claves para almacenar borradores de stock
   const claveBorrador = useMemo(() => {
     if (tabKey) return `stockFormDraft_${tabKey}`
     return stock?.id ? `stockFormDraft_${stock.id}` : `stockFormDraft_nuevo`
@@ -152,7 +161,14 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
 
   // Función para cancelar
   const handleCancel = () => {
-    try { localStorage.removeItem(claveBorrador) } catch (_) {}
+    try {
+      localStorage.removeItem(claveBorrador)
+      localStorage.removeItem(`${claveBorrador}_precios`)
+      localStorage.removeItem(`${claveBorrador}_spPendientes`)
+      localStorage.removeItem(`${claveBorrador}_codPendientes`)
+      localStorage.removeItem(`${claveBorrador}_provAgregados`)
+      localStorage.removeItem(`${claveBorrador}_codPendEdic`)
+    } catch (_) { }
     onCancel()
   }
 
