@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import { useSistemaAPI } from "../../utils/useSistemaAPI"
+import { toast } from "react-toastify"
 import CajasHistorialTable from "./CajasHistorialTable"
 import CajaDetalleView from "./CajaDetalleView"
 import CajaActualTab from "./CajaActualTab"
@@ -41,6 +43,8 @@ const CajaManager = () => {
     obtenerMovimientos,
   } = useCajaAPI()
 
+  const { obtenerEstadoBackup } = useSistemaAPI()
+
   // Estados de tabs
   const [tabs, setTabs] = useState(() => {
     try {
@@ -75,6 +79,42 @@ const CajaManager = () => {
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])
 
+  // Lógica de monitoreo de Backup
+  const pollingRef = useRef(null)
+
+  const detenerMonitoreo = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
+
+  const iniciarMonitoreoBackup = useCallback(() => {
+    detenerMonitoreo()
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const respuesta = await obtenerEstadoBackup()
+
+        // Notificamos al usuario según el resultado final para que sepa que ya puede apagar el sistema.
+        if (respuesta.estado === "EXITO") {
+          toast.success("RESPALDO COMPLETADO: La copia de seguridad se realizó correctamente.")
+          detenerMonitoreo()
+        } else if (respuesta.estado === "ERROR") {
+          toast.error(`FALLO EL RESPALDO: ${respuesta.error || "Error desconocido"}. Por favor consulte con soporte.`)
+          detenerMonitoreo()
+        }
+      } catch (err) {
+        console.error("Error consultando estado de backup:", err)
+      }
+    }, 5000)
+  }, [obtenerEstadoBackup])
+
+  // Aseguramos que no queden intervalos activos si el usuario sale de la vista de Caja.
+  useEffect(() => {
+    return () => detenerMonitoreo()
+  }, [])
+
   // Estado de la caja abierta
   const [tieneCajaAbierta, setTieneCajaAbierta] = useState(false)
   const [sesionActual, setSesionActual] = useState(null)
@@ -83,7 +123,6 @@ const CajaManager = () => {
 
   // Estados de modales
   const [modalAbrirVisible, setModalAbrirVisible] = useState(false)
-  const [mensaje, setMensaje] = useState(null)
 
   // Estados de UI
   const [, setCargando] = useState(true) // Estado interno para controlar carga, no se expone
@@ -110,7 +149,7 @@ const CajaManager = () => {
       }
     } catch (err) {
       console.error("Error al cargar estado de caja:", err)
-      setMensaje({ tipo: "error", texto: err.message || "Error al cargar estado de caja" })
+      toast.error(err.message || "Error al cargar estado de caja")
     } finally {
       setCargando(false)
     }
@@ -149,7 +188,6 @@ const CajaManager = () => {
       setSesionActual(sesion)
       setTieneCajaAbierta(true)
       setModalAbrirVisible(false)
-      setMensaje({ tipo: "exito", texto: "Caja abierta correctamente" })
 
       // Recargar estado completo
       await cargarEstadoCaja()
@@ -157,7 +195,7 @@ const CajaManager = () => {
       // Cambiar a tab "Caja Actual"
       setActiveTab("caja-actual")
     } catch (err) {
-      setMensaje({ tipo: "error", texto: err.message || "Error al abrir caja" })
+      toast.error(err.message || "Error al abrir caja")
     }
   }
 
@@ -169,10 +207,15 @@ const CajaManager = () => {
       setSesionActual(null)
       setResumenCaja(null)
       setMovimientos([])
-      setMensaje({
-        tipo: "exito",
-        texto: `Caja cerrada. Diferencia: $${resultado.sesion.diferencia}`,
-      })
+
+      // Mostramos una advertencia persistente para evitar cierres accidentales del servidor.
+      if (resultado.backup_en_progreso) {
+        toast.warning("BACKUP EN CURSO: El sistema se está respaldando de fondo. Por favor, no apague el servidor/computadora principal.", {
+          autoClose: false,
+          toastId: "backup-progress"
+        })
+        iniciarMonitoreoBackup()
+      }
 
       // Recargar estado para actualizar historial
       await cargarEstadoCaja()
@@ -180,7 +223,7 @@ const CajaManager = () => {
       // Cambiar a tab "Historial"
       setActiveTab("historial")
     } catch (err) {
-      setMensaje({ tipo: "error", texto: err.message || "Error al cerrar caja" })
+      toast.error(err.message || "Error al cerrar caja")
     }
   }
 
@@ -188,22 +231,19 @@ const CajaManager = () => {
   const handleNuevoMovimiento = async (tipo, monto, descripcion) => {
     try {
       await registrarMovimiento(tipo, monto, descripcion)
-      setMensaje({
-        tipo: "exito",
-        texto: `${tipo === "ENTRADA" ? "Ingreso" : "Egreso"} registrado correctamente`,
-      })
+      toast.success(`${tipo === "ENTRADA" ? "Ingreso" : "Egreso"} registrado: $${monto}`)
 
       // Recargar estado
       await cargarEstadoCaja()
     } catch (err) {
-      setMensaje({ tipo: "error", texto: err.message || "Error al registrar movimiento" })
+      toast.error(err.message || "Error al registrar movimiento")
     }
   }
 
   // Refrescar estado (Cierre X)
   const handleRefrescar = async () => {
     await cargarEstadoCaja()
-    setMensaje({ tipo: "exito", texto: "Estado actualizado" })
+    toast.info("Estado actualizado")
   }
 
   // Abrir tab de detalles de caja
@@ -262,11 +302,8 @@ const CajaManager = () => {
 
   // Limpiar mensaje después de 3 segundos
   useEffect(() => {
-    if (mensaje) {
-      const timer = setTimeout(() => setMensaje(null), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [mensaje])
+    // Toastify maneja su propio ciclo de vida
+  }, [])
 
   // Obtener datos del tab activo
   const activeTabData = tabs.find((t) => t.key === activeTab)?.data || null
@@ -286,19 +323,6 @@ const CajaManager = () => {
               <h2 className="text-2xl font-bold text-slate-800">Caja, Banco y Cheques</h2>
             </div>
 
-            {/* Mensaje de feedback */}
-            {mensaje && (
-              <div
-                className={`mb-4 p-4 rounded-lg ${
-                  mensaje.tipo === "exito"
-                    ? "bg-green-100 text-green-800 border border-green-300"
-                    : "bg-red-100 text-red-800 border border-red-300"
-                }`}
-              >
-                {mensaje.texto}
-              </div>
-            )}
-
             {/* Contenedor principal con tabs */}
             <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
               {/* Tabs tipo browser */}
@@ -306,26 +330,25 @@ const CajaManager = () => {
                 {tabs.map((tab) => (
                   <div
                     key={tab.key}
-                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                      activeTab === tab.key ? theme.tabActiva : theme.tabInactiva
-                    }`}
+                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key ? theme.tabActiva : theme.tabInactiva
+                      }`}
                     onClick={() => setActiveTab(tab.key)}
                     style={{ position: "relative", zIndex: 1 }}
                     draggable={tab.closable}
                     onDragStart={
                       tab.closable
                         ? (e) => {
-                            handleDragStart(tab.key)
-                            e.dataTransfer.effectAllowed = "move"
-                          }
+                          handleDragStart(tab.key)
+                          e.dataTransfer.effectAllowed = "move"
+                        }
                         : undefined
                     }
                     onDrop={
                       tab.closable
                         ? (e) => {
-                            e.preventDefault()
-                            handleDrop(tab.key)
-                          }
+                          e.preventDefault()
+                          handleDrop(tab.key)
+                        }
                         : undefined
                     }
                     onDragEnd={handleDragEnd}

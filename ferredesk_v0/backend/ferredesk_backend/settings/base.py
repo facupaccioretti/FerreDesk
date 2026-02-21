@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'ferreapps.compras',
     'ferreapps.cuenta_corriente',
     'ferreapps.caja',
+    'ferreapps.sistema',
 
     'rest_framework',
     'django_filters',

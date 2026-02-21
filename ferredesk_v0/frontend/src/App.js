@@ -5,6 +5,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import './styles/design-tokens.css';
 import './styles/utilities.css';
 
+// React Toastify
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 import Landing from './components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
@@ -173,6 +177,7 @@ export default function App() {
         {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <ToastContainer position="bottom-right" theme="light" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover icon={false} />
     </Router >
   );
 }

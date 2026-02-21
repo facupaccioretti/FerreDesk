@@ -153,12 +153,24 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         sesion.observaciones_cierre = serializer.validated_data.get('observaciones_cierre', '')
         sesion.save()
         
+        # >>> INICIO INYECCIÓN DE BACKUP >>>
+        backup_disparado = False
+        try:
+            from ferreapps.sistema.services.backup_service import ejecutar_backup_asincrono
+            ejecutar_backup_asincrono()
+            backup_disparado = True
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"No se pudo disparar el backup post-cierre Z: {e}")
+        # <<< FIN INYECCIÓN DE BACKUP <<<
+        
         # Preparar respuesta con resumen
         resumen = self._generar_resumen_cierre(sesion)
         
         return Response({
             'sesion': SesionCajaSerializer(sesion).data,
             'resumen': resumen,
+            'backup_en_progreso': backup_disparado, # Bandera para el frontend
         })
     
     @action(detail=False, methods=['get'], url_path='estado')
