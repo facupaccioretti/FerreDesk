@@ -8,7 +8,7 @@ import { BotonDuplicar, BotonEliminar } from "../Botones"
 
 // Mapa de alícuotas por defecto, se utiliza solo si el backend aún no proveyó datos
 const ALICUOTAS_POR_DEFECTO = {
-  3: 0,   
+  3: 0,
   4: 10.5,
   5: 21,
   6: 27,
@@ -51,34 +51,43 @@ const ItemsGridPresupuesto = forwardRef(
       descu3 = 0,
       totales = {},
       alicuotas = {}, // Mapa { id: porcentaje }
-      setDescu1 = () => {},
-      setDescu2 = () => {},
-      setDescu3 = () => {},
+      setDescu1 = () => { },
+      setDescu2 = () => { },
+      setDescu3 = () => { },
       readOnly = false, // NUEVO: Prop para deshabilitar todo el grid
       listaPrecioId = 0, // Número de lista de precios activa (0=Minorista por defecto)
       listasPrecio = [], // Configuración de listas de precios [{numero, margen_descuento, ...}]
     },
     ref,
-      ) => {
+  ) => {
     // Hook del tema de FerreDesk
     const theme = useFerreDeskTheme();
-    
+
+    // Combinar alícuotas del backend con un fallback seguro (definido aquí para poder ser usado en callbacks)
+    const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
+
     // Helper para obtener precio según lista de precios activa
     // Usa la utilidad importada con fallback al cálculo legacy (costo + margen)
     const obtenerPrecioBaseProducto = useCallback((producto, proveedorHabitual) => {
       // Primero intentar obtener precio de la lista activa
       let precioBase = obtenerPrecioParaLista(producto, listaPrecioId, listasPrecio)
-      
-      // Fallback: si no hay precio de lista, usar cálculo legacy (costo + margen)
+
+      // Determinar el IVA para Cálculos finales
+      const aliId = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
+      const aliPorc = aliMap[aliId] || 0
+
+      // Fallback: si no hay precio de lista, usar cálculo legacy (costo + margen + IVA)
       if (!precioBase) {
         const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
         const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
-        precioBase = costoNum * (1 + margenNum / 100)
+        // Calcular Neto y luego sumar IVA
+        const neto = costoNum * (1 + margenNum / 100)
+        precioBase = neto * (1 + aliPorc / 100)
       }
-      
+
       return Math.round(precioBase * 100) / 100
-    }, [listaPrecioId, listasPrecio]);
-    
+    }, [listaPrecioId, listasPrecio, aliMap]);
+
     // ------------------------------------------------------------
     // Búsqueda remota por código (ventas/presupuesto/NC)
     // Búsqueda unificada: param "codigo" hace que el backend busque por codvta O código de barras (sin filtro extra).
@@ -86,7 +95,7 @@ const ItemsGridPresupuesto = forwardRef(
     const buscarProductoPorCodigo = useCallback(async (codigo) => {
       // En modo readOnly, no buscar productos
       if (readOnly) return null
-      
+
       const codigoTrim = (codigo || '').toString().trim()
       if (!codigoTrim) return null
       try {
@@ -107,12 +116,9 @@ const ItemsGridPresupuesto = forwardRef(
         return null
       }
     }, [readOnly])
-    
+
     // Eliminado: auto-hidratación de initialItems. El fetch solo ocurre en Enter o Blur del campo código.
 
-
-    // Combinar alícuotas del backend con un fallback seguro
-    const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
 
     const [rows, setRows] = useState(() => {
       // Los items que llegan a través de `initialItems` vienen crudos del backend
@@ -146,18 +152,18 @@ const ItemsGridPresupuesto = forwardRef(
           const productoFinal = item.producto
             ? item.producto
             : {
-                id: vdiId,
-                idaliiva: idaliivaStub,
-                margen: margenStub,
-                codvta: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
-                codigo: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
-                deno: item.denominacion || item.vdi_detalle1 || '',
-                nombre: item.denominacion || item.vdi_detalle1 || '',
-                unidad: item.unidad || item.vdi_detalle2 || '-',
-                unidadmedida: item.unidad || item.vdi_detalle2 || '-',
-                stock_proveedores: [],
-                proveedor_habitual: null,
-              }
+              id: vdiId,
+              idaliiva: idaliivaStub,
+              margen: margenStub,
+              codvta: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
+              codigo: item.codigo ?? item.vdi_codigo ?? (vdiId != null ? String(vdiId) : ''),
+              deno: item.denominacion || item.vdi_detalle1 || '',
+              nombre: item.denominacion || item.vdi_detalle1 || '',
+              unidad: item.unidad || item.vdi_detalle2 || '-',
+              unidadmedida: item.unidad || item.vdi_detalle2 || '-',
+              stock_proveedores: [],
+              proveedor_habitual: null,
+            }
           return {
             ...item,
             vdi_idsto: vdiId,
@@ -175,7 +181,7 @@ const ItemsGridPresupuesto = forwardRef(
           }
         })
 
-        
+
 
         // Verificar si ya existe un renglón vacío; si no, añadir uno para permitir nuevas cargas
         const hayVacio = baseRows.some(
@@ -189,16 +195,16 @@ const ItemsGridPresupuesto = forwardRef(
             return noTieneProducto && noTieneDenominacion && noTieneDetalle;
           }
         );
-        
+
         if (!hayVacio && !readOnly) {
           baseRows = [...baseRows, getEmptyRow()];
         }
-        
-        
+
+
         return baseRows;
       }
-      
-      
+
+
       return readOnly ? [] : [getEmptyRow()];
     })
     const [stockNegativo, setStockNegativo] = useState(false)
@@ -213,14 +219,49 @@ const ItemsGridPresupuesto = forwardRef(
     const [idxCodigoSiguienteFoco, setIdxCodigoSiguienteFoco] = useState(null)
     const [mostrarTooltipBonif, setMostrarTooltipBonif] = useState(false)
     const [mostrarTooltipDescuentos, setMostrarTooltipDescuentos] = useState(false)
-  const [mostrarTooltipOriginal, setMostrarTooltipOriginal] = useState({})
-  const [posicionTooltip, setPosicionTooltip] = useState({ x: 0, y: 0 })
+    const [mostrarTooltipOriginal, setMostrarTooltipOriginal] = useState({})
+    const [posicionTooltip, setPosicionTooltip] = useState({ x: 0, y: 0 })
+
+    // Sincronizar precios de los ítems ya cargados cuando cambia la lista de precios
+    useEffect(() => {
+      setRows((prevRows) => {
+        let huboCambios = false;
+        const nuevasFilas = prevRows.map((row) => {
+          if (!row.producto || row.esBloqueado) return row; // No actualizar ítems bloqueados o genéricos
+
+          // El proveedor habitual ya viene hidratado en el ítem si se cargó desde la búsqueda
+          const proveedorHabitual = row.producto.stock_proveedores?.find(
+            sp => sp.proveedor?.id === row.producto.proveedor_habitual?.id
+          );
+
+          // Obtener nuevo precio FINAL según la lista activa (precios de lista son finales con IVA)
+          const nuevoPrecioFinal = obtenerPrecioBaseProducto(row.producto, proveedorHabitual);
+
+          // Calcular precio NETO a partir del final, desagregando el IVA del ítem
+          const aliPorc = aliMap[row.idaliiva] || 0;
+          const nuevoPrecioNeto = Math.round((nuevoPrecioFinal / (1 + aliPorc / 100)) * 10000) / 10000;
+
+          // Si el precio cambió, marcar para actualizar
+          if (row.precioFinal !== nuevoPrecioFinal || Math.abs((row.precio || 0) - nuevoPrecioNeto) > 0.001) {
+            huboCambios = true;
+            return {
+              ...row,
+              precio: nuevoPrecioNeto,
+              precioFinal: nuevoPrecioFinal
+            };
+          }
+          return row;
+        });
+
+        return huboCambios ? nuevasFilas : prevRows;
+      });
+    }, [listaPrecioId, obtenerPrecioBaseProducto, aliMap]);
 
     const addItemWithDuplicado = useCallback(
       (producto, proveedorId, cantidad = 1) => {
         // No agregar items en modo readOnly
         if (readOnly) return
-        
+
         // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
         // para que "Sumar Cantidades" no funcione con items originales
         const idxExistente = rows.findIndex((r) => r.producto && r.producto.id === producto.id && !r.esBloqueado && !r.idOriginal)
@@ -240,23 +281,23 @@ const ItemsGridPresupuesto = forwardRef(
           if (autoSumarDuplicados === "duplicar") {
             setRows((prevRows) => {
               const lastRow = prevRows[prevRows.length - 1]
-              
-// Buscar el proveedor habitual en stock_proveedores
-                const proveedorHabitual = producto.stock_proveedores?.find(
-                  sp => sp.proveedor?.id === producto.proveedor_habitual?.id
-                )
 
-                // -------------------------------------------------------------
-                // Cálculo del precio base usando lista de precios activa
-                // Si no hay precio de lista, fallback a costo + margen
-                // -------------------------------------------------------------
-                const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
-                const aliPorcTmp = aliMap[aliIdTmp] || 0
-                const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
-                const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
+              // Buscar el proveedor habitual en stock_proveedores
+              const proveedorHabitual = producto.stock_proveedores?.find(
+                sp => sp.proveedor?.id === producto.proveedor_habitual?.id
+              )
 
-                const precioBaseTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
-                const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
+              // -------------------------------------------------------------
+              // Cálculo del precio base usando lista de precios activa
+              // Si no hay precio de lista, fallback a costo + margen
+              // -------------------------------------------------------------
+              const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
+              const aliPorcTmp = aliMap[aliIdTmp] || 0
+              const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
+              const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
+
+              const precioFinalTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
+              const precioBaseTmp = Math.round((precioFinalTmp / (1 + aliPorcTmp / 100)) * 10000) / 10000
 
               const nuevoItem = {
                 id: Date.now() + Math.random(),
@@ -285,7 +326,7 @@ const ItemsGridPresupuesto = forwardRef(
         }
         setRows((prevRows) => {
           const lastRow = prevRows[prevRows.length - 1]
-          
+
           // Buscar el proveedor habitual en stock_proveedores para obtener costo y precio
           const proveedorHabitual = producto.stock_proveedores?.find(
             sp => sp.proveedor?.id === producto.proveedor_habitual?.id
@@ -297,8 +338,8 @@ const ItemsGridPresupuesto = forwardRef(
           const aliIdTmp = typeof producto.idaliiva === 'object' ? producto.idaliiva.id : (producto.idaliiva ?? 3)
           const aliPorcTmp = aliMap[aliIdTmp] || 0
 
-          const precioBaseTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
-          const precioFinalTmp = Math.round((precioBaseTmp * (1 + aliPorcTmp / 100)) * 100) / 100
+          const precioFinalTmp = obtenerPrecioBaseProducto(producto, proveedorHabitual)
+          const precioBaseTmp = Math.round((precioFinalTmp / (1 + aliPorcTmp / 100)) * 10000) / 10000
 
           const nuevoItem = {
             id: Date.now() + Math.random(),
@@ -461,16 +502,16 @@ const ItemsGridPresupuesto = forwardRef(
             codigo: value,
             ...(value.trim() === ""
               ? {
-                  producto: null,
-                  denominacion: "",
-                  unidad: "",
-                  precio: "",
-                  cantidad: 1,
-                  bonificacion: 0,
-                  proveedorId: null, // <--- null en vez de ""
-                  idSto: null,      // <--- null en vez de ""
-                  vdi_idsto: null,  // <--- null en vez de ""
-                }
+                producto: null,
+                denominacion: "",
+                unidad: "",
+                precio: "",
+                cantidad: 1,
+                bonificacion: 0,
+                proveedorId: null, // <--- null en vez de ""
+                idSto: null,      // <--- null en vez de ""
+                vdi_idsto: null,  // <--- null en vez de ""
+              }
               : {}),
           }
           const updatedRows = ensureSoloUnEditablePreservandoIndice(newRows, idx)
@@ -572,7 +613,7 @@ const ItemsGridPresupuesto = forwardRef(
                 const idStock = row.producto?.id ?? row.vdi_idsto
                 const idaliiva = row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? row.idaliiva ?? 3
                 const margen = row.margen ?? row.vdi_margen ?? row.producto?.margen ?? 0
-                
+
                 return {
                   vdi_orden: idx + 1,
                   vdi_idsto: idStock,
@@ -611,7 +652,7 @@ const ItemsGridPresupuesto = forwardRef(
         getRows: () => rows,
         handleAddItem,
         getStockNegativo: () => stockNegativo,
-        _debugRows: () => {},
+        _debugRows: () => { },
       }),
       [rows, handleAddItem, stockNegativo],
     )
@@ -656,23 +697,23 @@ const ItemsGridPresupuesto = forwardRef(
         x: rect.left + rect.width / 2, // Centro del indicador
         y: rect.bottom + 5 // Debajo del indicador
       });
-      setMostrarTooltipOriginal(prev => ({...prev, [idx]: true}));
+      setMostrarTooltipOriginal(prev => ({ ...prev, [idx]: true }));
     };
 
     const handleMouseLeaveTooltip = (idx) => {
-      setMostrarTooltipOriginal(prev => ({...prev, [idx]: false}));
+      setMostrarTooltipOriginal(prev => ({ ...prev, [idx]: false }));
     };
 
     // Eliminar ítem y dejar solo un renglón vacío si no quedan ítems
     const handleDeleteRow = (idx) => {
       const row = rows[idx];
-      
+
       // NUEVO: Verificar si el item está bloqueado
       if (row.esBloqueado) {
         alert('Este ítem proviene del comprobante original y no puede ser eliminado para mantener la trazabilidad de la conversión.');
         return;
       }
-      
+
       setRows((rows) => {
         const newRows = rows.filter((_, i) => i !== idx);
 
@@ -687,7 +728,7 @@ const ItemsGridPresupuesto = forwardRef(
         if (last && isRowLleno(last)) {
           return readOnly ? newRows : [...newRows, getEmptyRow()];
         }
-        
+
         // Si no, simplemente devolvemos las filas actualizadas (ej. el último ya era vacío).
         return newRows;
       });
@@ -731,131 +772,131 @@ const ItemsGridPresupuesto = forwardRef(
           if (procesandoCodigoRef.current) return
           procesandoCodigoRef.current = true
           try {
-          // Búsqueda remota por código
-          const prod = await buscarProductoPorCodigo(row.codigo)
-          if (!prod) {
-            // Mostrar error si no se encuentra el producto
-            const inputCodigo = codigoRefs.current[idx]
-            if (inputCodigo && inputCodigo.setCustomValidity) {
-              inputCodigo.setCustomValidity('No se encontró el código de producto')
-              inputCodigo.reportValidity()
-            }
-            e.preventDefault()
-            e.stopPropagation()
-            return
-          }
-          
-          const proveedorHabitual = prod.stock_proveedores?.find(
-            sp => sp.proveedor?.id === prod.proveedor_habitual?.id
-          )
-          const proveedorId = proveedorHabitual?.proveedor?.id || null
-          
-          // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
-          // para que "Sumar Cantidades" no funcione con items originales
-          const idxExistente = rows.findIndex(
-            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
-          )
-          if (idxExistente !== -1) {
-            if (autoSumarDuplicados === "sumar") {
-              setRows((rows) => {
-                const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1;
-                const newRows = rows.map((r, i) =>
-                  i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r,
-                )
-                newRows[idx] = getEmptyRow()
-                return ensureSoloUnEditable(newRows)
-              })
-              if (modoLector) {
-                setIdxCodigoSiguienteFoco(idxExistente)
-              } else {
-                setIdxCantidadFoco(idxExistente)
+            // Búsqueda remota por código
+            const prod = await buscarProductoPorCodigo(row.codigo)
+            if (!prod) {
+              // Mostrar error si no se encuentra el producto
+              const inputCodigo = codigoRefs.current[idx]
+              if (inputCodigo && inputCodigo.setCustomValidity) {
+                inputCodigo.setCustomValidity('No se encontró el código de producto')
+                inputCodigo.reportValidity()
               }
               e.preventDefault()
               e.stopPropagation()
               return
             }
-            if (autoSumarDuplicados === "duplicar") {
-              setRows((prevRows) => {
-                const newRows = [...prevRows]
 
-                // Calcular precio usando lista de precios activa
-                const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
-                const aliPorc = aliMap[aliId] || 0
-                const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
-                const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+            const proveedorHabitual = prod.stock_proveedores?.find(
+              sp => sp.proveedor?.id === prod.proveedor_habitual?.id
+            )
+            const proveedorId = proveedorHabitual?.proveedor?.id || null
 
-                const itemCargado = {
-                  ...newRows[idx],
-                  codigo: prod.codvta || prod.codigo || "",
-                  denominacion: prod.deno || prod.nombre || "",
-                  unidad: prod.unidad || prod.unidadmedida || "-",
-                  precio: precioBase,
-                  precioFinal: precioFinal,
-                  vdi_costo: (proveedorHabitual?.costo || 0),
-                  margen: prod?.margen ?? 0,
-                  cantidad: row.cantidad || 1,
-                  bonificacion: 0,
-                  producto: prod,
-                  idaliiva: aliId,
-                  proveedorId: proveedorId,
+            // MEJORA: Excluir items originales (esBloqueado o idOriginal) de la detección de duplicados
+            // para que "Sumar Cantidades" no funcione con items originales
+            const idxExistente = rows.findIndex(
+              (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
+            )
+            if (idxExistente !== -1) {
+              if (autoSumarDuplicados === "sumar") {
+                setRows((rows) => {
+                  const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1;
+                  const newRows = rows.map((r, i) =>
+                    i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r,
+                  )
+                  newRows[idx] = getEmptyRow()
+                  return ensureSoloUnEditable(newRows)
+                })
+                if (modoLector) {
+                  setIdxCodigoSiguienteFoco(idxExistente)
+                } else {
+                  setIdxCantidadFoco(idxExistente)
                 }
-                
-                newRows[idx] = itemCargado
-                if (newRows.every(isRowLleno) && !readOnly) {
-                  newRows.push(getEmptyRow())
-                }
-                return ensureSoloUnEditable(newRows)
-              })
-              if (modoLector) {
-                setIdxCodigoSiguienteFoco(idx)
-              } else {
-                setIdxCantidadFoco(idx)
+                e.preventDefault()
+                e.stopPropagation()
+                return
               }
+              if (autoSumarDuplicados === "duplicar") {
+                setRows((prevRows) => {
+                  const newRows = [...prevRows]
+
+                  // Calcular precio usando lista de precios activa
+                  const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+                  const aliPorc = aliMap[aliId] || 0
+                  const precioFinal = obtenerPrecioBaseProducto(prod, proveedorHabitual)
+                  const precioBase = Math.round((precioFinal / (1 + aliPorc / 100)) * 10000) / 10000
+
+                  const itemCargado = {
+                    ...newRows[idx],
+                    codigo: prod.codvta || prod.codigo || "",
+                    denominacion: prod.deno || prod.nombre || "",
+                    unidad: prod.unidad || prod.unidadmedida || "-",
+                    precio: precioBase,
+                    precioFinal: precioFinal,
+                    vdi_costo: (proveedorHabitual?.costo || 0),
+                    margen: prod?.margen ?? 0,
+                    cantidad: row.cantidad || 1,
+                    bonificacion: 0,
+                    producto: prod,
+                    idaliiva: aliId,
+                    proveedorId: proveedorId,
+                  }
+
+                  newRows[idx] = itemCargado
+                  if (newRows.every(isRowLleno) && !readOnly) {
+                    newRows.push(getEmptyRow())
+                  }
+                  return ensureSoloUnEditable(newRows)
+                })
+                if (modoLector) {
+                  setIdxCodigoSiguienteFoco(idx)
+                } else {
+                  setIdxCantidadFoco(idx)
+                }
+                e.preventDefault()
+                e.stopPropagation()
+                return
+              }
+              // Si no hay acción válida, no mover foco
               e.preventDefault()
               e.stopPropagation()
               return
             }
-            // Si no hay acción válida, no mover foco
-            e.preventDefault()
-            e.stopPropagation()
-            return
-          }
-          // Si no es duplicado, autocompletar datos y agregar ítem
-          setRows((prevRows) => {
-            const newRows = [...prevRows]
-            const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
-            const aliPorc = aliMap[aliId] || 0
-            // Usar lista de precios activa para calcular precio
-            const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
-            const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
-            const itemCargado = {
-              ...newRows[idx],
-              codigo: prod.codvta || prod.codigo || "",
-              denominacion: prod.deno || prod.nombre || "",
-              unidad: prod.unidad || prod.unidadmedida || "-",
-              precio: precioBase,
-              precioFinal: precioFinal,
-              vdi_costo: (proveedorHabitual?.costo || 0),
-              margen: prod?.margen ?? 0,
-              cantidad: row.cantidad || 1,
-              bonificacion: 0,
-              producto: prod,
-              idaliiva: aliId,
-              proveedorId: proveedorId,
+            // Si no es duplicado, autocompletar datos y agregar ítem
+            setRows((prevRows) => {
+              const newRows = [...prevRows]
+              const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+              const aliPorc = aliMap[aliId] || 0
+              // Usar lista de precios activa para calcular precio
+              const precioFinal = obtenerPrecioBaseProducto(prod, proveedorHabitual)
+              const precioBase = Math.round((precioFinal / (1 + aliPorc / 100)) * 10000) / 10000
+              const itemCargado = {
+                ...newRows[idx],
+                codigo: prod.codvta || prod.codigo || "",
+                denominacion: prod.deno || prod.nombre || "",
+                unidad: prod.unidad || prod.unidadmedida || "-",
+                precio: precioBase,
+                precioFinal: precioFinal,
+                vdi_costo: (proveedorHabitual?.costo || 0),
+                margen: prod?.margen ?? 0,
+                cantidad: row.cantidad || 1,
+                bonificacion: 0,
+                producto: prod,
+                idaliiva: aliId,
+                proveedorId: proveedorId,
+              }
+
+              newRows[idx] = itemCargado
+              if (newRows.every(isRowLleno) && !readOnly) {
+                newRows.push(getEmptyRow())
+              }
+              return ensureSoloUnEditable(newRows)
+            })
+            // Mover foco según modo: lector va al siguiente código, normal va a cantidad
+            if (modoLector) {
+              setIdxCodigoSiguienteFoco(idx)
+            } else {
+              setIdxCantidadFoco(idx)
             }
-            
-            newRows[idx] = itemCargado
-            if (newRows.every(isRowLleno) && !readOnly) {
-              newRows.push(getEmptyRow())
-            }
-            return ensureSoloUnEditable(newRows)
-          })
-          // Mover foco según modo: lector va al siguiente código, normal va a cantidad
-          if (modoLector) {
-            setIdxCodigoSiguienteFoco(idx)
-          } else {
-            setIdxCantidadFoco(idx)
-          }
           } finally {
             // Liberar el flag para permitir futuros procesos
             procesandoCodigoRef.current = false
@@ -923,7 +964,7 @@ const ItemsGridPresupuesto = forwardRef(
             const codigoOriginal = actual.producto.codvta || actual.producto.codigo || String(actual.producto.id || '')
             nuevos[idx] = { ...actual, codigo: codigoOriginal }
           }
-        return nuevos
+          return nuevos
         })
         return
       }
@@ -953,8 +994,8 @@ const ItemsGridPresupuesto = forwardRef(
             const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
             const aliPorc = aliMap[aliId] || 0
             // Usar lista de precios activa para calcular precio
-            const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
-            const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+            const precioFinal = obtenerPrecioBaseProducto(prod, proveedorHabitual)
+            const precioBase = Math.round((precioFinal / (1 + aliPorc / 100)) * 10000) / 10000
             const itemCargado = {
               ...newRows[idx],
               codigo: prod.codvta || prod.codigo || "",
@@ -986,8 +1027,8 @@ const ItemsGridPresupuesto = forwardRef(
         const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
         const aliPorc = aliMap[aliId] || 0
         // Usar lista de precios activa para calcular precio
-        const precioBase = obtenerPrecioBaseProducto(prod, proveedorHabitual)
-        const precioFinal = Math.round(precioBase * (1 + aliPorc / 100) * 100) / 100
+        const precioFinal = obtenerPrecioBaseProducto(prod, proveedorHabitual)
+        const precioBase = Math.round((precioFinal / (1 + aliPorc / 100)) * 10000) / 10000
         const itemCargado = {
           ...newRows[idx],
           codigo: prod.codvta || prod.codigo || "",
@@ -1057,7 +1098,7 @@ const ItemsGridPresupuesto = forwardRef(
         const aliViejo = aliMap[fila.idaliiva] || 0
         const aliNuevo = aliMap[nuevoIdAli] || 0
         const precioFinalConst = fila.precioFinal !== undefined && fila.precioFinal !== "" ? Number.parseFloat(fila.precioFinal) : Number.parseFloat(fila.precio || 0) * (1 + aliViejo / 100)
-        
+
         // CORRECCIÓN: Usar división para obtener el precio base desde el precio final
         const divisorIva = 1 + aliNuevo / 100
         const nuevoPrecioBase = divisorIva > 0 ? precioFinalConst / divisorIva : 0
@@ -1077,7 +1118,7 @@ const ItemsGridPresupuesto = forwardRef(
     return (
       <div className="space-y-4 w-full">
         {/* Banner informativo removido para unificar diseño */}
-        <div className="grid gap-4 mb-2 items-end" style={{gridTemplateColumns: 'auto auto auto 1fr'}}>
+        <div className="grid gap-4 mb-2 items-end" style={{ gridTemplateColumns: 'auto auto auto 1fr' }}>
           {/* Bonificación general */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">Bonificación general (%)</label>
@@ -1094,11 +1135,10 @@ const ItemsGridPresupuesto = forwardRef(
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
                 disabled={readOnly}
-                className={`w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
-                  readOnly 
-                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400'
-                }`}
+                className={`w-24 px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${readOnly
+                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                  : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400'
+                  }`}
               />
               <div
                 className="relative cursor-pointer"
@@ -1143,11 +1183,10 @@ const ItemsGridPresupuesto = forwardRef(
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
                 disabled={readOnly}
-                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${
-                  readOnly 
-                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
-                }`}
+                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${readOnly
+                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                  : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                  }`}
               />
             </div>
           </div>
@@ -1168,11 +1207,10 @@ const ItemsGridPresupuesto = forwardRef(
                 }}
                 onFocus={manejarFocoSeleccionCompleta}
                 disabled={readOnly}
-                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${
-                  readOnly 
-                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                    : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
-                }`}
+                className={`w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-all duration-200 ${readOnly
+                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                  : 'bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500'
+                  }`}
               />
             </div>
             {/* Tooltip descuentos escalonados */}
@@ -1214,33 +1252,33 @@ const ItemsGridPresupuesto = forwardRef(
             </label>
           </div>
 
-                     {/* Resumen de Totales compacto */}
-           <div className="col-span-1 flex justify-end items-end">
-             <div className="min-w-[420px]">
-                                                             <div className="w-full bg-slate-700 rounded-xl shadow border border-slate-600/50 px-6 py-2">
-                                   <div className="flex items-center justify-between gap-4 text-sm">
-                     <div className="flex items-center gap-1">
-                       <span className={`${theme.fuente} font-semibold`}>Subtotal s/IVA:</span>
-                       <span className="text-white font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                       <span className={`${theme.fuente} font-semibold`}>Subtotal c/Desc:</span>
-                       <span className="text-white font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                       <span className={`${theme.fuente} font-semibold`}>IVA:</span>
-                       <span className="text-white font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                       <span className={`${theme.fuente} font-semibold`}>Total c/IVA:</span>
-                       <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1 rounded-lg shadow">
-                         <span className="font-bold text-base">${totales.total?.toFixed(2) ?? "0.00"}</span>
-                       </div>
-                     </div>
-                   </div>
-               </div>
-             </div>
-           </div>
+          {/* Resumen de Totales compacto */}
+          <div className="col-span-1 flex justify-end items-end">
+            <div className="min-w-[420px]">
+              <div className="w-full bg-slate-700 rounded-xl shadow border border-slate-600/50 px-6 py-2">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <span className={`${theme.fuente} font-semibold`}>Subtotal s/IVA:</span>
+                    <span className="text-white font-bold text-base">${totales.subtotal?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`${theme.fuente} font-semibold`}>Subtotal c/Desc:</span>
+                    <span className="text-white font-bold text-base">${totales.subtotalConDescuentos?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`${theme.fuente} font-semibold`}>IVA:</span>
+                    <span className="text-white font-bold text-base">${totales.iva?.toFixed(2) ?? "0.00"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`${theme.fuente} font-semibold`}>Total c/IVA:</span>
+                    <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1 rounded-lg shadow">
+                      <span className="font-bold text-base">${totales.total?.toFixed(2) ?? "0.00"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="w-full">
           <div className="max-h-[20rem] overflow-y-auto overscroll-contain rounded-xl border border-slate-200/50 shadow-lg">
@@ -1289,15 +1327,15 @@ const ItemsGridPresupuesto = forwardRef(
                     row.precioFinal !== "" && row.precioFinal !== undefined
                       ? Number(row.precioFinal)
                       : (row.precio !== "" && row.precio !== undefined
-                          ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
-                          : 0)
+                        ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
+                        : 0)
                   const bonifParticular = Number.parseFloat(row.bonificacion)
                   const bonifGeneral = Number.parseFloat(bonificacionGeneral) || 0
                   const bonifEfectiva = (Number.isFinite(bonifParticular) && bonifParticular > 0)
                     ? bonifParticular
                     : bonifGeneral
                   const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
-                  
+
                   // Aplicar descuentos globales al precio bonificado
                   let precioConDescuentos = precioBonificado
                   if (descu1 > 0) precioConDescuentos *= (1 - descu1 / 100)
@@ -1307,13 +1345,12 @@ const ItemsGridPresupuesto = forwardRef(
                   return (
                     <tr
                       key={row.id}
-                      className={`transition-colors duration-200 hover:bg-slate-50/50 ${
-                        isDuplicado(row, idx)
-                          ? "bg-gradient-to-r from-red-50 to-red-100/50 border-l-4 border-red-400"
-                          : row.esBloqueado
+                      className={`transition-colors duration-200 hover:bg-slate-50/50 ${isDuplicado(row, idx)
+                        ? "bg-gradient-to-r from-red-50 to-red-100/50 border-l-4 border-red-400"
+                        : row.esBloqueado
                           ? "bg-blue-50"
                           : ""
-                      }`}
+                        }`}
                     >
                       <td className="px-3 py-3 whitespace-nowrap text-center text-sm font-medium text-slate-600">
                         {idx + 1}
@@ -1326,11 +1363,10 @@ const ItemsGridPresupuesto = forwardRef(
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
                           onBlur={() => handleCodigoBlur(idx)}
                           onFocus={manejarFocoSeleccionCompleta}
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
-                            row.esBloqueado 
-                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                          }`}
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                            }`}
                           placeholder="Código"
                           aria-label="Código producto"
                           tabIndex={row.esBloqueado ? -1 : 0}
@@ -1350,11 +1386,10 @@ const ItemsGridPresupuesto = forwardRef(
                             value={row.denominacion}
                             onChange={(e) => handleRowChange(idx, "denominacion", e.target.value)}
                             onFocus={manejarFocoSeleccionCompleta}
-                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
-                              row.esBloqueado 
-                                ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                                : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                            }`}
+                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                              }`}
                             placeholder="Detalle"
                             aria-label="Detalle ítem genérico"
                             disabled={row.esBloqueado}
@@ -1375,11 +1410,10 @@ const ItemsGridPresupuesto = forwardRef(
                           onFocus={manejarFocoSeleccionCompleta}
                           /* Requerir al menos 1 si es ítem de stock o genérico con precio > 0 */
                           min={row.producto || (Number(row.precio) > 0) ? 1 : 0}
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
-                            row.esBloqueado 
-                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                          }`}
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                            }`}
                           aria-label="Cantidad"
                           tabIndex={row.esBloqueado ? -1 : 0}
                           disabled={row.esBloqueado}
@@ -1395,19 +1429,18 @@ const ItemsGridPresupuesto = forwardRef(
                             row.precioFinal !== "" && row.precioFinal !== undefined
                               ? row.precioFinal
                               : (row.precio !== "" && row.precio !== undefined
-                                  ? row.precio
-                                  : "")
+                                ? row.precio
+                                : "")
                           }
                           onChange={(e) => {
                             handleRowChange(idx, "precio", e.target.value)
                           }}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
                           onFocus={manejarFocoSeleccionCompleta}
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${
-                            row.esBloqueado 
-                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                          }`}
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${row.esBloqueado
+                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                            }`}
                           style={{
                             MozAppearance: 'textfield'
                           }}
@@ -1428,11 +1461,10 @@ const ItemsGridPresupuesto = forwardRef(
                           min="0"
                           max="100"
                           step="0.01"
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${
-                            row.esBloqueado 
-                              ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                          }`}
+                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                            }`}
                           aria-label="Bonificación particular"
                           tabIndex={row.esBloqueado ? -1 : 0}
                           disabled={row.esBloqueado}
@@ -1459,7 +1491,7 @@ const ItemsGridPresupuesto = forwardRef(
                                 onChange={(e) => handleIvaChange(idx, Number(e.target.value))}
                                 className="px-2 py-1 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                               >
-                                {[3,4,5,6].filter(id=>aliMap[id]!==undefined).map(id => (
+                                {[3, 4, 5, 6].filter(id => aliMap[id] !== undefined).map(id => (
                                   <option key={id} value={id}>{aliMap[id]}%</option>
                                 ))}
                               </select>
@@ -1482,7 +1514,7 @@ const ItemsGridPresupuesto = forwardRef(
                           {isRowLleno(row) && (
                             <>
                               {row.esBloqueado ? (
-                                <div 
+                                <div
                                   className="flex items-center gap-1 text-xs text-blue-600 font-medium cursor-pointer"
                                   onMouseEnter={(e) => handleMouseEnterTooltip(idx, e)}
                                   onMouseLeave={() => handleMouseLeaveTooltip(idx)}
@@ -1517,11 +1549,11 @@ const ItemsGridPresupuesto = forwardRef(
               </tbody>
             </table>
           </div>
-                </div>
+        </div>
 
         {/* Tooltip flotante global para items originales */}
         {Object.values(mostrarTooltipOriginal).some(Boolean) && (
-          <div 
+          <div
             className="fixed z-[9999] bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none whitespace-nowrap"
             style={{
               left: `${posicionTooltip.x}px`,
@@ -1533,7 +1565,7 @@ const ItemsGridPresupuesto = forwardRef(
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-b-4 border-b-slate-800"></div>
           </div>
         )}
-        
+
       </div>
     )
   },

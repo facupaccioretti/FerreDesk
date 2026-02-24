@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useStockProveAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
@@ -192,6 +192,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const codigoBarrasEfectivo = form.codigo_barras ?? stock?.codigo_barras ?? null
   const tipoCodigoBarrasEfectivo = form.tipo_codigo_barras ?? stock?.tipo_codigo_barras ?? null
 
+  // VAT Percentage calculation
+  const alicuotaSeleccionada = alicuotas.find(a => String(a.id) === String(form.idaliiva))
+  const porcentajeIVA = alicuotaSeleccionada ? Number(alicuotaSeleccionada.porce) : 0
+
   // Callback cuando el modal cambia el código
   const handleCodigoBarrasChange = (codigo, tipo) => {
     // Actualizar el form para que se guarde con el producto y persista entre pestañas
@@ -272,39 +276,47 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     return Number(spEncontrado?.costo || 0)
   }
 
-  // Función para calcular precio Lista 0 desde costo + margen
+  // Función para calcular precio Lista 0 desde costo + margen + IVA
   const calcularPrecioLista0Automatico = () => {
     const costo = obtenerCostoProveedorHabitual()
     const margen = Number(form.margen || 0)
     if (costo > 0 && margen >= 0) {
-      return calcularPrecioLista0(costo, margen)
+      return calcularPrecioLista0(costo, margen, porcentajeIVA)
     }
     return 0
   }
 
   // Función para recalcular precios de listas 1-4 desde Lista 0
-  const recalcularPreciosListas = (precioLista0) => {
-    if (!precioLista0 || precioLista0 <= 0) return
+  const recalcularPreciosListas = useCallback((precioLista0) => {
+    if (!precioLista0 || precioLista0 <= 0 || !Array.isArray(listasPrecio)) return
 
     setPreciosListas(prev => {
       const nuevos = { ...prev }
+      let huboCambios = false
 
       // Para cada lista 1-4, si no es manual, recalcular
       for (let i = 1; i <= 4; i++) {
         const key = `lista${i}`
         if (!nuevos[key].manual) {
           const listaConfig = listasPrecio.find(l => l.numero === i)
-          const margenLista = Number(listaConfig?.margen_descuento || 0)
-          nuevos[key] = {
-            ...nuevos[key],
-            precio: calcularPrecioLista(precioLista0, margenLista),
+          if (listaConfig) {
+            const margenLista = Number(listaConfig.margen_descuento || 0)
+            const nuevoPrecio = calcularPrecioLista(precioLista0, margenLista)
+
+            if (nuevos[key].precio !== nuevoPrecio) {
+              nuevos[key] = {
+                ...nuevos[key],
+                precio: nuevoPrecio,
+              }
+              huboCambios = true
+            }
           }
         }
       }
 
-      return nuevos
+      return huboCambios ? nuevos : prev
     })
-  }
+  }, [listasPrecio])
 
   // Handler para cuando cambia el precio de Lista 0
   const handlePrecioLista0Change = (valor, esManual = false) => {
@@ -315,11 +327,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
       lista0: { precio: precioNum || valor, manual: esManual },
     }))
 
-    // Si se ingresa un precio manual, recalcular el margen
+    // Si se ingresa un precio manual, recalcular el margen (teniendo en cuenta el IVA)
     if (esManual && precioNum > 0) {
       const costo = obtenerCostoProveedorHabitual()
       if (costo > 0) {
-        const nuevoMargen = calcularMargenDesdePrecios(precioNum, costo)
+        const nuevoMargen = calcularMargenDesdePrecios(precioNum, costo, porcentajeIVA)
         setForm(prev => ({ ...prev, margen: String(nuevoMargen) }))
       }
     }
@@ -382,15 +394,27 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     if (!preciosListas.lista0.manual && form.margen) {
       const precioCalculado = calcularPrecioLista0Automatico()
       if (precioCalculado > 0) {
-        setPreciosListas(prev => ({
-          ...prev,
-          lista0: { ...prev.lista0, precio: precioCalculado },
-        }))
+        setPreciosListas(prev => {
+          if (prev.lista0.precio === precioCalculado) return prev
+          return {
+            ...prev,
+            lista0: { ...prev.lista0, precio: precioCalculado },
+          }
+        })
         recalcularPreciosListas(precioCalculado)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.margen, form.proveedor_habitual_id])
+  }, [form.margen, form.proveedor_habitual_id, form.idaliiva, recalcularPreciosListas])
+
+  // Nuevo efecto: Sincronizar precios de listas derivadas cuando cargan las configuraciones
+  // o cuando cambia el precio base (incluso si el base es manual)
+  useEffect(() => {
+    const precioBase = Number(preciosListas.lista0.precio) || 0
+    if (precioBase > 0 && listasPrecio.length > 0) {
+      recalcularPreciosListas(precioBase)
+    }
+  }, [listasPrecio, preciosListas.lista0.precio, recalcularPreciosListas])
 
 
 

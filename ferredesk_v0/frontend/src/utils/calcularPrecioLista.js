@@ -16,46 +16,55 @@
 export function calcularPrecioLista(precioLista0, margenDescuento) {
   const precio = Number(precioLista0) || 0;
   const margen = Number(margenDescuento) || 0;
-  
+
   const resultado = precio * (1 + margen / 100);
   return Math.round(resultado * 100) / 100;
 }
 
 /**
- * Calcula el precio de Lista 0 desde costo y margen de ganancia.
+ * Calcula el precio de Lista 0 desde costo, margen de ganancia e IVA (Precio Final).
  * 
  * @param {number} costo - Costo del producto
  * @param {number} margenGanancia - Porcentaje de ganancia
- * @returns {number} Precio de Lista 0 redondeado a 2 decimales
+ * @param {number} porcentajeIVA - Porcentaje de IVA (ej: 21)
+ * @returns {number} Precio de Lista 0 (Final) redondeado a 2 decimales
  * 
  * @example
- * calcularPrecioLista0(1000, 40) // Costo 1000, Margen 40% -> 1400
+ * calcularPrecioLista0(1000, 40, 21) // Costo 1000, Margen 40%, IVA 21% -> 1000 * 1.4 * 1.21 = 1694
  */
-export function calcularPrecioLista0(costo, margenGanancia) {
+export function calcularPrecioLista0(costo, margenGanancia, porcentajeIVA = 0) {
   const costoNum = Number(costo) || 0;
   const margenNum = Number(margenGanancia) || 0;
-  
-  const resultado = costoNum * (1 + margenNum / 100);
+  const ivaNum = Number(porcentajeIVA) || 0;
+
+  // Precio Neto = Costo * (1 + Margen/100)
+  // Precio Final = Precio Neto * (1 + IVA/100)
+  const resultado = costoNum * (1 + margenNum / 100) * (1 + ivaNum / 100);
   return Math.round(resultado * 100) / 100;
 }
 
 /**
- * Calcula el margen de ganancia desde precio de venta y costo.
+ * Calcula el margen de ganancia desde precio de venta (final), costo e IVA.
  * 
- * @param {number} precioVenta - Precio de venta
+ * @param {number} precioVentaFinal - Precio de venta final (con IVA)
  * @param {number} costo - Costo del producto
+ * @param {number} porcentajeIVA - Porcentaje de IVA (ej: 21)
  * @returns {number} Porcentaje de margen redondeado a 2 decimales
  * 
  * @example
- * calcularMargenDesdePrecios(1400, 1000) // -> 40 (40%)
+ * calcularMargenDesdePrecios(1694, 1000, 21) // -> 40 (40%)
  */
-export function calcularMargenDesdePrecios(precioVenta, costo) {
-  const precioNum = Number(precioVenta) || 0;
+export function calcularMargenDesdePrecios(precioVentaFinal, costo, porcentajeIVA = 0) {
+  const precioFinalNum = Number(precioVentaFinal) || 0;
   const costoNum = Number(costo) || 0;
-  
+  const ivaNum = Number(porcentajeIVA) || 0;
+
   if (costoNum === 0) return 0;
-  
-  const margen = ((precioNum - costoNum) / costoNum) * 100;
+
+  // Precio Neto = Precio Final / (1 + IVA/100)
+  // Margen = ((Precio Neto - Costo) / Costo) * 100
+  const precioNeto = precioFinalNum / (1 + ivaNum / 100);
+  const margen = ((precioNeto - costoNum) / costoNum) * 100;
   return Math.round(margen * 100) / 100;
 }
 
@@ -73,23 +82,23 @@ export function obtenerPrecioParaLista(producto, listaNumero, listasConfig = [])
   if (listaNumero === 0) {
     return Number(producto?.precio_lista_0) || 0;
   }
-  
+
   // Buscar precio en precios_listas
   const precioLista = producto?.precios_listas?.find(
     p => p.lista_numero === listaNumero
   );
-  
+
   if (precioLista?.precio) {
     return Number(precioLista.precio);
   }
-  
+
   // Si no existe, calcular desde Lista 0 + margen de la lista
   const precioLista0 = Number(producto?.precio_lista_0) || 0;
   if (!precioLista0) return 0;
-  
+
   const listaConfig = listasConfig.find(l => l.numero === listaNumero);
   const margenLista = Number(listaConfig?.margen_descuento) || 0;
-  
+
   return calcularPrecioLista(precioLista0, margenLista);
 }
 
@@ -122,10 +131,10 @@ export function esPrecioManual(producto, listaNumero) {
   if (listaNumero === 0) {
     return Boolean(producto?.precio_lista_0_manual);
   }
-  
+
   const precioLista = producto?.precios_listas?.find(
     p => p.lista_numero === listaNumero
   );
-  
+
   return Boolean(precioLista?.precio_manual);
 }

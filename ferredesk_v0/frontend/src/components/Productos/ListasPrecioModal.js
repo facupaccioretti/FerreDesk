@@ -27,33 +27,33 @@ const formatearFecha = (valor) => {
 }
 
 function ListasPrecioModal({ open, onClose, onEditProducto }) {
-  const { 
-    listas, 
-    loading: loadingListas, 
-    actualizarLista, 
+  const {
+    listas,
+    loading: loadingListas,
+    actualizarLista,
     obtenerProductosDesactualizados,
-    fetchListas 
+    fetchListas
   } = useListasPrecioAPI()
-  
+
   // Estado de pestañas
   const [pestanaActiva, setPestanaActiva] = useState(PESTANA_MARGENES)
-  
+
   // Estado para edición de márgenes
   const [margenesEditados, setMargenesEditados] = useState({})
   const [margenesOriginales, setMargenesOriginales] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState(null)
   const [mensajeError, setMensajeError] = useState(null)
-  
+
   // Estado para productos desactualizados
   const [productosDesactualizados, setProductosDesactualizados] = useState([])
   const [loadingDesactualizados, setLoadingDesactualizados] = useState(false)
-  
+
   // Estado para historial de lista
   const [historialLista, setHistorialLista] = useState(null)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [listaHistorialActiva, setListaHistorialActiva] = useState(null)
-  
+
   // Estado para productos expandidos
   const [productosExpandidos, setProductosExpandidos] = useState({})
 
@@ -104,6 +104,13 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
 
   // Handler para cambio de margen
   const handleMargenChange = (listaId, valor) => {
+    // Validar que el descuento no sea mayor al 99% (valor < -99)
+    const num = parseFloat(valor)
+    if (!isNaN(num) && num < -99) {
+      window.alert("El descuento no puede ser superior al 99% (el valor mínimo permitido es -99).")
+      return
+    }
+
     setMargenesEditados(prev => ({
       ...prev,
       [listaId]: valor,
@@ -142,7 +149,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
   // Handler para guardar TODOS los cambios
   const handleGuardarTodo = async () => {
     const listasCambiadas = obtenerListasCambiadas()
-    
+
     if (listasCambiadas.length === 0) {
       setMensajeError('No hay cambios para guardar')
       setTimeout(() => setMensajeError(null), 3000)
@@ -154,12 +161,16 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
         setMensajeError(`El margen de ${lista.nombre} debe ser un número válido`)
         return
       }
+      if (lista.margenNuevo < -99) {
+        window.alert(`El descuento de ${lista.nombre} no puede ser superior al 99%.`)
+        return
+      }
     }
 
     setGuardando(true)
     setMensajeExito(null)
     setMensajeError(null)
-    
+
     try {
       const errores = []
 
@@ -174,7 +185,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
       if (errores.length > 0) {
         setMensajeError(`Errores: ${errores.join(', ')}`)
       } else {
-        setMargenesOriginales({...margenesEditados})
+        setMargenesOriginales({ ...margenesEditados })
         setMensajeExito('Márgenes actualizados correctamente.')
         cargarProductosDesactualizados()
         setTimeout(() => setMensajeExito(null), 5000)
@@ -188,7 +199,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
 
   // Handler para cancelar cambios
   const handleCancelar = () => {
-    setMargenesEditados({...margenesOriginales})
+    setMargenesEditados({ ...margenesOriginales })
     setMensajeError(null)
   }
 
@@ -218,10 +229,10 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
       setHistorialLista(null)
       return
     }
-    
+
     setLoadingHistorial(true)
     setListaHistorialActiva(listaNumero)
-    
+
     try {
       const res = await fetch(`/api/productos/actualizaciones-listas/?lista_numero=${listaNumero}`, {
         credentials: 'include',
@@ -293,21 +304,19 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                 <div className="flex border-b border-slate-200 bg-slate-50">
                   <button
                     onClick={() => setPestanaActiva(PESTANA_MARGENES)}
-                    className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                      pestanaActiva === PESTANA_MARGENES
+                    className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${pestanaActiva === PESTANA_MARGENES
                         ? 'text-orange-600 border-b-2 border-orange-600 bg-white'
                         : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Márgenes de Listas
                   </button>
                   <button
                     onClick={() => setPestanaActiva(PESTANA_DESACTUALIZADOS)}
-                    className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
-                      pestanaActiva === PESTANA_DESACTUALIZADOS
+                    className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${pestanaActiva === PESTANA_DESACTUALIZADOS
                         ? 'text-orange-600 border-b-2 border-orange-600 bg-white'
                         : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Productos Desactualizados
                     {productosDesactualizados.length > 0 && (
@@ -326,7 +335,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                       {mensajeExito}
                     </div>
                   )}
-                  
+
                   {/* Mensaje de error */}
                   {mensajeError && (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -340,7 +349,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                       <p className="text-sm text-slate-600 mb-4">
                         Define el porcentaje de descuento (-) o recargo (+) sobre el precio de Lista 0.
                       </p>
-                      
+
                       {loadingListas ? (
                         <div className="text-center py-8 text-slate-500">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mx-auto mb-2"></div>
@@ -354,12 +363,11 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                               const historialVisible = listaHistorialActiva === lista.numero
                               return (
                                 <div key={lista.id}>
-                                  <div 
-                                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                                      hayCambio 
-                                        ? 'bg-amber-50 border-amber-300' 
+                                  <div
+                                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${hayCambio
+                                        ? 'bg-amber-50 border-amber-300'
                                         : 'bg-slate-50 border-slate-200'
-                                    }`}
+                                      }`}
                                   >
                                     <div className="flex items-center gap-2">
                                       <BotonHistorial
@@ -385,7 +393,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                                       <span className="text-sm text-slate-500">%</span>
                                     </div>
                                   </div>
-                                  
+
                                   {/* Panel de historial */}
                                   {historialVisible && (
                                     <div className="ml-8 mt-1 p-3 bg-slate-100 rounded-lg border border-slate-200 text-xs">
@@ -422,22 +430,20 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                             <button
                               onClick={handleCancelar}
                               disabled={!hayCambiosPendientes() || guardando}
-                              className={`px-4 py-2 text-sm rounded transition-colors ${
-                                !hayCambiosPendientes() || guardando
+                              className={`px-4 py-2 text-sm rounded transition-colors ${!hayCambiosPendientes() || guardando
                                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                   : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                              }`}
+                                }`}
                             >
                               Cancelar
                             </button>
                             <button
                               onClick={handleGuardarTodo}
                               disabled={!hayCambiosPendientes() || guardando}
-                              className={`px-4 py-2 text-sm rounded transition-colors ${
-                                !hayCambiosPendientes() || guardando
+                              className={`px-4 py-2 text-sm rounded transition-colors ${!hayCambiosPendientes() || guardando
                                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                                   : 'bg-orange-600 text-white hover:bg-orange-700'
-                              }`}
+                                }`}
                             >
                               {guardando ? 'Guardando...' : 'Guardar Cambios'}
                             </button>
@@ -454,7 +460,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                         Productos con precios cargados manualmente antes de la última actualización de márgenes.
                         Estos precios no se actualizaron automáticamente.
                       </p>
-                      
+
                       {loadingDesactualizados ? (
                         <div className="text-center py-8 text-slate-500">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 mx-auto mb-2"></div>
@@ -492,10 +498,10 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                                           className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors"
                                           title={expandido ? "Ocultar detalles" : "Ver detalles"}
                                         >
-                                          <svg 
-                                            className={`w-4 h-4 transition-transform ${expandido ? 'rotate-90' : ''}`} 
-                                            fill="none" 
-                                            viewBox="0 0 24 24" 
+                                          <svg
+                                            className={`w-4 h-4 transition-transform ${expandido ? 'rotate-90' : ''}`}
+                                            fill="none"
+                                            viewBox="0 0 24 24"
                                             stroke="currentColor"
                                           >
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -511,7 +517,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                                       <td className="px-3 py-2">
                                         <div className="flex flex-wrap gap-1">
                                           {producto.listas_desactualizadas.map(listaNum => (
-                                            <span 
+                                            <span
                                               key={listaNum}
                                               className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded"
                                               title={obtenerNombreLista(listaNum)}
@@ -536,8 +542,8 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                                             <div className="font-medium text-slate-600 mb-2">Detalle de precios manuales:</div>
                                             <div className="grid gap-2">
                                               {producto.detalles_listas.map((detalle, idx) => (
-                                                <div 
-                                                  key={idx} 
+                                                <div
+                                                  key={idx}
                                                   className="flex items-center justify-between p-2 bg-white rounded border border-slate-200"
                                                 >
                                                   <div className="flex items-center gap-3">
@@ -571,7 +577,7 @@ function ListasPrecioModal({ open, onClose, onEditProducto }) {
                           </table>
                         </div>
                       )}
-                      
+
                       {/* Botón refrescar */}
                       <div className="mt-4 text-right">
                         <button
