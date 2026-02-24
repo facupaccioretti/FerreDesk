@@ -46,7 +46,7 @@ const InformesManager = () => {
         <div className="flex-1 py-6 px-4">
           <div className="max-w-[1400px] w-full mx-auto flex flex-col">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Centro de Informes y Estadísticas</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Informes</h2>
             </div>
 
             {/* Área principal: similar al ProductosManager */}
