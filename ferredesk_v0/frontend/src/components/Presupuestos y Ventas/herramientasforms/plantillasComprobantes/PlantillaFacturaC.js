@@ -1,5 +1,5 @@
 // PlantillaFacturaC.js
-// Componente visual para mostrar el detalle de una Factura C, Presupuesto o Venta
+// Componente visual para mostrar el detalle de una Factura C, Presupuesto o Cotizacion
 
 import { formatearDescuentosVisual, formatearMoneda, mapearTipoComprobante, renderizarObservacionesComoLista } from "./helpers"
 import Tabla from "../../../Tabla"
