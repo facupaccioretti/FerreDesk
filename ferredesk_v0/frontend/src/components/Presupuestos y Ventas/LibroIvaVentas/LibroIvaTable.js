@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Tabla from '../../Tabla';
+import { formatearFecha } from '../../../utils/formatters';
 
 const LibroIvaTable = ({ libroIva, loading }) => {
   const [filterTipo, setFilterTipo] = useState('');
@@ -17,15 +18,12 @@ const LibroIvaTable = ({ libroIva, loading }) => {
     }).format(isNaN(monto) ? 0 : monto);
   };
 
-  // Función para formatear fecha
-  const formatearFecha = (fecha) => {
-    return new Date(fecha).toLocaleDateString('es-AR');
-  };
+  // Se usa formateador centralizado de ../../../utils/formatters
 
   // Función para filtrar datos específicos del libro IVA
   const datosLibroIvaFiltrados = useMemo(() => {
     if (!libroIva?.lineas) return [];
-    
+
     return libroIva.lineas.filter(linea => {
       // Extraer letra del comprobante (último carácter)
       const letra = (linea.comprobante || '').trim().slice(-1);
@@ -197,7 +195,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
               Libro IVA Ventas - {libroIva.periodo?.mes?.toString().padStart(2, '0')}/{libroIva.periodo?.anio}
             </h3>
             <p className="text-sm text-gray-600">
-              {datosLibroIvaFiltrados.length} comprobantes • Generado el {new Date(libroIva.periodo?.fecha_generacion).toLocaleString('es-AR')}
+              {datosLibroIvaFiltrados.length} comprobantes • Generado el {formatearFecha(libroIva.periodo?.fecha_generacion, true)}
             </p>
           </div>
           <div className="text-right">

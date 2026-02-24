@@ -23,7 +23,7 @@ const filtrarConComodines = (datos, terminoBusqueda) => {
 
   // Dividir el término en palabras individuales
   const palabras = terminoBusqueda.toLowerCase().trim().split(/\s+/)
-  
+
   if (palabras.length === 0) {
     return datos
   }
@@ -48,7 +48,7 @@ const Tabla = ({
   columnas = [],
   datos = [],
   valorBusqueda = "",
-  onCambioBusqueda = () => {},
+  onCambioBusqueda = () => { },
   filasPorPaginaInicial = 10,
   opcionesFilasPorPagina = [10, 20, 30, 40, 50],
   paginadorVisible = true,
@@ -72,6 +72,8 @@ const Tabla = ({
   ordenamientoControlado = null, // Estado de ordenamiento desde el padre
   // --- Prop para estado de carga ---
   cargando = false,
+  // --- Prop para clave personalizada en filas ---
+  customKey = null,
 }) => {
   const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
   const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
@@ -115,55 +117,54 @@ const Tabla = ({
     : (paginadorVisible ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina) : datosFiltrados)
 
   // Clases calculadas según modo compacto para las celdas por defecto (cuando no se usa renderFila)
-  const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${
-    filasCompactas ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA
-  } whitespace-nowrap ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-700`
+  const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${filasCompactas ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA
+    } whitespace-nowrap ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-700`
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
       {/* Header con buscador y controles */}
       {!sinEstilos && (
         <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
-        <div className="flex items-center justify-between gap-4">
-          {/* Buscador */}
-          {mostrarBuscador && (
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar en tabla..."
-                className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
-                value={valorBusqueda}
-                onChange={(e) => onCambioBusqueda(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="flex items-center justify-between gap-4">
+            {/* Buscador */}
+            {mostrarBuscador && (
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar en tabla..."
+                  className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
+                  value={valorBusqueda}
+                  onChange={(e) => onCambioBusqueda(e.target.value)}
+                />
+              </div>
+            )}
 
-          {/* Control de ordenamiento */}
-          {mostrarOrdenamiento && (
-            <button
-              onClick={() => {
-                if (paginacionControlada && onOrdenamientoChange) {
-                  // En modo controlado, notificar al componente padre
-                  const nuevoOrdenamiento = ordenamientoControlado !== null ? !ordenamientoControlado : !ordenAscendente;
-                  onOrdenamientoChange(nuevoOrdenamiento);
-                } else {
-                  // En modo local, cambiar estado interno
-                  setOrdenAscendente(!ordenAscendente);
+            {/* Control de ordenamiento */}
+            {mostrarOrdenamiento && (
+              <button
+                onClick={() => {
+                  if (paginacionControlada && onOrdenamientoChange) {
+                    // En modo controlado, notificar al componente padre
+                    const nuevoOrdenamiento = ordenamientoControlado !== null ? !ordenamientoControlado : !ordenAscendente;
+                    onOrdenamientoChange(nuevoOrdenamiento);
+                  } else {
+                    // En modo local, cambiar estado interno
+                    setOrdenAscendente(!ordenAscendente);
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
+                title={
+                  (ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Cambiar a orden descendente (más recientes primero)" : "Cambiar a orden ascendente (más antiguos primero)"
                 }
-              }}
-              className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
-              title={
-                (ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Cambiar a orden descendente (más recientes primero)" : "Cambiar a orden ascendente (más antiguos primero)"
-              }
-            >
-              <ArrowUpDown
-                className={`w-4 h-4 transition-transform duration-200 ${(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "rotate-180" : ""}`}
-              />
-              <span className="hidden sm:inline">{(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Más antiguos" : "Más recientes"}</span>
-            </button>
-          )}
-        </div>
+              >
+                <ArrowUpDown
+                  className={`w-4 h-4 transition-transform duration-200 ${(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "rotate-180" : ""}`}
+                />
+                <span className="hidden sm:inline">{(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Más antiguos" : "Más recientes"}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -176,9 +177,8 @@ const Tabla = ({
               {columnas.map((col) => (
                 <th
                   key={col.id}
-                  className={`${
-                    { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                  } ${ESPACIO_HORIZONTAL_CELDA} ${tamañoEncabezado === "pequeño" ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA} font-semibold ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
+                  className={`${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
+                    } ${ESPACIO_HORIZONTAL_CELDA} ${tamañoEncabezado === "pequeño" ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA} font-semibold ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
                   {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
@@ -198,16 +198,16 @@ const Tabla = ({
               }
 
               // Renderizado por defecto por columnas
+              const rowKey = customKey ? customKey(fila, idxVisible) : (fila.id || indiceGlobal)
               return (
-                <tr key={fila.id || indiceGlobal} className="hover:bg-slate-200 transition-colors duration-150">
+                <tr key={rowKey} className="hover:bg-slate-200 transition-colors duration-150">
                   {columnas.map((col) => {
                     const contenido = col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]
                     return (
                       <td
                         key={col.id}
-                        className={`${clasesCeldaBaseCalculadas} bg-white ${
-                          { left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                        }`}
+                        className={`${clasesCeldaBaseCalculadas} bg-white ${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
+                          }`}
                         style={col.ancho ? { width: col.ancho } : undefined}
                       >
                         {contenido}
@@ -268,14 +268,6 @@ const Tabla = ({
       )}
     </div>
   )
-}
-
-Tabla.defaultProps = {
-  columnas: [],
-  datos: [],
-  valorBusqueda: "",
-  onCambioBusqueda: () => {},
-  mostrarBuscador: true,
 }
 
 export default Tabla

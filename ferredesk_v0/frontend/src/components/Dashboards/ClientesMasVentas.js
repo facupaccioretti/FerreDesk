@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -25,21 +25,17 @@ const ClientesMasVentas = () => {
   const [error, setError] = useState(null);
   const [tipoMetrica, setTipoMetrica] = useState('total'); // 'total', 'cantidad', 'frecuencia'
 
-  useEffect(() => {
-    fetchClientesMasVentas();
-  }, [tipoMetrica]);
-
-  const fetchClientesMasVentas = async () => {
+  const fetchClientesMasVentas = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/home/clientes-mas-ventas/?tipo=${tipoMetrica}`, {
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         throw new Error('Error al cargar los datos');
       }
-      
+
       const result = await response.json();
       setData(result);
     } catch (err) {
@@ -48,7 +44,11 @@ const ClientesMasVentas = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tipoMetrica]);
+
+  useEffect(() => {
+    fetchClientesMasVentas();
+  }, [fetchClientesMasVentas]);
 
   const options = {
     responsive: true,
@@ -83,7 +83,7 @@ const ClientesMasVentas = () => {
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             const label = context.dataset.label || '';
             const value = context.parsed.x;
             if (tipoMetrica === 'total') {
@@ -105,7 +105,7 @@ const ClientesMasVentas = () => {
           font: {
             size: 11
           },
-          callback: function(value) {
+          callback: function (value) {
             if (tipoMetrica === 'total') {
               return `$${value.toLocaleString()}`;
             } else {
@@ -154,7 +154,7 @@ const ClientesMasVentas = () => {
             </svg>
           </div>
           <p className="text-slate-600">Error: {error}</p>
-          <button 
+          <button
             onClick={fetchClientesMasVentas}
             className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
           >
@@ -173,7 +173,7 @@ const ClientesMasVentas = () => {
           <h3 className="@container text-base @container/md:text-lg @container/lg:text-xl font-bold text-slate-800">Clientes con Más Ventas</h3>
           <p className="@container text-xs @container/md:text-sm text-slate-600">Análisis de los clientes más importantes</p>
         </div>
-        
+
         {/* Selector de métrica */}
         <div className="flex items-center space-x-2">
           <span className="@container text-xs @container/md:text-sm font-medium text-slate-700">Métrica:</span>
@@ -222,7 +222,7 @@ const ClientesMasVentas = () => {
             <div className="@container ml-2 @container/md:ml-3">
               <p className="@container text-xs @container/md:text-sm font-medium text-slate-600">Valor</p>
               <p className="@container text-sm @container/md:text-lg font-bold text-slate-800">
-                {tipoMetrica === 'total' 
+                {tipoMetrica === 'total'
                   ? `$${data?.datasets[0]?.data[0]?.toLocaleString() || 0}`
                   : `${data?.datasets[0]?.data[0]?.toLocaleString() || 0} ${tipoMetrica === 'cantidad' ? 'productos' : 'compras'}`
                 }
@@ -241,7 +241,7 @@ const ClientesMasVentas = () => {
             <div className="@container ml-2 @container/md:ml-3">
               <p className="@container text-xs @container/md:text-sm font-medium text-slate-600">Participación</p>
               <p className="@container text-sm @container/md:text-lg font-bold text-slate-800">
-                {data?.datasets[0]?.data[0] && data?.datasets[0]?.data[9] 
+                {data?.datasets[0]?.data[0] && data?.datasets[0]?.data[9]
                   ? `${((data.datasets[0].data[0] / data.datasets[0].data[0]) * 100).toFixed(1)}%`
                   : 'N/A'
                 }

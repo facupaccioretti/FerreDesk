@@ -4,10 +4,10 @@ Consolida datos de las vistas calculadas existentes sin cálculos adicionales.
 """
 
 from decimal import Decimal
-from datetime import datetime
+from django.utils import timezone
 from typing import Dict, List, Optional, Any
 from ferreapps.clientes.models import Cliente
-from ferreapps.ventas.models import VentaCalculada, VentaIVAAlicuota
+from ferreapps.ventas.models import Venta
 from ferreapps.ventas.utils import normalizar_situacion_iva
 from ferreapps.productos.models import Ferreteria
 
@@ -80,8 +80,8 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
     else:
         raise ValueError(f"Tipo de libro no válido: {tipo_libro}")
     
-    # Obtener ventas del período desde la vista calculada con filtros aplicados
-    ventas_periodo = VentaCalculada.objects.filter(
+    # Obtener ventas del período usando con_calculos() del manager
+    ventas_periodo = Venta.objects.con_calculos().filter(
         ven_fecha__year=anio,
         ven_fecha__month=mes,
         **filtros_comprobante
@@ -92,7 +92,7 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
             'periodo': {
                 'mes': mes,
                 'anio': anio,
-                'fecha_generacion': datetime.now().isoformat()
+                'fecha_generacion': timezone.localtime().isoformat()
             },
             'emisor': {
                 'situacion_iva': situacion_iva_emisor,
@@ -144,8 +144,8 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
             nombre_comprador = 'CLIENTE NO ENCONTRADO'
             condicion_iva = ''
         
-        # Obtener desglose de IVA por alícuota para esta venta
-        iva_alicuotas = VentaIVAAlicuota.objects.filter(vdi_idve=venta.ven_id)
+        # Obtener desglose de IVA usando el nuevo método del modelo Venta
+        iva_alicuotas = venta.get_iva_breakdown()
         
         # Construir número de comprobante con fallback seguro
         if venta.ven_punto and venta.ven_numero:
@@ -253,7 +253,7 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
         'periodo': {
             'mes': mes,
             'anio': anio,
-            'fecha_generacion': datetime.now().isoformat()
+            'fecha_generacion': timezone.localtime().isoformat()
         },
         'emisor': {
             'situacion_iva': situacion_iva_emisor,

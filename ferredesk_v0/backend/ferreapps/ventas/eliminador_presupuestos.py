@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
+from django.utils import timezone
 from .models import Venta
 import logging
 
@@ -25,7 +26,6 @@ def eliminar_presupuestos_antiguos(request):
     """
     try:
         from datetime import timedelta
-        from django.utils import timezone
         
         # Validar parámetros
         dias_antiguedad = request.data.get('dias_antiguedad')
@@ -91,7 +91,6 @@ def vista_previa_presupuestos_antiguos(request):
     """
     try:
         from datetime import timedelta
-        from django.utils import timezone
         
         # Validar parámetros
         dias_antiguedad = request.data.get('dias_antiguedad')

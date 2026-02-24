@@ -9,8 +9,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from io import BytesIO
-from datetime import datetime
-from ferreapps.productos.models import VistaStockProducto
+from django.utils import timezone
+from ferreapps.productos.models import Stock
 
 # Create your views here.
 
@@ -19,8 +19,8 @@ class StockBajoView(APIView):
     
     def get(self, request):
         try:
-            # Obtener productos con stock bajo (necesita_reposicion = 1)
-            productos_stock_bajo = VistaStockProducto.objects.filter(
+            # Obtener productos con stock bajo usando el manager anotado
+            productos_stock_bajo = Stock.objects.con_stock_total().filter(
                 necesita_reposicion=1
             ).order_by('denominacion')
             
@@ -56,8 +56,8 @@ class StockBajoPDFView(APIView):
     
     def get(self, request):
         try:
-            # Obtener productos con stock bajo
-            productos_stock_bajo = VistaStockProducto.objects.filter(
+            # Obtener productos con stock bajo usando el manager anotado
+            productos_stock_bajo = Stock.objects.con_stock_total().filter(
                 necesita_reposicion=1
             ).order_by('denominacion')
             
@@ -91,7 +91,7 @@ class StockBajoPDFView(APIView):
                 spaceAfter=20,
                 alignment=1
             )
-            fecha = Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", fecha_style)
+            fecha = Paragraph(f"Generado el: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}", fecha_style)
             elements.append(fecha)
             elements.append(Spacer(1, 20))
             
@@ -195,7 +195,7 @@ class StockBajoPDFView(APIView):
             
             # Crear respuesta HTTP
             response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="informe_stock_bajo_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf"'
+            response['Content-Disposition'] = f'attachment; filename="informe_stock_bajo_{timezone.localtime().strftime("%Y%m%d_%H%M")}.pdf"'
             
             return response
             

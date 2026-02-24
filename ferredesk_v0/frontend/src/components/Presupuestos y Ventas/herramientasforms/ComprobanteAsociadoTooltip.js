@@ -5,7 +5,7 @@ import usePortalTooltip from "./usePortalTooltip"
 
 const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
   // Hook para manejar el portal del tooltip
-  const { visible, TooltipPortal, triggerProps } = usePortalTooltip({
+  const { TooltipPortal, triggerProps } = usePortalTooltip({
     placement: 'right', // El tooltip aparece a la derecha del botón
     offset: 8
   })

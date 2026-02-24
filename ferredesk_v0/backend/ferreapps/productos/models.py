@@ -1,12 +1,15 @@
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
+import logging
+from .managers_productos_stock import ProductosStockQuerySet
+
+logger = logging.getLogger(__name__)
 
 class Ferreteria(models.Model):
     nombre = models.CharField(max_length=100)
     direccion = models.CharField(max_length=200)
     telefono = models.CharField(max_length=20)
     email = models.EmailField(blank=True, null=True)
-    activa = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     
     SITUACION_IVA_CHOICES = [
@@ -107,6 +110,14 @@ class Ferreteria(models.Model):
     permitir_stock_negativo = models.BooleanField(
         default=False,
         help_text='Permite que el sistema permita vender con stock negativo por defecto'
+    )
+    
+    # Prefijo para códigos de barras Code 128 internos
+    prefijo_codigo_barras = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text='Siglas para códigos de barras internos Code 128 (ej: ABC, MIF). Si está vacío, se usa solo el número secuencial.'
     )
     
     # Estado de configuración ARCA
@@ -332,6 +343,54 @@ class Proveedor(models.Model):
     class Meta:
         db_table = 'PROVEEDORES'
 
+    def __str__(self):
+        return self.razon
+
+
+class ContadorCodigoBarras(models.Model):
+    """Contador secuencial para generación de códigos de barras internos."""
+    
+    TIPO_EAN13 = 'EAN13'
+    TIPO_CODE128 = 'CODE128'
+    
+    TIPO_CHOICES = [
+        (TIPO_EAN13, 'EAN-13'),
+        (TIPO_CODE128, 'Code 128'),
+    ]
+    
+    tipo = models.CharField(
+        max_length=10,
+        unique=True,
+        choices=TIPO_CHOICES,
+        db_column='TIPO_CODIGO'
+    )
+    ultimo_numero = models.BigIntegerField(
+        default=0,
+        db_column='ULTIMO_NUMERO'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'CONTADOR_CODIGO_BARRAS'
+        verbose_name = 'Contador de Código de Barras'
+        verbose_name_plural = 'Contadores de Códigos de Barras'
+    
+    def __str__(self):
+        return f"{self.tipo}: {self.ultimo_numero}"
+    
+    @classmethod
+    def obtener_siguiente_numero(cls, tipo: str) -> int:
+        """Obtiene el siguiente número secuencial de forma atómica."""
+        with transaction.atomic():
+            contador, _ = cls.objects.select_for_update().get_or_create(
+                tipo=tipo,
+                defaults={'ultimo_numero': 0}
+            )
+            contador.ultimo_numero += 1
+            contador.save()
+            return contador.ultimo_numero
+
+
 class Stock(models.Model):
     id = models.IntegerField(primary_key=True, db_column='STO_ID')
     codvta = models.CharField(max_length=15, unique=True, db_column='STO_CODVTA')
@@ -367,12 +426,63 @@ class Stock(models.Model):
         default='S',
         db_column='STO_ACTI'
     )
+    
+    # Campos para Lista de Precios 0 (precio base)
+    precio_lista_0 = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='PRECIO_VENTA_LISTA_CERO_SIN_IVA',
+        help_text='Precio de venta base (Lista 0) sin IVA'
+    )
+    precio_lista_0_manual = models.BooleanField(
+        default=False,
+        db_column='ES_PRECIO_LISTA_CERO_MANUAL',
+        help_text='TRUE si el precio fue cargado manualmente, FALSE si se calcula desde costo+margen'
+    )
+    
+    # Campos para código de barras
+    TIPO_CODIGO_BARRAS_CHOICES = [
+        ('EAN13', 'EAN-13 Interno'),
+        ('CODE128', 'Code 128 Interno'),
+        ('EXTERNO', 'Código externo/escaneado'),
+    ]
+    codigo_barras = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        unique=True,
+        db_column='STO_CODIGO_BARRAS',
+        help_text='Código de barras asociado al producto'
+    )
+    tipo_codigo_barras = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        choices=TIPO_CODIGO_BARRAS_CHOICES,
+        db_column='STO_TIPO_CODIGO_BARRAS',
+        help_text='Tipo de código de barras (EAN13, CODE128, EXTERNO)'
+    )
+
+    # Impuesto interno: informativo; no se cobra en venta minorista (ya viene en el costo).
+    impuesto_interno_porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='STO_IMP_INTERNO_PORCE',
+        help_text='Porcentaje nominal del impuesto interno que ya viene en el costo (ej. 70 cigarrillos, 26 destilados, 14 cerveza, 8 gaseosas). Solo informativo.'
+    )
+
+    objects = ProductosStockQuerySet.as_manager()
 
     class Meta:
         db_table = 'STOCK'
         indexes = [
             models.Index(fields=['acti']),
             models.Index(fields=['proveedor_habitual']),
+            models.Index(fields=['codigo_barras']),
         ]
 
 class StockProve(models.Model):
@@ -469,5 +579,136 @@ class VistaStockProducto(models.Model):
         db_table = 'VISTA_STOCK_PRODUCTO'
         verbose_name = 'Vista de Stock de Producto'
         verbose_name_plural = 'Vistas de Stock de Productos'
+
+
+# =============================================================================
+# SISTEMA DE LISTAS DE PRECIOS
+# =============================================================================
+
+class ListaPrecio(models.Model):
+    """
+    Configuración de márgenes generales por lista de precios (0-4).
+    - Lista 0: Precio base (sin descuento/recargo sobre sí misma)
+    - Listas 1-4: Aplican margen_descuento sobre Lista 0
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_LISTA_DE_PRECIOS')
+    numero = models.IntegerField(unique=True, db_column='NUMERO_LISTA_DE_PRECIOS')
+    nombre = models.CharField(max_length=50, db_column='NOMBRE_LISTA_DE_PRECIOS')
+    margen_descuento = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        db_column='PORCENTAJE_AJUSTE_SOBRE_LISTA_CERO',
+        help_text='Porcentaje de descuento (-) o recargo (+) sobre Lista 0'
+    )
+    activo = models.BooleanField(default=True, db_column='ESTA_ACTIVA')
+    fecha_actualizacion = models.DateTimeField(auto_now=True, db_column='FECHA_ACTUALIZACION')
+
+    class Meta:
+        db_table = 'LISTAS_DE_PRECIOS'
+        verbose_name = 'Lista de Precios'
+        verbose_name_plural = 'Listas de Precios'
+        ordering = ['numero']
+
+    def __str__(self):
+        return f"Lista {self.numero} - {self.nombre}"
+
+
+class PrecioProductoLista(models.Model):
+    """
+    Precio de un producto para una lista específica (1-4).
+    La Lista 0 se almacena directamente en Stock.precio_lista_0.
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_PRECIO_DE_PRODUCTO_POR_LISTA_DE_PRECIOS')
+    stock = models.ForeignKey(
+        'Stock',
+        on_delete=models.CASCADE,
+        db_column='ID_PRODUCTO_STOCK',
+        related_name='precios_listas'
+    )
+    lista_numero = models.IntegerField(db_column='NUMERO_LISTA_DE_PRECIOS')
+    precio = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        db_column='PRECIO_VENTA_SIN_IVA'
+    )
+    precio_manual = models.BooleanField(
+        default=False,
+        db_column='ES_PRECIO_MANUAL',
+        help_text='TRUE si fue cargado manualmente, FALSE si es calculado'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True, db_column='FECHA_ACTUALIZACION')
+    fecha_carga_manual = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column='FECHA_CARGA_MANUAL',
+    )
+    usuario_carga_manual = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column='USUARIO_CARGA_MANUAL',
+    )
+
+    class Meta:
+        db_table = 'PRECIOS_DE_PRODUCTOS_POR_LISTA_DE_PRECIOS'
+        verbose_name = 'Precio de Producto por Lista'
+        verbose_name_plural = 'Precios de Productos por Lista'
+        unique_together = (('stock', 'lista_numero'),)
+        indexes = [
+            models.Index(fields=['stock', 'lista_numero']),
+            models.Index(fields=['lista_numero']),
+            models.Index(fields=['precio_manual']),
+        ]
+
+    def __str__(self):
+        tipo = "Manual" if self.precio_manual else "Calculado"
+        return f"{self.stock.codvta} - Lista {self.lista_numero}: ${self.precio} ({tipo})"
+
+
+class ActualizacionListaDePrecios(models.Model):
+    """
+    Registro de auditoría para actualizaciones de márgenes de listas.
+    Permite rastrear cuándo se actualizó una lista y cuántos productos
+    quedaron sin recalcular por tener precio manual.
+    """
+    id = models.AutoField(primary_key=True, db_column='ID_ACTUALIZACION_DE_LISTA_DE_PRECIOS')
+    lista_numero = models.IntegerField(db_column='NUMERO_LISTA_DE_PRECIOS')
+    porcentaje_anterior = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        db_column='PORCENTAJE_ANTERIOR'
+    )
+    porcentaje_nuevo = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        db_column='PORCENTAJE_NUEVO'
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now_add=True, db_column='FECHA_ACTUALIZACION')
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column='USUARIO_ID'
+    )
+    cantidad_productos_recalculados = models.IntegerField(
+        default=0,
+        db_column='CANTIDAD_PRODUCTOS_RECALCULADOS'
+    )
+    cantidad_productos_manuales_no_recalculados = models.IntegerField(
+        default=0,
+        db_column='CANTIDAD_PRODUCTOS_CON_PRECIO_MANUAL_NO_RECALCULADOS'
+    )
+
+    class Meta:
+        db_table = 'ACTUALIZACIONES_DE_LISTAS_DE_PRECIOS'
+        verbose_name = 'Actualización de Lista de Precios'
+        verbose_name_plural = 'Actualizaciones de Listas de Precios'
+        ordering = ['-fecha_actualizacion']
+
+    def __str__(self):
+        return f"Lista {self.lista_numero}: {self.porcentaje_anterior}% → {self.porcentaje_nuevo}% ({self.fecha_actualizacion.strftime('%d/%m/%Y %H:%M')})"
 
 

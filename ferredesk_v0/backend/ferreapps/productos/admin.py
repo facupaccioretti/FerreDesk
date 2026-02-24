@@ -3,13 +3,13 @@ from .models import Ferreteria, Categoria, Producto, PrecioProveedorExcel
 
 @admin.register(Ferreteria)
 class FerreteriaAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'direccion', 'telefono', 'email', 'situacion_iva', 'activa')
-    list_filter = ('activa', 'situacion_iva')
+    list_display = ('nombre', 'direccion', 'telefono', 'email', 'situacion_iva')
+    list_filter = ('situacion_iva',)
     search_fields = ('nombre', 'direccion', 'email')
     
     fieldsets = (
         ('Información del Negocio', {
-            'fields': ('nombre', 'direccion', 'telefono', 'email', 'activa')
+            'fields': ('nombre', 'direccion', 'telefono', 'email')
         }),
         ('Configuración Fiscal', {
             'fields': ('situacion_iva',)

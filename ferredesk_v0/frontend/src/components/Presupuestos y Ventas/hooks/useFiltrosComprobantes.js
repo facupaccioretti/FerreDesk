@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react"
+import { fechaHoyLocal } from "../../../utils/fechas"
 
 /**
  * Hook personalizado para gestionar filtros, normalización y paginación de comprobantes
@@ -19,7 +20,7 @@ const useFiltrosComprobantes = ({
   // Estados de filtros
   const [comprobanteTipo, setComprobanteTipo] = useState("")
   const [comprobanteLetra, setComprobanteLetra] = useState("")
-  
+
   // Inicializar rango de fechas: hoy y 30 días atrás
   const hoyISO = (() => {
     const d = new Date()
@@ -27,7 +28,7 @@ const useFiltrosComprobantes = ({
     const dia = String(d.getDate()).padStart(2, "0")
     return `${d.getFullYear()}-${mes}-${dia}`
   })()
-  
+
   const hace30ISO = (() => {
     const d = new Date()
     d.setDate(d.getDate() - 30)
@@ -35,12 +36,12 @@ const useFiltrosComprobantes = ({
     const dia = String(d.getDate()).padStart(2, "0")
     return `${d.getFullYear()}-${mes}-${dia}`
   })()
-  
+
   const [fechaDesde, setFechaDesde] = useState(hace30ISO)
   const [fechaHasta, setFechaHasta] = useState(hoyISO)
   const [clienteId, setClienteId] = useState("")
   const [vendedorId, setVendedorId] = useState("")
-  
+
   // Estados de paginación
   const [paginaActual, setPaginaActual] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(15)
@@ -106,9 +107,10 @@ const useFiltrosComprobantes = ({
         cliente:
           clientesPorId.get(venta.ven_idcli)?.razon ||
           (venta.ven_idcli === 1 || venta.ven_idcli === "1" ? "Cliente Mostrador" : "") ||
+          venta.cliente_razon ||
           venta.cliente ||
           "",
-        fecha: venta.ven_fecha || venta.fecha || new Date().toISOString().split("T")[0],
+        fecha: venta.ven_fecha || venta.fecha || fechaHoyLocal(),
         id: venta.ven_id || venta.id || venta.pk,
         items,
         plazoId: venta.ven_idpla || venta.plazoId || "",
@@ -155,7 +157,7 @@ const useFiltrosComprobantes = ({
     setFechaHasta(filtros.fechaHasta)
     setClienteId(filtros.clienteId)
     setVendedorId(filtros.vendedorId)
-    
+
     const params = {}
     if (filtros.comprobanteTipo) params["comprobante_tipo"] = filtros.comprobanteTipo
     if (filtros.comprobanteLetra) params["comprobante_letra"] = filtros.comprobanteLetra
@@ -163,7 +165,7 @@ const useFiltrosComprobantes = ({
     if (filtros.fechaHasta) params["ven_fecha_before"] = filtros.fechaHasta
     if (filtros.clienteId) params["ven_idcli"] = filtros.clienteId
     if (filtros.vendedorId) params["ven_idvdo"] = filtros.vendedorId
-    
+
     fetchVentas(params)
   }
 
@@ -208,27 +210,27 @@ const useFiltrosComprobantes = ({
     setClienteId,
     vendedorId,
     setVendedorId,
-    
+
     // Estados de paginación
     paginaActual,
     setPaginaActual,
     itemsPorPagina,
     setItemsPorPagina,
-    
+
     // Datos normalizados y paginados
     ventasNormalizadas,
     totalItems,
     datosPagina,
-    
+
     // Funciones
     handleFiltroChange,
     resetearFiltros,
     obtenerFiltrosActuales,
-    
+
     // Mapas para acceso rápido
     productosPorId,
     clientesPorId,
-    
+
     // Función de normalización
     normalizarVenta,
   }

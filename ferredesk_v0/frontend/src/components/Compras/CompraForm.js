@@ -5,6 +5,7 @@ import ItemsGridCompras from "./ItemsGridCompras"
 import BuscadorProductoCompras from "./BuscadorProductoCompras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
+import { fechaHoyLocal } from "../../utils/fechas"
 
 // Letras permitidas para comprobantes de compras
 const LETRAS_COMPROBANTE_PERMITIDAS = ["A", "C", "X"]
@@ -36,7 +37,7 @@ const CompraForm = ({
     // Estado inicial del formulario
     const initialState = {
       comp_sucursal: sucursales[0]?.id || 1,
-      comp_fecha: new Date().toISOString().split("T")[0],
+      comp_fecha: fechaHoyLocal(),
       comp_numero_factura: "",
       comp_tipo: "COMPRA",
       comp_idpro: "",
@@ -146,7 +147,7 @@ const CompraForm = ({
       if (!modoConversion) {
         setFormData({
           comp_sucursal: initialData.comp_sucursal || sucursales[0]?.id || 1,
-          comp_fecha: initialData.comp_fecha || new Date().toISOString().split("T")[0],
+          comp_fecha: initialData.comp_fecha || fechaHoyLocal(),
           comp_numero_factura: initialData.comp_numero_factura || "",
           comp_tipo: initialData.comp_tipo || "COMPRA",
           comp_idpro: initialData.comp_idpro !== undefined && initialData.comp_idpro !== null ? initialData.comp_idpro : initialData.proveedorSeleccionado?.id || "",

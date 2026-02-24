@@ -8,6 +8,7 @@ Mantiene compatibilidad con el sistema original de certificados.
 """
 
 import datetime
+from django.utils import timezone
 import base64
 import os
 import logging
@@ -141,7 +142,7 @@ class FerreDeskAuth:
         Returns:
             XML del TRA en bytes
         """
-        now = datetime.datetime.now()
+        now = timezone.localtime()
         
         tra_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketRequest version="1.0">
@@ -222,8 +223,8 @@ class FerreDeskAuth:
             LoginTicket con el token y firma
         """
         try:
-            # Crear TRA válido por 12 horas
-            expiration_time = datetime.datetime.now() + datetime.timedelta(hours=12)
+            # Crear TRA válido por 12 horas (hora Argentina)
+            expiration_time = timezone.localtime() + datetime.timedelta(hours=12)
             tra = self.create_tra(expiration_time)
             
             # Firmar el TRA

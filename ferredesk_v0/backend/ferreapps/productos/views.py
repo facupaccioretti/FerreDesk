@@ -112,14 +112,18 @@ class StockViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Aplicar filtro de productos activos por defecto y búsqueda general.
+        Aplicar filtro de productos activos por defecto, búsqueda general y cálculos de stock.
         """
-        queryset = super().get_queryset()
+        queryset = Stock.objects.con_stock_total()
 
-        # Búsqueda exacta por código (para el grid)
-        codigo_exacto = self.request.query_params.get('codvta', None)
-        if codigo_exacto:
-            queryset = queryset.filter(codvta__iexact=codigo_exacto)
+        # Búsqueda unificada por código (para el grid): param "codigo" busca en codvta O código de barras.
+        # No usamos "codvta" aquí para evitar que DjangoFilterBackend aplique filtro extra y anule el OR.
+        codigo_unificado = self.request.query_params.get('codigo', None)
+        if codigo_unificado:
+            codigo_trim = codigo_unificado.strip()
+            queryset = queryset.filter(
+                Q(codvta__iexact=codigo_trim) | Q(codigo_barras__iexact=codigo_trim)
+            )
         else:
             # Búsqueda general por código o denominación (para otros casos)
             termino_busqueda = self.request.query_params.get('search', None)
@@ -445,7 +449,7 @@ class PrecioProductoProveedorAPIView(APIView):
                     'origen': 'manual',
                     'precio': precio_manual,
                     'fecha': fecha_manual,
-                    'denominacion': None,  # Los precios manuales no tienen denominación
+                    'denominacion': stockprove.stock.deno if stockprove and stockprove.stock else None,
                 })
             elif precio_excel_val:
                 return Response({
@@ -789,25 +793,16 @@ class FerreteriaAPIView(APIView):
         return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
 
     def post(self, request):
-        """Crea la primera ferretería si aún no existe. Solo para usuarios staff."""
+        """Crea la primera ferretería si aún no existe."""
         if not request.user.is_authenticated:
             return Response({'detail': 'No autenticado.'}, status=401)
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para crear.'}, status=403)
-
-        # Verificar unicidad: solo una instancia permitida
+        
+        # Si ya existe una ferretería, prohibir creación (unicidad)
         if Ferreteria.objects.exists():
             return Response({'detail': 'Ya existe una ferretería configurada.'}, status=400)
 
         # Manejar archivos subidos y normalizar datos
         data = request.data.copy()
-
-        if 'logo_empresa' in request.FILES:
-            data['logo_empresa'] = request.FILES['logo_empresa']
-        if 'certificado_arca' in request.FILES:
-            data['certificado_arca'] = request.FILES['certificado_arca']
-        if 'clave_privada_arca' in request.FILES:
-            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
 
         # Remover claves no soportadas por el modelo (compatibilidad UI legacy)
         for legacy_key in [
@@ -827,20 +822,9 @@ class FerreteriaAPIView(APIView):
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
         
         # Manejar archivos subidos
         data = request.data.copy()
-        if 'logo_empresa' in request.FILES:
-            data['logo_empresa'] = request.FILES['logo_empresa']
-        
-        # Manejar archivos ARCA
-        if 'certificado_arca' in request.FILES:
-            data['certificado_arca'] = request.FILES['certificado_arca']
-        
-        if 'clave_privada_arca' in request.FILES:
-            data['clave_privada_arca'] = request.FILES['clave_privada_arca']
         
         # Remover claves no soportadas por el modelo (legacy UI)
         for legacy_key in [
@@ -857,8 +841,8 @@ class FerreteriaAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
-    """Provee list y retrieve para la vista de stock total por producto."""
-    queryset = VistaStockProducto.objects.all()
+    """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""
+    queryset = Stock.objects.con_stock_total()
     serializer_class = VistaStockProductoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']

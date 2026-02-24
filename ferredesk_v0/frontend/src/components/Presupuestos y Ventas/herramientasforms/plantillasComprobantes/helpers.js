@@ -23,9 +23,9 @@ export const convertirBytesABase64 = (bytes) => {
   if (!bytes) {
     return null;
   }
-  
-  
-  
+
+
+
   try {
     // Si ya es un string (base64 del backend), devolverlo directamente
     if (typeof bytes === 'string') {
@@ -36,21 +36,21 @@ export const convertirBytesABase64 = (bytes) => {
         return null;
       }
     }
-    
+
     // Si bytes es un ArrayBuffer, convertirlo a Uint8Array
     const uint8Array = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
-    
-    
-    
+
+
+
     // Convertir a string y luego a base64
     const binaryString = String.fromCharCode.apply(null, uint8Array);
-    
-    
-    
+
+
+
     const resultado = btoa(binaryString);
-    
-    
-    
+
+
+
     return resultado;
   } catch (error) {
     console.error('Error convirtiendo QR a base64:', error);
@@ -105,6 +105,39 @@ export const formatearHora = (hora) => {
 };
 
 /**
+ * Formatea una fecha de YYYY-MM-DD a DD/MM/YY
+ * @param {string|Date} fecha
+ * @returns {string}
+ */
+export const formatearFecha = (fecha) => {
+  if (!fecha) return "";
+
+  // Si ya tiene el formato DD/MM/YYYY o DD/MM/YY (viniendo de toLocaleDateString por ejemplo)
+  if (typeof fecha === 'string' && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(fecha)) {
+    return fecha;
+  }
+
+  // Si viene en formato YYYY-MM-DD (ISO)
+  if (typeof fecha === 'string' && fecha.includes('-')) {
+    const partes = fecha.split('T')[0].split('-'); // Manejar si trae hora (ISO completo)
+    if (partes.length === 3) {
+      const anioStr = partes[0].length === 4 ? partes[0].slice(-2) : partes[0];
+      return `${partes[2].padStart(2, '0')}/${partes[1].padStart(2, '0')}/${anioStr}`;
+    }
+  }
+
+  // Si es objeto Date
+  if (fecha instanceof Date) {
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const anio = String(fecha.getFullYear()).slice(-2);
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  return fecha;
+};
+
+/**
  * Mapea códigos de situación fiscal a texto legible
  * @param {string} situacion
  * @returns {string}
@@ -112,7 +145,7 @@ export const formatearHora = (hora) => {
 export const mapearSituacionFiscal = (situacion) => {
   const mapeo = {
     'RI': 'Responsable Inscripto',
-    'MO': 'Monotributista', 
+    'MO': 'Monotributista',
   };
   return mapeo[situacion] || situacion;
 };
@@ -200,12 +233,12 @@ export const renderizarObservacionesComoLista = (textoObservaciones, separador =
  */
 export const dividirItemsEnPaginas = (items, itemsPorPagina = CANTIDAD_MAXIMA_ITEMS) => {
   if (!items || items.length === 0) return [];
-  
+
   const paginas = [];
   for (let i = 0; i < items.length; i += itemsPorPagina) {
     paginas.push(items.slice(i, i + itemsPorPagina));
   }
-  
+
   return paginas;
 };
 
@@ -216,87 +249,100 @@ export const dividirItemsEnPaginas = (items, itemsPorPagina = CANTIDAD_MAXIMA_IT
  * @param {Object} styles - Estilos del componente
  * @param {Function} mostrarSiempre - Función para mostrar campos con label
  * @param {Function} formatearHora - Función para formatear hora
+ * @param {Function} formatearFecha - Función para formatear fecha
  * @param {Function} mapearSituacionFiscal - Función para mapear situación fiscal
  * @returns {JSX.Element} Componente del header
  */
-export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
+export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, formatearFecha, mapearSituacionFiscal) => {
   // Debug: Verificar URL del logo
-  
 
-  // Determinar si es comprobante informal (presupuesto o factura interna)
+
+  // Determinar si es comprobante informal (presupuesto, factura interna, etc.)
   const comprobante = data.comprobante || {};
-  const esComprobanteInformal = comprobante.CBT_TIPO === "presupuesto" || comprobante.CBT_TIPO === "factura_interna" || comprobante.CBT_LETRA === "P" || comprobante.CBT_LETRA === "I";
+  const tipo = (comprobante.tipo || "").toLowerCase();
+  const letra = (comprobante.letra || "").toUpperCase();
+
+  const esComprobanteInformal =
+    tipo === "presupuesto" ||
+    tipo === "factura_interna" ||
+    tipo === "nota_credito_interna" ||
+    tipo === "nota_debito_interna" ||
+    letra === "P" ||
+    letra === "I" ||
+    letra === "X";
 
   return (
-  <View style={styles.header}>
-    {/* SECCIÓN IZQUIERDA */}
-    <View style={styles.seccionIzquierda}>
-      {/* Información principal centrada */}
-      <View style={styles.infoEmpresaCentrada}>
-        {ferreteriaConfig.logo_empresa && (
-          <View style={styles.logoEmpresa}>
-            <Image 
-              src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
-              style={styles.logoImagen}
-            />
-          </View>
-        )}
-        <Text style={styles.empresaNombre}>
-          {ferreteriaConfig.nombre || ""}
-        </Text>
-        <Text style={styles.empresaInfo}>
-          {ferreteriaConfig.direccion || ""}
-        </Text>
-        <Text style={styles.empresaInfo}>
-          {ferreteriaConfig.telefono || ""}
-        </Text>
-        {/* Situación fiscal centrada al pie del bloque empresa */}
-        <View style={styles.situacionFiscalContainer}>
-          <Text style={styles.situacionFiscal}>
-            {ferreteriaConfig.situacion_iva ? mapearSituacionFiscal(ferreteriaConfig.situacion_iva) : ""}
+    <View style={styles.header}>
+      {/* SECCIÓN IZQUIERDA */}
+      <View style={styles.seccionIzquierda}>
+        {/* Información principal centrada */}
+        <View style={styles.infoEmpresaCentrada}>
+          {ferreteriaConfig.logo_empresa && (
+            <View style={styles.logoEmpresa}>
+              <Image
+                src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
+                style={styles.logoImagen}
+              />
+            </View>
+          )}
+          <Text style={styles.empresaNombre}>
+            {ferreteriaConfig.nombre || ""}
           </Text>
+          <Text style={styles.empresaInfo}>
+            {ferreteriaConfig.direccion || ""}
+          </Text>
+          <Text style={styles.empresaInfo}>
+            {ferreteriaConfig.telefono || ""}
+          </Text>
+          {/* Situación fiscal centrada al pie del bloque empresa */}
+          <View style={styles.situacionFiscalContainer}>
+            <Text style={styles.situacionFiscal}>
+              {ferreteriaConfig.situacion_iva ? mapearSituacionFiscal(ferreteriaConfig.situacion_iva) : ""}
+            </Text>
+          </View>
+        </View>
+      </View>
+      {/* LÍNEA DIVISORIA CENTRAL */}
+      <View style={styles.lineaDivisoriaCentral} />
+      {/* RECUADRO DE LETRA FLOTANTE */}
+      <View style={styles.recuadroLetraFlotante}>
+        {data.comprobante?.letra && (
+          <Text style={styles.letraGrande}>{data.comprobante.letra}</Text>
+        )}
+        {data.comprobante?.codigo_afip && (
+          <Text style={styles.codigoOriginal}>CÓD. {data.comprobante.codigo_afip}</Text>
+        )}
+        {!esComprobanteInformal && (
+          <Text style={styles.codigoOriginal}>ORIGINAL</Text>
+        )}
+      </View>
+      {/* SECCIÓN DERECHA */}
+      <View style={styles.seccionDerecha}>
+        <View style={styles.facturaInfoTop}>
+          <Text style={styles.facturaTitle}>{mapearTipoComprobante(data.comprobante)}</Text>
+          {data.numero_formateado && (
+            <Text style={styles.numeroComprobante}>{data.numero_formateado}</Text>
+          )}
+          {esComprobanteInformal && (
+            <Text style={styles.noValidoComprobanteLabel}>Documento no válido como comprobante</Text>
+          )}
+          {data.fecha && (
+            <Text style={styles.fechaEmision}>Fecha de Emisión: {formatearFecha(data.fecha)}</Text>
+          )}
+          {data.hora_creacion && (
+            <Text style={styles.fechaEmision}>Hora: {formatearHora(data.hora_creacion)}</Text>
+          )}
+          {!data.hora_creacion && (
+            <Text style={styles.fechaEmision}>Hora: No disponible</Text>
+          )}
+        </View>
+        <View style={styles.facturaInfoBottom}>
+          {mostrarSiempre(ferreteriaConfig.cuit_cuil, "CUIT", styles)}
+          {mostrarSiempre(ferreteriaConfig.ingresos_brutos, "Ingresos Brutos", styles)}
+          {mostrarSiempre(formatearFecha(ferreteriaConfig.inicio_actividad), "Inicio de Actividades", styles)}
         </View>
       </View>
     </View>
-    {/* LÍNEA DIVISORIA CENTRAL */}
-    <View style={styles.lineaDivisoriaCentral} />
-    {/* RECUADRO DE LETRA FLOTANTE */}
-    <View style={styles.recuadroLetraFlotante}>
-      {data.comprobante?.letra && (
-        <Text style={styles.letraGrande}>{data.comprobante.letra}</Text>
-      )}
-      {data.comprobante?.codigo_afip && (
-         <Text style={styles.codigoOriginal}>CÓD. {data.comprobante.codigo_afip}</Text>
-      )}
-       <Text style={styles.codigoOriginal}>ORIGINAL</Text>
-    </View>
-    {/* SECCIÓN DERECHA */}
-    <View style={styles.seccionDerecha}>
-      <View style={styles.facturaInfoTop}>
-        <Text style={styles.facturaTitle}>{mapearTipoComprobante(data.comprobante)}</Text>
-        {data.numero_formateado && (
-          <Text style={styles.numeroComprobante}>{data.numero_formateado}</Text>
-        )}
-        {esComprobanteInformal && (
-          <Text style={styles.noValidoComprobanteLabel}>Documento no válido como comprobante</Text>
-        )}
-        {data.fecha && (
-          <Text style={styles.fechaEmision}>Fecha de Emisión: {data.fecha}</Text>
-        )}
-        {data.hora_creacion && (
-          <Text style={styles.fechaEmision}>Hora: {formatearHora(data.hora_creacion)}</Text>
-        )}
-        {!data.hora_creacion && (
-          <Text style={styles.fechaEmision}>Hora: No disponible</Text>
-        )}
-      </View>
-      <View style={styles.facturaInfoBottom}>
-        {mostrarSiempre(ferreteriaConfig.cuit_cuil, "CUIT", styles)}
-        {mostrarSiempre(ferreteriaConfig.ingresos_brutos, "Ingresos Brutos", styles)}
-        {mostrarSiempre(ferreteriaConfig.inicio_actividad, "Inicio de Actividades", styles)}
-      </View>
-    </View>
-  </View>
   );
 };
 
@@ -339,9 +385,9 @@ export const generarInfoClienteComun = (data, styles, mostrarSiempre) => (
  * @returns {JSX.Element} Tabla de items con traspasos
  */
 export const generarTablaItemsComun = (
-  itemsPagina, 
-  styles, 
-  formatearMoneda, 
+  itemsPagina,
+  styles,
+  formatearMoneda,
   formatearDescuentosVisual,
   netoTraspasado = null,
   netoPagina = null,
@@ -398,26 +444,26 @@ export const generarTablaItemsComun = (
  */
 export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPaginas = 1) => {
   // Debug: Verificar datos del QR
-  
-  
+
+
   // Convertir QR a base64 si existe
   const qrBase64 = data.ven_qr ? convertirBytesABase64(data.ven_qr) : null;
-  
-  
-  
+
+
+
   return (
     <View style={styles.pieFiscal}>
       <View style={styles.pieFilaHorizontal}>
         {/* QR: mostrar solo si existe, sin placeholder */}
         {qrBase64 && (
-          <Image 
+          <Image
             src={`data:image/png;base64,${qrBase64}`}
             style={styles.qrPlaceholder}
           />
         )}
         {/* Logo ARCA */}
         <View style={styles.arcaPlaceholder}>
-          <Image 
+          <Image
             src={`/api/productos/servir-logo-arca/?v=${Date.now()}`}
             style={{
               width: 60,
@@ -470,10 +516,10 @@ export const generarPieFiscalComun = (data, styles, numeroPagina = 1, totalPagin
  */
 export const generarPaginaComprobante = (
   config,
-  data, 
-  ferreteriaConfig, 
-  itemsPagina, 
-  styles, 
+  data,
+  ferreteriaConfig,
+  itemsPagina,
+  styles,
   mostrarTotales = false,
   netoTraspasado = null,
   netoPagina = null,
@@ -486,6 +532,7 @@ export const generarPaginaComprobante = (
   const {
     mostrarSiempre = crearComponenteMostrarSiempre,
     formatearHoraFn = formatearHora,
+    formatearFechaFn = formatearFecha,
     mapearSituacionFiscalFn = mapearSituacionFiscal,
     formatearMonedaFn = formatearMoneda,
     formatearDescuentosVisualFn = formatearDescuentosVisual,
@@ -498,22 +545,22 @@ export const generarPaginaComprobante = (
 
   return (
     <Page size="A4" style={styles.page}>
-      {generarHeader(data, ferreteriaConfig, styles, mostrarSiempre, formatearHoraFn, mapearSituacionFiscalFn)}
+      {generarHeader(data, ferreteriaConfig, styles, mostrarSiempre, formatearHoraFn, formatearFechaFn, mapearSituacionFiscalFn)}
       {generarInfoCliente(data, styles, mostrarSiempre)}
-      
+
       {generarTablaItems(
-        itemsPagina, 
-        styles, 
-        formatearMonedaFn, 
+        itemsPagina,
+        styles,
+        formatearMonedaFn,
         formatearDescuentosVisualFn,
         netoTraspasado,
         netoPagina,
         mostrarTraspasoSiguiente
       )}
-      
+
       {/* Totales - SOLO EN LA ÚLTIMA PÁGINA */}
       {mostrarTotales && generarTotales && generarTotales(data, styles, formatearMonedaFn)}
-      
+
       {/* Pie fiscal */}
       {generarPieFiscal(data, styles, numeroPagina, totalPaginas)}
     </Page>
@@ -529,12 +576,12 @@ export const generarPaginaComprobante = (
  * @returns {JSX.Element} Fila de traspaso
  */
 export const generarFilaTraspaso = (neto, styles, formatearMoneda, esTraspasado = false) => {
-  const texto = esTraspasado 
+  const texto = esTraspasado
     ? `Neto Acumulado de Pagina/s Anterior/es $${formatearMoneda(neto)}`
     : `Neto Acumulado a Pagina Siguiente $${formatearMoneda(neto)}`;
-  
-  
-  
+
+
+
   return (
     <View style={styles.filaTraspaso}>
       <Text style={styles.colTraspaso}>{texto}</Text>
@@ -552,7 +599,7 @@ export const generarFilaTraspaso = (neto, styles, formatearMoneda, esTraspasado 
  */
 export const calcularNetoPagina = (itemsPagina, tipoComprobante) => {
   if (!itemsPagina || itemsPagina.length === 0) return 0;
-  
+
   return itemsPagina.reduce((total, item) => {
     if (tipoComprobante === 'A') {
       // Factura A: neto sin IVA
@@ -596,12 +643,12 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
           <Text key={index} style={styles.totalesHeaderCol}>{campo.label}</Text>
         ))}
       </View>
-      
+
       {/* Fila de valores */}
       <View style={styles.totalesRow}>
         {configTotales.map((campo, index) => {
           let valor = 0;
-          
+
           // Calcular valor según el tipo de campo
           switch (campo.tipo) {
             case 'neto_gravado':
@@ -622,7 +669,7 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
             default:
               valor = data[campo.campo] || 0;
           }
-          
+
           return (
             <Text key={index} style={styles.totalesCol}>
               {formatearMoneda(valor)}
@@ -632,7 +679,7 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
       </View>
     </View>
   );
-}; 
+};
 
 /**
  * Mapea el tipo de comprobante a un string legible para mostrar en el header del PDF
@@ -640,35 +687,27 @@ export const generarTablaTotales = (data, styles, formatearMoneda, configTotales
  * @returns {string}
  */
 export function mapearTipoComprobante(comprobante) {
-  if (!comprobante) return "Factura";
-  
-  // Función para capitalizar primera letra
-  const capitalizarPrimeraLetra = (texto) => {
-    if (!texto) return "";
-    return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
-  };
-  
-  const nombre = String(comprobante.nombre || "").toLowerCase();
-  if (nombre.includes("presupuesto")) return "Presupuesto";
-  if (nombre.includes("venta")) return "Venta";
-  if (nombre.includes("factura")) return "Factura";
-  if (nombre.includes("nota de crédito interna")) return "Nota de Crédito";
-  if (nombre.includes("nota de crédito")) return "Nota de Crédito";
-  if (nombre.includes("nota de débito")) return "Nota de Débito";
-  if (nombre.includes("recibo")) return "Recibo";
-  
-  // fallback por tipo
-  const tipo = String(comprobante.tipo || "").toLowerCase();
-  if (tipo === "presupuesto") return "Presupuesto";
-  if (tipo === "factura_interna") return "Cotización";
-  if (tipo === "nota_credito_interna") return "Nota de Crédito";
-  if (tipo === "nota_credito") return "Nota de Crédito";
-  if (tipo === "nota_debito") return "Nota de Débito";
-  if (tipo === "recibo") return "Recibo";
-  
-  // Capitalizar primera letra del tipo por defecto
-  return capitalizarPrimeraLetra(comprobante.nombre || comprobante.tipo || "Factura");
-} 
+  if (!comprobante) return "Comprobante";
+
+  const tipo = (comprobante.tipo || "").toLowerCase();
+  const letra = (comprobante.letra || "").toUpperCase();
+  const nombre = (comprobante.nombre || "").trim();
+
+  // Si es un comprobante interno/informal, usar el nombre exacto de la DB (Cotización, Presupuesto, etc.)
+  if (tipo.includes("interna") || tipo === "presupuesto" || letra === "P" || letra === "I" || letra === "X") {
+    return nombre || "Comprobante";
+  }
+
+  // Para comprobantes fiscales, usar nombres genéricos (Factura, Nota de Crédito, etc.)
+  const nombreLower = nombre.toLowerCase();
+  if (nombreLower.includes("nota de crédito")) return "Nota de Crédito";
+  if (nombreLower.includes("nota de débito")) return "Nota de Débito";
+  if (nombreLower.includes("factura")) return "Factura";
+  if (nombreLower.includes("recibo")) return "Recibo";
+  if (nombreLower.includes("venta")) return "Venta";
+
+  return nombre || "Comprobante";
+}
 
 /**
  * Agrega estilos para el label de comprobante no válido

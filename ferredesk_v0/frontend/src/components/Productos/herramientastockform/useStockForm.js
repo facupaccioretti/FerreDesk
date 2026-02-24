@@ -16,8 +16,50 @@ function getCookie(name) {
   return cookieValue
 }
 
+/**
+ * Transforma los datos del producto (API) al formato esperado por el formulario.
+ * El backend devuelve objetos anidados para relaciones (idaliiva, idfam1..3, proveedor_habitual);
+ * los selects esperan IDs (número o string).
+ */
+function stockAFormulario(stock) {
+  const idDeRelacion = (obj) => {
+    if (obj == null) return null
+    if (typeof obj === "object" && "id" in obj) return obj.id
+    if (typeof obj === "number" || typeof obj === "string") return obj
+    return null
+  }
+  const idAli = idDeRelacion(stock.idaliiva)
+  const idFam1 = idDeRelacion(stock.idfam1)
+  const idFam2 = idDeRelacion(stock.idfam2)
+  const idFam3 = idDeRelacion(stock.idfam3)
+  const provHab = stock.proveedor_habitual
+  const proveedorHabitualId = provHab != null
+    ? (typeof provHab === "object" && "id" in provHab ? String(provHab.id) : String(provHab))
+    : ""
+
+  // Normalizar stock_proveedores para tener una estructura plana y predecible
+  const stockProveedores = Array.isArray(stock.stock_proveedores)
+    ? stock.stock_proveedores.map(sp => ({
+      ...sp,
+      proveedor_id: sp.proveedor_id || (typeof sp.proveedor === "object" ? sp.proveedor.id : sp.proveedor),
+    }))
+    : []
+
+  return {
+    ...stock,
+    id: stock.id,
+    idaliiva: idAli ?? "",
+    idfam1: idFam1 ?? null,
+    idfam2: idFam2 ?? null,
+    idfam3: idFam3 ?? null,
+    proveedor_habitual_id: proveedorHabitualId,
+    impuesto_interno_porcentaje: stock.impuesto_interno_porcentaje != null ? stock.impuesto_interno_porcentaje : null,
+    stock_proveedores: stockProveedores,
+  }
+}
+
 const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
-// Claves para almacenar borradores de stock
+  // Claves para almacenar borradores de stock
   const claveBorrador = useMemo(() => {
     if (tabKey) return `stockFormDraft_${tabKey}`
     return stock?.id ? `stockFormDraft_${stock.id}` : `stockFormDraft_nuevo`
@@ -33,9 +75,9 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
     } catch (e) {
       // Ignorar errores de parseo
     }
-    // Fallback a datos iniciales
+    // Fallback a datos iniciales: normalizar objetos anidados → IDs para selects
     if (stock) {
-      return { ...stock, id: stock.id }
+      return stockAFormulario(stock)
     }
     return {
       codvta: "",
@@ -49,6 +91,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
       idaliiva: "",
       acti: "S", // Estado por defecto: Activo para productos nuevos
       id: undefined,
+      impuesto_interno_porcentaje: null,
     }
   })
 
@@ -88,6 +131,8 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
       // Campos que deben transformarse a número (o null si vacío)
       if (["idfam1", "idfam2", "idfam3", "idaliiva"].includes(name)) {
         finalValue = value === "" ? null : Number(value)
+      } else if (name === "impuesto_interno_porcentaje") {
+        finalValue = value === "" ? null : (parseFloat(value) || null)
       } else if (name === "proveedor_habitual_id") {
         // Este campo se mantiene como string para preservar ceros a la izquierda si los hubiera
         finalValue = value === "" ? "" : String(value)
@@ -116,7 +161,14 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
 
   // Función para cancelar
   const handleCancel = () => {
-    try { localStorage.removeItem(claveBorrador) } catch (_) {}
+    try {
+      localStorage.removeItem(claveBorrador)
+      localStorage.removeItem(`${claveBorrador}_precios`)
+      localStorage.removeItem(`${claveBorrador}_spPendientes`)
+      localStorage.removeItem(`${claveBorrador}_codPendientes`)
+      localStorage.removeItem(`${claveBorrador}_provAgregados`)
+      localStorage.removeItem(`${claveBorrador}_codPendEdic`)
+    } catch (_) { }
     onCancel()
   }
 

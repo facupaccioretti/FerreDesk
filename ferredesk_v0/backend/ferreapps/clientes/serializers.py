@@ -70,4 +70,5 @@ class ClienteBusquedaSerializer(serializers.ModelSerializer):
             'descu3',
             'vendedor',  # ForeignKey al vendedor
             'plazo',     # ForeignKey al plazo
+            'lista_precio_id',  # Lista de precios asignada al cliente
         ] 

@@ -8,18 +8,18 @@ from rest_framework.response import Response
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db import IntegrityError
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 from decimal import Decimal
+from django.db.models import Sum
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
-    VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada
+    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
 )
 from ..serializers import (
     VentaSerializer, VentaDetalleItemSerializer, VentaDetalleManSerializer,
-    VentaRemPedSerializer, VentaDetalleItemCalculadoSerializer,
-    VentaIVAAlicuotaSerializer, VentaCalculadaSerializer
+    VentaRemPedSerializer, VentaCalculadaSerializer, VentaDetalleItemCalculadoSerializer
 )
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
@@ -31,6 +31,7 @@ from .utils_stock import (
     _obtener_codigo_venta,
     _descontar_distribuyendo,
 )
+from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,27 @@ ALICUOTAS = {
     6: Decimal('27')
 }
 
+# Tipos de comprobante que requieren tener caja abierta
+# Excluimos: presupuesto (propuesta), nota_credito (devolución)
+COMPROBANTES_QUE_REQUIEREN_CAJA = [
+    'factura',              # Ventas fiscales (A, B, C)
+    'factura_interna',      # Cotización - venta en negro
+    'nota_debito',          # Cobro adicional fiscal
+    'nota_debito_interna',  # Cobro adicional interno
+    'recibo',               # Cobro de cuenta corriente
+]
+
+
+def obtener_sesion_caja_activa(usuario):
+    """
+    Obtiene la sesión de caja abierta del usuario.
+    Retorna None si no tiene caja abierta.
+    """
+    return SesionCaja.objects.filter(
+        usuario=usuario,
+        estado=ESTADO_CAJA_ABIERTA
+    ).first()
+
 
 class VentaFilter(FilterSet):
     ven_fecha = DateFromToRangeFilter(field_name='ven_fecha')
@@ -55,7 +77,6 @@ class VentaFilter(FilterSet):
     comprobante_tipo = CharFilter(field_name='comprobante__tipo', lookup_expr='iexact')
     comprobante_letra = CharFilter(field_name='comprobante__letra', lookup_expr='iexact')
     ven_sucursal = NumberFilter(field_name='ven_sucursal')
-    ven_total = DateFromToRangeFilter(field_name='ven_total')
     ven_punto = NumberFilter(field_name='ven_punto')
     ven_numero = NumberFilter(field_name='ven_numero')
 
@@ -63,7 +84,7 @@ class VentaFilter(FilterSet):
         model = Venta
         fields = [
             'ven_fecha', 'ven_idcli', 'ven_idvdo', 'ven_estado', 'comprobante',
-            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_total', 'ven_punto', 'ven_numero'
+            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_punto', 'ven_numero'
         ]
 
 
@@ -101,7 +122,7 @@ class VentaCalculadaFilter(FilterSet):
         return queryset
 
     class Meta:
-        model = VentaCalculada  # Vista SQL (managed = False)
+        model = Venta  # Cambiamos de VentaCalculada a Venta
         fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra', 'para_nota_credito']
 
 
@@ -123,8 +144,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         if getattr(self, 'action', None) == 'list':
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
-            # Orden inverso por fecha e ID para traer los más recientes primero
-            return VentaCalculada.objects.all().order_by('-ven_fecha', '-ven_id')
+            # Usamos el manager personalizado con todas las anotaciones necesarias
+            return Venta.objects.con_calculos()
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()
@@ -148,6 +169,18 @@ class VentaViewSet(viewsets.ModelViewSet):
         # el serializer generará el ítem genérico en base a los campos específicos.
         if not items and tipo_comprobante not in ['nota_debito', 'nota_debito_interna']:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # === VALIDACIÓN DE CAJA ABIERTA ===
+        # Para ventas, cotizaciones y notas de débito se requiere tener una caja abierta
+        sesion_caja = None
+        if tipo_comprobante in COMPROBANTES_QUE_REQUIEREN_CAJA:
+            sesion_caja = obtener_sesion_caja_activa(request.user)
+            if not sesion_caja:
+                return Response({
+                    'detail': 'Debe abrir una caja antes de realizar esta operación.',
+                    'error_code': 'CAJA_NO_ABIERTA',
+                    'tipo_comprobante': tipo_comprobante
+                }, status=status.HTTP_400_BAD_REQUEST)
 
         # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
         bonif_general = data.get('bonificacionGeneral', 0)
@@ -290,6 +323,12 @@ class VentaViewSet(viewsets.ModelViewSet):
                 response = super().create(request, *args, **kwargs)
                 venta_creada = Venta.objects.get(ven_id=response.data['ven_id'])
                 
+                # === ASIGNAR SESIÓN DE CAJA ===
+                # Si el comprobante requería caja abierta, vincular la venta con la sesión
+                if sesion_caja:
+                    venta_creada.sesion_caja = sesion_caja
+                    venta_creada.save(update_fields=['sesion_caja'])
+                
                 # === INTEGRACIÓN ARCA AUTOMÁTICA (DENTRO DE LA TRANSACCIÓN) ===
                 if debe_emitir_arca(tipo_comprobante):
                     try:
@@ -318,24 +357,26 @@ class VentaViewSet(viewsets.ModelViewSet):
                 comprobante_pagado = data.get('comprobante_pagado', False)
                 monto_pago = Decimal(str(data.get('monto_pago', 0)))
                 
-                # Obtener total de la venta desde VentaCalculada
-                venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
-                total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                # Obtener total de la venta usando el manager ORM con_calculos
+                venta_con_totales = Venta.objects.con_calculos().filter(pk=venta_creada.pk).first()
+                total_venta = venta_con_totales.ven_total if venta_con_totales else Decimal('0')
+
+                # NOTA: Si monto_pago < total_venta, la diferencia va a cuenta corriente del cliente.
+                # No se bloquea la venta por esto (la deuda queda pendiente en CC).
                 
-                # Auto-imputación: solo hasta el total de la venta
-                if comprobante_pagado and monto_pago > 0:
-                    from ferreapps.cuenta_corriente.models import ImputacionVenta
-                    from datetime import date
+                # Auto-imputación: solo hasta el total de la venta (no aplicar si hay recibo parcial)
+                if comprobante_pagado and monto_pago > 0 and not data.get('recibo_parcial'):
+                    from ferreapps.cuenta_corriente.models import Imputacion
                     
                     # El monto de auto-imputación es el mínimo entre monto_pago y total_venta
                     monto_auto_imputacion = min(monto_pago, total_venta)
                     
                     # Crear la auto-imputación: factura se imputa a sí misma
-                    ImputacionVenta.objects.create(
-                        imp_id_venta=venta_creada,      # La factura
-                        imp_id_recibo=venta_creada,     # La misma factura (auto-imputación)
+                    Imputacion.objects.create(
+                        origen=venta_creada,      # El pago (la misma factura)
+                        destino=venta_creada,     # La deuda (la misma factura)
                         imp_monto=monto_auto_imputacion, # Monto del pago (limitado al total)
-                        imp_fecha=date.today(),         # Fecha actual
+                        imp_fecha=timezone.localdate(),         # Fecha actual (hora Argentina)
                         imp_observacion='Factura Recibo - Auto-imputación'
                     )
                     
@@ -344,11 +385,75 @@ class VentaViewSet(viewsets.ModelViewSet):
                 else:
                     response.data['auto_imputacion_creada'] = False
                 
+                # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
+                # Flujo unificado: normalizar_cobro (bruto/neto, excedente) → registrar_pagos_venta → metadata en Venta
+                if sesion_caja and comprobante_pagado:
+                    from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta, registrar_vuelto
+                    from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
+
+                    pagos_data = list(data.get('pagos') or [])
+                    if not pagos_data and monto_pago and monto_pago > 0:
+                        metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
+                        if metodo_efectivo:
+                            pagos_data = [{'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago}]
+
+                    request_data = {
+                        'pagos': pagos_data,
+                        'monto_pago': monto_pago,
+                        'excedente_destino': data.get('excedente_destino'),
+                        'justificacion_excedente': data.get('justificacion_excedente'),
+                    }
+                    pagos_normalizados, metadata_cobro = normalizar_cobro(request_data, total_venta)
+
+                    if pagos_normalizados:
+                        pagos_creados = registrar_pagos_venta(
+                            venta=venta_creada,
+                            sesion_caja=sesion_caja,
+                            pagos=pagos_normalizados,
+                            descripcion_base="Pago de"
+                        )
+                        campos_actualizados = []
+                        for clave, valor in metadata_cobro.items():
+                            if valor is not None and hasattr(venta_creada, clave):
+                                setattr(venta_creada, clave, valor)
+                                campos_actualizados.append(clave)
+                        if campos_actualizados:
+                            venta_creada.save(update_fields=campos_actualizados)
+
+                        # === REGISTRAR EGRESO DE VUELTO EN CAJA ===
+                        # Cuando el destino del excedente es 'vuelto', normalizar_cobro ya neteó
+                        # el efectivo (entrada reducida), pero falta registrar la SALIDA física
+                        # del vuelto en caja para que el arqueo cuadre.
+                        excedente_destino = (data.get('excedente_destino') or '').strip().lower()
+                        monto_excedente = metadata_cobro.get('vuelto_calculado') or Decimal('0')
+                        if excedente_destino == 'vuelto' and monto_excedente > 0:
+                            pago_vuelto = registrar_vuelto(
+                                venta=venta_creada,
+                                sesion_caja=sesion_caja,
+                                monto_vuelto=monto_excedente,
+                            )
+                            if pago_vuelto:
+                                response.data['vuelto_registrado'] = True
+                                response.data['vuelto_monto'] = str(monto_excedente)
+                    else:
+                        pagos_creados = []
+
+                    response.data['pagos_registrados'] = len(pagos_creados)
+                    response.data['total_pagado'] = str(sum(p.monto for p in pagos_creados))
+                else:
+                    response.data['pagos_registrados'] = 0
+                
                 # === CREAR RECIBO DE EXCEDENTE SI EXISTE ===
                 recibo_excedente_data = data.get('recibo_excedente')
                 if recibo_excedente_data:
-                    # Validar que el monto del recibo coincida con el excedente
-                    excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
+                    # Fuente de verdad del total pagado: suma de pagos o monto_pago
+                    _pagos_re = data.get('pagos') or []
+                    _total_pagado_re = (
+                        sum(Decimal(str(p.get('monto', 0))) for p in _pagos_re)
+                        if _pagos_re
+                        else monto_pago
+                    )
+                    excedente_calculado = max(_total_pagado_re - total_venta, Decimal('0'))
                     monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
                     
                     if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
@@ -359,9 +464,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                     # Validar que el recibo no tenga imputaciones
                     if recibo_excedente_data.get('imputaciones'):
                         raise ValidationError('El recibo de excedente no debe tener imputaciones')
-                    
-                    # Crear el recibo
-                    from datetime import date as datetime_date
                     
                     # Obtener comprobante de recibo (letra X)
                     comprobante_recibo = Comprobante.objects.filter(
@@ -392,7 +494,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     # Crear recibo
                     recibo = Venta.objects.create(
                         ven_sucursal=1,
-                        ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
+                        ven_fecha=recibo_excedente_data.get('rec_fecha', timezone.localdate()),
                         comprobante=comprobante_recibo,
                         ven_punto=rec_pv,
                         ven_numero=rec_num,
@@ -420,7 +522,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         vdi_idpro=None,
                         vdi_cantidad=1,
                         vdi_precio_unitario_final=monto_recibo,
-                        vdi_idaliiva=3,  # Alícuota 0%
+                        vdi_idaliiva_id=3,  # Alícuota 0%
                         vdi_orden=1,
                         vdi_bonifica=0,
                         vdi_costo=0,
@@ -434,7 +536,98 @@ class VentaViewSet(viewsets.ModelViewSet):
                     response.data['recibo_excedente_numero'] = f'X {rec_pv:04d}-{rec_num:08d}'
                 else:
                     response.data['recibo_excedente_creado'] = False
-                
+
+                # === CREAR RECIBO PARCIAL E IMPUTACIÓN SI EXISTE ===
+                recibo_parcial_data = data.get('recibo_parcial')
+                if recibo_parcial_data:
+                    from ferreapps.cuenta_corriente.models import Imputacion
+
+                    monto_recibo_parcial = Decimal(str(recibo_parcial_data.get('rec_monto_total', 0)))
+                    if monto_recibo_parcial <= 0:
+                        raise ValidationError('El monto del recibo parcial debe ser mayor a 0.')
+
+                    # Monto pagado debe coincidir con el recibo parcial
+                    if abs(monto_recibo_parcial - monto_pago) > Decimal('0.01'):
+                        raise ValidationError(
+                            f'El monto del recibo parcial ({monto_recibo_parcial}) debe coincidir con el monto pagado ({monto_pago}).'
+                        )
+
+                    comprobante_recibo = Comprobante.objects.filter(
+                        tipo='recibo',
+                        letra='X',
+                        activo=True
+                    ).first()
+                    if not comprobante_recibo:
+                        raise ValidationError('No se encontró comprobante de recibo con letra X')
+
+                    rec_pv = int(recibo_parcial_data['rec_pv'])
+                    rec_num = int(recibo_parcial_data['rec_numero'])
+                    ya_existe = Venta.objects.filter(
+                        comprobante=comprobante_recibo,
+                        ven_punto=rec_pv,
+                        ven_numero=rec_num
+                    ).exists()
+                    if ya_existe:
+                        raise ValidationError(
+                            f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
+                        )
+
+                    recibo_parcial = Venta.objects.create(
+                        ven_sucursal=1,
+                        ven_fecha=recibo_parcial_data.get('rec_fecha', timezone.localdate()),
+                        comprobante=comprobante_recibo,
+                        ven_punto=rec_pv,
+                        ven_numero=rec_num,
+                        ven_descu1=0,
+                        ven_descu2=0,
+                        ven_descu3=0,
+                        ven_vdocomvta=0,
+                        ven_vdocomcob=0,
+                        ven_estado='CO',
+                        ven_idcli=venta_creada.ven_idcli,
+                        ven_cuit=venta_creada.ven_cuit or '',
+                        ven_dni='',
+                        ven_domicilio=venta_creada.ven_domicilio or '',
+                        ven_razon_social=venta_creada.ven_razon_social or '',
+                        ven_idpla=venta_creada.ven_idpla,
+                        ven_idvdo=venta_creada.ven_idvdo,
+                        ven_copia=1,
+                        ven_observacion=recibo_parcial_data.get('rec_observacion', '')
+                    )
+
+                    VentaDetalleItem.objects.create(
+                        vdi_idve=recibo_parcial,
+                        vdi_idsto=None,
+                        vdi_idpro=None,
+                        vdi_cantidad=1,
+                        vdi_precio_unitario_final=monto_recibo_parcial,
+                        vdi_idaliiva_id=3,
+                        vdi_orden=1,
+                        vdi_bonifica=0,
+                        vdi_costo=0,
+                        vdi_margen=0,
+                        vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
+                        vdi_detalle2=''
+                    )
+
+                    fecha_imp = recibo_parcial_data.get('rec_fecha', timezone.localdate())
+                    if isinstance(fecha_imp, str):
+                        from datetime import datetime
+                        fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
+                    Imputacion.objects.create(
+                        origen=recibo_parcial,
+                        destino=venta_creada,
+                        imp_monto=monto_recibo_parcial,
+                        imp_fecha=fecha_imp,
+                        imp_observacion='Recibo parcial - Pago al cobro'
+                    )
+
+                    response.data['recibo_parcial_creado'] = True
+                    response.data['recibo_parcial_id'] = recibo_parcial.ven_id
+                    response.data['recibo_parcial_numero'] = f'X {rec_pv:04d}-{rec_num:08d}'
+                else:
+                    response.data['recibo_parcial_creado'] = False
+
                 # Agregar datos de respuesta
                 response.data['stock_actualizado'] = stock_actualizado
                 response.data['comprobante_letra'] = comprobante["letra"]
@@ -456,6 +649,15 @@ class VentaViewSet(viewsets.ModelViewSet):
         venta = get_object_or_404(Venta, pk=pk)
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
+                # === VALIDACIÓN DE CAJA ABIERTA ===
+                # Al convertir un presupuesto a factura, se requiere caja abierta
+                sesion_caja = obtener_sesion_caja_activa(request.user)
+                if not sesion_caja:
+                    return Response({
+                        'detail': 'Debe abrir una caja antes de convertir el presupuesto a venta.',
+                        'error_code': 'CAJA_NO_ABIERTA'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
                 items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
                 # Obtener configuración de la ferretería para determinar política de stock negativo
                 ferreteria = Ferreteria.objects.first()
@@ -489,7 +691,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if errores_stock:
                     payload = {'detail': 'Error de stock', 'errores': errores_stock}
                     return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-                cliente = Cliente.objects.filter(id=venta.ven_idcli).first()
+                cliente = venta.ven_idcli  # Ya es objeto FK
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
                 tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
                 comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
@@ -497,6 +699,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                     return Response({'detail': 'No se encontró comprobante de tipo factura para la conversión.'}, status=status.HTTP_400_BAD_REQUEST)
                 venta.comprobante_id = comprobante_venta["codigo_afip"]
                 venta.ven_estado = 'CE'
+                # === ASIGNAR SESIÓN DE CAJA ===
+                venta.sesion_caja = sesion_caja
                 venta.save()
                 serializer = self.get_serializer(venta)
                 data = serializer.data
@@ -549,6 +753,17 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def ticket(self, request, pk=None):
+        # Utilizamos con_calculos() para asegurarnos de traer los subtotales anotados
+        venta = Venta.objects.con_calculos().filter(pk=pk).first()
+        if not venta:
+            return Response({'detail': 'Venta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        from ..serializers import VentaTicketSerializer
+        serializer = VentaTicketSerializer(venta)
+        return Response(serializer.data)
+
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleItem.objects.all()
@@ -569,12 +784,13 @@ class VentaDetalleItemCalculadoFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
     
     class Meta:
-        model = VentaDetalleItemCalculado
+        model = VentaDetalleItem
         fields = ['vdi_idve']
 
 
 class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaDetalleItemCalculado.objects.all()
+    """ViewSet para ver detalles con cálculos (reemplaza a la antigua vista SQL)"""
+    queryset = VentaDetalleItem.objects.con_calculos()
     serializer_class = VentaDetalleItemCalculadoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter
@@ -584,17 +800,38 @@ class VentaIVAAlicuotaFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
     
     class Meta:
-        model = VentaIVAAlicuota
+        model = VentaDetalleItem
         fields = ['vdi_idve']
 
 
 class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaIVAAlicuota.objects.all()
-    serializer_class = VentaIVAAlicuotaSerializer
+    """ViewSet para ver desglose de IVA (reemplaza a la antigua vista SQL)"""
+    queryset = VentaDetalleItem.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaIVAAlicuotaFilter
+    
+    def get_queryset(self):
+        # Replicamos la lógica de agrupación de la vista VENTAIVA_ALICUOTA
+        return VentaDetalleItem.objects.con_calculos().values(
+            'vdi_idve', 'ali_porce'
+        ).annotate(
+            neto_gravado=Sum('subtotal_neto'),
+            iva_total=Sum('iva_monto')
+        ).order_by('vdi_idve', 'ali_porce')
+
+    def list(self, request, *args, **kwargs):
+        # El frontend espera un formato específico para este ViewSet
+        queryset = self.filter_queryset(self.get_queryset())
+        data = list(queryset)
+        # Añadir un ID ficticio para compatibilidad con React keys si es necesario
+        for i, item in enumerate(data):
+            item['id'] = i 
+        return Response(data)
 
 
 class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = VentaCalculada.objects.all()
+    """ViewSet de compatibilidad para la antigua VentaCalculada"""
+    queryset = Venta.objects.con_calculos()
     serializer_class = VentaCalculadaSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VentaCalculadaFilter

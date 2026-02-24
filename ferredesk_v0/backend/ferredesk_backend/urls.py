@@ -44,6 +44,8 @@ urlpatterns = [
     path('api/', include('ferreapps.compras.urls')),
     path('api/informes/', include('ferreapps.informes.urls')),
     path('api/cuenta-corriente/', include('ferreapps.cuenta_corriente.urls')),
+    path('api/caja/', include('ferreapps.caja.urls')),
+    path('api/sistema/', include('ferreapps.sistema.urls')),
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     
     # ===== AUTENTICACIÓN =====

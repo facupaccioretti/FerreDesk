@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import useNavegacionForm from '../../hooks/useNavegacionForm'
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario'
 import SelectorDocumento from './herramientasforms/SelectorDocumento'
@@ -8,6 +8,7 @@ import { useArcaResultadoHandler } from '../../utils/useArcaResultadoHandler'
 import ArcaEsperaOverlay from './herramientasforms/ArcaEsperaOverlay'
 import CuitStatusBanner from '../Alertas/CuitStatusBanner'
 import { useFerreDeskTheme } from '../../hooks/useFerreDeskTheme'
+import { fechaHoyLocal } from '../../utils/fechas'
 
 // Constantes descriptivas
 const TIPO_NOTA_DEBITO = 'nota_debito'
@@ -39,12 +40,13 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
     vendedorId: vendedores[0]?.id || '',
     sucursalId: sucursales[0]?.id || '',
     puntoVentaId: puntosVenta[0]?.id || '',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: fechaHoyLocal(),
     copia: 1,
     facturasAsociadas: facturasAsociadas || [],
     exentoIVA: false,
     montoNeto: '',
     observacion: '',
+    cobrado: false,
   }
 }
 
@@ -109,6 +111,9 @@ const NotaDebitoForm = ({
     obtenerMensajePersonalizado
   } = useArcaEstado()
 
+  // Estados para manejar el envío
+  const [, setIsSaving] = useState(false)
+
   const {
     procesarResultadoArca,
     manejarErrorArca,
@@ -147,7 +152,8 @@ const NotaDebitoForm = ({
       limpiarEstadosARCAStatus();
       return
     }
-    if (letraND !== 'A') {
+    // Solo consultar si es una Nota de Débito fiscal (no interna)
+    if (esInterna) {
       limpiarEstadosARCAStatus();
       return
     }
@@ -173,6 +179,62 @@ const NotaDebitoForm = ({
     return true
   }
 
+  const construirPayloadBase = () => {
+    const montoNeto = parseFloat(formulario.montoNeto)
+    const observacion = (formulario.observacion || (esInterna ? 'Extensión de Contenido' : 'Nota de Débito')).slice(0, LONGITUD_MAX_OBSERVACION)
+    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
+    return {
+      ven_estado: 'CE',
+      ven_tipo: 'Nota de Débito',
+      tipo_comprobante: tipoComprobanteSeleccionado,
+      comprobante_id: comprobanteND?.codigo_afip || '',
+      comprobantes_asociados_ids: (formulario.facturasAsociadas || facturasAsociadas || []).map(f => f.id || f.ven_id),
+      ven_fecha: formulario.fecha,
+      ven_idcli: formulario.clienteId,
+      ven_idpla: formulario.plazoId,
+      ven_idvdo: formulario.vendedorId,
+      ven_sucursal: formulario.sucursalId,
+      ven_copia: formulario.copia || 1,
+      ven_cuit: formulario.cuit || '',
+      detalle_item_generico: observacion,
+      exento_iva: !!formulario.exentoIVA,
+      monto_neto_item_generico: montoNeto,
+    }
+  }
+
+  const realizarEnvioDirecto = async () => {
+    const payload = construirPayloadBase()
+
+    // Las Notas de Débito/Extensiones siempre van a cuenta corriente por defecto en este formulario simplificado
+    payload.comprobante_pagado = false
+    payload.monto_pago = 0
+    payload.pagos = []
+
+    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
+
+    if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
+      temporizadorArcaRef.current = setTimeout(() => iniciarEsperaArca(), 400)
+    }
+
+    try {
+      setIsSaving(true)
+      const resultado = await onSave(payload, () => { })
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
+    } catch (error) {
+      if (temporizadorArcaRef.current) {
+        clearTimeout(temporizadorArcaRef.current)
+        temporizadorArcaRef.current = null
+      }
+      manejarErrorArca(error, 'Error al procesar la nota de débito')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -188,55 +250,11 @@ const NotaDebitoForm = ({
       return
     }
 
-    const observacion = (formulario.observacion || (esInterna ? 'Extensión de Contenido' : 'Nota de Débito')).slice(0, LONGITUD_MAX_OBSERVACION)
-    const tipoComprobanteSeleccionado = comprobanteND?.tipo || TIPO_NOTA_DEBITO
-
-    const payload = {
-      ven_estado: 'CE',
-      ven_tipo: 'Nota de Débito',
-      tipo_comprobante: tipoComprobanteSeleccionado,
-      comprobante_id: comprobanteND?.codigo_afip || '',
-      comprobantes_asociados_ids: (formulario.facturasAsociadas || facturasAsociadas || []).map(f => f.id || f.ven_id),
-
-      ven_fecha: formulario.fecha,
-      ven_idcli: formulario.clienteId,
-      ven_idpla: formulario.plazoId,
-      ven_idvdo: formulario.vendedorId,
-      ven_sucursal: formulario.sucursalId,
-      ven_copia: formulario.copia || 1,
-
-      ven_cuit: formulario.cuit || '',
-
-      // Ítem genérico: datos para que el backend lo genere
-      detalle_item_generico: observacion,
-      exento_iva: !!formulario.exentoIVA,
-      monto_neto_item_generico: montoNeto,
+    if (!window.confirm(`¿Está seguro de crear esta ${tituloForm.toLowerCase()}?`)) {
+      return
     }
 
-    try {
-      // Mostrar overlay con retardo para evitar flashes si responde muy rápido
-      if (requiereEmisionArca(tipoComprobanteSeleccionado) && !temporizadorArcaRef.current) {
-        temporizadorArcaRef.current = setTimeout(() => {
-          iniciarEsperaArca()
-        }, 400)
-      }
-
-      const resultado = await onSave(payload, () => {})
-
-      if (temporizadorArcaRef.current) {
-        clearTimeout(temporizadorArcaRef.current)
-        temporizadorArcaRef.current = null
-      }
-
-      // Procesar resultado ARCA (muestra modal o cierra si no se emitió)
-      procesarResultadoArca(resultado, tipoComprobanteSeleccionado)
-    } catch (error) {
-      if (temporizadorArcaRef.current) {
-        clearTimeout(temporizadorArcaRef.current)
-        temporizadorArcaRef.current = null
-      }
-      manejarErrorArca(error, 'Error al procesar la nota de débito')
-    }
+    realizarEnvioDirecto()
   }
 
   return (
@@ -246,8 +264,8 @@ const NotaDebitoForm = ({
           <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${theme.primario}`}></div>
 
           <div className="px-8 pt-4 pb-6">
-            {/* Banner de estado CUIT para ND A */}
-            {letraND === 'A' && (
+            {/* Banner de estado CUIT para notas de débito fiscales */}
+            {(
               <CuitStatusBanner
                 cuit={formulario.cuit}
                 estado={(() => {
@@ -332,6 +350,7 @@ const NotaDebitoForm = ({
                   <label htmlFor="exentoIVA" className="text-[12px] font-semibold text-slate-700">Exento de IVA</label>
                 </div>
 
+
                 {/* Monto neto */}
                 <div>
                   <label className="block text-[12px] font-semibold text-slate-700 mb-1">Monto neto *</label>
@@ -390,6 +409,7 @@ const NotaDebitoForm = ({
           </div>
         </form>
       </div>
+
       {/* Overlay de espera de ARCA */}
       <ArcaEsperaOverlay
         estaEsperando={esperandoArca}

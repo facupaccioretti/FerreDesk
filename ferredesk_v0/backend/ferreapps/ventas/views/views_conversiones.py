@@ -11,25 +11,28 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from decimal import Decimal
-from datetime import date
+from django.utils import timezone
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaCalculada
+    Comprobante, Venta, VentaDetalleItem
 )
 from ..serializers import VentaSerializer
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
-from ferreapps.cuenta_corriente.models import ImputacionVenta
+from django.contrib.contenttypes.models import ContentType
+from ferreapps.cuenta_corriente.models import Imputacion
 from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
+from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
 from .utils_stock import (
     _obtener_proveedor_habitual_stock,
     _obtener_codigo_venta,
     _descontar_distribuyendo,
     _total_disponible_en_proveedores,
 )
+from .utils_conversion import transferir_imputaciones_conversion
 
 logger = logging.getLogger(__name__)
 
@@ -196,21 +199,21 @@ def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
     if not (comprobante_pagado and monto_pago > 0):
         return
     
-    # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    # Obtener total usando el manager con calculos (reemplaza VentaCalculada)
+    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
     monto_auto_imputacion = min(monto_pago, total_venta)
     
-    ImputacionVenta.objects.create(
-        imp_id_venta=nueva_factura,
-        imp_id_recibo=nueva_factura,
+    Imputacion.objects.create(
+        origen=nueva_factura,
+        destino=nueva_factura,
         imp_monto=monto_auto_imputacion,
-        imp_fecha=date.today(),
+        imp_fecha=timezone.localdate(),
         imp_observacion='Factura Recibo - Auto-imputación'
     )
 
 
-def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
+def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_caja=None):
     """
     Crea recibo de excedente si existe.
     
@@ -218,16 +221,22 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
         nueva_factura: Instancia de Venta creada
         data: Datos originales del request
         venta_data: Datos de la venta procesados
+        sesion_caja: Sesión de caja abierta (opcional), para vincular el recibo
     """
     recibo_excedente_data = data.get('recibo_excedente')
     if not recibo_excedente_data:
         return
     
-    # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
-    venta_calculada = VentaCalculada.objects.filter(ven_id=nueva_factura.ven_id).first()
+    # Total pagado: fuente de verdad es suma de pagos; fallback monto_pago
+    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
     total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
-    excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
+    _pagos = data.get('pagos') or []
+    total_pagado = (
+        sum(Decimal(str(p.get('monto', 0))) for p in _pagos)
+        if _pagos
+        else Decimal(str(venta_data.get('monto_pago', 0)))
+    )
+    excedente_calculado = max(total_pagado - total_venta, Decimal('0'))
     monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
     
     if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
@@ -238,9 +247,6 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
     # Validar que el recibo no tenga imputaciones
     if recibo_excedente_data.get('imputaciones'):
         raise ValidationError('El recibo de excedente no debe tener imputaciones')
-    
-    # Crear el recibo
-    from datetime import date as datetime_date
     
     # Obtener comprobante de recibo (letra X)
     comprobante_recibo = Comprobante.objects.filter(
@@ -268,29 +274,32 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
             f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
         )
     
-    # Crear recibo
-    recibo = Venta.objects.create(
-        ven_sucursal=1,
-        ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
-        comprobante=comprobante_recibo,
-        ven_punto=rec_pv,
-        ven_numero=rec_num,
-        ven_descu1=0,
-        ven_descu2=0,
-        ven_descu3=0,
-        ven_vdocomvta=0,
-        ven_vdocomcob=0,
-        ven_estado='CO',
-        ven_idcli=nueva_factura.ven_idcli,
-        ven_cuit=nueva_factura.ven_cuit or '',
-        ven_dni='',
-        ven_domicilio=nueva_factura.ven_domicilio or '',
-        ven_razon_social=nueva_factura.ven_razon_social or '',
-        ven_idpla=nueva_factura.ven_idpla,
-        ven_idvdo=nueva_factura.ven_idvdo,
-        ven_copia=1,
-        ven_observacion=recibo_excedente_data.get('rec_observacion', '')
-    )
+    # Crear recibo (vincular sesion_caja si se proporciona)
+    recibo_kw = {
+        'ven_sucursal': 1,
+        'ven_fecha': recibo_excedente_data.get('rec_fecha', timezone.localdate()),
+        'comprobante': comprobante_recibo,
+        'ven_punto': rec_pv,
+        'ven_numero': rec_num,
+        'ven_descu1': 0,
+        'ven_descu2': 0,
+        'ven_descu3': 0,
+        'ven_vdocomvta': 0,
+        'ven_vdocomcob': 0,
+        'ven_estado': 'CO',
+        'ven_idcli': nueva_factura.ven_idcli,
+        'ven_cuit': nueva_factura.ven_cuit or '',
+        'ven_dni': '',
+        'ven_domicilio': nueva_factura.ven_domicilio or '',
+        'ven_razon_social': nueva_factura.ven_razon_social or '',
+        'ven_idpla': nueva_factura.ven_idpla,
+        'ven_idvdo': nueva_factura.ven_idvdo,
+        'ven_copia': 1,
+        'ven_observacion': recibo_excedente_data.get('rec_observacion', ''),
+    }
+    if sesion_caja is not None:
+        recibo_kw['sesion_caja'] = sesion_caja
+    recibo = Venta.objects.create(**recibo_kw)
     
     # Crear item genérico para el recibo
     VentaDetalleItem.objects.create(
@@ -299,13 +308,110 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data):
         vdi_idpro=None,
         vdi_cantidad=1,
         vdi_precio_unitario_final=monto_recibo,
-        vdi_idaliiva=3,  # Alícuota 0%
+        vdi_idaliiva_id=3,  # Alícuota 0%
         vdi_orden=1,
         vdi_bonifica=0,
         vdi_costo=0,
         vdi_margen=0,
         vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
         vdi_detalle2=''
+    )
+
+
+def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja=None):
+    """
+    Crea recibo parcial e imputación a la factura si existe recibo_parcial en data.
+
+    Args:
+        nueva_factura: Instancia de Venta (factura) creada
+        data: Datos originales del request
+        venta_data: Datos de la venta procesados
+        sesion_caja: Sesión de caja abierta (opcional)
+    """
+    recibo_parcial_data = data.get('recibo_parcial')
+    if not recibo_parcial_data:
+        return
+
+    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
+    monto_recibo_parcial = Decimal(str(recibo_parcial_data.get('rec_monto_total', 0)))
+    if monto_recibo_parcial <= 0:
+        raise ValidationError('El monto del recibo parcial debe ser mayor a 0.')
+    if abs(monto_recibo_parcial - monto_pago) > Decimal('0.01'):
+        raise ValidationError(
+            f'El monto del recibo parcial ({monto_recibo_parcial}) debe coincidir con el monto pagado ({monto_pago}).'
+        )
+
+    comprobante_recibo = Comprobante.objects.filter(
+        tipo='recibo',
+        letra='X',
+        activo=True
+    ).first()
+    if not comprobante_recibo:
+        raise ValidationError('No se encontró comprobante de recibo con letra X')
+
+    rec_pv = int(recibo_parcial_data['rec_pv'])
+    rec_num = int(recibo_parcial_data['rec_numero'])
+    ya_existe = Venta.objects.filter(
+        comprobante=comprobante_recibo,
+        ven_punto=rec_pv,
+        ven_numero=rec_num
+    ).exists()
+    if ya_existe:
+        raise ValidationError(
+            f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
+        )
+
+    recibo_kw = {
+        'ven_sucursal': 1,
+        'ven_fecha': recibo_parcial_data.get('rec_fecha', timezone.localdate()),
+        'comprobante': comprobante_recibo,
+        'ven_punto': rec_pv,
+        'ven_numero': rec_num,
+        'ven_descu1': 0,
+        'ven_descu2': 0,
+        'ven_descu3': 0,
+        'ven_vdocomvta': 0,
+        'ven_vdocomcob': 0,
+        'ven_estado': 'CO',
+        'ven_idcli': nueva_factura.ven_idcli,
+        'ven_cuit': nueva_factura.ven_cuit or '',
+        'ven_dni': '',
+        'ven_domicilio': nueva_factura.ven_domicilio or '',
+        'ven_razon_social': nueva_factura.ven_razon_social or '',
+        'ven_idpla': nueva_factura.ven_idpla,
+        'ven_idvdo': nueva_factura.ven_idvdo,
+        'ven_copia': 1,
+        'ven_observacion': recibo_parcial_data.get('rec_observacion', ''),
+    }
+    if sesion_caja is not None:
+        recibo_kw['sesion_caja'] = sesion_caja
+    recibo_parcial = Venta.objects.create(**recibo_kw)
+
+    VentaDetalleItem.objects.create(
+        vdi_idve=recibo_parcial,
+        vdi_idsto=None,
+        vdi_idpro=None,
+        vdi_cantidad=1,
+        vdi_precio_unitario_final=monto_recibo_parcial,
+        vdi_idaliiva_id=3,
+        vdi_orden=1,
+        vdi_bonifica=0,
+        vdi_costo=0,
+        vdi_margen=0,
+        vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
+        vdi_detalle2=''
+    )
+
+    fecha_imp = recibo_parcial_data.get('rec_fecha', timezone.localdate())
+    if isinstance(fecha_imp, str):
+        from datetime import datetime
+        fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
+    Imputacion.objects.create(
+        origen=recibo_parcial,
+        destino=nueva_factura,
+        imp_monto=monto_recibo_parcial,
+        imp_fecha=fecha_imp,
+        imp_observacion='Recibo parcial - Pago al cobro'
     )
 
 
@@ -392,10 +498,30 @@ def convertir_presupuesto_a_venta(request):
                 print(f"DEBUG - Error de validación: {error_msg}")
                 raise ValidationError(error_msg)
 
+            # === VALIDACIÓN DE CAJA ABIERTA ===
+            sesion_caja = SesionCaja.objects.filter(
+                usuario=request.user,
+                estado=ESTADO_CAJA_ABIERTA
+            ).first()
+            if not sesion_caja:
+                return Response({
+                    'detail': 'Debe abrir una caja para convertir el presupuesto a venta.',
+                    'error_code': 'CAJA_NO_ABIERTA'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             print("DEBUG - INICIO BLOQUE ATOMICO")
             # Obtener el presupuesto con bloqueo
             presupuesto = Venta.objects.select_for_update().get(ven_id=presupuesto_id)
             print("DEBUG - Presupuesto obtenido:", presupuesto)
+            
+            # === VALIDACIÓN: NO PERMITIR RECONVERSIÓN ===
+            if presupuesto.convertida_a_fiscal:
+                return Response({
+                    'detail': 'Esta cotización ya fue convertida a factura fiscal.',
+                    'error_code': 'YA_CONVERTIDA',
+                    'factura_fiscal_id': presupuesto.factura_fiscal_convertida.ven_id if presupuesto.factura_fiscal_convertida else None
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             # Validar que es un presupuesto (estado AB)
             if presupuesto.ven_estado != 'AB':
                 print("DEBUG - Presupuesto no está en estado AB")
@@ -538,33 +664,71 @@ def convertir_presupuesto_a_venta(request):
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     venta_creada = Venta.objects.get(ven_id=venta.ven_id)
                     
+                    # === ASIGNAR SESIÓN DE CAJA ===
+                    venta_creada.sesion_caja = sesion_caja
+                    venta_creada.save(update_fields=['sesion_caja'])
+                    
                     print(f"LOG: Venta creada con ID {venta_creada.ven_id}")
                     
-                    # === CREAR AUTO-IMPUTACIÓN SI ES FACTURA PAGADA ===
+                    # Obtener total usando con_calculos() para imputación, pagos y excedente
+                    venta_calculada = Venta.objects.con_calculos().filter(ven_id=venta_creada.ven_id).first()
+                    total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                    
+                    # === CREAR AUTO-IMPUTACIÓN SI ES FACTURA PAGADA (no si hay recibo parcial) ===
                     comprobante_pagado = venta_data.get('comprobante_pagado', False)
                     monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
                     
-                    if comprobante_pagado and monto_pago > 0:
-                        # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-                        venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
-                        total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                    if comprobante_pagado and monto_pago > 0 and not data.get('recibo_parcial'):
                         monto_auto_imputacion = min(monto_pago, total_venta)
-                        
-                        ImputacionVenta.objects.create(
-                            imp_id_venta=venta_creada,
-                            imp_id_recibo=venta_creada,
+                        Imputacion.objects.create(
+                            origen=venta_creada,
+                            destino=venta_creada,
                             imp_monto=monto_auto_imputacion,
-                            imp_fecha=date.today(),
+                            imp_fecha=timezone.localdate(),
                             imp_observacion='Factura Recibo - Auto-imputación'
                         )
+                    
+                    # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA (flujo unificado) ===
+                    if sesion_caja and comprobante_pagado:
+                        from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
+                        from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
+                        pagos_data = list(data.get('pagos') or [])
+                        if not pagos_data and monto_pago and monto_pago > 0:
+                            metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
+                            if metodo_efectivo:
+                                pagos_data = [{'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago}]
+                        request_data = {
+                            'pagos': pagos_data,
+                            'monto_pago': monto_pago,
+                            'excedente_destino': data.get('excedente_destino'),
+                            'justificacion_excedente': data.get('justificacion_excedente'),
+                        }
+                        pagos_normalizados, metadata_cobro = normalizar_cobro(request_data, total_venta)
+                        if pagos_normalizados:
+                            registrar_pagos_venta(
+                                venta=venta_creada,
+                                sesion_caja=sesion_caja,
+                                pagos=pagos_normalizados,
+                                descripcion_base="Pago de"
+                            )
+                            campos_actualizados = []
+                            for clave, valor in metadata_cobro.items():
+                                if valor is not None and hasattr(venta_creada, clave):
+                                    setattr(venta_creada, clave, valor)
+                                    campos_actualizados.append(clave)
+                            if campos_actualizados:
+                                venta_creada.save(update_fields=campos_actualizados)
                     
                     # === CREAR RECIBO DE EXCEDENTE SI EXISTE ===
                     recibo_excedente_data = data.get('recibo_excedente')
                     if recibo_excedente_data:
-                        # Obtener total desde VentaCalculada (vista SQL con campos calculados)
-                        venta_calculada = VentaCalculada.objects.filter(ven_id=venta_creada.ven_id).first()
-                        total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
-                        excedente_calculado = max(monto_pago - total_venta, Decimal('0'))
+                        _pagos_re = data.get('pagos') or []
+                        _total_pagado_re = (
+                            sum(Decimal(str(p.get('monto', 0))) for p in _pagos_re)
+                            if _pagos_re
+                            else monto_pago
+                        )
+                        excedente_calculado = max(_total_pagado_re - total_venta, Decimal('0'))
                         monto_recibo = Decimal(str(recibo_excedente_data.get('rec_monto_total', 0)))
                         
                         if abs(monto_recibo - excedente_calculado) > Decimal('0.01'):  # Tolerancia de 1 centavo
@@ -575,9 +739,6 @@ def convertir_presupuesto_a_venta(request):
                         # Validar que el recibo no tenga imputaciones
                         if recibo_excedente_data.get('imputaciones'):
                             raise ValidationError('El recibo de excedente no debe tener imputaciones')
-                        
-                        # Crear el recibo
-                        from datetime import date as datetime_date
                         
                         # Obtener comprobante de recibo (letra X)
                         comprobante_recibo = Comprobante.objects.filter(
@@ -605,10 +766,10 @@ def convertir_presupuesto_a_venta(request):
                                 f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
                             )
                         
-                        # Crear recibo
+                        # Crear recibo (vincular a la misma sesión de caja)
                         recibo = Venta.objects.create(
                             ven_sucursal=1,
-                            ven_fecha=recibo_excedente_data.get('rec_fecha', datetime_date.today()),
+                            ven_fecha=recibo_excedente_data.get('rec_fecha', timezone.localdate()),
                             comprobante=comprobante_recibo,
                             ven_punto=rec_pv,
                             ven_numero=rec_num,
@@ -626,7 +787,8 @@ def convertir_presupuesto_a_venta(request):
                             ven_idpla=venta_creada.ven_idpla,
                             ven_idvdo=venta_creada.ven_idvdo,
                             ven_copia=1,
-                            ven_observacion=recibo_excedente_data.get('rec_observacion', '')
+                            ven_observacion=recibo_excedente_data.get('rec_observacion', ''),
+                            sesion_caja=sesion_caja
                         )
                         
                         # Crear item genérico para el recibo
@@ -636,13 +798,83 @@ def convertir_presupuesto_a_venta(request):
                             vdi_idpro=None,
                             vdi_cantidad=1,
                             vdi_precio_unitario_final=monto_recibo,
-                            vdi_idaliiva=3,  # Alícuota 0%
+                            vdi_idaliiva_id=3,  # Alícuota 0%
                             vdi_orden=1,
                             vdi_bonifica=0,
                             vdi_costo=0,
                             vdi_margen=0,
                             vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
                             vdi_detalle2=''
+                        )
+                    
+                    # === CREAR RECIBO PARCIAL E IMPUTACIÓN SI EXISTE ===
+                    recibo_parcial_data = data.get('recibo_parcial')
+                    if recibo_parcial_data:
+                        monto_recibo_parcial = Decimal(str(recibo_parcial_data.get('rec_monto_total', 0)))
+                        if monto_recibo_parcial <= 0:
+                            raise ValidationError('El monto del recibo parcial debe ser mayor a 0.')
+                        if abs(monto_recibo_parcial - monto_pago) > Decimal('0.01'):
+                            raise ValidationError(
+                                f'El monto del recibo parcial ({monto_recibo_parcial}) debe coincidir con el monto pagado ({monto_pago}).'
+                            )
+                        comprobante_recibo = Comprobante.objects.filter(
+                            tipo='recibo', letra='X', activo=True
+                        ).first()
+                        if not comprobante_recibo:
+                            raise ValidationError('No se encontró comprobante de recibo con letra X')
+                        rec_pv = int(recibo_parcial_data['rec_pv'])
+                        rec_num = int(recibo_parcial_data['rec_numero'])
+                        ya_existe_rp = Venta.objects.filter(
+                            comprobante=comprobante_recibo, ven_punto=rec_pv, ven_numero=rec_num
+                        ).exists()
+                        if ya_existe_rp:
+                            raise ValidationError(
+                                f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
+                            )
+                        recibo_parcial = Venta.objects.create(
+                            ven_sucursal=1,
+                            ven_fecha=recibo_parcial_data.get('rec_fecha', timezone.localdate()),
+                            comprobante=comprobante_recibo,
+                            ven_punto=rec_pv,
+                            ven_numero=rec_num,
+                            ven_descu1=0, ven_descu2=0, ven_descu3=0,
+                            ven_vdocomvta=0, ven_vdocomcob=0,
+                            ven_estado='CO',
+                            ven_idcli=venta_creada.ven_idcli,
+                            ven_cuit=venta_creada.ven_cuit or '',
+                            ven_dni='',
+                            ven_domicilio=venta_creada.ven_domicilio or '',
+                            ven_razon_social=venta_creada.ven_razon_social or '',
+                            ven_idpla=venta_creada.ven_idpla,
+                            ven_idvdo=venta_creada.ven_idvdo,
+                            ven_copia=1,
+                            ven_observacion=recibo_parcial_data.get('rec_observacion', ''),
+                            sesion_caja=sesion_caja
+                        )
+                        VentaDetalleItem.objects.create(
+                            vdi_idve=recibo_parcial,
+                            vdi_idsto=None,
+                            vdi_idpro=None,
+                            vdi_cantidad=1,
+                            vdi_precio_unitario_final=monto_recibo_parcial,
+                            vdi_idaliiva_id=3,
+                            vdi_orden=1,
+                            vdi_bonifica=0,
+                            vdi_costo=0,
+                            vdi_margen=0,
+                            vdi_detalle1=f'Recibo X {rec_pv:04d}-{rec_num:08d}',
+                            vdi_detalle2=''
+                        )
+                        fecha_imp = recibo_parcial_data.get('rec_fecha', timezone.localdate())
+                        if isinstance(fecha_imp, str):
+                            from datetime import datetime
+                            fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
+                        Imputacion.objects.create(
+                            origen=recibo_parcial,
+                            destino=venta_creada,
+                            imp_monto=monto_recibo_parcial,
+                            imp_fecha=fecha_imp,
+                            imp_observacion='Recibo parcial - Pago al cobro'
                         )
                     
                     break
@@ -791,13 +1023,46 @@ def convertir_factura_interna_a_fiscal(request):
         except Venta.DoesNotExist:
             return Response({'detail': 'Factura interna no encontrada'}, status=status.HTTP_404_NOT_FOUND)
         
+        # === VALIDACIÓN DE CAJA ABIERTA ===
+        sesion_caja = SesionCaja.objects.filter(
+            usuario=request.user,
+            estado=ESTADO_CAJA_ABIERTA
+        ).first()
+        if not sesion_caja:
+            return Response({
+                'detail': 'Debe abrir una caja para convertir la cotización a factura fiscal.',
+                'error_code': 'CAJA_NO_ABIERTA'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # === VALIDACIÓN: CLIENTE NO PUEDE CAMBIAR ===
+        cliente_original = factura_interna.ven_idcli.id
+        cliente_solicitado = data.get('ven_idcli')
+        
+        if cliente_original != cliente_solicitado:
+            return Response({
+                'detail': (
+                    'No se puede cambiar el cliente durante la fiscalización de una cotización. '
+                    'El comprobante fiscal debe emitirse al mismo cliente que realizó la compra.'
+                ),
+                'error_code': 'CAMBIO_CLIENTE_NO_PERMITIDO',
+                'cliente_original_id': cliente_original
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # === VALIDACIÓN: NO PERMITIR RECONVERSIÓN ===
+        if factura_interna.convertida_a_fiscal:
+            return Response({
+                'detail': 'Esta cotización ya fue convertida a factura fiscal.',
+                'error_code': 'YA_CONVERTIDA',
+                'factura_fiscal_id': factura_interna.factura_fiscal_convertida.ven_id if factura_interna.factura_fiscal_convertida else None
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Preparar datos de la nueva factura fiscal
         venta_data = data.copy()
         venta_data.pop('factura_interna_origen', None)
         venta_data.pop('tipo_conversion', None)
         venta_data.pop('conversion_metadata', None)
         venta_data['ven_estado'] = 'CE'
-        
+
         # Obtener items usando función auxiliar
         items = _preparar_items_conversion(factura_interna)
 
@@ -877,13 +1142,55 @@ def convertir_factura_interna_a_fiscal(request):
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     nueva_factura = Venta.objects.get(ven_id=nueva_factura.ven_id)
                     
+                    # === ASIGNAR SESIÓN DE CAJA ===
+                    nueva_factura.sesion_caja = sesion_caja
+                    nueva_factura.save(update_fields=['sesion_caja'])
+                    
                     print(f"LOG: Factura fiscal creada con ID {nueva_factura.ven_id}")
                     
-                    # Crear auto-imputación usando función auxiliar
-                    _crear_auto_imputacion_si_necesario(nueva_factura, venta_data)
+                    # Crear auto-imputación usando función auxiliar (no si hay recibo parcial)
+                    if not data.get('recibo_parcial'):
+                        _crear_auto_imputacion_si_necesario(nueva_factura, venta_data)
+                    
+                    # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
+                    comprobante_pagado = venta_data.get('comprobante_pagado', False)
+                    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
+                    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
+                    total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
+                    if sesion_caja and comprobante_pagado:
+                        from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
+                        from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
+                        pagos_data = list(data.get('pagos') or [])
+                        if not pagos_data and monto_pago and monto_pago > 0:
+                            metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
+                            if metodo_efectivo:
+                                pagos_data = [{'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago}]
+                        request_data = {
+                            'pagos': pagos_data,
+                            'monto_pago': monto_pago,
+                            'excedente_destino': data.get('excedente_destino'),
+                            'justificacion_excedente': data.get('justificacion_excedente'),
+                        }
+                        pagos_normalizados, metadata_cobro = normalizar_cobro(request_data, total_venta)
+                        if pagos_normalizados:
+                            registrar_pagos_venta(
+                                venta=nueva_factura,
+                                sesion_caja=sesion_caja,
+                                pagos=pagos_normalizados,
+                                descripcion_base="Pago de"
+                            )
+                            campos_actualizados = []
+                            for clave, valor in metadata_cobro.items():
+                                if valor is not None and hasattr(nueva_factura, clave):
+                                    setattr(nueva_factura, clave, valor)
+                                    campos_actualizados.append(clave)
+                            if campos_actualizados:
+                                nueva_factura.save(update_fields=campos_actualizados)
                     
                     # Crear recibo de excedente usando función auxiliar
-                    _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data)
+                    _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_caja=sesion_caja)
+                    # Crear recibo parcial e imputación si existe
+                    _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja=sesion_caja)
                     
                     break
                 except IntegrityError as e:
@@ -899,21 +1206,25 @@ def convertir_factura_interna_a_fiscal(request):
             
             print("LOG: Antes de gestionar la factura interna original")
             
-            # === LÓGICA DE GESTIÓN DE FACTURA INTERNA ===
-            # Si llegamos aquí, o no hay imputaciones o ya fueron eliminadas
-            # Conversión siempre completa: eliminar la factura interna original
-            try:
-                print("DEBUG - Eliminando factura interna original")
-                factura_interna.delete()
-                print("LOG: Factura interna eliminada exitosamente")
-            except ProtectedError as e:
-                # Este caso no debería ocurrir porque ya manejamos las imputaciones arriba
-                # pero lo dejamos por seguridad
-                print(f"ERROR INESPERADO: No se puede eliminar factura interna: {e}")
-                return Response({
-                    'detail': 'Error inesperado al eliminar la factura interna. Contacte al administrador.',
-                    'error_tecnico': str(e)
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # === NUEVA LÓGICA: MARCAR COMO CONVERTIDA (NO ELIMINAR) ===
+            # Transferir imputaciones de cotización → factura fiscal
+            stats_imputaciones = transferir_imputaciones_conversion(
+                factura_interna=factura_interna,
+                nueva_factura=nueva_factura
+            )
+            
+            # Marcar cotización como convertida y vincular
+            factura_interna.convertida_a_fiscal = True
+            factura_interna.factura_fiscal_convertida = nueva_factura
+            factura_interna.fecha_conversion = timezone.now()
+            factura_interna.save(update_fields=[
+                'convertida_a_fiscal',
+                'factura_fiscal_convertida',
+                'fecha_conversion'
+            ])
+            
+            print(f"LOG: Cotización {factura_interna.ven_id} marcada como convertida → Factura {nueva_factura.ven_id}")
+            print(f"LOG: Imputaciones transferidas: {stats_imputaciones}")
             
             # Gestionar emisión ARCA y construir respuesta usando función auxiliar
             response_data = _gestionar_emision_arca(
@@ -939,10 +1250,14 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
     Usado ANTES de abrir el formulario de conversión de cotizaciones.
     """
     try:
+        from django.contrib.contenttypes.models import ContentType
+        venta_ct = ContentType.objects.get_for_model(Venta)
+        
         # Buscar imputaciones relacionadas
-        imputaciones_relacionadas = ImputacionVenta.objects.filter(
-            Q(imp_id_venta=comprobante_id) | Q(imp_id_recibo=comprobante_id)
-        ).select_related('imp_id_venta', 'imp_id_recibo')
+        imputaciones_relacionadas = Imputacion.objects.filter(
+            (Q(destino_content_type=venta_ct) & Q(destino_id=comprobante_id)) |
+            (Q(origen_content_type=venta_ct) & Q(origen_id=comprobante_id))
+        )
         
         if not imputaciones_relacionadas.exists():
             return Response({
@@ -964,9 +1279,10 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
         comprobantes_relacionados = []
         
         for imp in imputaciones_relacionadas:
-            if imp.imp_id_venta.ven_id == imp.imp_id_recibo.ven_id:
+            if (imp.origen_content_type == venta_ct and imp.origen_id == imp.destino_id and 
+                imp.origen_content_type == imp.destino_content_type):
                 # Auto-imputación
-                vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_venta.ven_id).first()
+                vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
                 if vc:
                     comprobantes_relacionados.append({
                         'tipo': 'auto_imputacion',
@@ -975,28 +1291,32 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                         'monto': str(imp.imp_monto),
                         'fecha': str(imp.imp_fecha)
                     })
-            elif imp.imp_id_venta.ven_id == comprobante_id:
+            elif imp.destino_content_type == venta_ct and imp.destino_id == comprobante_id:
                 # Esta cotización está siendo pagada
-                vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_recibo.ven_id).first()
-                if vc:
-                    comprobantes_relacionados.append({
-                        'tipo': 'recibo_pago',
-                        'numero': vc.numero_formateado,
-                        'nombre': vc.comprobante_nombre,
-                        'monto': str(imp.imp_monto),
-                        'fecha': str(imp.imp_fecha)
-                    })
-            else:
+                # El origen es el recibo
+                if imp.origen_content_type == venta_ct:
+                    vc = Venta.objects.con_calculos().filter(ven_id=imp.origen_id).first()
+                    if vc:
+                        comprobantes_relacionados.append({
+                            'tipo': 'recibo_pago',
+                            'numero': vc.numero_formateado,
+                            'nombre': vc.comprobante_nombre,
+                            'monto': str(imp.imp_monto),
+                            'fecha': str(imp.imp_fecha)
+                        })
+            elif imp.origen_content_type == venta_ct and imp.origen_id == comprobante_id:
                 # Esta cotización está pagando otra factura
-                vc = VentaCalculada.objects.filter(ven_id=imp.imp_id_venta.ven_id).first()
-                if vc:
-                    comprobantes_relacionados.append({
-                        'tipo': 'factura_pagada',
-                        'numero': vc.numero_formateado,
-                        'nombre': vc.comprobante_nombre,
-                        'monto': str(imp.imp_monto),
-                        'fecha': str(imp.imp_fecha)
-                    })
+                # El destino es la factura pagada
+                if imp.destino_content_type == venta_ct:
+                    vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
+                    if vc:
+                        comprobantes_relacionados.append({
+                            'tipo': 'factura_pagada',
+                            'numero': vc.numero_formateado,
+                            'nombre': vc.comprobante_nombre,
+                            'monto': str(imp.imp_monto),
+                            'fecha': str(imp.imp_fecha)
+                        })
         
         # Verificar si es cliente genérico
         comprobante = Venta.objects.get(ven_id=comprobante_id)
@@ -1060,9 +1380,10 @@ def eliminar_auto_imputaciones_cliente_generico(request, comprobante_id):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Buscar auto-imputaciones
-            auto_imputaciones = ImputacionVenta.objects.filter(
-                imp_id_venta=comprobante,
-                imp_id_recibo=comprobante
+            venta_ct = ContentType.objects.get_for_model(comprobante)
+            auto_imputaciones = Imputacion.objects.filter(
+                origen_content_type=venta_ct, origen_id=comprobante.pk,
+                destino_content_type=venta_ct, destino_id=comprobante.pk
             )
             
             if not auto_imputaciones.exists():
@@ -1073,11 +1394,12 @@ def eliminar_auto_imputaciones_cliente_generico(request, comprobante_id):
                 })
             
             # Verificar que SOLO tiene auto-imputaciones (no otras)
-            otras_imputaciones = ImputacionVenta.objects.filter(
-                Q(imp_id_venta=comprobante) | Q(imp_id_recibo=comprobante)
+            otras_imputaciones = Imputacion.objects.filter(
+                (Q(destino_content_type=venta_ct) & Q(destino_id=comprobante.pk)) |
+                (Q(origen_content_type=venta_ct) & Q(origen_id=comprobante.pk))
             ).exclude(
-                imp_id_venta=comprobante,
-                imp_id_recibo=comprobante
+                origen_content_type=venta_ct, origen_id=comprobante.pk,
+                destino_content_type=venta_ct, destino_id=comprobante.pk
             )
             
             if otras_imputaciones.exists():

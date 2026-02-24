@@ -1,23 +1,12 @@
 import { useState, useEffect, useMemo } from "react"
 
-const useAsociacionCodigos = ({ 
-  stock, 
-  modo, 
-  form, 
-  stockProve, 
-  codigosPendientes, 
-  setCodigosPendientes, 
-  codigosPendientesEdicion, 
-  setCodigosPendientesEdicion,
-  stockProvePendientes,
-  setStockProvePendientes,
-  proveedoresAgregados,
-  setProveedoresAgregados,
+const useAsociacionCodigos = ({
+  stock,
+  form,
+  proveedores,
   updateForm,
-  setFormError 
+  alert
 }) => {
-  const isEdicion = !!stock?.id
-
   // Estados para el componente de asociar código integrado
   const [selectedProveedor, setSelectedProveedor] = useState("")
   const [codigoProveedor, setCodigoProveedor] = useState("")
@@ -51,10 +40,10 @@ const useAsociacionCodigos = ({
     }
   }, [selectedProveedor])
 
-  // Al cambiar de proveedor, ocultar errores previos de asociación
+  // Limpiar error al cambiar de proveedor
   useEffect(() => {
     setErrorAsociar(null)
-  }, [selectedProveedor, setErrorAsociar])
+  }, [selectedProveedor])
 
   // Limpiar input al cambiar modo de búsqueda
   useEffect(() => {
@@ -91,203 +80,68 @@ const useAsociacionCodigos = ({
     }
   }, [selectedProveedor, codigoProveedor])
 
-  // Handler para asociar código de proveedor
-  const handleAsociarCodigoPendiente = async ({ proveedor_id, codigo_producto_proveedor, costo }) => {
-    if (!isEdicion) {
-      // Validar duplicados en pendientes
-      const codigoYaUsado = (codigosPendientes || []).some(
-        (c) =>
-          c.codigo_producto_proveedor === codigo_producto_proveedor && String(c.proveedor_id) !== String(proveedor_id),
-      )
-      if (codigoYaUsado) {
-        return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
-      }
-      // Producto nuevo (incluye caso con ID temporal): NO llamar backend, persistir en estado local
-      if (!stock) {
-        setCodigosPendientes((prev) => {
-          const otros = (prev || []).filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-          return [
-            ...otros,
-            {
-              proveedor_id,
-              codigo_producto_proveedor,
-              costo: costo !== "" ? costo : 0,
-            },
-          ]
-        })
-        setStockProvePendientes((prev) =>
-          (prev || []).map((sp) =>
-            String(sp.proveedor) === String(proveedor_id) ? { ...sp, costo: costo !== "" ? costo : 0 } : sp,
-          ),
-        )
-        return { ok: true }
-      }
-    }
-
-    // En EDICIÓN: registrar en pendientes de edición y sincronizar el form
-    if (isEdicion && form.id != null && String(form.id).length > 0) {
-      // Validar contra los códigos ya asociados (guardados y pendientes)
-      const codigosActuales = [
-        ...(Array.isArray(form.stock_proveedores) ? form.stock_proveedores.map((sp) => sp.codigo_producto_proveedor).filter(Boolean) : []),
-        ...codigosPendientesEdicion.map((c) => c.codigo_producto_proveedor),
-      ]
-      // Si el código ya está en uso para otro proveedor, error
-      const yaUsado = codigosActuales.some(
-        (c, idx, arr) =>
-          c === codigo_producto_proveedor &&
-          // Si ya está en pendientes, que no sea para el mismo proveedor
-          codigosPendientesEdicion[idx]?.proveedor_id !== proveedor_id,
-      )
-      if (yaUsado) {
-        return { ok: false, error: "Este código ya se encuentra asociado a otro producto." }
-      }
-      setCodigosPendientesEdicion((prev) => {
-        // Reemplaza si ya existe para ese proveedor
-        const otros = prev.filter((c) => String(c.proveedor_id) !== String(proveedor_id))
-        return [...otros, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }]
-      })
-      // Actualizar form.stock_proveedores en el estado local para reflejar el nuevo código asociado
-      const actualizado = (form.stock_proveedores || []).map((sp) =>
-        String(sp.proveedor_id ?? (sp.proveedor?.id || sp.proveedor)) === String(proveedor_id)
-          ? { ...sp, codigo_producto_proveedor, costo }
-          : sp,
-      )
-      // Si no existe, agregarlo
-      const existe = actualizado.some((sp) => String(sp.proveedor_id) === String(proveedor_id))
-      updateForm({
-        stock_proveedores: existe
-          ? actualizado
-          : [...actualizado, { proveedor_id, codigo_producto_proveedor, costo, cantidad: 0 }],
-      })
-      return { ok: true }
-    }
-
-    // Producto nuevo con id temporal: ya manejado arriba en la rama !isEdicion
-    if (!isEdicion && form.id) {
-      return { ok: true }
-    }
-    
-    return { ok: false, error: "No se pudo asociar el código." }
-  }
-
-  // Función para filtrar productos sugeridos
-  const filteredProductos = useMemo(() => {
-    if (productosConDenominacion.length === 0) return []
-
-    const term = codigoProveedor.trim().toLowerCase()
-    const campo = modoBusqueda === "codigo" ? "codigo" : "denominacion"
-
-    // Calcular puntuación por campo seleccionado
-    const puntuados = productosConDenominacion
-      .map((producto) => {
-        const texto = String(producto[campo] || "").toLowerCase()
-        let score = 0
-        if (term.length === 0) {
-          score = 0
-        } else if (texto === term) {
-          score = 1000
-        } else if (texto.startsWith(term)) {
-          score = 200 + (term.length / (texto.length || 1)) * 10
-        } else if (texto.includes(term)) {
-          score = 50
-        }
-        if (modoBusqueda === "denominacion" && !producto.denominacion) score = 0
-        return { ...producto, score }
-      })
-      .filter((obj) => obj.score > 0 || term.length === 0)
-
-    // Orden natural numérica + desc por score
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-    puntuados.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      return collator.compare(String(a.codigo), String(b.codigo))
-    })
-
-    return puntuados.slice(0, 8)
-  }, [productosConDenominacion, codigoProveedor, modoBusqueda])
-
-  // Validar si el código ingresado existe en la lista cargada del proveedor
-  const codigoExisteEnLista = useMemo(() => {
-    if (!selectedProveedor || !codigoProveedor) return false
-    const term = String(codigoProveedor).trim().toLowerCase()
-    return productosConDenominacion.some((p) => String(p.codigo || "").toLowerCase() === term)
-  }, [selectedProveedor, codigoProveedor, productosConDenominacion])
-
-  // Función para manejar la asociación de código
+  // Handler unificado para asociar código
   const handleAsociarCodigoIntegrado = async () => {
     setErrorAsociar(null)
     setMessageAsociar(null)
+
     if (!selectedProveedor || !codigoProveedor) {
       setErrorAsociar("Debe seleccionar proveedor y código.")
       return
     }
 
-    // VALIDACIONES DESHABILITADAS: Permitir asociar cualquier código, aunque no esté en la lista del proveedor
-    // Si el proveedor no tiene lista, permitir asociar código manualmente
-    // if ((productosConDenominacion || []).length === 0) {
-    //   setErrorAsociar("El proveedor seleccionado no tiene lista cargada o no se pudieron cargar sus códigos. No es posible asociar un código manualmente.")
-    //   return
-    // }
+    const pId = Number(selectedProveedor)
+    const normalizedCodigo = String(codigoProveedor).trim()
+    const normalizedCosto = parseFloat(String(costoAsociar).replace(",", ".")) || 0
 
-    // Permitir asociar cualquier código, aunque no exista en la lista
-    // if (!codigoExisteEnLista) {
-    //   setErrorAsociar("No se encontró el código en la lista del proveedor. Selecciónelo desde la tabla de sugerencias.")
-    //   return
-    // }
+    // Validar duplicado en el propio formulario (fuente de verdad)
+    const yaAsociadoAotro = (form.stock_proveedores || []).some(sp =>
+      String(sp.codigo_producto_proveedor) === normalizedCodigo && String(sp.proveedor_id) !== String(pId)
+    )
 
-    const resultado = await handleAsociarCodigoPendiente({
-      proveedor_id: selectedProveedor,
-      codigo_producto_proveedor: codigoProveedor,
-      costo: costoAsociar,
-    })
-
-    if (resultado && resultado.ok) {
-      // En modo nuevo, si el proveedor no está en proveedoresAgregados, agregarlo automáticamente
-      if (!isEdicion && !stock?.id) {
-        const proveedorId = Number(selectedProveedor)
-        const yaExiste = proveedoresAgregados.some((pa) => pa.proveedor === proveedorId)
-        
-        if (!yaExiste) {
-          setProveedoresAgregados((prev) => [
-            ...prev,
-            {
-              proveedor: proveedorId,
-              cantidad: 0,
-              costo: Number(costoAsociar) || 0,
-              codigo_producto_proveedor: codigoProveedor,
-              pendiente: true,
-            }
-          ])
-        } else {
-          // Si ya existe, actualizar el costo y código
-          setProveedoresAgregados((prev) =>
-            prev.map((pa) =>
-              pa.proveedor === proveedorId
-                ? { ...pa, costo: Number(costoAsociar) || 0, codigo_producto_proveedor: codigoProveedor }
-                : pa
-            )
-          )
-        }
-      }
-
-      setMessageAsociar("¡Código de proveedor asociado correctamente!")
-      // Limpiar formulario
-      setSelectedProveedor("")
-      setCodigoProveedor("")
-      setCostoAsociar("")
-      setDenominacionAsociar("")
-      setTimeout(() => {
-        setMessageAsociar(null)
-      }, 2000)
-    } else {
-      setErrorAsociar(resultado && resultado.error ? resultado.error : "No se pudo asociar el código.")
-      setTimeout(() => {
-        setErrorAsociar(null)
-      }, 3000)
+    if (yaAsociadoAotro) {
+      setErrorAsociar("Este código ya se encuentra asociado a otro proveedor en este producto.")
+      return
     }
+
+    // Actualizar o Agregar en form.stock_proveedores
+    const actual = form.stock_proveedores || []
+    const existeIndice = actual.findIndex(sp => String(sp.proveedor_id) === String(pId))
+
+    let nuevaLista
+    if (existeIndice !== -1) {
+      nuevaLista = actual.map((sp, idx) =>
+        idx === existeIndice
+          ? { ...sp, codigo_producto_proveedor: normalizedCodigo, costo: normalizedCosto, pendiente: true }
+          : sp
+      )
+    } else {
+      nuevaLista = [
+        ...actual,
+        {
+          proveedor_id: pId,
+          codigo_producto_proveedor: normalizedCodigo,
+          costo: normalizedCosto,
+          cantidad: 0,
+          pendiente: true
+        }
+      ]
+    }
+
+    updateForm({ stock_proveedores: nuevaLista })
+
+    setMessageAsociar("¡Código asociado correctamente!")
+    // Limpiar formulario local modal
+    setSelectedProveedor("")
+    setCodigoProveedor("")
+    setCostoAsociar("")
+    setDenominacionAsociar("")
+
+    setTimeout(() => {
+      setMessageAsociar(null)
+    }, 2000)
   }
 
-  // Función para limpiar el formulario de asociación
   const handleCancelarAsociarCodigo = () => {
     setSelectedProveedor("")
     setCodigoProveedor("")
@@ -297,8 +151,27 @@ const useAsociacionCodigos = ({
     setMessageAsociar(null)
   }
 
+  const filteredProductos = useMemo(() => {
+    if (productosConDenominacion.length === 0) return []
+    const term = codigoProveedor.trim().toLowerCase()
+    const campo = modoBusqueda === "codigo" ? "codigo" : "denominacion"
+
+    return productosConDenominacion
+      .map((producto) => {
+        const texto = String(producto[campo] || "").toLowerCase()
+        let score = 0
+        if (term.length === 0) score = 1
+        else if (texto === term) score = 1000
+        else if (texto.startsWith(term)) score = 200
+        else if (texto.includes(term)) score = 50
+        return { ...producto, score }
+      })
+      .filter((obj) => obj.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+  }, [productosConDenominacion, codigoProveedor, modoBusqueda])
+
   return {
-    // Estados
     selectedProveedor,
     setSelectedProveedor,
     codigoProveedor,
@@ -306,7 +179,6 @@ const useAsociacionCodigos = ({
     productosConDenominacion,
     loadingCodigos,
     messageAsociar,
-    setMessageAsociar,
     errorAsociar,
     setErrorAsociar,
     costoAsociar,
@@ -318,15 +190,9 @@ const useAsociacionCodigos = ({
     setShowSugeridos,
     modoBusqueda,
     setModoBusqueda,
-    codigoExisteEnLista,
-    
-    // Handlers
-    handleAsociarCodigoPendiente,
-    handleAsociarCodigoIntegrado,
-    handleCancelarAsociarCodigo,
-    
-    // Cálculos
     filteredProductos,
+    handleAsociarCodigoIntegrado,
+    handleCancelarAsociarCodigo
   }
 }
 

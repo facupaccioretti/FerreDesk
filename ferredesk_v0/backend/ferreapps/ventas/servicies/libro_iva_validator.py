@@ -6,7 +6,7 @@ Verifica la integridad y consistencia de los datos según las regulaciones argen
 from decimal import Decimal
 from typing import Dict, List, Any, Tuple
 from datetime import datetime, date
-from ferreapps.ventas.models import VentaCalculada, Comprobante
+from ferreapps.ventas.models import Venta, Comprobante
 from ferreapps.clientes.models import Cliente
 
 

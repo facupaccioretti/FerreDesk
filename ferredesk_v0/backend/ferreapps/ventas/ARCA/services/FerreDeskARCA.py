@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 from django.db import transaction
+from django.utils import timezone
 
 from ...models import Venta
 from ferreapps.productos.models import Ferreteria
@@ -226,7 +227,7 @@ class FerreDeskARCA:
                             'resultado': cab_resp.Resultado,
                             'observaciones': observaciones_procesadas if observaciones_procesadas is not None else [],  # Lista procesada para frontend
                             'observaciones_raw': observaciones_raw,     # Estructura completa para debugging
-                            'fecha_emision': datetime.now()
+                            'fecha_emision': timezone.localtime()
                         }
                     else:
                         logger.error(f"CAE no encontrado en la respuesta")
@@ -313,9 +314,12 @@ class FerreDeskARCA:
             cliente = venta.ven_idcli
             comprobante = venta.comprobante
             
-            from ...models import VentaCalculada, VentaIVAAlicuota
-            venta_calculada = VentaCalculada.objects.get(ven_id=venta.ven_id)
-            alicuotas_venta = VentaIVAAlicuota.objects.filter(vdi_idve=venta.ven_id)
+            from ...models import Venta
+            
+            # Usar la instancia de venta directamente (que ahora tiene propiedades de cálculo)
+            # como venta_calculada y obtener el desglose de IVA con el nuevo método
+            venta_calculada = venta
+            alicuotas_venta = venta.get_iva_breakdown()
             
             # Preparar datos usando el armador
             datos_arca = armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_venta)

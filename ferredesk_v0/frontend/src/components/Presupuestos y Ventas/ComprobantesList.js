@@ -2,6 +2,7 @@ import React from "react"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
 import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
+import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 import Paginador from "../Paginador"
@@ -33,54 +34,6 @@ const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
   return { icon: <IconFactura />, label: String(nombre) }
 }
 
-/**
- * Badge de estado para mostrar visualmente si está Abierto o Cerrado
- * @param {Object} props - Props del componente
- * @param {string} props.estado - Estado del comprobante
- * @returns {JSX.Element} - Badge de estado
- */
-const EstadoBadge = ({ estado }) => {
-  if (estado === "Cerrado") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-          className="w-3.5 h-3.5"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
-          />
-        </svg>
-        Cerrado
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-        className="w-3.5 h-3.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
-        />
-      </svg>
-      Abierto
-    </span>
-  )
-}
 
 /**
  * Función para generar los botones de acciones según el tipo de comprobante
@@ -104,16 +57,16 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
 
   // Función para determinar si una factura puede tener NC
   const puedeTenerNotaCredito = (comp) => {
-    const esFactura = comp.comprobante?.tipo === 'factura' || 
-                     comp.comprobante?.tipo === 'venta' || 
-                     comp.comprobante?.tipo === 'factura_interna';
+    const esFactura = comp.comprobante?.tipo === 'factura' ||
+      comp.comprobante?.tipo === 'venta' ||
+      comp.comprobante?.tipo === 'factura_interna';
     const letraValida = ['A', 'B', 'C', 'I'].includes(comp.comprobante?.letra);
     const estaCerrada = comp.estado === 'Cerrado';
     return esFactura && letraValida && estaCerrada;
   };
 
   const botones = []
-  
+
   // Verificar si es Presupuesto (único tipo que puede tener botón de eliminar)
   // Excluir explícitamente: Modif. de Contenido, Cotizaciones, Extensión de Contenido, etc.
   const esPresupuesto = comprobante.tipo === "Presupuesto"
@@ -127,59 +80,74 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
     'factura',                // Factura
     'venta'                   // Venta
   ].includes(tipoComprobanteOriginal.toLowerCase())
-  
+
   // Solo Presupuestos pueden tener botón de eliminar
   const puedeEliminar = esPresupuesto && !esComprobanteNoEliminable
 
   // Presupuesto abierto
   if (puedeEliminar && comprobante.estado === "Abierto") {
     botones.push(
-      { 
-        componente: BotonGenerarPDF, 
+      {
+        componente: BotonGenerarPDF,
         onClick: () => handleImprimir(comprobante),
         titulo: "Generar PDF"
       },
-      { 
-        componente: BotonVerDetalle, 
+      // {
+      //   componente: BotonVerTicket,
+      //   onClick: () => handleVerTicket(comprobante),
+      //   titulo: "Ver Ticket"
+      // },
+      {
+        componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
       },
-      { 
-        componente: BotonEditar, 
+      {
+        componente: BotonEditar,
         onClick: () => handleEdit(comprobante),
         titulo: "Editar"
-      },
-      { 
-        componente: BotonConvertir, 
+      }
+    )
+
+    // Solo mostrar botón de convertir si NO está ya convertida
+    if (!comprobante.convertida_a_fiscal) {
+      botones.push({
+        componente: BotonConvertir,
         onClick: () => handleConvertir(comprobante),
         titulo: isFetchingForConversion && fetchingPresupuestoId === comprobante.id ? "Cargando..." : "Convertir",
         disabled: isFetchingForConversion && fetchingPresupuestoId === comprobante.id
-      },
-      { 
-        componente: BotonEliminar, 
-        onClick: () => handleDelete(comprobante.id),
-        titulo: "Eliminar"
-      }
-    )
+      })
+    }
+
+    botones.push({
+      componente: BotonEliminar,
+      onClick: () => handleDelete(comprobante.id),
+      titulo: "Eliminar"
+    })
   }
   // Facturas cerradas que pueden tener NC
   else if (puedeTenerNotaCredito(comprobante)) {
-    const esFacturaInternaConvertibleActual = comprobante.comprobante?.tipo === 'factura_interna' && 
+    const esFacturaInternaConvertibleActual = comprobante.comprobante?.tipo === 'factura_interna' &&
       esFacturaInternaConvertible(comprobante);
 
     botones.push(
-      { 
-        componente: BotonGenerarPDF, 
+      {
+        componente: BotonGenerarPDF,
         onClick: () => handleImprimir(comprobante),
         titulo: "Generar PDF"
       },
-      { 
-        componente: BotonVerDetalle, 
+      // {
+      //   componente: BotonVerTicket,
+      //   onClick: () => handleVerTicket(comprobante),
+      //   titulo: "Ver Ticket"
+      // },
+      {
+        componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
       },
-      { 
-        componente: BotonNotaCredito, 
+      {
+        componente: BotonNotaCredito,
         onClick: () => handleNotaCredito(comprobante),
         titulo: comprobante.comprobante?.tipo === 'factura_interna'
           ? "Crear Modificación de Contenido"
@@ -201,13 +169,18 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
   // Venta cerrada (sin botón NC)
   else if (comprobante.tipo === "Venta" && comprobante.estado === "Cerrado") {
     botones.push(
-      { 
-        componente: BotonGenerarPDF, 
+      {
+        componente: BotonGenerarPDF,
         onClick: () => handleImprimir(comprobante),
         titulo: "Generar PDF"
       },
-      { 
-        componente: BotonVerDetalle, 
+      // {
+      //   componente: BotonVerTicket,
+      //   onClick: () => handleVerTicket(comprobante),
+      //   titulo: "Ver Ticket"
+      // },
+      {
+        componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
       }
@@ -216,13 +189,18 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
   // Otros casos (solo ver y generar PDF)
   else {
     botones.push(
-      { 
-        componente: BotonVerDetalle, 
+      {
+        componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
       },
-      { 
-        componente: BotonGenerarPDF, 
+      // {
+      //   componente: BotonVerTicket,
+      //   onClick: () => handleVerTicket(comprobante),
+      //   titulo: "Ver Ticket"
+      // },
+      {
+        componente: BotonGenerarPDF,
         onClick: () => handleImprimir(comprobante),
         titulo: "Generar PDF"
       }
@@ -250,7 +228,7 @@ const ComprobanteAcciones = ({
   esFacturaInternaConvertible,
 }) => {
   const botones = generarBotonesComprobante(comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible)
-  
+
   return (
     <AccionesMenu botones={botones} />
   )
@@ -287,31 +265,31 @@ const ComprobantesList = ({
   setPaginaActual,
   setItemsPorPagina,
 }) => {
-  return (  
+  return (
     <>
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px", tableLayout: "fixed" }}>
-           <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
-             <tr>
-                              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "22%" }}>
-                  Comprobante
-                </th>
-                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "32%" }}>
-                  N°
-                </th>
-                               <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
-                   Fecha
-                 </th>
-                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "18%" }}>
-                  Cliente
-                </th>
-                               <th className="px-3 py-3 text-right text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
-                   Total
-                </th>
-                                <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "50px" }}>
-                 </th>
-             </tr>
-           </thead>
+          <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
+            <tr>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "22%" }}>
+                Comprobante
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "32%" }}>
+                N°
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
+                Fecha
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "18%" }}>
+                Cliente
+              </th>
+              <th className="px-3 py-3 text-right text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
+                Total
+              </th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "50px" }}>
+              </th>
+            </tr>
+          </thead>
           <tbody className="bg-white divide-y divide-slate-300 leading-tight">
             {datosPagina.map((p) => {
               // Obtener datos del comprobante
@@ -321,23 +299,23 @@ const ComprobantesList = ({
               } else if (p.comprobante) {
                 comprobanteObj = (comprobantes || []).find((c) => c.id === p.comprobante) || null
               }
-              
+
               const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
               const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
               const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
-              
+
               const { icon, label } = getComprobanteIconAndLabel(
                 comprobanteTipo,
                 comprobanteNombre,
                 comprobanteLetra,
               )
-              
+
               // Quitar letra del numero_formateado si existe
               let numeroSinLetra = p.numero_formateado
               if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
                 numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
               }
-              
+
               // Lógica para mostrar tooltips de comprobantes asociados
               const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
               const facturasAnuladas = p.facturas_anuladas || []
@@ -368,28 +346,30 @@ const ComprobantesList = ({
                       )}
                     </div>
                   </td>
-                  
+
                   {/* Número */}
                   <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-800">
                         {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
                       </span>
-                      <EstadoBadge estado={p.estado} />
+                      {p.convertida_a_fiscal && p.factura_fiscal_info && (
+                        <TooltipFacturado facturaInfo={p.factura_fiscal_info} />
+                      )}
                     </div>
                   </td>
-                  
+
                   {/* Fecha */}
                   <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fecha}</td>
-                  
+
                   {/* Cliente */}
                   <td className="px-2 py-0.5 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
-                  
+
                   {/* Total */}
                   <td className="px-2 py-0.5 whitespace-nowrap text-right">
                     <span className="font-semibold text-slate-800 min-w-[64px]">${formatearMoneda(p.total)}</span>
                   </td>
-                  
+
                   {/* Acciones */}
                   <td className="px-2 py-0.5 whitespace-nowrap">
                     <div className="flex gap-1">
@@ -408,7 +388,7 @@ const ComprobantesList = ({
           </tbody>
         </table>
       </div>
-      
+
       {/* Paginador */}
       <Paginador
         totalItems={totalItems}

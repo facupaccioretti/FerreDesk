@@ -73,13 +73,13 @@ const ArcaEsperaOverlay = ({
 
                     {/* Título de error */}
                     <Dialog.Title as="h3" className="text-lg font-semibold text-red-800 mb-2">
-                      Error en la Emisión Fiscal
+                      Error en la Emisión
                     </Dialog.Title>
                     
                     {/* Mensaje de error */}
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 w-full mb-6">
                       <div className="text-red-700 text-sm leading-relaxed whitespace-pre-wrap">
-                        {typeof errorArca === 'string' ? errorArca : 'Error desconocido en la emisión ARCA'}
+                        {typeof errorArca === 'string' ? errorArca : 'Error desconocido en la emisión'}
                       </div>
                     </div>
 

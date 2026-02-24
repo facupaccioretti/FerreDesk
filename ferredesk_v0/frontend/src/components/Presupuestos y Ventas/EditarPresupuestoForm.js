@@ -13,6 +13,7 @@ import { useClientesConDefecto } from './herramientasforms/useClientesConDefecto
 import ClienteSelectorModal from '../Clientes/ClienteSelectorModal';
 import { normalizarItems } from './herramientasforms/normalizadorItems';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
+import { fechaHoyLocal } from '../../utils/fechas';
 
 // Función para combinar datos iniciales con el estado por defecto, usando la misma lógica que ConVentaForm
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap = {}) => {
@@ -56,7 +57,7 @@ const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap
     descu2: data.ven_descu2 ?? data.descu2 ?? 0,
     descu3: data.ven_descu3 ?? data.descu3 ?? 0,
     copia: data.ven_copia ?? data.copia ?? 1,
-    fecha: data.ven_fecha ?? data.fecha ?? new Date().toISOString().split('T')[0],
+    fecha: data.ven_fecha ?? data.fecha ?? fechaHoyLocal(),
     estado: data.ven_estado ?? data.estado ?? 'Abierto',
     tipo: data.tipo ?? 'Presupuesto',
     items: itemsNormalizados,
