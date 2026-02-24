@@ -120,20 +120,20 @@ const useComprobantesCRUD = ({
         emisor_ingresos_brutos: ferreteria?.ingresos_brutos,
         emisor_inicio_actividad: ferreteria?.inicio_actividad,
 
-        // Datos del comprobante (desde VENTA_CALCULADO)
+        // Datos del comprobante (priorizar objeto anidado del Serializer ORM, fallback a campos planos)
         comprobante: {
-          letra: cabecera.comprobante_letra,
-          codigo_afip: cabecera.comprobante_codigo_afip,
-          nombre: cabecera.comprobante_nombre,
-          tipo: cabecera.comprobante_tipo
+          letra: cabecera.comprobante?.letra || cabecera.comprobante_letra,
+          codigo_afip: cabecera.comprobante?.codigo_afip || cabecera.comprobante_codigo_afip,
+          nombre: cabecera.comprobante?.nombre || cabecera.comprobante_nombre,
+          tipo: cabecera.comprobante?.tipo || cabecera.comprobante_tipo
         },
-        numero_formateado: cabecera.numero_formateado,
+        numero_formateado: cabecera.numero_formateado || cabecera._numero_formateado,
         fecha: cabecera.ven_fecha,
-        hora_creacion: cabecera.hora_creacion,
+        hora_creacion: cabecera.hora_creacion || cabecera.hora_creacion_venta,
 
-        // Datos del cliente (desde VENTA_CALCULADO)
-        cliente: cabecera.cliente_razon,
-        domicilio: cabecera.cliente_domicilio,
+        // Datos del cliente (priorizar anotaciones directas o campos del modelo)
+        cliente: cabecera.cliente_razon || cabecera.ven_razon_social,
+        domicilio: cabecera.cliente_domicilio || cabecera.ven_domicilio,
         condicion_iva_cliente: cabecera.cliente_condicion_iva,
         cuit: cabecera.ven_cuit || cabecera.cliente_cuit,
         localidad: cabecera.cliente_localidad,

@@ -793,13 +793,11 @@ class FerreteriaAPIView(APIView):
         return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
 
     def post(self, request):
-        """Crea la primera ferretería si aún no existe. Solo para usuarios staff."""
+        """Crea la primera ferretería si aún no existe."""
         if not request.user.is_authenticated:
             return Response({'detail': 'No autenticado.'}, status=401)
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para crear.'}, status=403)
-
-        # Verificar unicidad: solo una instancia permitida
+        
+        # Si ya existe una ferretería, prohibir creación (unicidad)
         if Ferreteria.objects.exists():
             return Response({'detail': 'Ya existe una ferretería configurada.'}, status=400)
 
@@ -824,8 +822,6 @@ class FerreteriaAPIView(APIView):
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
             return Response({'detail': 'No existe ferretería configurada.'}, status=404)
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
         
         # Manejar archivos subidos
         data = request.data.copy()

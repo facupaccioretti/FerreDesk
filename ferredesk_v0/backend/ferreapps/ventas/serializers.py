@@ -3,6 +3,9 @@ from .models import (
     Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
     VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada, ComprobanteAsociacion
 )
+
+from ferreapps.caja.models import PagoVenta
+from ferreapps.caja.serializers import PagoVentaSerializer
 from django.db import models
 from ferreapps.productos.models import AlicuotaIVA
 from decimal import Decimal
@@ -646,11 +649,29 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
     # Campo personalizado para el QR
     ven_qr = serializers.SerializerMethodField()
     numero_formateado = serializers.SerializerMethodField()
+    # Detalles de pagos asociados
+    pagos_detalle = serializers.SerializerMethodField()
     # Campos calculados (properties/anotaciones, no columnas DB)
     ven_total = serializers.SerializerMethodField()
     ven_impneto = serializers.SerializerMethodField()
     iva_global = serializers.SerializerMethodField()
     subtotal_bruto = serializers.SerializerMethodField()
+    # Campos de cliente anotados (para compatibilidad con vistas SQL)
+    cliente_razon = serializers.CharField(read_only=True)
+    cliente_fantasia = serializers.CharField(read_only=True)
+    cliente_domicilio = serializers.CharField(read_only=True)
+    cliente_telefono = serializers.CharField(read_only=True)
+    cliente_cuit = serializers.CharField(read_only=True)
+    cliente_ingresos_brutos = serializers.CharField(read_only=True)
+    cliente_localidad = serializers.CharField(read_only=True)
+    cliente_provincia = serializers.CharField(read_only=True)
+    cliente_condicion_iva = serializers.CharField(read_only=True)
+
+    # Campos de comprobante planos (para compatibilidad con vistas SQL)
+    comprobante_nombre = serializers.CharField(source='_comprobante_nombre', read_only=True)
+    comprobante_letra = serializers.CharField(source='_comprobante_letra', read_only=True)
+    comprobante_tipo = serializers.CharField(read_only=True)
+    comprobante_codigo_afip = serializers.CharField(source='_comprobante_codigo_afip', read_only=True)
 
     class Meta:
         model = Venta # Cambiamos de VentaCalculada a Venta
@@ -778,3 +799,97 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         # De cada asociación, obtenemos la factura que fue afectada
         facturas = [asc.factura_afectada for asc in asociaciones]
         return VentaAsociadaSerializer(facturas, many=True, context=self.context).data 
+
+    def get_pagos_detalle(self, obj):
+        """
+        Obtiene el detalle de los pagos asociados a la venta.
+        Utilizado para mostrar cómo se abonó la comprobante.
+        """
+        pagos = PagoVenta.objects.filter(venta_id=obj.pk).select_related('metodo_pago', 'cuenta_banco')
+        resultado = []
+        for pago in pagos:
+            detalle = {
+                'id': pago.id,
+                'metodo_vuelto': pago.es_vuelto,
+                'metodo': pago.metodo_pago.nombre if pago.metodo_pago else 'Desconocido',
+                'monto': str(pago.monto),
+                'referencia': pago.referencia_externa or '',
+            }
+            if pago.cuenta_banco:
+                detalle['cuenta'] = pago.cuenta_banco.nombre
+            resultado.append(detalle)
+        return resultado
+
+class VentaTicketSerializer(serializers.ModelSerializer):
+    items = serializers.SerializerMethodField()
+    pagos = PagoVentaSerializer(many=True, read_only=True)
+    ferreteria = serializers.SerializerMethodField()
+    cliente_nombre = serializers.SerializerMethodField()
+    cliente_cuit = serializers.SerializerMethodField()
+    cliente_condicion_iva = serializers.SerializerMethodField()
+    cliente_domicilio = serializers.SerializerMethodField()
+    numero_formateado = serializers.SerializerMethodField()
+    ven_qr = serializers.SerializerMethodField()
+    comprobante_nombre = serializers.CharField(source='comprobante.nombre', read_only=True)
+    comprobante_letra = serializers.CharField(source='comprobante.letra', read_only=True)
+    
+    # Campo para totales anotados
+    ven_total = serializers.DecimalField(max_digits=15, decimal_places=2, source='_ven_total', read_only=True)
+    ven_impneto = serializers.DecimalField(max_digits=15, decimal_places=2, source='_ven_impneto', read_only=True)
+    iva_global = serializers.DecimalField(max_digits=15, decimal_places=2, source='_iva_global', read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = [
+            'ven_id', 'numero_formateado', 'ven_fecha', 'hora_creacion', 'comprobante_nombre', 'comprobante_letra',
+            'ven_total', 'ven_impneto', 'iva_global', 'cliente_nombre', 'cliente_cuit', 'cliente_condicion_iva', 'cliente_domicilio',
+            'items', 'pagos', 'ven_cae', 'ven_caevencimiento', 'ven_qr', 'ferreteria', 'vuelto_calculado'
+        ]
+
+    def get_items(self, obj):
+        # MUY IMPORTANTE: Aplicar con_calculos() para que los precios unitarios e IVA estén disponibles
+        items_qs = obj.items.all().con_calculos()
+        return VentaDetalleItemCalculadoSerializer(items_qs, many=True).data
+
+    def get_ferreteria(self, obj):
+        from ferreapps.productos.models import Ferreteria
+        from ferreapps.productos.serializers import FerreteriaSerializer
+        ferreteria = Ferreteria.objects.first()
+        if ferreteria:
+            # Aseguramos que el serializer obtenga toda la información necesaria
+            return FerreteriaSerializer(ferreteria, context=self.context).data
+        return None
+
+
+
+    def get_numero_formateado(self, obj):
+        if obj.ven_punto is not None and obj.ven_numero is not None:
+            letra = getattr(obj.comprobante, 'letra', '') if obj.comprobante else ''
+            prefix = f"{letra} " if letra else ""
+            return f"{prefix}{obj.ven_punto:04d}-{obj.ven_numero:08d}"
+        return None
+
+    def get_ven_qr(self, obj):
+        if obj.ven_qr:
+            try:
+                import base64
+                if isinstance(obj.ven_qr, str):
+                    qr_bytes = obj.ven_qr.encode('latin-1')
+                else:
+                    qr_bytes = obj.ven_qr
+                return base64.b64encode(qr_bytes).decode('utf-8')
+            except Exception:
+                return None
+        return None
+
+    def get_cliente_nombre(self, obj):
+        return getattr(obj, 'cliente_razon', None) or (obj.ven_idcli.razon if obj.ven_idcli else '')
+
+    def get_cliente_cuit(self, obj):
+        return getattr(obj, 'cliente_cuit', None) or (obj.ven_idcli.cuit if obj.ven_idcli else '')
+
+    def get_cliente_condicion_iva(self, obj):
+        return getattr(obj, 'cliente_condicion_iva', None) or (obj.ven_idcli.iva.nombre if obj.ven_idcli and obj.ven_idcli.iva else '')
+
+    def get_cliente_domicilio(self, obj):
+        return getattr(obj, 'cliente_domicilio', None) or (obj.ven_idcli.domicilio if obj.ven_idcli else '')

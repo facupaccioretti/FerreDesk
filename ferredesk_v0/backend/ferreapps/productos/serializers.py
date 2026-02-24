@@ -168,6 +168,13 @@ class StockSerializer(serializers.ModelSerializer):
         return value
 
 class FerreteriaSerializer(serializers.ModelSerializer):
+    # Campos obligatorios para identificación fiscal
+    nombre = serializers.CharField(required=True, allow_blank=False)
+    razon_social = serializers.CharField(required=True, allow_blank=False)
+    cuit_cuil = serializers.CharField(required=True, allow_blank=False)
+    direccion = serializers.CharField(required=True, allow_blank=False)
+    inicio_actividad = serializers.DateField(required=False, allow_null=True, input_formats=['%Y-%m-%d', '%d/%m/%Y'])
+    
     # Campo escribible para permitir subir archivo vía PATCH
     logo_empresa = serializers.ImageField(required=False, allow_null=True)
     # Aceptar archivos para escritura, pero no exponerlos en la respuesta

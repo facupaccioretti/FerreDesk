@@ -753,6 +753,17 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def ticket(self, request, pk=None):
+        # Utilizamos con_calculos() para asegurarnos de traer los subtotales anotados
+        venta = Venta.objects.con_calculos().filter(pk=pk).first()
+        if not venta:
+            return Response({'detail': 'Venta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        from ..serializers import VentaTicketSerializer
+        serializer = VentaTicketSerializer(venta)
+        return Response(serializer.data)
+
 
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleItem.objects.all()

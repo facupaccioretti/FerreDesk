@@ -105,8 +105,9 @@ export function mapearVentaDetalle({
     cuit: ventaCalculada.ven_cuit || clienteCompleto?.cuit || '',
     condicion_iva_cliente: clienteCompleto?.condicion_iva || ventaCalculada.cliente_condicion_iva || '',
     telefono_cliente: clienteCompleto?.telefono || '',
-    items: itemsCalculados || [],    
+    items: itemsCalculados || [],
     iva_discriminado: ivaDiscriminado || [],
+    pagos_detalle: ventaCalculada.pagos_detalle || [],
   };
 
   return datos;

@@ -3,13 +3,14 @@ import { pdf } from '@react-pdf/renderer';
 import PlantillaFacturaAPDF from './PlantillaFacturaAPDF';
 import PlantillaFacturaBPDF from './PlantillaFacturaBPDF';
 import PlantillaFacturaCPDF from './PlantillaFacturaCPDF';
+import { mapearTipoComprobante } from '../helpers';
 
 export const useGeneradorPDF = () => {
   const [generando, setGenerando] = useState(false);
 
   const obtenerPlantillaPDF = useCallback((data, tipoComprobante, ferreteriaConfig) => {
     const letra = data?.comprobante?.letra || tipoComprobante;
-    
+
     switch (letra) {
       case 'A':
       case 'M':
@@ -26,19 +27,19 @@ export const useGeneradorPDF = () => {
   }, []);
 
   const generarNombreArchivo = useCallback((data, tipoComprobante) => {
-    const nombre = data?.comprobante?.nombre || tipoComprobante || 'Comprobante';
+    const nombre = mapearTipoComprobante(data?.comprobante || { tipo: tipoComprobante });
     const numeroRaw = data?.numero_formateado || '0000-00000001';
-    const letra = data?.comprobante?.letra || '';
-    let numero = numeroRaw;
-    if (letra && typeof numeroRaw === 'string' && numeroRaw.startsWith(`${letra} `)) {
-      numero = numeroRaw.slice(letra.length + 1);
-    }
-    return `${nombre.replace(/\s+/g, '_')}_${numero}.pdf`;
+
+    // Combinamos nombre y número, asegurándonos de que los espacios sean guiones bajos
+    const nombreLimpio = nombre.replace(/\s+/g, '_');
+    const numeroLimpio = numeroRaw.replace(/\s+/g, '_');
+
+    return `${nombreLimpio}_${numeroLimpio}.pdf`;
   }, []);
 
   const descargarPDF = useCallback(async (data, tipoComprobante, ferreteriaConfig) => {
     if (generando) return;
-    
+
     setGenerando(true);
     try {
       const plantilla = obtenerPlantillaPDF(data, tipoComprobante, ferreteriaConfig);

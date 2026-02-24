@@ -34,6 +34,7 @@ import ComprobantesList from "./ComprobantesList"
 import VendedoresTab from "./VendedoresTab"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import EliminadorResiduoModal from "./EliminadorResiduoModal"
+import ModalTicketVenta from "./ModalTicketVenta"
 
 
 
@@ -241,6 +242,10 @@ const PresupuestosManager = () => {
   const [eliminadorModal, setEliminadorModal] = useState({ open: false })
   const [loadingEliminador, setLoadingEliminador] = useState(false)
 
+  // --- Estados para Ver Ticket ---
+  const [ticketModalOpen, setTicketModalOpen] = useState(false)
+  const [selectedTicketId, setSelectedTicketId] = useState(null)
+
 
 
   // Acciones
@@ -430,8 +435,8 @@ const PresupuestosManager = () => {
                   <div
                     key={tab.key}
                     className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key
-                        ? theme.tabActiva
-                        : theme.tabInactiva
+                      ? theme.tabActiva
+                      : theme.tabInactiva
                       }`}
                     onClick={() => setActiveTab(tab.key)}
                     style={{ position: "relative", zIndex: 1 }}
@@ -516,6 +521,10 @@ const PresupuestosManager = () => {
                         handleDelete,
                         handleConvertirFacturaI,
                         handleNotaCredito,
+                        handleVerTicket: (comprobante) => {
+                          setSelectedTicketId(comprobante.id)
+                          setTicketModalOpen(true)
+                        },
                       }}
                       isFetchingForConversion={isFetchingForConversion}
                       fetchingPresupuestoId={fetchingPresupuestoId}
@@ -959,6 +968,7 @@ const PresupuestosManager = () => {
           sucursales={sucursales}
           puntosVenta={puntosVenta}
           comprobantes={comprobantes}
+          ferreteriaConfig={ferreteria}
           onImprimir={handleImprimir}
           onEliminar={async (id) => {
             await handleDelete(id)
@@ -974,6 +984,13 @@ const PresupuestosManager = () => {
         onClose={handleCerrarEliminador}
         onConfirmar={handleConfirmarEliminacion}
         loading={loadingEliminador}
+      />
+
+      {/* Modal para Ver e Imprimir Ticket (Impresoras 80mm) */}
+      <ModalTicketVenta
+        isOpen={ticketModalOpen}
+        onClose={() => setTicketModalOpen(false)}
+        ventaId={selectedTicketId}
       />
     </div>
   )

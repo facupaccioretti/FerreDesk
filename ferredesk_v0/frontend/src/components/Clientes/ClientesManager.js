@@ -25,7 +25,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 const ClientesManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
-  
+
   // ------ Cambiar título página ------
   useEffect(() => {
     document.title = "Clientes FerreDesk"
@@ -84,14 +84,14 @@ const ClientesManager = () => {
     return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
 
-  
+
   const [expandedClientId, setExpandedClientId] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
-  
+
   // Estado de ordenamiento
   const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
-  
+
   const [user, setUser] = useState(null)
 
   // Persistencia de tabs
@@ -213,7 +213,7 @@ const ClientesManager = () => {
     <div className={theme.fondo}>
       <div className={theme.patron}></div>
       <div className={theme.overlay}></div>
-      
+
       <div className="relative z-10">
         <Navbar user={user} onLogout={handleLogout} />
 
@@ -224,142 +224,141 @@ const ClientesManager = () => {
               <h2 className="text-2xl font-bold text-slate-800">Gestión de Clientes</h2>
             </div>
 
-          {/* Área principal: pestañas y contenido */}
-          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
-            {/* Tabs tipo browser - Encabezado azul oscuro */}
-            <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.key}
-                  className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${
-                    activeTab === tab.key
-                      ? theme.tabActiva
-                      : theme.tabInactiva
-                  }`}
-                  onClick={() => setActiveTab(tab.key)}
-                  style={{ position: "relative", zIndex: 1 }}
-                >
-                  {tab.label}
-                  {tab.closable && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        closeTab(tab.key)
-                      }}
-                      className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
-                      title="Cerrar"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            
-            <div className="flex-1 p-6">
-              {/* Botón Nuevo Cliente solo en la tab de lista */}
-              {activeTab === "lista" && (
-                <div className="mb-4 flex gap-2">
-                  <button
-                    onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Cliente")}
-                    className={theme.botonPrimario}
+            {/* Área principal: pestañas y contenido */}
+            <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
+              {/* Tabs tipo browser - Encabezado azul oscuro */}
+              <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.key}
+                    className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key
+                        ? theme.tabActiva
+                        : theme.tabInactiva
+                      }`}
+                    onClick={() => setActiveTab(tab.key)}
+                    style={{ position: "relative", zIndex: 1 }}
                   >
-                    <span className="text-lg">+</span> Nuevo Cliente
-                  </button>
-                </div>
-              )}
+                    {tab.label}
+                    {tab.closable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab.key)
+                        }}
+                        className="ml-3 text-lg font-bold text-slate-400 hover:text-red-500 focus:outline-none transition-colors"
+                        title="Cerrar"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-              {/* Contenido de pestañas */}
-              {activeTab === "lista" && (
-                <ClientesTable
-                  clientes={clientesActivos}
-                  onEdit={handleEditCliente}
-                  onDelete={handleDeleteCliente}
-                  search={search}
-                  setSearch={setSearch}
-                  expandedClientId={expandedClientId}
-                  setExpandedClientId={setExpandedClientId}
-                  barrios={barrios}
-                  localidades={localidades}
-                  provincias={provincias}
-                  tiposIVA={tiposIVA}
-                  transportes={transportes}
-                  vendedores={vendedores}
-                  plazos={plazos}
-                  categorias={categorias}
-                  paginacionControlada={true}
-                  paginaActual={pagina}
-                  onPageChange={setPagina}
-                  itemsPerPage={itemsPorPagina}
-                  onItemsPerPageChange={setItemsPorPagina}
-                  totalRemoto={total}
-                  busquedaRemota={true}
-                  onOrdenamientoChange={handleOrdenamientoChange}
-                  ordenamientoControlado={ordenamiento === 'asc'}
-                  cargando={loading}
-                />
-              )}
+              <div className="flex-1 p-6">
+                {/* Botón Nuevo Cliente solo en la tab de lista */}
+                {activeTab === "lista" && (
+                  <div className="mb-4 flex gap-2">
+                    <button
+                      onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Cliente")}
+                      className={theme.botonPrimario}
+                    >
+                      <span className="text-lg">+</span> Nuevo Cliente
+                    </button>
+                  </div>
+                )}
 
-              {activeTab === "inactivos" && (
-                <ClientesTable
-                  clientes={clientesInactivos}
-                  onEdit={handleEditCliente}
-                  onDelete={handleDeleteCliente}
-                  search={searchInactivos}
-                  setSearch={setSearchInactivos}
-                  expandedClientId={expandedClientId}
-                  setExpandedClientId={setExpandedClientId}
-                  barrios={barrios}
-                  localidades={localidades}
-                  provincias={provincias}
-                  tiposIVA={tiposIVA}
-                  transportes={transportes}
-                  vendedores={vendedores}
-                  plazos={plazos}
-                  categorias={categorias}
-                  cargando={loading}
-                />
-              )}
+                {/* Contenido de pestañas */}
+                {activeTab === "lista" && (
+                  <ClientesTable
+                    clientes={clientesActivos}
+                    onEdit={handleEditCliente}
+                    onDelete={handleDeleteCliente}
+                    search={search}
+                    setSearch={setSearch}
+                    expandedClientId={expandedClientId}
+                    setExpandedClientId={setExpandedClientId}
+                    barrios={barrios}
+                    localidades={localidades}
+                    provincias={provincias}
+                    tiposIVA={tiposIVA}
+                    transportes={transportes}
+                    vendedores={vendedores}
+                    plazos={plazos}
+                    categorias={categorias}
+                    paginacionControlada={true}
+                    paginaActual={pagina}
+                    onPageChange={setPagina}
+                    itemsPerPage={itemsPorPagina}
+                    onItemsPerPageChange={setItemsPorPagina}
+                    totalRemoto={total}
+                    busquedaRemota={true}
+                    onOrdenamientoChange={handleOrdenamientoChange}
+                    ordenamientoControlado={ordenamiento === 'asc'}
+                    cargando={loading}
+                  />
+                )}
 
-              {/* Pestaña "Maestros" eliminada */}
+                {activeTab === "inactivos" && (
+                  <ClientesTable
+                    clientes={clientesInactivos}
+                    onEdit={handleEditCliente}
+                    onDelete={handleDeleteCliente}
+                    search={searchInactivos}
+                    setSearch={setSearchInactivos}
+                    expandedClientId={expandedClientId}
+                    setExpandedClientId={setExpandedClientId}
+                    barrios={barrios}
+                    localidades={localidades}
+                    provincias={provincias}
+                    tiposIVA={tiposIVA}
+                    transportes={transportes}
+                    vendedores={vendedores}
+                    plazos={plazos}
+                    categorias={categorias}
+                    cargando={loading}
+                  />
+                )}
 
-              {activeTab !== "lista" && activeTab !== "inactivos" && activeTab !== "maestros" && (
-                <div className="flex justify-center items-center min-h-[60vh]">
-                  {(() => {
-                    const tabActual = tabs.find((t) => t.key === activeTab)
-                    const initialData = tabActual?.cliente || null
-                    return (
-                      <ClienteForm
-                        key={activeTab}
-                        onSave={(data) => handleSaveCliente(data, activeTab)}
-                        onCancel={() => closeTab(activeTab)}
-                        initialData={initialData}
-                        tabKey={activeTab}
-                        barrios={barrios}
-                        localidades={localidades}
-                        provincias={provincias}
-                        transportes={transportes}
-                        vendedores={vendedores}
-                        plazos={plazos}
-                        categorias={categorias}
-                        setBarrios={setBarrios}
-                        setLocalidades={setLocalidades}
-                        setProvincias={setProvincias}
-                        setTransportes={setTransportes}
-                        setPlazos={setPlazos}
-                        setCategorias={setCategorias}
-                        tiposIVA={tiposIVA}
-                        apiError={error}
-                      />
-                    )
-                  })()}
-                </div>
-              )}
+                {/* Pestaña "Maestros" eliminada */}
+
+                {activeTab !== "lista" && activeTab !== "inactivos" && activeTab !== "maestros" && (
+                  <div className="flex justify-center items-center min-h-[60vh]">
+                    {(() => {
+                      const tabActual = tabs.find((t) => t.key === activeTab)
+                      const initialData = tabActual?.cliente || null
+                      return (
+                        <ClienteForm
+                          key={activeTab}
+                          onSave={(data) => handleSaveCliente(data, activeTab)}
+                          onCancel={() => closeTab(activeTab)}
+                          initialData={initialData}
+                          tabKey={activeTab}
+                          barrios={barrios}
+                          localidades={localidades}
+                          provincias={provincias}
+                          transportes={transportes}
+                          vendedores={vendedores}
+                          plazos={plazos}
+                          categorias={categorias}
+                          setBarrios={setBarrios}
+                          setLocalidades={setLocalidades}
+                          setProvincias={setProvincias}
+                          setTransportes={setTransportes}
+                          setPlazos={setPlazos}
+                          setCategorias={setCategorias}
+                          tiposIVA={tiposIVA}
+                          apiError={error}
+                        />
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
       {/* Modal de Maestros eliminado en Clientes (migrado a Configuración) */}
 

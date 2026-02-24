@@ -1,7 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer"
 
-import { 
-  CANTIDAD_MAXIMA_ITEMS, 
+import {
+  CANTIDAD_MAXIMA_ITEMS,
   dividirItemsEnPaginas,
   generarPaginaComprobante,
   calcularNetoPagina,
@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Helvetica",
   },
-  
+
   // HEADER: Contenedor principal con posición relativa para elementos flotantes.
   header: {
     flexDirection: "row",
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 2,
   },
-  
+
   // LÍNEA DIVISORIA CENTRAL (cortada para no superponerse con el recuadro)
   lineaDivisoriaCentral: {
     width: 1,
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 1,
   },
-  
+
   // RECUADRO DE LETRA FLOTANTE
   recuadroLetraFlotante: {
     position: 'absolute',
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     fontSize: 6,
     fontWeight: "bold",
   },
-  
+
   // SECCIÓN DERECHA
   seccionDerecha: {
     flex: 1,
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     borderBottomStyle: "solid",
     marginVertical: 2,
   },
-  
+
   // Información del cliente - Estructura corregida
   infoCliente: {
     flexDirection: "row",
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   labelNormal: {
     fontWeight: "normal", // El valor en normal
   },
-  
+
   // ITEMS - ESTRUCTURA CORREGIDA con líneas completas
   itemsContainer: {
     marginBottom: 10,
@@ -363,23 +363,23 @@ const styles = StyleSheet.create({
   },
   colImporte: {
     flex: 1,
-    padding: 1, 
-    fontSize: 8, 
+    padding: 1,
+    fontSize: 8,
     textAlign: "right",
     justifyContent: "center", // Centrar verticalmente
   },
-  
+
   // Totales - Tabla con columnas y filas
   totalesContainer: {
     position: "absolute",
-    bottom: 75, 
+    bottom: 75,
     left: 8,
     right: 8,
     borderWidth: 1,
     borderColor: "#000",
     borderStyle: "solid",
     backgroundColor: "#f8f9fa",
-    minHeight: 40, 
+    minHeight: 40,
   },
   totalesHeader: {
     flexDirection: "row",
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "right",
   },
-  
+
   // Pie fiscal - UNA SOLA FILA HORIZONTAL
   pieFiscal: {
     flexDirection: "row",
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
     fontSize: 6,
     textAlign: "right",
   },
-  
+
   // Estilos para filas de traspaso
   filaTraspaso: {
     flexDirection: "row",
@@ -543,9 +543,19 @@ const styles = StyleSheet.create({
 })
 
 // Sobrescribir la función del header para la plantilla C
-const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, mapearSituacionFiscal) => {
+const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatearHora, formatearFecha, mapearSituacionFiscal) => {
   const comprobante = data.comprobante || {};
-  const esComprobanteInformal = (comprobante.tipo === "presupuesto" || comprobante.tipo === "factura_interna" || comprobante.letra === "P" || comprobante.letra === "I");
+  const tipo = (comprobante.tipo || "").toLowerCase();
+  const letra = (comprobante.letra || "").toUpperCase();
+
+  const esComprobanteInformal =
+    tipo === "presupuesto" ||
+    tipo === "factura_interna" ||
+    tipo === "nota_credito_interna" ||
+    tipo === "nota_debito_interna" ||
+    letra === "P" ||
+    letra === "I" ||
+    letra === "X";
 
   return (
     <View style={styles.header}>
@@ -555,7 +565,7 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
         <View style={styles.infoEmpresaCentrada}>
           {ferreteriaConfig.logo_empresa && (
             <View style={styles.logoEmpresa}>
-              <Image 
+              <Image
                 src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
                 style={styles.logoImagen}
               />
@@ -601,7 +611,7 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
             <Text style={styles.numeroComprobante}>{data.numero_formateado}</Text>
           )}
           {data.fecha && (
-            <Text style={styles.fechaEmision}>Fecha de Emisión: {data.fecha}</Text>
+            <Text style={styles.fechaEmision}>Fecha de Emisión: {formatearFecha(data.fecha)}</Text>
           )}
           {data.hora_creacion && (
             <Text style={styles.fechaEmision}>Hora: {formatearHora(data.hora_creacion)}</Text>
@@ -613,7 +623,7 @@ const generarHeaderC = (data, ferreteriaConfig, styles, mostrarSiempre, formatea
         <View style={styles.facturaInfoBottom}>
           {mostrarSiempre(ferreteriaConfig.cuit_cuil, "CUIT", styles)}
           {mostrarSiempre(ferreteriaConfig.ingresos_brutos, "Ingresos Brutos", styles)}
-          {mostrarSiempre(ferreteriaConfig.inicio_actividad, "Inicio de Actividades", styles)}
+          {mostrarSiempre(formatearFecha(ferreteriaConfig.inicio_actividad), "Inicio de Actividades", styles)}
         </View>
         {/* Etiqueta de documento no válido centrada y más baja en la sección derecha */}
         {esComprobanteInformal && (
@@ -699,14 +709,14 @@ const configFacturaC = {
       <View style={styles.pieFiscal}>
         <View style={styles.pieFilaHorizontal}>
           {qrBase64 && (
-            <Image 
+            <Image
               src={`data:image/png;base64,${qrBase64}`}
               style={styles.qrPlaceholder}
             />
           )}
           {/* Logo ARCA */}
           <View style={styles.arcaPlaceholder}>
-            <Image 
+            <Image
               src={`/api/productos/servir-logo-arca/?v=${Date.now()}`}
               style={{ width: 60, height: 50, objectFit: "contain", resizeMode: "contain" }}
             />
@@ -760,10 +770,10 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
     <Document>
       {paginasItems.map((itemsPagina, indexPagina) => {
         const esUltimaPagina = indexPagina === paginasItems.length - 1;
-        
+
         // Calcular neto de la página actual
         const netoPagina = calcularNetoPagina(itemsPagina, 'C');
-        
+
         // Calcular neto traspasado de páginas anteriores
         let netoTraspasado = null;
         if (indexPagina > 0) {
@@ -775,17 +785,17 @@ const PlantillaFacturaCPDF = ({ data, ferreteriaConfig }) => {
           }
           netoTraspasado = netoAcumulado;
         }
-        
+
         // Calcular neto acumulado para traspaso a página siguiente
-        const netoAcumuladoParaSiguiente = netoTraspasado !== null 
-          ? netoTraspasado + netoPagina 
+        const netoAcumuladoParaSiguiente = netoTraspasado !== null
+          ? netoTraspasado + netoPagina
           : netoPagina;
-        
+
         // Determinar si mostrar traspaso a página siguiente
         const mostrarTraspasoSiguiente = !esUltimaPagina;
-        
-        
-        
+
+
+
         return generarPaginaComprobante(
           configFacturaC, //  Configuración específica de Factura A
           data,

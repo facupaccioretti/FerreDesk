@@ -166,6 +166,20 @@ const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
 
         <div className="flex items-center border-b border-slate-100 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
+            Ingresos Brutos
+          </label>
+          <input
+            type="text"
+            value={config.ingresos_brutos || ""}
+            onChange={(e) => onConfigChange("ingresos_brutos", e.target.value)}
+            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            placeholder="Ej: 901-123456-7"
+            disabled={loading}
+          />
+        </div>
+
+        <div className="flex items-center border-b border-slate-100 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
             Logo de la Empresa
           </label>
           <div className="w-2/3">
@@ -632,11 +646,6 @@ const ConfiguracionManager = () => {
   }, [])
 
   const handleSave = async () => {
-    if (!user?.is_staff) {
-      setFeedback("No tienes permisos para modificar la configuración")
-      return
-    }
-
     setSaving(true)
     setFeedback("")
 
@@ -812,7 +821,10 @@ const ConfiguracionManager = () => {
                   <button
                     key={cat}
                     onClick={() => setCatalogoSeleccionado(cat)}
-                    className={`${catalogoSeleccionado === cat ? theme.tabActiva : `bg-gradient-to-r ${theme.primario} text-white`} px-3 py-1 rounded-lg`}
+                    className={`${catalogoSeleccionado === cat
+                      ? "bg-slate-600 text-white shadow-lg ring-1 ring-slate-400 font-bold"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+                      } px-4 py-2 rounded-lg transition-all text-sm`}
                   >
                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </button>
@@ -824,7 +836,7 @@ const ConfiguracionManager = () => {
                   <input type="checkbox" checked={ocultarInactivos} onChange={(e) => setOcultarInactivos(e.target.checked)} />
                   Ocultar inactivos
                 </label>
-                <button onClick={abrirModalNuevo} className={theme.botonPrimario}><span className="text-lg">+</span> Nuevo</button>
+                <button onClick={abrirModalNuevo} className={theme.botonPrimario}>Nuevo</button>
               </div>
             </div>
 
@@ -866,8 +878,8 @@ const ConfiguracionManager = () => {
                   <div
                     key={tab.key}
                     className={`flex items-center px-5 py-3 mr-2 rounded-t-lg cursor-pointer transition-colors ${activeTab === tab.key
-                        ? theme.tabActiva
-                        : theme.tabInactiva
+                      ? theme.tabActiva
+                      : theme.tabInactiva
                       }`}
                     onClick={() => setActiveTab(tab.key)}
                     style={{ position: "relative", zIndex: 1 }}
@@ -888,7 +900,7 @@ const ConfiguracionManager = () => {
               <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 px-6 pb-6">
                 <button
                   onClick={handleSave}
-                  disabled={saving || !user?.is_staff}
+                  disabled={saving}
                   className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
                 >
                   {saving ? (
@@ -900,12 +912,7 @@ const ConfiguracionManager = () => {
                       Guardando...
                     </>
                   ) : (
-                    <>
-                      Guardar Configuración
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                      </svg>
-                    </>
+                    "Guardar Configuración"
                   )}
                 </button>
               </div>
@@ -929,8 +936,8 @@ const ConfiguracionManager = () => {
             {/* Feedback */}
             {feedback && (
               <div className={`mx-6 mb-6 text-center p-4 rounded-xl ${feedback.includes("Error")
-                  ? "bg-red-50 border border-red-200 text-red-700"
-                  : "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                ? "bg-red-50 border border-red-200 text-red-700"
+                : "bg-emerald-50 border border-emerald-200 text-emerald-700"
                 }`}>
                 {feedback}
               </div>
