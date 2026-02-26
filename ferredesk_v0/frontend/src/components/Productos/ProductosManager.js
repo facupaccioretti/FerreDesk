@@ -84,7 +84,16 @@ const ProductosManager = () => {
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
   const [showListasPrecioModal, setShowListasPrecioModal] = useState(false)
   const [productoParaImprimirEtiquetas, setProductoParaImprimirEtiquetas] = useState(null)
-  const [user, setUser] = useState({ username: "ferreadmin" })
+  const [user, setUser] = useState(null)
+
+  // Info usuario (para Navbar)
+  useEffect(() => {
+    fetch("/api/user/", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "success") setUser(data.user)
+      })
+  }, [])
 
   // Estado de búsqueda para ProductosTable
   const [searchProductos, setSearchProductos] = useState("")
@@ -195,9 +204,9 @@ const ProductosManager = () => {
   }
 
   const handleLogout = () => {
-    // Aquí tu lógica real de logout (borrar token, limpiar storage, redirigir, etc)
-    setUser(null)
-    window.location.href = "/login/" // o la ruta de tu login
+    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+      window.location.href = "/login/"
+    })
   }
 
   // Función global para refrescar el producto editado desde la API y actualizar el estado de edición
