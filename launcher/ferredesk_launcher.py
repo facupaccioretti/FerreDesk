@@ -1,14 +1,38 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import subprocess
 import threading
 import webbrowser
 import os
 import sys
 import time
+import re
+import json
+import urllib.request
 from datetime import datetime
 
 CREATE_NO_WINDOW = 0x08000000
+
+# ========================================
+# CONFIGURACIÓN DE ACTUALIZACIÓN (PROD)
+# ========================================
+DOCKERHUB_REPO = "lautajuare/ferredesk"
+DOCKERHUB_API_URL = f"https://registry.hub.docker.com/v2/repositories/{DOCKERHUB_REPO}/tags"
+UPDATE_CHECK_TIMEOUT = 10  # segundos
+
+# Rutas de búsqueda para configuración
+POSSIBLE_CONFIG_DIRS = [
+    os.path.join(os.environ.get("LocalAppData", ""), "Programs", "FerreDesk", "ferredesk"),
+    os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "FerreDesk", "ferredesk")
+]
+
+# Determinar directorio de configuración
+FERREDESK_CONFIG_DIR = POSSIBLE_CONFIG_DIRS[0] # Default
+for _dir in POSSIBLE_CONFIG_DIRS:
+    if os.path.exists(os.path.join(_dir, ".env")):
+        FERREDESK_CONFIG_DIR = _dir
+        break
+# ========================================
 
 class FerreDeskLauncher:
     def __init__(self, root):
@@ -23,6 +47,7 @@ class FerreDeskLauncher:
         self.log_file = os.path.join(log_dir, "launcher.log")
         
         self.log(f"Launcher iniciado")
+        self.log(f"Usando repositorio: {DOCKERHUB_REPO}")
         
         # Icono
         try:
@@ -72,6 +97,247 @@ class FerreDeskLauncher:
         self.status_label.config(text=message)
         self.root.update()
         self.log(message)
+    
+    # ========================================
+    # SISTEMA DE ACTUALIZACIÓN
+    # ========================================
+    
+    def get_installed_version(self):
+        """
+        Lee la versión instalada desde el archivo .env
+        Retorna: string con la versión (ej: "1.0.0") o None si no existe
+        """
+        try:
+            env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+            if not os.path.exists(env_path):
+                self.log(f"Archivo .env no encontrado en: {env_path}")
+                return None
+            
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith('FERREDESK_VERSION='):
+                        version = line.split('=', 1)[1].strip()
+                        self.log(f"Versión instalada: {version}")
+                        return version
+            
+            self.log("FERREDESK_VERSION no encontrado en .env")
+            return None
+        except Exception as e:
+            self.log(f"Error leyendo versión instalada: {e}")
+            return None
+    
+    def get_latest_dockerhub_version(self):
+        """
+        Consulta DockerHub para obtener la última versión disponible
+        Retorna: string con la versión o None si hay error
+        """
+        try:
+            self.log("Consultando DockerHub para versión más reciente...")
+            
+            # Consultar API de DockerHub
+            req = urllib.request.Request(
+                f"{DOCKERHUB_API_URL}?page_size=100",
+                headers={'Accept': 'application/json', 'User-Agent': 'FerreDesk-Launcher/1.0'}
+            )
+            
+            with urllib.request.urlopen(req, timeout=UPDATE_CHECK_TIMEOUT) as response:
+                data = json.loads(response.read().decode())
+            
+            # Filtrar tags que sean versiones semánticas (X.Y.Z)
+            version_pattern = re.compile(r'^\d+\.\d+\.\d+$')
+            
+            versions = []
+            for tag in data.get('results', []):
+                tag_name = tag.get('name', '')
+                if version_pattern.match(tag_name):
+                    versions.append(tag_name)
+            
+            if not versions:
+                self.log("No se encontraron versiones válidas en DockerHub")
+                return None
+            
+            # Ordenar versiones y obtener la más reciente
+            versions.sort(key=lambda v: [int(x) for x in v.split('.')], reverse=True)
+            latest = versions[0]
+            
+            self.log(f"Última versión en DockerHub: {latest}")
+            self.log(f"Todas las versiones encontradas: {versions}")
+            return latest
+            
+        except urllib.error.URLError as e:
+            self.log(f"Error de red consultando DockerHub: {e}")
+            return None
+        except Exception as e:
+            self.log(f"Error consultando DockerHub: {e}")
+            return None
+    
+    def compare_versions(self, v1, v2):
+        """
+        Compara dos versiones en formato X.Y.Z
+        Retorna: -1 si v1 < v2, 0 si v1 == v2, 1 si v1 > v2
+        """
+        try:
+            parts1 = [int(x) for x in v1.split('.')]
+            parts2 = [int(x) for x in v2.split('.')]
+            
+            for i in range(max(len(parts1), len(parts2))):
+                p1 = parts1[i] if i < len(parts1) else 0
+                p2 = parts2[i] if i < len(parts2) else 0
+                
+                if p1 < p2:
+                    return -1
+                elif p1 > p2:
+                    return 1
+            
+            return 0
+        except:
+            return 0
+    
+    def check_for_updates(self):
+        """
+        Verifica si hay actualizaciones disponibles
+        Retorna: (hay_actualizacion, version_actual, version_nueva) o (False, None, None)
+        """
+        try:
+            self.update_status("Verificando actualizaciones...")
+            
+            current_version = self.get_installed_version()
+            if not current_version:
+                self.log("No se pudo determinar versión instalada")
+                return False, None, None
+            
+            latest_version = self.get_latest_dockerhub_version()
+            if not latest_version:
+                self.log("No se pudo consultar versión más reciente")
+                return False, None, None
+            
+            # Comparar versiones
+            comparison = self.compare_versions(current_version, latest_version)
+            
+            if comparison < 0:
+                self.log(f"¡Actualización disponible! {current_version} -> {latest_version}")
+                return True, current_version, latest_version
+            else:
+                self.log(f"FerreDesk está actualizado (v{current_version})")
+                return False, current_version, latest_version
+                
+        except Exception as e:
+            self.log(f"Error verificando actualizaciones: {e}")
+            return False, None, None
+    
+    def show_update_dialog(self, current_version, new_version):
+        """
+        Muestra diálogo preguntando si desea actualizar
+        Retorna: True si el usuario acepta, False si rechaza
+        """
+        message = f"Hay una nueva versión disponible de FerreDesk\n\n"
+        message += f"Versión actual: {current_version}\n"
+        message += f"Nueva versión: {new_version}\n\n"
+        message += "¿Deseas actualizar ahora?"
+        
+        result = messagebox.askyesno(
+            "Actualización Disponible",
+            message,
+            icon='info'
+        )
+        
+        self.log(f"Usuario {'aceptó' if result else 'rechazó'} actualización")
+        return result
+    
+    def perform_update(self, new_version):
+        """
+        Ejecuta el proceso de actualización
+        """
+        try:
+            # Guardar versión actual para limpiar después
+            old_version = self.get_installed_version()
+            
+            self.update_status(f"Descargando versión {new_version}...")
+            
+            # Descargar nueva imagen
+            new_image = f"{DOCKERHUB_REPO}:{new_version}"
+            self.log(f"Ejecutando: docker pull {new_image}")
+            
+            result = subprocess.run(
+                ["docker", "pull", new_image],
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minutos
+                creationflags=CREATE_NO_WINDOW
+            )
+            
+            if result.returncode != 0:
+                self.log(f"Error en docker pull: {result.stderr}")
+                self.show_error("Error descargando actualización")
+                return False
+            
+            self.log("Imagen descargada exitosamente")
+            self.update_status("Actualizando configuración...")
+            
+            # Actualizar .env
+            env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+            if os.path.exists(env_path):
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                
+                with open(env_path, 'w', encoding='utf-8') as f:
+                    for line in lines:
+                        if line.startswith('FERREDESK_VERSION='):
+                            f.write(f'FERREDESK_VERSION={new_version}\n')
+                            self.log(f"Actualizado FERREDESK_VERSION a {new_version}")
+                        else:
+                            f.write(line)
+            
+            self.update_status("Reiniciando servicios...")
+            
+            # Recrear contenedores con nueva versión
+            self.log(f"Ejecutando docker-compose up -d --force-recreate en {FERREDESK_CONFIG_DIR}")
+            
+            result = subprocess.run(
+                ["docker-compose", "up", "-d", "--force-recreate"],
+                capture_output=True,
+                text=True,
+                timeout=180,  # 3 minutos
+                cwd=FERREDESK_CONFIG_DIR,
+                creationflags=CREATE_NO_WINDOW
+            )
+            
+            if result.returncode != 0:
+                self.log(f"Error en docker-compose: {result.stderr}")
+                # Intentar continuar de todos modos
+            
+            self.update_status("Esperando servicios...")
+            time.sleep(10)  # Esperar a que los servicios inicien
+            
+            # LIMPIEZA: Borrar imagen vieja
+            if old_version and old_version != new_version:
+                try:
+                    self.log(f"Limpiando imagen anterior: {old_version}...")
+                    old_image = f"{DOCKERHUB_REPO}:{old_version}"
+                    subprocess.run(
+                        ["docker", "rmi", old_image],
+                        capture_output=True,
+                        creationflags=CREATE_NO_WINDOW
+                    )
+                    self.log("Limpieza completada")
+                except Exception as cleanup_error:
+                    self.log(f"No se pudo borrar imagen vieja (no crítico): {cleanup_error}")
+            
+            self.log(f"Actualización a v{new_version} completada exitosamente")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            self.log("Timeout durante actualización")
+            self.show_error("La actualización tardó demasiado")
+            return False
+        except Exception as e:
+            self.log(f"Error durante actualización: {e}")
+            self.show_error(f"Error durante actualización: {str(e)}")
+            return False
+    
+    # ========================================
+    # FUNCIONES DE DOCKER
+    # ========================================
     
     def check_docker(self):
         try:
@@ -175,7 +441,47 @@ class FerreDeskLauncher:
             self.log(f"Error starting containers: {e}")
             return False
     
+    # ========================================
+    # PROCESO PRINCIPAL
+    # ========================================
+    
     def launch_process(self):
+        try:
+            # PASO 1: Verificar actualizaciones
+            has_update, current_ver, new_ver = self.check_for_updates()
+            
+            if has_update:
+                # Mostrar diálogo de actualización (debe ejecutarse en thread principal)
+                self.root.after(0, lambda: self._handle_update(current_ver, new_ver))
+                return
+            
+            # Continuar con flujo normal
+            self._continue_launch()
+            
+        except Exception as e:
+            self.log(f"Fatal error: {e}")
+            self.show_error(f"Error: {str(e)}")
+    
+    def _handle_update(self, current_ver, new_ver):
+        """Maneja el diálogo de actualización en el thread principal"""
+        if self.show_update_dialog(current_ver, new_ver):
+            # Usuario aceptó actualizar - ejecutar en thread separado
+            threading.Thread(target=lambda: self._do_update_and_continue(new_ver), daemon=True).start()
+        else:
+            # Usuario rechazó - continuar normalmente
+            threading.Thread(target=self._continue_launch, daemon=True).start()
+    
+    def _do_update_and_continue(self, new_ver):
+        """Ejecuta la actualización y luego continúa con el lanzamiento"""
+        if self.perform_update(new_ver):
+            self.log("Actualización exitosa, continuando con lanzamiento")
+        else:
+            self.log("Actualización falló, continuando con versión actual")
+        
+        self._continue_launch()
+    
+    def _continue_launch(self):
+        """Continúa con el proceso normal de lanzamiento"""
         try:
             if not self.check_docker():
                 self.update_status("Iniciando Docker Desktop...")
@@ -216,5 +522,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = FerreDeskLauncher(root)
     root.mainloop()
-
-
