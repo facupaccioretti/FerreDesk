@@ -133,6 +133,33 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
         finalValue = value === "" ? null : Number(value)
       } else if (name === "impuesto_interno_porcentaje") {
         finalValue = value === "" ? null : (parseFloat(value) || null)
+
+        // --- INICIO LÓGICA DE RECALCULO DE COSTOS POR IMPUESTO INTERNO ---
+        // Si el I.I. cambia, recalculamos todos los costos de proveedores asociados.
+        // Asumimos que el costo actual ya tiene el I.I. anterior (si lo había).
+        const oldImpuesto = prev.impuesto_interno_porcentaje || 0
+        const newImpuesto = finalValue || 0
+
+        // Multiplicador para "limpiar" el costo viejo y aplicar el nuevo
+        // Ej: paso de 0% a 10%: factor = (1 + 0.10) / (1 + 0.00) = 1.10
+        // Ej: paso de 10% a 20%: factor = (1 + 0.20) / (1 + 1.10) = 1.0909...
+        const factorMultiplicador = (1 + (newImpuesto / 100)) / (1 + (oldImpuesto / 100))
+
+        const newStockProveedores = (prev.stock_proveedores || []).map(sp => {
+          if (!sp.costo) return sp
+          const currentCosto = parseFloat(sp.costo) || 0
+          // Redondeamos a 2 decimales para evitar basuras flotantes
+          const nuevoCosto = Number((currentCosto * factorMultiplicador).toFixed(2))
+          return { ...sp, costo: nuevoCosto }
+        })
+
+        return {
+          ...prev,
+          [name]: finalValue,
+          stock_proveedores: newStockProveedores
+        }
+        // --- FIN LÓGICA DE RECALCULO ---
+
       } else if (name === "proveedor_habitual_id") {
         // Este campo se mantiene como string para preservar ceros a la izquierda si los hubiera
         finalValue = value === "" ? "" : String(value)

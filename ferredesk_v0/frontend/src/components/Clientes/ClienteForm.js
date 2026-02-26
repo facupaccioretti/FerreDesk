@@ -62,7 +62,7 @@ const SeccionLista = memo(({ titulo, icono, children }) => (
 // Fila editable con etiqueta e input (memoizada)
 const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange, onAdd }) => {
   const theme = useFerreDeskTheme()
-  
+
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center gap-2">
@@ -75,7 +75,7 @@ const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange, on
             title={`Agregar ${etiqueta}`}
           >
             <svg className={`w-4 h-4 text-orange-600 hover:text-orange-700 ${theme.botonPrimario.split(' ').filter(cls => cls.includes('transition')).join(' ')}`} fill="currentColor" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10s10-4.477 10-10S17.523 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+              <path fill="currentColor" d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10s10-4.477 10-10S17.523 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
             </svg>
           </button>
         )}
@@ -117,7 +117,7 @@ const ClienteForm = ({
   const claveAnteriorRef = useRef(claveBorradorCliente)
   const estaRecargandoRef = useRef(false)
   const cuitInputRef = useRef(null)
-  
+
   // Hook para navegación entre campos con Enter
   const { formRef, getFormProps } = useNavegacionForm()
 
@@ -139,7 +139,7 @@ const ClienteForm = ({
       if (saved) {
         return JSON.parse(saved)
       }
-    } catch (_) {}
+    } catch (_) { }
     return {
       razon: initialData?.razon || "",
       domicilio: initialData?.domicilio || "",
@@ -197,13 +197,13 @@ const ClienteForm = ({
   }, [initialData, plazos, form.plazo])
 
   useEffect(() => {
-    try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) {}
+    try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) { }
   }, [form, claveBorradorCliente])
 
   // Si cambia la clave (p.ej., de nuevo a edición con id), borrar la anterior para no dejar borrador huérfano
   useEffect(() => {
     if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
-      try { localStorage.removeItem(claveAnteriorRef.current) } catch (_) {}
+      try { localStorage.removeItem(claveAnteriorRef.current) } catch (_) { }
     }
     claveAnteriorRef.current = claveBorradorCliente
   }, [claveBorradorCliente])
@@ -272,13 +272,13 @@ const ClienteForm = ({
   }, [form.cuit, tiposIVA, opcionConsumidorFinal])
 
   // Hook para validación de CUIT
-  const { 
-    resultado, 
-    isLoading: isLoadingCUIT, 
-    error: errorCUIT, 
-    mostrarTooltip, 
-    handleCUITBlur, 
-    limpiarResultado, 
+  const {
+    resultado,
+    isLoading: isLoadingCUIT,
+    error: errorCUIT,
+    mostrarTooltip,
+    handleCUITBlur,
+    limpiarResultado,
     toggleTooltip,
     // Estados y funciones de ARCA
     datosARCA,
@@ -292,7 +292,7 @@ const ClienteForm = ({
     if (name === "codigo" && value && !/^\d*$/.test(value)) {
       return
     }
-    
+
     // Manejo de Tipo IVA con lógica de bloqueo/obligatoriedad
     if (name === "iva") {
       setForm((prev) => {
@@ -326,7 +326,7 @@ const ClienteForm = ({
       })
       return
     }
-    
+
     if (name === "cuit") {
       // Si el CUIT tenía longitud completa y el usuario modifica/borra un dígito,
       // limpiar Razón Social, Dirección y C.P. SIEMPRE (hayan sido autocompletados o no).
@@ -362,7 +362,7 @@ const ClienteForm = ({
       limpiarResultado()
       // Quitar mensaje nativo si lo había
       if (cuitInputRef.current) {
-        try { cuitInputRef.current.setCustomValidity("") } catch (_) {}
+        try { cuitInputRef.current.setCustomValidity("") } catch (_) { }
       }
       return
     }
@@ -387,42 +387,42 @@ const ClienteForm = ({
   // Función para autocompletar campos con datos de ARCA
   const autocompletarCampos = useCallback((datos) => {
     if (!datos) return
-    
+
     // Función para buscar coincidencia en opciones de FilterableSelect
     const buscarCoincidencia = (valor, opciones) => {
       if (!valor || !opciones || !Array.isArray(opciones)) return null
-      
+
       // Buscar coincidencia exacta (case-insensitive)
-      let encontrada = opciones.find(opt => 
+      let encontrada = opciones.find(opt =>
         opt.nombre && opt.nombre.toLowerCase() === valor.toLowerCase()
       )
-      
+
       if (encontrada) return encontrada
-      
+
       // Si no hay coincidencia exacta, buscar coincidencia parcial
-      encontrada = opciones.find(opt => 
+      encontrada = opciones.find(opt =>
         opt.nombre && opt.nombre.toLowerCase().includes(valor.toLowerCase())
       )
-      
+
       return encontrada
     }
-    
+
     // Mapeo de tipos de IVA de ARCA a nombres de BD
     const mapearTipoIVA = (descripcionARCA) => {
       const mapeo = {
         "IVA": "Responsable Inscripto",
-        "IVA EXENTO": "Sujeto Exento", 
+        "IVA EXENTO": "Sujeto Exento",
         "MONOTRIBUTO": "Responsable Monotributo",
         "MONOTRIBUTO SOCIAL": "Monotributo Social",
         "MONOTRIBUTO TRABAJADOR": "Monotributo Trabajador"
       }
       return mapeo[descripcionARCA] || descripcionARCA
     }
-    
+
     setForm(prev => {
       const nuevosDatos = { ...prev }
       const nuevosCamposAutocompletados = { ...camposAutocompletados }
-      
+
       // Campos de texto simple (autocompletado directo - SIEMPRE sobreescribir)
       if (datos.razon) {
         nuevosDatos.razon = datos.razon
@@ -440,7 +440,7 @@ const ClienteForm = ({
         nuevosDatos.cpostal = datos.cpostal
         nuevosCamposAutocompletados.cpostal = true
       }
-      
+
       // Campos FilterableSelect (buscar coincidencias - SIEMPRE sobreescribir)
       if (datos.localidad) {
         const localidadEncontrada = buscarCoincidencia(datos.localidad, localidades)
@@ -449,7 +449,7 @@ const ClienteForm = ({
           nuevosCamposAutocompletados.localidad = true
         }
       }
-      
+
       if (datos.condicion_iva) {
         const nombreMapeado = mapearTipoIVA(datos.condicion_iva)
         const tipoIVAEncontrado = buscarCoincidencia(nombreMapeado, tiposIVA)
@@ -458,10 +458,10 @@ const ClienteForm = ({
           nuevosCamposAutocompletados.iva = true
         }
       }
-      
+
       // Actualizar el estado de campos autocompletados
       setCamposAutocompletados(nuevosCamposAutocompletados)
-      
+
       return nuevosDatos
     })
   }, [localidades, tiposIVA, camposAutocompletados, setForm, setCamposAutocompletados])
@@ -479,12 +479,12 @@ const ClienteForm = ({
         return
       }
       autocompletarCamposRef.current(datosARCA)
-      
+
       // Limpiar el mensaje de éxito después de 3 segundos
       const timer = setTimeout(() => {
         limpiarEstadosARCA()
       }, 3000)
-      
+
       return () => clearTimeout(timer)
     }
   }, [datosARCA, errorARCA, limpiarEstadosARCA])
@@ -774,7 +774,7 @@ const ClienteForm = ({
         try {
           cuitInputRef.current.setCustomValidity("El CUIT ingresado es inválido.")
           cuitInputRef.current.reportValidity()
-        } catch (_) {}
+        } catch (_) { }
       }
       return
     }
@@ -785,10 +785,10 @@ const ClienteForm = ({
       }
       return
     }
-    
+
     // Procesar campos antes de enviar al backend
     const processedForm = { ...form }
-    
+
     // Convertir cadenas vacías en null para campos opcionales
     if (processedForm.fecsalcta === "") {
       processedForm.fecsalcta = null
@@ -799,7 +799,7 @@ const ClienteForm = ({
     if (processedForm.impsalcta === "") {
       processedForm.impsalcta = null
     }
-    
+
     setError("")
     onSave(processedForm)
   }
@@ -858,11 +858,11 @@ const ClienteForm = ({
               <div className="mb-4 flex items-center justify-between">
                 <div className="text-sm font-semibold text-slate-800 truncate" title={form.razon || form.fantasia}>
                   {form.razon || form.fantasia || "Nuevo Cliente"}
-                  </div>
-                <ChipEstado activo={form.activo === "A"} />
                 </div>
+                <ChipEstado activo={form.activo === "A"} />
+              </div>
 
-              
+
               {/* Tarjetas horizontales al estilo del detalle */}
               <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
                 {/* Tarjeta Información Básica */}
@@ -872,39 +872,39 @@ const ClienteForm = ({
                 >
                   <FilaEditable etiqueta="CUIT/DNI">
                     <div className="relative h-[34px]">
-                        <input
-                          name="cuit"
-                          value={form.cuit}
-                          onChange={handleChange}
+                      <input
+                        name="cuit"
+                        value={form.cuit}
+                        onChange={handleChange}
                         onBlur={(e) => { if (!initialData) { handleCUITBlur(e.target.value) } }}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !initialData) { handleCUITBlur(e.target.value) } }}
-                          maxLength={11}
+                        maxLength={11}
                         className={`${CLASES_INPUT} h-full pr-8`}
                         ref={cuitInputRef}
-                          disabled={!!initialData}
-                        />
-                        <div className="absolute top-0 right-2 h-full flex items-center">
-                          {((resultado && !isLoadingCUIT && !errorCUIT) || (errorARCA && errorARCA.trim() !== '')) ? (
-                            <button
-                              type="button"
-                              onClick={toggleTooltip}
+                        disabled={!!initialData}
+                      />
+                      <div className="absolute top-0 right-2 h-full flex items-center">
+                        {((resultado && !isLoadingCUIT && !errorCUIT) || (errorARCA && errorARCA.trim() !== '')) ? (
+                          <button
+                            type="button"
+                            onClick={toggleTooltip}
                             className={`transition-colors ${((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
                             title={((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? 'Error en CUIT/ARCA' : 'CUIT válido'}
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                               {((errorARCA && errorARCA.trim() !== '') || (resultado && !resultado.es_valido)) ? (
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                               ) : (
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                )}
-                              </svg>
-                            </button>
+                              )}
+                            </svg>
+                          </button>
                         ) : (<div className="w-4 h-4"></div>)}
-                        </div>
-                          {(resultado || (errorARCA && errorARCA.trim() !== '')) && (
-                          <CUITValidacionTooltip resultado={resultado} onIgnorar={limpiarResultado} isLoading={isLoadingCUIT} error={errorCUIT} mostrarTooltip={mostrarTooltip} onToggle={toggleTooltip} errorARCA={errorARCA} />
-                        )}
                       </div>
+                      {(resultado || (errorARCA && errorARCA.trim() !== '')) && (
+                        <CUITValidacionTooltip resultado={resultado} onIgnorar={limpiarResultado} isLoading={isLoadingCUIT} error={errorCUIT} mostrarTooltip={mostrarTooltip} onToggle={toggleTooltip} errorARCA={errorARCA} />
+                      )}
+                    </div>
                   </FilaEditable>
                   <FilaEditable etiqueta="Tipo IVA">
                     <select
@@ -996,7 +996,7 @@ const ClienteForm = ({
                     >
                       <option value={0}>0 - Minorista</option>
                       <option value={1}>1 - Mayorista</option>
-                      <option value={2}>2 - Lista 2</option>
+                      <option value={2}>2 - Distribuidor</option>
                       <option value={3}>3 - Lista 3</option>
                       <option value={4}>4 - Lista 4</option>
                     </select>
@@ -1006,7 +1006,7 @@ const ClienteForm = ({
                     <div className="w-[180px] grid grid-cols-2 gap-2">
                       <input className={CLASES_INPUT} name="descu1" value={form.descu1 || ""} onChange={handleChange} placeholder="%1" />
                       <input className={CLASES_INPUT} name="descu2" value={form.descu2 || ""} onChange={handleChange} placeholder="%2" />
-                  </div>
+                    </div>
                   </FilaEditable>
                 </SeccionLista>
               </div>
@@ -1017,7 +1017,7 @@ const ClienteForm = ({
                   <TarjetaCampo etiqueta="Comentario">
                     <textarea name="comentario" value={form.comentario} onChange={handleChange} rows={2} className={`${CLASES_INPUT} h-16 resize-none`} />
                   </TarjetaCampo>
-                  </div>
+                </div>
               )}
 
               {/* Botones de acción */}
@@ -1032,7 +1032,7 @@ const ClienteForm = ({
                       if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
                         localStorage.removeItem(claveAnteriorRef.current)
                       }
-                    } catch (_) {}
+                    } catch (_) { }
                     onCancel()
                   }}
                   className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium shadow-sm hover:shadow-md"

@@ -61,7 +61,17 @@ const useAsociacionCodigos = ({
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.precio !== undefined && data.precio !== null) {
-            setCostoAsociar(data.precio)
+            // --- APLICACIÓN DE IMPUESTO INTERNO ---
+            const baseCosto = parseFloat(data.precio) || 0
+            const currImpuesto = parseFloat(form.impuesto_interno_porcentaje) || 0
+
+            if (currImpuesto > 0) {
+              const costoInflado = Number((baseCosto * (1 + (currImpuesto / 100))).toFixed(2))
+              setCostoAsociar(costoInflado)
+            } else {
+              setCostoAsociar(baseCosto)
+            }
+
             setDenominacionAsociar(data.denominacion || "")
           } else {
             setCostoAsociar("")
@@ -78,7 +88,7 @@ const useAsociacionCodigos = ({
       setCostoAsociar("")
       setDenominacionAsociar("")
     }
-  }, [selectedProveedor, codigoProveedor])
+  }, [selectedProveedor, codigoProveedor, form.impuesto_interno_porcentaje])
 
   // Handler unificado para asociar código
   const handleAsociarCodigoIntegrado = async () => {

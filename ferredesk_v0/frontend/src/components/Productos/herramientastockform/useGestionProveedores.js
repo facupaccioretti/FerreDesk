@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 
 const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, alert, fetchStockProve }) => {
   const isEdicion = !!stock?.id
@@ -10,15 +10,17 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
   const [nuevoCosto, setNuevoCosto] = useState("")
 
   // Cálculos dinámicos basados exclusivamente en form.stock_proveedores
-  const stockProveParaMostrar = (form.stock_proveedores || []).map(sp => {
-    // Normalizar proveedor para la UI (asegurar que sea un objeto para mostrar RAZÓN)
-    const proveedorInfo = typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find(p => p.id === Number(sp.proveedor_id || sp.proveedor))
-    return {
-      ...sp,
-      id: sp.id || `temp-${sp.proveedor_id}`,
-      proveedor: proveedorInfo || sp.proveedor,
-    }
-  })
+  const stockProveParaMostrar = useMemo(() => {
+    return (form.stock_proveedores || []).map(sp => {
+      // Normalizar proveedor para la UI (asegurar que sea un objeto para mostrar RAZÓN)
+      const proveedorInfo = typeof sp.proveedor === "object" ? sp.proveedor : proveedores.find(p => p.id === Number(sp.proveedor_id || sp.proveedor))
+      return {
+        ...sp,
+        id: sp.id || `temp-${sp.proveedor_id}`,
+        proveedor: proveedorInfo || sp.proveedor,
+      }
+    })
+  }, [form.stock_proveedores, proveedores])
 
   const proveedoresAsociados = (() => {
     const vistos = new Set()

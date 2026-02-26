@@ -157,6 +157,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     setErrorAsociar,
     errorAsociar,
     costoAsociar,
+    setCostoAsociar,
     denominacionAsociar,
     setDenominacionAsociar,
     cargandoCostoAsociar,
@@ -265,26 +266,26 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   }, [stock])
 
   // Obtener costo del proveedor habitual
-  const obtenerCostoProveedorHabitual = () => {
+  const obtenerCostoProveedorHabitual = useCallback(() => {
     const provHabId = form.proveedor_habitual_id
     if (!provHabId) return 0
 
     // Buscar en stockProveParaMostrar o en stock.stock_proveedores
-    const spEncontrado = stockProveParaMostrar.find(
+    const spEncontrado = (stockProveParaMostrar || []).find(
       sp => String(sp.proveedor?.id || sp.proveedor) === String(provHabId)
     )
     return Number(spEncontrado?.costo || 0)
-  }
+  }, [form.proveedor_habitual_id, stockProveParaMostrar])
 
   // Función para calcular precio Lista 0 desde costo + margen + IVA
-  const calcularPrecioLista0Automatico = () => {
+  const calcularPrecioLista0Automatico = useCallback(() => {
     const costo = obtenerCostoProveedorHabitual()
     const margen = Number(form.margen || 0)
     if (costo > 0 && margen >= 0) {
       return calcularPrecioLista0(costo, margen, porcentajeIVA)
     }
     return 0
-  }
+  }, [obtenerCostoProveedorHabitual, form.margen, porcentajeIVA])
 
   // Función para recalcular precios de listas 1-4 desde Lista 0
   const recalcularPreciosListas = useCallback((precioLista0) => {
@@ -404,8 +405,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         recalcularPreciosListas(precioCalculado)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.margen, form.proveedor_habitual_id, form.idaliiva, recalcularPreciosListas])
+  }, [form.margen, preciosListas.lista0.manual, calcularPrecioLista0Automatico, recalcularPreciosListas])
 
   // Nuevo efecto: Sincronizar precios de listas derivadas cuando cargan las configuraciones
   // o cuando cambia el precio base (incluso si el base es manual)
@@ -816,6 +816,22 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                     onClick={() => {
                                       setCodigoProveedor(producto.codigo)
                                       if (producto.denominacion) setDenominacionAsociar(producto.denominacion)
+
+                                      // --- APLICACIÓN DE IMPUESTO INTERNO A NUEVO COSTO ---
+                                      // Si el producto seleccionado tiene un costo y el formulario actual
+                                      // tiene un impuesto interno definido, lo aplicamos de inmediato.
+                                      if (producto.costo_base) {
+                                        const baseCosto = parseFloat(producto.costo_base) || 0;
+                                        const currImpuesto = parseFloat(form.impuesto_interno_porcentaje) || 0;
+
+                                        if (currImpuesto > 0) {
+                                          const costoInflado = Number((baseCosto * (1 + (currImpuesto / 100))).toFixed(2));
+                                          setCostoAsociar(costoInflado);
+                                        } else {
+                                          setCostoAsociar(baseCosto);
+                                        }
+                                      }
+
                                       setShowSugeridos(false)
                                     }}
                                     className="w-full text-left px-2 py-1 hover:bg-orange-50 hover:text-orange-700 transition-colors text-[12px] border-b border-slate-100 last:border-b-0"
