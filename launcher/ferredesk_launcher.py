@@ -287,6 +287,23 @@ class FerreDeskLauncher:
                             self.log(f"Actualizado FERREDESK_VERSION a {new_version}")
                         else:
                             f.write(line)
+
+            # Actualizar docker-compose.yml al formato actual (IN_DOCKER + backups)
+            compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+            try:
+                with open(compose_path, 'w', encoding='utf-8') as f:
+                    f.write(self._get_compose_content())
+                self.log("docker-compose.yml actualizado (IN_DOCKER + volumen backups)")
+            except Exception as e:
+                self.log(f"Error escribiendo docker-compose.yml: {e}")
+
+            # Asegurar que exista la carpeta backups para el volumen
+            backups_dir = os.path.join(FERREDESK_CONFIG_DIR, "backups")
+            try:
+                os.makedirs(backups_dir, exist_ok=True)
+                self.log(f"Directorio backups listo: {backups_dir}")
+            except Exception as e:
+                self.log(f"No se pudo crear backups (no crítico): {e}")
             
             self.update_status("Reiniciando servicios...")
             
@@ -335,6 +352,90 @@ class FerreDeskLauncher:
             self.show_error(f"Error durante actualización: {str(e)}")
             return False
     
+    # ========================================
+    # DOCKER COMPOSE (formato actual: IN_DOCKER + backups)
+    # ========================================
+
+    def _get_compose_content(self):
+        """
+        Contenido de docker-compose.yml alineado con el repo.
+        Incluye IN_DOCKER y volumen ./backups para que el backup nativo funcione.
+        """
+        return f"""services:
+  postgres:
+    image: postgres:15
+    container_name: ferredesk_postgres
+    env_file:
+      - .env
+    environment:
+      TZ: America/Argentina/Buenos_Aires
+      PGTZ: America/Argentina/Buenos_Aires
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${{POSTGRES_USER}} -d ${{POSTGRES_DB}}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: {DOCKERHUB_REPO}:${{FERREDESK_VERSION}}
+    container_name: ferredesk_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      IN_DOCKER: "True"
+    volumes:
+      - ./media:/app/media
+      - ./backups:/app/backups
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+"""
+
+    def start_ferredesk_with_compose(self):
+        """
+        Levanta FerreDesk con docker-compose up -d desde el directorio de configuración.
+        Requiere que existan docker-compose.yml y .env en FERREDESK_CONFIG_DIR.
+        """
+        try:
+            compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+            env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+            if not os.path.exists(compose_path) or not os.path.exists(env_path):
+                self.log(f"Configuración no encontrada: compose={os.path.exists(compose_path)}, env={os.path.exists(env_path)}")
+                return False
+
+            self.log(f"Ejecutando docker-compose up -d en {FERREDESK_CONFIG_DIR}")
+            result = subprocess.run(
+                ["docker-compose", "up", "-d"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                cwd=FERREDESK_CONFIG_DIR,
+                creationflags=CREATE_NO_WINDOW
+            )
+            if result.returncode != 0:
+                self.log(f"docker-compose up falló: {result.stderr}")
+                return False
+            self.log("docker-compose up -d finalizado correctamente")
+            time.sleep(10)
+            return True
+        except subprocess.TimeoutExpired:
+            self.log("Timeout en docker-compose up -d")
+            return False
+        except Exception as e:
+            self.log(f"Error en start_ferredesk_with_compose: {e}")
+            return False
+
     # ========================================
     # FUNCIONES DE DOCKER
     # ========================================
@@ -496,8 +597,13 @@ class FerreDeskLauncher:
             self.update_status("Verificando contenedores...")
             if not self.check_ferredesk_containers():
                 self.update_status("Iniciando FerreDesk...")
-                if not self.start_ferredesk_containers():
-                    self.show_error("Error al iniciar contenedores")
+                compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+                env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+                if not os.path.exists(compose_path) or not os.path.exists(env_path):
+                    self.show_error(f"No se encontró la configuración de FerreDesk.\nRevisa: {FERREDESK_CONFIG_DIR}")
+                    return
+                if not self.start_ferredesk_with_compose():
+                    self.show_error("Error al iniciar contenedores (docker-compose)")
                     return
             
             self.update_status("Abriendo FerreDesk...")
