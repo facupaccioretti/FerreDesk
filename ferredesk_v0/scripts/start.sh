@@ -10,6 +10,12 @@ while ! nc -z postgres 5432; do
 done
 echo "✅ PostgreSQL listo!"
 
+# Preparar directorio de backups (evitar conflictos de permisos con el volumen del host)
+echo "📦 Preparando directorio de backups..."
+mkdir -p /app/backups
+chmod 777 /app/backups
+echo "✅ Directorio de backups listo!"
+
 # Ejecutar migraciones automáticamente
 echo "🔄 Ejecutando migraciones de Django..."
 python manage.py migrate --noinput

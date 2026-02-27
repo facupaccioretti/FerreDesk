@@ -30,9 +30,12 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      IN_DOCKER: "True"
     volumes:
       # Solo persistimos media y estáticos recolectados si es necesario
       - ./media:/app/media
+      - ./backups:/app/backups
       # IMPORTANTE: Ya no montamos el código (- ./backend:/app) 
       # porque queremos usar el código que está DENTRO de la imagen (producción)
     ports:

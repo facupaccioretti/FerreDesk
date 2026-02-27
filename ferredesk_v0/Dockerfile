@@ -25,6 +25,7 @@ WORKDIR /app
 # Instalar dependencias del sistema necesarias para Postgres
 RUN apt-get update && apt-get install -y \
     libpq-dev \
+    postgresql-client-15 \
     netcat-traditional \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*

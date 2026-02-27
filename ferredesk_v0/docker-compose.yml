@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      IN_DOCKER: "True"
     volumes:
       # Solo persistimos media y estáticos recolectados si es necesario
       - ./media:/app/media

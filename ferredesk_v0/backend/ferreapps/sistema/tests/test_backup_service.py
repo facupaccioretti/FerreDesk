@@ -119,6 +119,22 @@ class BackupServiceTests(TestCase):
         self.assertTrue(mock_rename.called)
         
     @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    def test_proceso_backup_interno_pg_dump_no_encontrado(self, mock_run):
+        """
+        Si pg_dump no está instalado, subprocess.run lanza FileNotFoundError.
+        El servicio debe registrar ERROR con mensaje amigable para el frontend.
+        """
+        mock_run.side_effect = FileNotFoundError("pg_dump no encontrado en el PATH")
+        
+        _proceso_backup_interno()
+        
+        self.assertEqual(ESTADO_BACKUP['estado'], 'ERROR')
+        self.assertEqual(
+            ESTADO_BACKUP['error'],
+            'El comando pg_dump no se encuentra instalado en el servidor.'
+        )
+
+    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
     def test_proceso_backup_interno_excepcion_critica(self, mock_run):
         """
         Si ocurre alguna excepción a nivel código (Python), 
