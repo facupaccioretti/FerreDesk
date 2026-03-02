@@ -21,9 +21,23 @@ const CuentaCorrienteProveedorManager = () => {
     })
     const [completo, setCompleto] = useState(false)
 
+    const [user, setUser] = useState(null)
+
     useEffect(() => {
         document.title = "Cuenta Corriente Proveedores - FerreDesk"
+        // Info usuario (para Navbar)
+        fetch("/api/user/", { credentials: "include" })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.status === "success") setUser(data.user)
+            })
     }, [])
+
+    const handleLogout = () => {
+        fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+            window.location.href = "/login/"
+        })
+    }
 
     return (
         <div className={theme.fondo}>
@@ -31,7 +45,7 @@ const CuentaCorrienteProveedorManager = () => {
             <div className={theme.overlay}></div>
 
             <div className="relative z-10">
-                <Navbar />
+                <Navbar user={user} onLogout={handleLogout} />
 
                 <div className="py-8 px-4">
                     <div className="max-w-[1400px] w-full mx-auto">

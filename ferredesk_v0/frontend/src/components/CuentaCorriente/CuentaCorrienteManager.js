@@ -7,7 +7,7 @@ import CuentaCorrienteList from "./CuentaCorrienteList"
 
 const CuentaCorrienteManager = () => {
   const theme = useFerreDeskTheme()
-  
+
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [fechaDesde, setFechaDesde] = useState(() => {
     // Default: 30 días atrás
@@ -21,18 +21,32 @@ const CuentaCorrienteManager = () => {
   })
   const [completo, setCompleto] = useState(false)
 
+  const [user, setUser] = useState(null)
+
   useEffect(() => {
     document.title = "Cuentas Corrientes - FerreDesk"
+    // Info usuario (para Navbar)
+    fetch("/api/user/", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "success") setUser(data.user)
+      })
   }, [])
+
+  const handleLogout = () => {
+    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+      window.location.href = "/login/"
+    })
+  }
 
   return (
     <div className={theme.fondo}>
       <div className={theme.patron}></div>
       <div className={theme.overlay}></div>
-      
+
       <div className="relative z-10">
-        <Navbar />
-        
+        <Navbar user={user} onLogout={handleLogout} />
+
         {/* Contenedor central con ancho máximo fijo al estilo de PresupuestosManager */}
         <div className="py-8 px-4">
           <div className="max-w-[1400px] w-full mx-auto">

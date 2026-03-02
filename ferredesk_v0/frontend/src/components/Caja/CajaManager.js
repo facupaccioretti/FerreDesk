@@ -121,6 +121,8 @@ const CajaManager = () => {
   const [resumenCaja, setResumenCaja] = useState(null)
   const [movimientos, setMovimientos] = useState([])
 
+  const [user, setUser] = useState(null)
+
   // Estados de modales
   const [modalAbrirVisible, setModalAbrirVisible] = useState(false)
 
@@ -158,7 +160,20 @@ const CajaManager = () => {
   useEffect(() => {
     document.title = "Caja, Banco y Cheques - FerreDesk"
     cargarEstadoCaja()
+
+    // Info usuario (para Navbar)
+    fetch("/api/user/", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "success") setUser(data.user)
+      })
   }, [cargarEstadoCaja])
+
+  const handleLogout = () => {
+    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+      window.location.href = "/login/"
+    })
+  }
 
   // Sincronizar tab "Caja Actual" cuando cambia el estado de caja
   useEffect(() => {
@@ -314,7 +329,7 @@ const CajaManager = () => {
       <div className={theme.overlay}></div>
 
       <div className="relative z-10">
-        <Navbar />
+        <Navbar user={user} onLogout={handleLogout} />
 
         <div className="py-8 px-4">
           <div className="max-w-[1400px] w-full mx-auto">

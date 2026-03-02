@@ -12,20 +12,18 @@ const InformesManager = () => {
 
   useEffect(() => {
     document.title = "Informes - FerreDesk";
-    const userInfo = localStorage.getItem('user');
-    if (userInfo) {
-      try {
-        setUser(JSON.parse(userInfo));
-      } catch (error) {
-        console.error('Error al parsear información del usuario:', error);
-      }
-    }
+    // Info usuario (para Navbar)
+    fetch("/api/user/", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "success") setUser(data.user)
+      })
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    window.location.href = '/login';
+    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+      window.location.href = "/login/"
+    })
   };
 
   const tabs = [
