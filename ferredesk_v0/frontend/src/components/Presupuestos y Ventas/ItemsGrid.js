@@ -237,6 +237,11 @@ const ItemsGridPresupuesto = forwardRef(
           // Obtener nuevo precio FINAL según la lista activa (precios de lista son finales con IVA)
           const nuevoPrecioFinal = obtenerPrecioBaseProducto(row.producto, proveedorHabitual);
 
+          // CORRECCIÓN: Si el precio calculado es 0 pero el ítem ya tiene un precio > 0,
+          // significa que el producto es un stub (sin datos reales de proveedor/lista).
+          // En ese caso NO sobreescribir el precio existente (ej: ítems de presupuesto en conversión/edición).
+          if (nuevoPrecioFinal === 0 && Number(row.precioFinal || 0) > 0) return row;
+
           // Calcular precio NETO a partir del final, desagregando el IVA del ítem
           const aliPorc = aliMap[row.idaliiva] || 0;
           const nuevoPrecioNeto = Math.round((nuevoPrecioFinal / (1 + aliPorc / 100)) * 10000) / 10000;

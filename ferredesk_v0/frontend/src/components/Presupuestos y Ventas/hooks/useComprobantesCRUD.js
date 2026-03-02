@@ -216,7 +216,11 @@ const useComprobantesCRUD = ({
       ])
 
       const presupuestoConDetalle = {
-        ...(cabecera.venta || presupuesto),
+        ...cabecera,
+        // Normalizar PK y número para uso consistente en tabs y formularios
+        // VentaCalculadaSerializer devuelve ven_id/numero_formateado, no id/numero
+        id: cabecera.ven_id ?? cabecera.id,
+        numero: cabecera.numero_formateado ?? cabecera.numero,
         items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
       }
 
@@ -507,7 +511,10 @@ const useComprobantesCRUD = ({
             ]);
 
             const facturaInternaConDetalle = {
-              ...(cabecera.venta || facturaInterna),
+              ...cabecera,
+              // Normalizar PK y número (VentaCalculadaSerializer devuelve ven_id/numero_formateado)
+              id: cabecera.ven_id ?? cabecera.id,
+              numero: cabecera.numero_formateado ?? cabecera.numero,
               items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
             };
 
@@ -587,7 +594,10 @@ const useComprobantesCRUD = ({
       ]);
 
       const facturaInternaConDetalle = {
-        ...(cabecera.venta || facturaInterna),
+        ...cabecera,
+        // Normalizar PK y número (VentaCalculadaSerializer devuelve ven_id/numero_formateado)
+        id: cabecera.ven_id ?? cabecera.id,
+        numero: cabecera.numero_formateado ?? cabecera.numero,
         items: Array.isArray(itemsDetalle) ? itemsDetalle : [],
       };
 

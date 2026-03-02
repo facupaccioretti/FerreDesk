@@ -6,7 +6,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import transaction, models
 from django.db import IntegrityError
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
@@ -666,7 +666,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                 errores_stock = []
                 stock_actualizado = []
                 for item in items:
-                    id_stock = item.vdi_idsto
+                    # Usar _id para obtener el entero, no el objeto FK
+                    id_stock = item.vdi_idsto_id
                     cantidad = Decimal(str(item.vdi_cantidad))
                     if not id_stock:
                         errores_stock.append(f"Falta stock en item: {item.id}")
@@ -746,6 +747,13 @@ class VentaViewSet(viewsets.ModelViewSet):
                     item_data['vdi_idve'] = instance
                     for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
                         item_data.pop(campo_calculado, None)
+                    # Convertir IDs numéricos de FK a la forma _id
+                    # (Django espera instancias o campo_id=valor numérico)
+                    for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
+                        if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
+                            val = item_data.pop(fk_field)
+                            if val is not None:
+                                item_data[f'{fk_field}_id'] = val
                     VentaDetalleItem.objects.create(**item_data)
             except Exception as e:
                 logging.error(f"Error actualizando ítems de venta: {e}")

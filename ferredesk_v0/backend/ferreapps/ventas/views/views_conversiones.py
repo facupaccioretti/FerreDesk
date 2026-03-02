@@ -542,13 +542,14 @@ def convertir_presupuesto_a_venta(request):
             for item_presupuesto in items_presupuesto:
                 if str(item_presupuesto.id) in [str(i) for i in items_seleccionados]:
                     # Convertir el item del presupuesto al formato del serializer
-                    # IMPORTANTE: Los campos son IntegerField, no ForeignKey, por eso no tienen _id
+                    # CORRECCIÓN: vdi_idsto, vdi_idpro, vdi_idaliiva son ForeignKey,
+                    # acceder sin _id devuelve el objeto relacionado en vez del ID numérico
                     item_data = {
-                        'vdi_idsto': item_presupuesto.vdi_idsto if item_presupuesto.vdi_idsto else None,
-                        'vdi_idpro': item_presupuesto.vdi_idpro if item_presupuesto.vdi_idpro else None,
+                        'vdi_idsto': item_presupuesto.vdi_idsto_id if item_presupuesto.vdi_idsto_id else None,
+                        'vdi_idpro': item_presupuesto.vdi_idpro_id if item_presupuesto.vdi_idpro_id else None,
                         'vdi_cantidad': float(item_presupuesto.vdi_cantidad),
                         'vdi_precio_unitario_final': float(item_presupuesto.vdi_precio_unitario_final),
-                        'vdi_idaliiva': item_presupuesto.vdi_idaliiva if item_presupuesto.vdi_idaliiva else None,
+                        'vdi_idaliiva': item_presupuesto.vdi_idaliiva_id if item_presupuesto.vdi_idaliiva_id else None,
                         'vdi_orden': item_presupuesto.vdi_orden or 1,
                         'vdi_bonifica': float(item_presupuesto.vdi_bonifica) if item_presupuesto.vdi_bonifica else 0,
                         'vdi_costo': float(item_presupuesto.vdi_costo) if item_presupuesto.vdi_costo else 0,

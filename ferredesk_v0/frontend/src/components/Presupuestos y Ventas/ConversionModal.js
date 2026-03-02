@@ -21,7 +21,7 @@ const ConversionModal = ({
 
   // Detectar tipo de conversión
   const esConversionFacturaI = presupuesto?.tipoConversion === 'factura_i_factura'
-  
+
   // Textos dinámicos según el tipo de conversión
   const titulo = esConversionFacturaI ? 'Convertir a Factura Fiscal' : 'Convertir a Venta'
   const subtituloItems = esConversionFacturaI ? 'Ítems de la Cotización' : 'Ítems del Presupuesto'
@@ -239,9 +239,8 @@ const ConversionModal = ({
                         {presupuesto?.items?.map((item, idxItem) => (
                           <tr
                             key={item.id}
-                            className={`hover:bg-orange-50/50 cursor-pointer transition-colors duration-150 ${
-                              selectedItems.includes(item.id) ? "bg-orange-50/80 border-l-2 border-orange-500" : ""
-                            }`}
+                            className={`hover:bg-orange-50/50 cursor-pointer transition-colors duration-150 ${selectedItems.includes(item.id) ? "bg-orange-50/80 border-l-2 border-orange-500" : ""
+                              }`}
                             onClick={() => handleRowClick(item.id)}
                             tabIndex={0}
                             aria-label={`Seleccionar item ${item.denominacion}`}
@@ -259,11 +258,10 @@ const ConversionModal = ({
                                   if (e.key === "Enter" || e.key === " ")
                                     handleItemSelect(item.id, !selectedItems.includes(item.id))
                                 }}
-                                className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-all duration-200 cursor-pointer ${
-                                  selectedItems.includes(item.id)
+                                className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-all duration-200 cursor-pointer ${selectedItems.includes(item.id)
                                     ? "bg-orange-600 border-orange-600 shadow-sm"
                                     : "bg-white border-slate-300 hover:border-orange-400"
-                                }`}
+                                  }`}
                               >
                                 {selectedItems.includes(item.id) && (
                                   <svg
@@ -295,13 +293,22 @@ const ConversionModal = ({
                               {item.vdi_cantidad || item.cantidad}
                             </td>
                             <td className="px-3 py-2 text-sm text-slate-700 font-medium text-right">
-                              ${formatearMoneda(item.precioFinal ?? item.vdi_precio_unitario_final ?? item.precio)}
+                              ${formatearMoneda(item.vdi_precio_unitario_final ?? item.precioFinal ?? item.precio)}
                             </td>
                             <td className="px-3 py-2 text-sm text-slate-600 text-center">
                               {item.vdi_bonifica || item.bonificacion}%
                             </td>
                             <td className="px-3 py-2 text-sm text-slate-800 font-bold text-right">
-                              ${formatearMoneda(item.vdi_importe_total)}
+                              ${formatearMoneda(
+                                item.total_item ??
+                                (() => {
+                                  // Fallback: calcular total manualmente si el campo anotado no existe
+                                  const precio = Number(item.vdi_precio_unitario_final ?? item.precioFinal ?? item.precio ?? 0);
+                                  const cantidad = Number(item.vdi_cantidad ?? item.cantidad ?? 1);
+                                  const bonif = Number(item.vdi_bonifica ?? item.bonificacion ?? 0);
+                                  return precio * cantidad * (1 - bonif / 100);
+                                })()
+                              )}
                             </td>
                           </tr>
                         ))}

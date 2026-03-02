@@ -606,10 +606,19 @@ class VentaSerializer(serializers.ModelSerializer):
                 # Actualizar item existente
                 item = items_existentes[item_id]
                 for field, value in item_data.items():
-                    setattr(item, field, value)
+                    # Para campos FK, usar la forma _id si el valor es numérico
+                    if field in ('vdi_idsto', 'vdi_idpro', 'vdi_idaliiva') and not isinstance(value, models.Model) and value is not None:
+                        setattr(item, f'{field}_id', value)
+                    else:
+                        setattr(item, field, value)
                 item.save()
             else:
-                # Crear nuevo item
+                # Crear nuevo item — normalizar FK a forma _id
+                for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
+                    if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
+                        val = item_data.pop(fk_field)
+                        if val is not None:
+                            item_data[f'{fk_field}_id'] = val
                 VentaDetalleItem.objects.create(**item_data)
 
     def validate(self, data):
@@ -762,10 +771,14 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         Si esta cotización fue convertida a factura fiscal, devuelve los datos
         de la factura resultante y auditoría (número, fecha facturación, usuario que facturó).
         """
-        if not getattr(obj, 'factura_fiscal_id', None):
+        # CORRECCIÓN: El campo FK real del modelo Venta es 'factura_fiscal_convertida',
+        # Django expone el PK numérico como 'factura_fiscal_convertida_id'.
+        # 'factura_fiscal_id' era el nombre de la columna en la vista SQL obsoleta VentaCalculada.
+        fk_id = getattr(obj, 'factura_fiscal_convertida_id', None) or getattr(obj, 'factura_fiscal_id', None)
+        if not fk_id:
             return None
         try:
-            venta = Venta.objects.select_related('sesion_caja__usuario').get(pk=obj.factura_fiscal_id)
+            venta = Venta.objects.select_related('sesion_caja__usuario').get(pk=fk_id)
             data = dict(VentaAsociadaSerializer(venta, context=self.context).data)
             data['fecha_conversion'] = getattr(obj, 'fecha_conversion', None)
             if venta.sesion_caja and venta.sesion_caja.usuario:

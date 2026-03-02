@@ -69,6 +69,7 @@ utilidades/vercel/Pagina_combinada/backend/db.sqlite3  # Base de datos de utilid
 db.sqlite3-journal
 media/
 staticfiles/
+backups_locales/
 
 # Node
 node_modules/
