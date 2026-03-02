@@ -1,3 +1,14 @@
+# FerreDesk - docker-compose de desarrollo local
+# Uso:
+#   - Solo para desarrolladores que ejecutan FerreDesk desde el código fuente.
+#   - Se levanta con: docker compose -f docker-compose-dev.yml up --build
+# Diferencias con producción:
+#   - Aquí se usa build y se monta el código local.
+#   - En producción se usa la imagen ya construida y publicada.
+# Nota:
+#   - El instalador y el launcher no usan este archivo.
+#   - El launcher siempre usa el docker-compose de producción.
+
 services:
   postgres:
     image: postgres:15
@@ -20,19 +31,23 @@ services:
       retries: 5
 
   app: 
+    # Desarrollo: construye la imagen desde el código local (Dockerfile).
     build:
       context: .
       dockerfile: Dockerfile
-    image: lautajuare/ferredesk:latest # Nombre de la imagen para producción
+    image: lautajuare/ferredesk:latest # Nombre de la imagen local para desarrollo
     container_name: ferredesk_app
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      IN_DOCKER: "True"
     volumes:
       # Solo persistimos media y estáticos recolectados si es necesario
       - ./media:/app/media
+      - ./backups:/app/backups
       # IMPORTANTE: Ya no montamos el código (- ./backend:/app) 
       # porque queremos usar el código que está DENTRO de la imagen (producción)
     ports:

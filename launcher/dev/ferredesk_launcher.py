@@ -32,6 +32,30 @@ for _dir in POSSIBLE_CONFIG_DIRS:
     if os.path.exists(os.path.join(_dir, ".env")):
         FERREDESK_CONFIG_DIR = _dir
         break
+
+# ========================================
+# MENSAJES DEL LAUNCHER (fallback Docker y diálogos)
+# ========================================
+DOCKER_WAIT_TIMEOUT_SEC = 120
+DOCKER_MAX_EXTRA_WAITS = 2  # Máximo de "Seguir esperando" antes de mostrar fallo
+
+MSG_STATUS_WAITING_DOCKER = "Esperando Docker Desktop..."
+MSG_STATUS_STARTING_DOCKER = "Iniciando Docker Desktop..."
+
+MSG_DOCKER_TIMEOUT_TITLE = "Docker tarda en responder"
+MSG_DOCKER_TIMEOUT_BODY = "Docker todavía no está listo. En algunas computadoras puede tardar varios minutos."
+BTN_DOCKER_KEEP_WAITING = "Seguir esperando"
+BTN_DOCKER_SEE_WHY = "No pudo iniciar: ver qué hacer"
+
+MSG_DOCKER_FAILED_TITLE = "Docker no está listo"
+MSG_DOCKER_FAILED_BODY = (
+    "FerreDesk necesita Docker Desktop en ejecución. No pudimos detectar Docker a tiempo.\n\n"
+    "Recomendamos:\n"
+    "1. Reiniciar la computadora e intentar de nuevo.\n"
+    "2. Si el problema continúa, contactar con nosotros."
+)
+BTN_CLOSE = "Cerrar"
+BTN_RETRY = "Reintentar"
 # ========================================
 
 class FerreDeskLauncher:
@@ -287,6 +311,29 @@ class FerreDeskLauncher:
                             self.log(f"Actualizado FERREDESK_VERSION a {new_version}")
                         else:
                             f.write(line)
+
+            # Actualizar docker-compose.yml desde el archivo empaquetado
+            compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+            ruta_empaquetado = self._obtener_ruta_compose_empaquetado()
+            try:
+                if os.path.exists(ruta_empaquetado):
+                    with open(ruta_empaquetado, 'r', encoding='utf-8') as f:
+                        contenido = f.read()
+                    with open(compose_path, 'w', encoding='utf-8') as f:
+                        f.write(contenido)
+                    self.log("docker-compose.yml actualizado desde archivo empaquetado")
+                else:
+                    self.log("Advertencia: compose empaquetado no encontrado")
+            except Exception as e:
+                self.log(f"Error escribiendo docker-compose.yml: {e}")
+
+            # Asegurar que exista la carpeta backups para el volumen
+            backups_dir = os.path.join(FERREDESK_CONFIG_DIR, "backups")
+            try:
+                os.makedirs(backups_dir, exist_ok=True)
+                self.log(f"Directorio backups listo: {backups_dir}")
+            except Exception as e:
+                self.log(f"No se pudo crear backups (no crítico): {e}")
             
             self.update_status("Reiniciando servicios...")
             
@@ -336,6 +383,54 @@ class FerreDeskLauncher:
             return False
     
     # ========================================
+    # DOCKER COMPOSE (archivo empaquetado)
+    # ========================================
+
+    def _obtener_ruta_compose_empaquetado(self):
+        """
+        Ruta al docker-compose empaquetado (ferredesk_v0/docker-compose.yml).
+        Compilado: sys._MEIPASS. Desarrollo: directorio ferredesk_v0.
+        """
+        nombre_archivo = "docker-compose.yml"
+        if getattr(sys, 'frozen', False):
+            return os.path.join(sys._MEIPASS, nombre_archivo)
+        return os.path.join(os.path.dirname(__file__), "..", "..", "ferredesk_v0", nombre_archivo)
+
+    def start_ferredesk_with_compose(self):
+        """
+        Levanta FerreDesk con docker-compose up -d desde el directorio de configuración.
+        Requiere que existan docker-compose.yml y .env en FERREDESK_CONFIG_DIR.
+        """
+        try:
+            compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+            env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+            if not os.path.exists(compose_path) or not os.path.exists(env_path):
+                self.log(f"Configuración no encontrada: compose={os.path.exists(compose_path)}, env={os.path.exists(env_path)}")
+                return False
+
+            self.log(f"Ejecutando docker-compose up -d en {FERREDESK_CONFIG_DIR}")
+            result = subprocess.run(
+                ["docker-compose", "up", "-d"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                cwd=FERREDESK_CONFIG_DIR,
+                creationflags=CREATE_NO_WINDOW
+            )
+            if result.returncode != 0:
+                self.log(f"docker-compose up falló: {result.stderr}")
+                return False
+            self.log("docker-compose up -d finalizado correctamente")
+            time.sleep(10)
+            return True
+        except subprocess.TimeoutExpired:
+            self.log("Timeout en docker-compose up -d")
+            return False
+        except Exception as e:
+            self.log(f"Error en start_ferredesk_with_compose: {e}")
+            return False
+
+    # ========================================
     # FUNCIONES DE DOCKER
     # ========================================
     
@@ -379,18 +474,106 @@ class FerreDeskLauncher:
         self.log("Docker not found")
         return False
     
-    def wait_for_docker(self, timeout=120):
-        self.update_status("Esperando Docker Desktop...")
+    def wait_for_docker(self, timeout=None):
+        if timeout is None:
+            timeout = DOCKER_WAIT_TIMEOUT_SEC
+        self.update_status(MSG_STATUS_WAITING_DOCKER)
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             if self.check_docker():
                 self.log("Docker is ready")
                 return True
             time.sleep(5)
-        
+
         self.log("Docker timeout")
         return False
+
+    def _show_docker_timeout_dialog_impl(self, result_holder, event):
+        """Diálogo modal: Docker tarda. Ejecutar en thread principal."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(MSG_DOCKER_TIMEOUT_TITLE)
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        tk.Label(dlg, text=MSG_DOCKER_TIMEOUT_BODY, wraplength=320, justify=tk.LEFT).pack(pady=15, padx=15)
+        btn_frame = tk.Frame(dlg)
+        btn_frame.pack(pady=10, padx=15)
+
+        def on_keep_waiting():
+            result_holder[0] = "keep_waiting"
+            dlg.destroy()
+            event.set()
+
+        def on_see_why():
+            result_holder[0] = "see_why"
+            dlg.destroy()
+            event.set()
+
+        tk.Button(btn_frame, text=BTN_DOCKER_KEEP_WAITING, command=on_keep_waiting, width=18).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text=BTN_DOCKER_SEE_WHY, command=on_see_why, width=22).pack(side=tk.LEFT, padx=5)
+
+        dlg.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+
+    def _show_docker_timeout_dialog(self):
+        """Muestra el diálogo de timeout y retorna la opción del usuario."""
+        result_holder = [None]
+        evt = threading.Event()
+        self.root.after(0, lambda: self._show_docker_timeout_dialog_impl(result_holder, evt))
+        evt.wait()
+        return result_holder[0]
+
+    def _show_docker_failed_dialog_impl(self, result_holder, event):
+        """Diálogo modal: Docker no está listo. Ejecutar en thread principal."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(MSG_DOCKER_FAILED_TITLE)
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        tk.Label(dlg, text=MSG_DOCKER_FAILED_BODY, wraplength=320, justify=tk.LEFT).pack(pady=15, padx=15)
+        btn_frame = tk.Frame(dlg)
+        btn_frame.pack(pady=10, padx=15)
+
+        def on_close():
+            result_holder[0] = "close"
+            dlg.destroy()
+            event.set()
+
+        def on_retry():
+            result_holder[0] = "retry"
+            dlg.destroy()
+            event.set()
+
+        tk.Button(btn_frame, text=BTN_RETRY, command=on_retry, width=12).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text=BTN_CLOSE, command=on_close, width=12).pack(side=tk.LEFT, padx=5)
+
+        dlg.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+
+    def _show_docker_failed_dialog(self):
+        """Muestra el diálogo de fallo y retorna 'close' o 'retry'."""
+        result_holder = [None]
+        evt = threading.Event()
+        self.root.after(0, lambda: self._show_docker_failed_dialog_impl(result_holder, evt))
+        evt.wait()
+        return result_holder[0]
+
+    def _wait_for_docker_with_retry(self):
+        """Espera a Docker con opción de seguir esperando tras timeout."""
+        extra_waits = 0
+        while True:
+            if self.wait_for_docker():
+                return True
+            if extra_waits >= DOCKER_MAX_EXTRA_WAITS:
+                self.log("Máximo de esperas extra alcanzado")
+                return False
+            choice = self._show_docker_timeout_dialog()
+            if choice == "see_why":
+                return False
+            if choice == "keep_waiting":
+                extra_waits += 1
+                self.log(f"Seguir esperando (intento {extra_waits})")
     
     def check_ferredesk_containers(self):
         try:
@@ -483,21 +666,33 @@ class FerreDeskLauncher:
     def _continue_launch(self):
         """Continúa con el proceso normal de lanzamiento"""
         try:
-            if not self.check_docker():
-                self.update_status("Iniciando Docker Desktop...")
+            while True:
+                if self.check_docker():
+                    break
+                self.update_status(MSG_STATUS_STARTING_DOCKER)
                 if not self.start_docker():
                     self.show_error("No se encontró Docker Desktop")
                     return
-                
-                if not self.wait_for_docker():
-                    self.show_error("Docker no inició a tiempo")
+
+                if not self._wait_for_docker_with_retry():
+                    choice = self._show_docker_failed_dialog()
+                    if choice == "retry":
+                        continue
+                    self.progress.stop()
+                    self.status_label.config(text=MSG_DOCKER_FAILED_TITLE, fg="red")
+                    self.root.after(3000, self.root.quit)
                     return
-            
+
             self.update_status("Verificando contenedores...")
             if not self.check_ferredesk_containers():
                 self.update_status("Iniciando FerreDesk...")
-                if not self.start_ferredesk_containers():
-                    self.show_error("Error al iniciar contenedores")
+                compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+                env_path = os.path.join(FERREDESK_CONFIG_DIR, ".env")
+                if not os.path.exists(compose_path) or not os.path.exists(env_path):
+                    self.show_error(f"No se encontró la configuración de FerreDesk.\nRevisa: {FERREDESK_CONFIG_DIR}")
+                    return
+                if not self.start_ferredesk_with_compose():
+                    self.show_error("Error al iniciar contenedores (docker-compose)")
                     return
             
             self.update_status("Abriendo FerreDesk...")

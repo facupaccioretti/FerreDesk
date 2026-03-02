@@ -35,7 +35,7 @@ const getInputClasses = (theme) => `w-full border border-slate-300 rounded-sm px
 const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange }) => {
   const theme = useFerreDeskTheme()
   const CLASES_INPUT = getInputClasses(theme)
-  
+
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center gap-2">
@@ -92,9 +92,10 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
       return;
     }
     const dataToSave = {
-        ...form,
-        comivta: parseFloat(form.comivta) || 0,
-        comicob: parseFloat(form.comicob) || 0,
+      ...form,
+      comivta: parseFloat(form.comivta) || 0,
+      comicob: parseFloat(form.comicob) || 0,
+      localidad: form.localidad === "" ? null : form.localidad
     };
     onSave(dataToSave);
   };
@@ -173,19 +174,19 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
                 icono={<svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2" /></svg>}
               >
                 <FilaEditable etiqueta="Comisión Venta (%) *" inputProps={{ name: "comivta", type: "number", step: "0.01", min: "0", required: true }} value={form.comivta} onChange={handleChange} />
-                                 <FilaEditable etiqueta="Liquida Com. Venta *">
-                   <select name="liquivta" value={form.liquivta} onChange={handleChange} className={getInputClasses(theme)} required>
-                     <option value="S">Sí</option>
-                     <option value="N">No</option>
-                   </select>
-                 </FilaEditable>
+                <FilaEditable etiqueta="Liquida Com. Venta *">
+                  <select name="liquivta" value={form.liquivta} onChange={handleChange} className={getInputClasses(theme)} required>
+                    <option value="S">Sí</option>
+                    <option value="N">No</option>
+                  </select>
+                </FilaEditable>
                 <FilaEditable etiqueta="Comisión Cobranza (%) *" inputProps={{ name: "comicob", type: "number", step: "0.01", min: "0", required: true }} value={form.comicob} onChange={handleChange} />
-                                 <FilaEditable etiqueta="Liquida Com. Cobranza *">
-                   <select name="liquicob" value={form.liquicob} onChange={handleChange} className={getInputClasses(theme)} required>
-                     <option value="S">Sí</option>
-                     <option value="N">No</option>
-                   </select>
-                 </FilaEditable>
+                <FilaEditable etiqueta="Liquida Com. Cobranza *">
+                  <select name="liquicob" value={form.liquicob} onChange={handleChange} className={getInputClasses(theme)} required>
+                    <option value="S">Sí</option>
+                    <option value="N">No</option>
+                  </select>
+                </FilaEditable>
               </SeccionLista>
 
               {/* Tarjeta Ubicación y Estado */}
@@ -193,20 +194,20 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
                 titulo="Ubicación y Estado"
                 icono={<svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
               >
-                                 <FilaEditable etiqueta="Localidad *">
-                   <select name="localidad" value={form.localidad} onChange={handleChange} className={getInputClasses(theme)} required>
-                     <option value="">Seleccionar...</option>
-                     {localidades.map(l => (
-                       <option key={l.id} value={l.id}>{l.nombre}</option>
-                     ))}
-                   </select>
-                 </FilaEditable>
-                                 <FilaEditable etiqueta="Estado *">
-                   <select name="activo" value={form.activo} onChange={handleChange} className={getInputClasses(theme)} required>
-                     <option value="S">Activo</option>
-                     <option value="N">Inactivo</option>
-                   </select>
-                 </FilaEditable>
+                <FilaEditable etiqueta="Localidad">
+                  <select name="localidad" value={form.localidad || ""} onChange={handleChange} className={getInputClasses(theme)}>
+                    <option value="">Seleccionar...</option>
+                    {localidades.map(l => (
+                      <option key={l.id} value={l.id}>{l.nombre}</option>
+                    ))}
+                  </select>
+                </FilaEditable>
+                <FilaEditable etiqueta="Estado *">
+                  <select name="activo" value={form.activo} onChange={handleChange} className={getInputClasses(theme)} required>
+                    <option value="S">Activo</option>
+                    <option value="N">Inactivo</option>
+                  </select>
+                </FilaEditable>
               </SeccionLista>
             </div>
 
@@ -223,11 +224,11 @@ const VendedorForm = ({ initialData = {}, onSave, onCancel, loading, error, loca
               >
                 Cancelar
               </button>
-                             <button
-                 type="submit"
-                 disabled={loading}
-                 className={`px-6 py-3 ${theme.botonPrimario} rounded-xl disabled:opacity-50 disabled:cursor-not-allowed`}
-               >
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-6 py-3 ${theme.botonPrimario} rounded-xl disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
                 {loading ? 'Guardando...' : (initialData?.id ? 'Actualizar Vendedor' : 'Crear Vendedor')}
               </button>
             </div>

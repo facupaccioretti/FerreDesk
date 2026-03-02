@@ -125,6 +125,11 @@ def _proceso_backup_interno():
             
         _limpiar_backups_antiguos(directorio_backup, dias_retencion=60)
         
+    except FileNotFoundError:
+        # pg_dump no está en el PATH (ej. imagen sin postgresql-client).
+        ESTADO_BACKUP['estado'] = 'ERROR'
+        ESTADO_BACKUP['error'] = 'El comando pg_dump no se encuentra instalado en el servidor.'
+        logger.error("pg_dump no encontrado. Verificar instalación de postgresql-client.")
     except Exception as e:
         ESTADO_BACKUP['estado'] = 'ERROR'
         ESTADO_BACKUP['error'] = str(e)
