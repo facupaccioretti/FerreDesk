@@ -2,7 +2,7 @@
 echo Compilando FerreDesk Launcher...
 echo.
 
-pyinstaller --onefile --noconsole --icon=..\instalador\FerreDesk.ico --add-data "..\instalador\FerreDesk.ico;." ferredesk_launcher.py
+pyinstaller ferredesk_launcher.spec
 
 if %errorlevel% neq 0 (
     echo.

@@ -5,7 +5,10 @@ a = Analysis(
     ['ferredesk_launcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('..\\..\\instalador\\dev\\FerreDesk.ico', '.')],
+    datas=[
+        ('..\\..\\instalador\\dev\\FerreDesk.ico', '.'),
+        ('..\\..\\ferredesk_v0\\docker-compose.yml', '.'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

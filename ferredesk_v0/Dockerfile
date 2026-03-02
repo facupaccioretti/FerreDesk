@@ -22,10 +22,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para Postgres
+# Instalar dependencias del sistema necesarias para Postgres (pg_dump para backups).
+# Usamos postgresql-client sin versión para compatibilidad con Bookworm y Trixie.
 RUN apt-get update && apt-get install -y \
     libpq-dev \
-    postgresql-client-15 \
+    postgresql-client \
     netcat-traditional \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*

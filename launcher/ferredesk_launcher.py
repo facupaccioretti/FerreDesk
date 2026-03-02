@@ -32,6 +32,30 @@ for _dir in POSSIBLE_CONFIG_DIRS:
     if os.path.exists(os.path.join(_dir, ".env")):
         FERREDESK_CONFIG_DIR = _dir
         break
+
+# ========================================
+# MENSAJES DEL LAUNCHER (fallback Docker y diálogos)
+# ========================================
+DOCKER_WAIT_TIMEOUT_SEC = 120
+DOCKER_MAX_EXTRA_WAITS = 2  # Máximo de "Seguir esperando" antes de mostrar fallo
+
+MSG_STATUS_WAITING_DOCKER = "Esperando Docker Desktop..."
+MSG_STATUS_STARTING_DOCKER = "Iniciando Docker Desktop..."
+
+MSG_DOCKER_TIMEOUT_TITLE = "Docker tarda en responder"
+MSG_DOCKER_TIMEOUT_BODY = "Docker todavía no está listo. En algunas computadoras puede tardar varios minutos."
+BTN_DOCKER_KEEP_WAITING = "Seguir esperando"
+BTN_DOCKER_SEE_WHY = "No pudo iniciar: ver qué hacer"
+
+MSG_DOCKER_FAILED_TITLE = "Docker no está listo"
+MSG_DOCKER_FAILED_BODY = (
+    "FerreDesk necesita Docker Desktop en ejecución. No pudimos detectar Docker a tiempo.\n\n"
+    "Recomendamos:\n"
+    "1. Reiniciar la computadora e intentar de nuevo.\n"
+    "2. Si el problema continúa, contactar con nosotros."
+)
+BTN_CLOSE = "Cerrar"
+BTN_RETRY = "Reintentar"
 # ========================================
 
 class FerreDeskLauncher:
@@ -288,12 +312,18 @@ class FerreDeskLauncher:
                         else:
                             f.write(line)
 
-            # Actualizar docker-compose.yml al formato actual (IN_DOCKER + backups)
+            # Actualizar docker-compose.yml desde el archivo empaquetado
             compose_path = os.path.join(FERREDESK_CONFIG_DIR, "docker-compose.yml")
+            ruta_empaquetado = self._obtener_ruta_compose_empaquetado()
             try:
-                with open(compose_path, 'w', encoding='utf-8') as f:
-                    f.write(self._get_compose_content())
-                self.log("docker-compose.yml actualizado (IN_DOCKER + volumen backups)")
+                if os.path.exists(ruta_empaquetado):
+                    with open(ruta_empaquetado, 'r', encoding='utf-8') as f:
+                        contenido = f.read()
+                    with open(compose_path, 'w', encoding='utf-8') as f:
+                        f.write(contenido)
+                    self.log("docker-compose.yml actualizado desde archivo empaquetado")
+                else:
+                    self.log("Advertencia: compose empaquetado no encontrado")
             except Exception as e:
                 self.log(f"Error escribiendo docker-compose.yml: {e}")
 
@@ -353,54 +383,18 @@ class FerreDeskLauncher:
             return False
     
     # ========================================
-    # DOCKER COMPOSE (formato actual: IN_DOCKER + backups)
+    # DOCKER COMPOSE (archivo empaquetado)
     # ========================================
 
-    def _get_compose_content(self):
+    def _obtener_ruta_compose_empaquetado(self):
         """
-        Contenido de docker-compose.yml alineado con el repo.
-        Incluye IN_DOCKER y volumen ./backups para que el backup nativo funcione.
+        Ruta al docker-compose empaquetado (ferredesk_v0/docker-compose.yml).
+        Compilado: sys._MEIPASS. Desarrollo: directorio ferredesk_v0.
         """
-        return f"""services:
-  postgres:
-    image: postgres:15
-    container_name: ferredesk_postgres
-    env_file:
-      - .env
-    environment:
-      TZ: America/Argentina/Buenos_Aires
-      PGTZ: America/Argentina/Buenos_Aires
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${{POSTGRES_USER}} -d ${{POSTGRES_DB}}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  app:
-    image: {DOCKERHUB_REPO}:${{FERREDESK_VERSION}}
-    container_name: ferredesk_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      IN_DOCKER: "True"
-    volumes:
-      - ./media:/app/media
-      - ./backups:/app/backups
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-"""
+        nombre_archivo = "docker-compose.yml"
+        if getattr(sys, 'frozen', False):
+            return os.path.join(sys._MEIPASS, nombre_archivo)
+        return os.path.join(os.path.dirname(__file__), "..", "ferredesk_v0", nombre_archivo)
 
     def start_ferredesk_with_compose(self):
         """

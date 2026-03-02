@@ -1,3 +1,13 @@
+# FerreDesk - docker-compose de producción
+# Uso:
+#   - Lo usan el instalador y el launcher (prod y dev) para clientes.
+#   - Siempre se copia como docker-compose.yml en el directorio de FerreDesk.
+# Versión:
+#   - La imagen se toma de FERREDESK_VERSION definido en el archivo .env.
+#   - El launcher actualiza FERREDESK_VERSION cuando hay una versión nueva.
+# Nota:
+#   - El launcher nunca usa docker-compose-dev.yml, solo este archivo.
+
 services:
   postgres:
     image: postgres:15
@@ -20,9 +30,8 @@ services:
       retries: 5
 
   app: 
-    # PRODUCCIÓN: Solo descarga la imagen precompilada de Docker Hub
-    # NO construye localmente - elimina la sección build:
-    image: lautajuare/ferredesk:1.0.0
+    # Imagen de producción en Docker Hub; el tag lo aporta FERREDESK_VERSION desde .env.
+    image: lautajuare/ferredesk:${FERREDESK_VERSION}
     container_name: ferredesk_app
     depends_on:
       postgres:
