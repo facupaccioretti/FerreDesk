@@ -54,6 +54,7 @@ const Tabla = ({
   paginadorVisible = true,
   renderFila = null,
   mostrarBuscador = true,
+  placeholderBuscador = "Buscar en tabla...",
   mostrarOrdenamiento = true,
   sinEstilos = false,
   tamañoEncabezado = "normal", // "normal" | "pequeño"
@@ -132,7 +133,7 @@ const Tabla = ({
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Buscar en tabla..."
+                  placeholder={placeholderBuscador}
                   className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
                   value={valorBusqueda}
                   onChange={(e) => onCambioBusqueda(e.target.value)}

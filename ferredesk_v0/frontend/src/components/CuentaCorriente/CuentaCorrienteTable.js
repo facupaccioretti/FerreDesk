@@ -23,6 +23,9 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
   const generarBotonesAcciones = (item) => {
     const botones = []
 
+    // Detectar si es una autoimputación (FacRecibo/CotRecibo)
+    const esAutoimputacion = item.comprobante_tipo === 'factura_recibo'
+
     // Ver detalle - disponible para todos los comprobantes
     botones.push({
       componente: () => (
@@ -34,25 +37,6 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
       onClick: () => onVerDetalle(item),
       titulo: "Ver detalle"
     })
-
-    // Detectar si es una autoimputación (FacRecibo/CotRecibo)
-    const esAutoimputacion = item.comprobante_tipo === 'factura_recibo'
-
-    // Anular recibo - para recibos normales y autoimputaciones
-    if (item.comprobante_tipo === 'recibo' || esAutoimputacion) {
-      botones.push({
-        componente: () => (
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3,6 5,6 21,6" />
-            <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" />
-            <line x1="10" y1="11" x2="10" y2="17" />
-            <line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
-        ),
-        onClick: () => onAnularRecibo(item),
-        titulo: esAutoimputacion ? "Anular Autoimputación" : "Anular Recibo"
-      })
-    }
 
     // Modificar pagos - SOLO para recibos normales y notas de crédito (NO para autoimputaciones)
     if ((item.comprobante_tipo === 'recibo' || item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna') && !esAutoimputacion) {
@@ -79,6 +63,22 @@ const CuentaCorrienteTable = ({ items, loading, onImputarPago, onVerDetalle, onA
         ),
         onClick: () => onImputarPago(item),
         titulo: (item.comprobante_tipo === 'nota_credito' || item.comprobante_tipo === 'nota_credito_interna') ? "Imputar Crédito" : "Imputar Pago"
+      })
+    }
+
+    // Anular recibo - SIEMPRE al final (acción destructiva)
+    if (item.comprobante_tipo === 'recibo' || esAutoimputacion) {
+      botones.push({
+        componente: () => (
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3,6 5,6 21,6" />
+            <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+        ),
+        onClick: () => onAnularRecibo(item),
+        titulo: esAutoimputacion ? "Anular Autoimputación" : "Anular Recibo"
       })
     }
 

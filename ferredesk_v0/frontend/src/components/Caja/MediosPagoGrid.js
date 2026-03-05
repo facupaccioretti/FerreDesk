@@ -21,7 +21,7 @@ const MediosPagoGrid = ({
     const hoy = fechaHoyLocal;
 
     const agregarPago = () => {
-        const efectivo = metodosPago.find(m => m.codigo === 'EFECTIVO');
+        const efectivo = metodosPago.find(m => m.codigo?.toUpperCase() === 'EFECTIVO');
         setPagos(prev => [...prev, {
             metodo_pago_id: efectivo ? efectivo.id : '',
             codigo: efectivo ? efectivo.codigo : '',

@@ -160,24 +160,26 @@ def normalizar_cobro(
 
 def registrar_valores_y_movimientos(
     pagos: List[Dict[str, Any]],
-    sesion_caja: SesionCaja,
-    direccion: str,
-    descripcion_comprobante: str,
+    sesion_caja: Optional[SesionCaja] = None,
+    direccion: str = 'salida',
+    descripcion_comprobante: str = '',
     descripcion_base: str = "Pago",
     orden_pago=None,
+    usuario=None,
 ) -> List[Dict[str, Any]]:
     """
     Procesa una lista de medios de pago y genera los movimientos de caja y cheques
     correspondientes. Función genérica reutilizable para cobros (ventas) y pagos (OPs).
 
     Args:
-        pagos: Lista de dicts con metodo_pago_id, monto, y datos opcionales
+        pagos: Lista de dicts con metodo_pago_id y monto, y datos opcionales
             (referencia_externa, observacion, cuenta_banco_id, datos de cheque).
-        sesion_caja: Sesión de caja activa.
+        sesion_caja: (opcional) Sesión de caja activa. Requerida si afecta_arqueo es True.
         direccion: 'entrada' para cobros o 'salida' para pagos a proveedores.
         descripcion_comprobante: Texto que identifica al comprobante (ej: "A 0001-00000001").
         descripcion_base: Prefijo para la descripción del movimiento de caja.
         orden_pago: (opcional) Instancia de OrdenPago para vincular cheques entregados.
+        usuario: (opcional) Usuario que realiza la operación si no hay sesion_caja.
 
     Returns:
         Lista de dicts procesados con claves:
@@ -186,7 +188,7 @@ def registrar_valores_y_movimientos(
 
     Raises:
         ValueError: Si no se encuentra un método de pago.
-        ValidationError: Si faltan datos obligatorios de cheque o transferencia/QR.
+        ValidationError: Si faltan datos obligatorios o si se intenta medio físico sin caja.
     """
     tipo_movimiento = (
         TIPO_MOVIMIENTO_ENTRADA if direccion == 'entrada'
@@ -206,6 +208,22 @@ def registrar_valores_y_movimientos(
         except MetodoPago.DoesNotExist:
             raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
 
+        # Validación Crítica: Medios físicos requieren caja abierta
+        if metodo_pago.afecta_arqueo and not sesion_caja:
+            raise ValidationError(
+                f'El medio de pago "{metodo_pago.nombre}" requiere una sesión de caja abierta.'
+            )
+
+        # Validación Crítica: Cheques requieren caja abierta (custodia física)
+        # El cheque tiene afecta_arqueo=False (no entra al conteo de efectivo),
+        # pero SÍ requiere sesión de caja porque genera movimientos de custodia
+        # (MovimientoCaja) que exigen sesion_caja NOT NULL (models.py L200-204).
+        # CODIGO_CHEQUE importado en L33 de este archivo, definido en models.py L47.
+        if metodo_pago.codigo == CODIGO_CHEQUE and not sesion_caja:
+            raise ValidationError(
+                f'El medio de pago "{metodo_pago.nombre}" requiere una sesión de caja abierta.'
+            )
+
         # Métodos bancarios (Transferencia, QR, Tarjetas): permiten/requieren cuenta banco
         cuenta_banco_id = pago_data.get('cuenta_banco_id')
         metodos_bancarios = [CODIGO_TRANSFERENCIA, CODIGO_QR, CODIGO_TARJETA_DEBITO, CODIGO_TARJETA_CREDITO]
@@ -224,6 +242,10 @@ def registrar_valores_y_movimientos(
         cheque_obj = None
         movimiento_custodia_obj = None
         if metodo_pago.codigo == CODIGO_CHEQUE:
+            # Los cheques de terceros siempre requieren custodia, por ende caja. 
+            # Los cheques propios podrían ser tratados como nominales si se decide así,
+            # pero por ahora, si afecta_arqueo=True (Cheque 3ros), requiere caja.
+            
             def _extraer_datos_cheque():
                 nonlocal datos_cheque
                 numero_cheque = (pago_data.get('numero_cheque') or '').strip()
@@ -253,51 +275,62 @@ def registrar_valores_y_movimientos(
                     'tipo_cheque': tipo_cheque,
                 }
 
-            if direccion == 'salida':
-                # Pago a proveedor: se entrega un cheque de terceros existente
+            if direccion == 'entrada':
+                # Cobro con cheque nuevo (Terceros)
+                _extraer_datos_cheque()
+                cheque_obj = Cheque.objects.create(
+                    **datos_cheque,
+                    monto=monto,
+                    estado=Cheque.ESTADO_EN_CARTERA,
+                )
+                # Registrar movimiento de custodia (entrada) solo si hay caja
+                if sesion_caja:
+                    movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
+                        cheque=cheque_obj,
+                        sesion_caja=sesion_caja,
+                        usuario=usuario or sesion_caja.usuario,
+                        tipo_movimiento=TIPO_MOVIMIENTO_ENTRADA,
+                        motivo=f"Recibido en {descripcion_comprobante}"
+                    )
+            else:
+                # Pago con cheque (Propio o de Terceros en Cartera)
                 cheque_id = pago_data.get('cheque_id')
-                if cheque_id:
+                es_propio = pago_data.get('es_propio', False)
+                
+                if es_propio:
+                    # Cheque propio entregado a proveedor
+                    _extraer_datos_cheque()
+                    cheque_obj = Cheque.objects.create(
+                        **datos_cheque,
+                        monto=monto,
+                        estado=Cheque.ESTADO_ENTREGADO,
+                        proveedor=orden_pago.op_proveedor if orden_pago else None,
+                        orden_pago=orden_pago,
+                    )
+                elif cheque_id:
+                    # Cheque de terceros de cartera entregado a proveedor (Endosado)
                     try:
                         cheque_obj = Cheque.objects.get(id=cheque_id, estado=Cheque.ESTADO_EN_CARTERA)
-                        cheque_obj.estado = Cheque.ESTADO_ENTREGADO
-                        cheque_obj.proveedor_id = pago_data.get('proveedor_id')
-                        if orden_pago:
-                            cheque_obj.orden_pago = orden_pago
-                        cheque_obj.save()
                     except Cheque.DoesNotExist:
-                        raise ValidationError(f'No se encontró cheque en cartera con ID {cheque_id}.')
+                        raise ValidationError(f"El cheque con ID {cheque_id} no está en cartera.")
+                    
+                    # Registrar movimiento de custodia (salida) solo si hay caja
+                    if sesion_caja:
+                        movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
+                            cheque=cheque_obj,
+                            sesion_caja=sesion_caja,
+                            usuario=usuario or sesion_caja.usuario,
+                            tipo_movimiento=TIPO_MOVIMIENTO_SALIDA,
+                            motivo=f"Entregado en {descripcion_comprobante}"
+                        )
+                    
+                    cheque_obj.estado = Cheque.ESTADO_ENTREGADO
+                    cheque_obj.proveedor = orden_pago.op_proveedor if orden_pago else None
+                    cheque_obj.orden_pago = orden_pago
+                    cheque_obj.movimiento_caja_salida = movimiento_custodia_obj
+                    cheque_obj.save(update_fields=['movimiento_caja_salida', 'estado', 'proveedor', 'orden_pago'])
                 else:
-                    # Cheque Propio: Validar y asignar datos_cheque
-                    _extraer_datos_cheque()
-                    datos_cheque['es_propio'] = True
-            else:
-                # Cobro de venta: se recibe un cheque nuevo
-                _extraer_datos_cheque()
-            
-            # Movimiento de custodia para cheques físicos (terceros)
-            # Entrada: Si recibimos un cheque nuevo (siempre terceros en este flujo)
-            # Salida: Si entregamos un cheque existente de cartera (endoso)
-            movimiento_custodia_obj = None
-            if direccion == 'entrada' and datos_cheque:
-                # Creamos una instancia temporal solo para la descripción del movimiento
-                temp_cheque = Cheque(
-                    numero=datos_cheque['numero'],
-                    banco_emisor=datos_cheque['banco_emisor'],
-                    monto=monto
-                )
-                movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
-                    temp_cheque, sesion_caja, sesion_caja.usuario,
-                    TIPO_MOVIMIENTO_ENTRADA, f"en custodia ({descripcion_comprobante})"
-                )
-            elif direccion == 'salida' and cheque_obj:
-                # Cheque de terceros que sale de cartera (endoso)
-                movimiento_custodia_obj = registrar_movimiento_custodia_cheque(
-                    cheque_obj, sesion_caja, sesion_caja.usuario,
-                    TIPO_MOVIMIENTO_SALIDA, f"entregado de custodia ({descripcion_comprobante})"
-                )
-                # Vincular movimiento de salida al cheque existente
-                cheque_obj.movimiento_caja_salida = movimiento_custodia_obj
-                cheque_obj.save(update_fields=['movimiento_caja_salida', 'estado', 'proveedor', 'orden_pago'])
+                    raise ValidationError('Debe especificar cheque_id para un cheque de terceros o es_propio=True para un cheque propio.')
 
         # Monto recibido (solo relevante en cobros con efectivo)
         monto_recibido = pago_data.get('monto_recibido')
@@ -311,6 +344,7 @@ def registrar_valores_y_movimientos(
         # Movimiento de caja (si el método afecta arqueo)
         movimiento_obj = None
         if metodo_pago.afecta_arqueo:
+            # Aquí ya validamos arriba que existe sesion_caja si afecta_arqueo=True
             observacion = (pago_data.get('observacion') or '').strip()
             descripcion_mov = f"{descripcion_base} {descripcion_comprobante} ({metodo_pago.nombre})"
             if observacion:
@@ -392,6 +426,7 @@ def registrar_pagos_venta(
             direccion='entrada',
             descripcion_comprobante=numero_venta,
             descripcion_base=descripcion_base,
+            usuario=sesion_caja.usuario,
         )
 
         for res in resultados:
@@ -431,7 +466,7 @@ def registrar_pagos_venta(
 
 def registrar_pagos_recibo(
     recibo: Recibo,
-    sesion_caja: SesionCaja,
+    sesion_caja: Optional[SesionCaja] = None,
     pagos: Optional[List[Dict[str, Any]]] = None,
     monto_pago_legacy: Optional[Decimal] = None,
     descripcion_base: str = "Cobro Recibo"
@@ -459,6 +494,7 @@ def registrar_pagos_recibo(
             direccion='entrada',
             descripcion_comprobante=numero_recibo,
             descripcion_base=descripcion_base,
+            usuario=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
         )
 
         for res in resultados:
@@ -489,7 +525,7 @@ def registrar_pagos_recibo(
                     estado=Cheque.ESTADO_EN_CARTERA,
                     recibo=recibo, # Nuevo FK
                     pago_venta=pago_recibo,
-                    usuario_registro=sesion_caja.usuario,
+                    usuario_registro=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
                     movimiento_caja_entrada=res['movimiento_custodia_obj'],
                 )
 
@@ -498,8 +534,8 @@ def registrar_pagos_recibo(
 
 def registrar_pagos_orden_pago(
     orden_pago,
-    sesion_caja: SesionCaja,
-    pagos: List[Dict[str, Any]],
+    sesion_caja: Optional[SesionCaja] = None,
+    pagos: List[Dict[str, Any]] = None,
     descripcion_base: str = "Pago a proveedor"
 ) -> List[Dict[str, Any]]:
     """
@@ -531,6 +567,7 @@ def registrar_pagos_orden_pago(
             descripcion_comprobante=f"OP {orden_pago.op_numero}",
             descripcion_base=descripcion_base,
             orden_pago=orden_pago,
+            usuario=orden_pago.op_usuario,
         )
 
         for res in resultados:
@@ -560,7 +597,7 @@ def registrar_pagos_orden_pago(
                     proveedor=orden_pago.op_proveedor,
                     orden_pago=orden_pago,
                     pago_venta=pago_op,
-                    usuario_registro=sesion_caja.usuario,
+                    usuario_registro=sesion_caja.usuario if sesion_caja else orden_pago.op_usuario,
                     origen_tipo=Cheque.ORIGEN_PROPIO
                 )
 

@@ -105,6 +105,9 @@ const ProductosManager = () => {
   // Estado de ordenamiento
   const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
 
+  // Toggle para buscar por código de proveedor en lugar de código de venta/denominación
+  const [buscarPorCodigoProveedor, setBuscarPorCodigoProveedor] = useState(false)
+
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
     localStorage.setItem("productosTabs", JSON.stringify(tabs))
@@ -278,14 +281,18 @@ const ProductosManager = () => {
       } else if (activeTab === "inactivos") {
         filtros.acti = "N";
       }
-      // Búsqueda remota por código de venta y denominación
+      // Búsqueda remota: por código de proveedor o por código de venta/denominación
       if ((searchProductos || '').trim()) {
-        filtros['search'] = searchProductos.trim();
+        if (buscarPorCodigoProveedor) {
+          filtros['search_codigo_proveedor'] = searchProductos.trim();
+        } else {
+          filtros['search'] = searchProductos.trim();
+        }
       }
       fetchProductos(filtros, pagina, itemsPorPagina, 'id', ordenamiento);
     }, 200);
     return () => clearTimeout(timeout);
-  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, ordenamiento, fetchProductos]);
+  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, ordenamiento, buscarPorCodigoProveedor, fetchProductos]);
 
   // Resetear a página 1 cuando cambian filtros o búsqueda
   useEffect(() => {
@@ -399,6 +406,8 @@ const ProductosManager = () => {
                     onUpdateStock={handleUpdateStock}
                     searchProductos={searchProductos}
                     setSearchProductos={setSearchProductos}
+                    buscarPorCodigoProveedor={buscarPorCodigoProveedor}
+                    setBuscarPorCodigoProveedor={setBuscarPorCodigoProveedor}
                     paginacionControlada={true}
                     paginaActual={pagina}
                     onPageChange={setPagina}
@@ -437,6 +446,8 @@ const ProductosManager = () => {
                     onUpdateStock={handleUpdateStock}
                     searchProductos={searchProductos}
                     setSearchProductos={setSearchProductos}
+                    buscarPorCodigoProveedor={buscarPorCodigoProveedor}
+                    setBuscarPorCodigoProveedor={setBuscarPorCodigoProveedor}
                     paginacionControlada={true}
                     paginaActual={pagina}
                     onPageChange={setPagina}

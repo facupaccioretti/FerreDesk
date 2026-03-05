@@ -229,22 +229,21 @@ def crear_orden_pago(request):
             usuario=request.user,
             fecha_hora_fin__isnull=True
         ).first()
-        if not sesion_caja:
-            return Response(
-                {'detail': 'No hay una sesión de caja abierta'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
+        # Si no hay sesión, validamos que no se intenten pagos físicos más adelante (en registrar_pagos_orden_pago)
+        # pero primero determinamos la sucursal para la numeración.
+        
         with transaction.atomic():
-            # Determinar el punto de venta (sucursal de la caja)
-            sucursal = sesion_caja.sucursal or 1
+            # Determinar el punto de venta (sucursal de la caja o fallback)
+            # Usamos sucursal 1 si no hay sesión abierta (Pago Nominal)
+            sucursal = sesion_caja.sucursal if sesion_caja else 1
             
             # Buscar el último número para esta sucursal
             # El número se guarda como '0001-00000001'
             prefijo = f"{sucursal:04d}-"
             ultima_op = OrdenPago.objects.filter(
                 op_numero__startswith=prefijo
-            ).order_by('-op_numero').first()
+            ).order_by('-op_numero').select_for_update().first()
             
             if ultima_op:
                 try:
@@ -258,7 +257,7 @@ def crear_orden_pago(request):
             
             numero_formateado = f"{prefijo}{nuevo_num:08d}"
 
-            # Crear la orden de pago
+            # Crear la orden de pago (permite sesion_caja=None)
             orden_pago = OrdenPago.objects.create(
                 op_fecha=data['fecha'],
                 op_numero=numero_formateado, # Usar el generado secuencialmente

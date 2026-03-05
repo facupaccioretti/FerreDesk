@@ -614,6 +614,8 @@ class OrdenCompraDetalleItemViewSet(viewsets.ModelViewSet):
     queryset = OrdenCompraDetalleItem.objects.all()
     serializer_class = OrdenCompraDetalleItemSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['odi_idor']
     
     def get_queryset(self):
         """Optimizar consultas"""

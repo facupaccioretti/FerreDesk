@@ -125,19 +125,26 @@ class StockViewSet(viewsets.ModelViewSet):
                 Q(codvta__iexact=codigo_trim) | Q(codigo_barras__iexact=codigo_trim)
             )
         else:
-            # Búsqueda general por código o denominación (para otros casos)
-            termino_busqueda = self.request.query_params.get('search', None)
-            if termino_busqueda:
-                # NUEVA FUNCIONALIDAD: Búsqueda por comodines
-                # Si el término contiene espacios, usar búsqueda por comodines
-                if ' ' in termino_busqueda.strip():
-                    queryset = self._busqueda_por_comodines(queryset, termino_busqueda)
-                else:
-                    # Búsqueda tradicional para términos simples
-                    queryset = queryset.filter(
-                        Q(codvta__icontains=termino_busqueda) |
-                        Q(deno__icontains=termino_busqueda)
-                    ).distinct()
+            # Búsqueda exclusiva por código de proveedor (modo toggle desde el frontend)
+            search_codigo_prov = self.request.query_params.get('search_codigo_proveedor', None)
+            if search_codigo_prov:
+                queryset = queryset.filter(
+                    stock_proveedores__codigo_producto_proveedor__icontains=search_codigo_prov.strip()
+                ).distinct()
+            else:
+                # Búsqueda general por código o denominación (para otros casos)
+                termino_busqueda = self.request.query_params.get('search', None)
+                if termino_busqueda:
+                    # NUEVA FUNCIONALIDAD: Búsqueda por comodines
+                    # Si el término contiene espacios, usar búsqueda por comodines
+                    if ' ' in termino_busqueda.strip():
+                        queryset = self._busqueda_por_comodines(queryset, termino_busqueda)
+                    else:
+                        # Búsqueda tradicional para términos simples
+                        queryset = queryset.filter(
+                            Q(codvta__icontains=termino_busqueda) |
+                            Q(deno__icontains=termino_busqueda)
+                        ).distinct()
 
         # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
         if 'acti' not in self.request.query_params:

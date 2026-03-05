@@ -36,11 +36,11 @@ class CajaTestMixin:
         """Obtiene el método de pago 'efectivo' creado por la data migration."""
         return MetodoPago.objects.get(codigo=CODIGO_EFECTIVO)
     
-    def crear_sesion_caja(self, usuario, saldo_inicial=Decimal('1000.00'), estado=ESTADO_CAJA_ABIERTA):
+    def crear_sesion_caja(self, usuario, saldo_inicial=Decimal('1000.00'), estado=ESTADO_CAJA_ABIERTA, sucursal=1):
         """Crea una sesión de caja de prueba."""
         return SesionCaja.objects.create(
             usuario=usuario,
-            sucursal=1,
+            sucursal=sucursal,
             saldo_inicial=saldo_inicial,
             estado=estado,
         )

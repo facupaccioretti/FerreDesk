@@ -29,7 +29,7 @@ const OrdenPagoReciboModal = ({
     // Hooks de API (seleccionamos según tipo)
     const apiCliente = useCuentaCorrienteAPI()
     const apiProveedor = useCuentaCorrienteProveedorAPI()
-    const { validarCUIT } = useCajaAPI()
+    const { validarCUIT, obtenerMiCaja } = useCajaAPI()
 
     // Extraemos métodos específicos para que las dependencias sean estables
     const {
@@ -54,6 +54,9 @@ const OrdenPagoReciboModal = ({
     const [metodosPago, setMetodosPago] = useState([])
     const [cuentasBanco, setCuentasBanco] = useState([])
     const [chequesCartera, setChequesCartera] = useState([])
+
+    // Estado de sesión de caja para filtrar métodos que requieren custodia física
+    const [cajaAbierta, setCajaAbierta] = useState(false)
 
     // Paso 1: Deudas (Facturas de Venta o Facturas de Compra)
     const [documentosPendientes, setDocumentosPendientes] = useState([])
@@ -114,16 +117,32 @@ const OrdenPagoReciboModal = ({
             const cuentasFn = tipo === 'RECIBO' ? getCuentasCliente : getCuentasProv
             const chequesFn = tipo === 'RECIBO' ? getChequesCliente : getChequesProv
 
-            const [pendientes, metodos, cuentas, cheques] = await Promise.all([
+            const [pendientes, metodos, cuentas, cheques, miCaja] = await Promise.all([
                 fetchPendientes,
                 metodosFn(),
                 cuentasFn(),
-                chequesFn()
+                chequesFn(),
+                obtenerMiCaja()
             ])
+
+            // Detectar si la caja está abierta para filtrar métodos físicos
+            // obtenerMiCaja() retorna {tiene_caja_abierta: bool} (useCajaAPI.js L73)
+            const tieneCaja = miCaja?.tiene_caja_abierta || false
+            setCajaAbierta(tieneCaja)
 
             const docs = tipo === 'RECIBO' ? (pendientes.facturas || []) : (pendientes.compras_pendientes || [])
             setDocumentosPendientes(docs)
-            setMetodosPago(Array.isArray(metodos) ? metodos : metodos.results || [])
+
+            // Si la caja NO está abierta, excluir métodos que requieren custodia física.
+            // 'efectivo' (models.py L41) y 'cheque' (models.py L47) requieren caja.
+            // m.codigo viene del MetodoPagoSerializer (serializers_metodo_pago.py L18).
+            const todosMetodos = Array.isArray(metodos) ? metodos : metodos.results || []
+            const CODIGOS_REQUIEREN_CAJA = ['efectivo', 'cheque']
+            const metodosFiltrados = tieneCaja
+                ? todosMetodos
+                : todosMetodos.filter(m => !CODIGOS_REQUIEREN_CAJA.includes(m.codigo))
+            setMetodosPago(metodosFiltrados)
+
             setCuentasBanco(Array.isArray(cuentas) ? cuentas : cuentas.results || [])
             setChequesCartera(Array.isArray(cheques) ? cheques : cheques.results || [])
 
@@ -148,7 +167,8 @@ const OrdenPagoReciboModal = ({
         getFacturasPendientes, getComprasPendientes,
         getMetodosCliente, getMetodosProv,
         getCuentasCliente, getCuentasProv,
-        getChequesCliente, getChequesProv
+        getChequesCliente, getChequesProv,
+        obtenerMiCaja
     ])
 
     useEffect(() => {
@@ -179,7 +199,7 @@ const OrdenPagoReciboModal = ({
     const handleAvanzarPaso2 = () => {
         // Al avanzar, si no hay pagos definidos, inicializar con Efectivo por defecto cubriendo el total imputado
         if (pagos.length === 0 && montoImputaciones > 0) {
-            const efectivo = metodosPago.find(m => m.codigo === 'EFECTIVO')
+            const efectivo = metodosPago.find(m => m.codigo?.toUpperCase() === 'EFECTIVO')
             setPagos([{
                 metodo_pago_id: efectivo?.id || '',
                 codigo: efectivo?.codigo || 'EFECTIVO',
