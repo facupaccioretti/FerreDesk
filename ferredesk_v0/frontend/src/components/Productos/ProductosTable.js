@@ -173,6 +173,8 @@ export default function ProductosTable({
   setFam3Filtro,
   searchProductos,
   setSearchProductos,
+  buscarPorCodigoProveedor = false,
+  setBuscarPorCodigoProveedor = () => { },
   paginacionControlada = false,
   paginaActual,
   onPageChange,
@@ -293,6 +295,21 @@ export default function ProductosTable({
       </div>
 
       <div className="flex-1">
+        {/* Toggle de modo de búsqueda por código de proveedor */}
+        <div className="mb-2 flex items-center">
+          <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none hover:text-orange-600 transition-colors">
+            <input
+              type="checkbox"
+              checked={buscarPorCodigoProveedor}
+              onChange={(e) => {
+                setBuscarPorCodigoProveedor(e.target.checked)
+                setSearchProductos('') // Limpiar búsqueda al cambiar modo para evitar resultados cruzados
+              }}
+              className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+            />
+            Buscar por código de proveedor
+          </label>
+        </div>
         {/* Definición de columnas */}
         {(() => {
           const columnas = [
@@ -353,6 +370,7 @@ export default function ProductosTable({
               valorBusqueda={searchProductos}
               onCambioBusqueda={setSearchProductos}
               mostrarBuscador={true}
+              placeholderBuscador={buscarPorCodigoProveedor ? "Buscar por código de proveedor..." : "Buscar en tabla..."}
               mostrarOrdenamiento={true}
               paginacionControlada={paginacionControlada}
               paginaActual={paginaActual}
@@ -423,7 +441,7 @@ export default function ProductosTable({
                                 Información Básica
                               </h5>
                               <div className="space-y-1 text-xs">
-                                
+
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Unidad:</span>
                                   <span className="font-medium text-slate-700">{p.unidad || "N/A"}</span>
@@ -439,13 +457,12 @@ export default function ProductosTable({
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Estado:</span>
                                   <span
-                                    className={`font-medium px-2 py-0.5 rounded-full text-xs ${
-                                      p.acti === "S"
+                                    className={`font-medium px-2 py-0.5 rounded-full text-xs ${p.acti === "S"
                                         ? "bg-green-100 text-green-800"
                                         : p.acti === "N"
                                           ? "bg-red-100 text-red-800"
                                           : "bg-gray-100 text-gray-800"
-                                    }`}
+                                      }`}
                                   >
                                     {p.acti === "S" ? "Activo" : p.acti === "N" ? "Inactivo" : "N/A"}
                                   </span>
