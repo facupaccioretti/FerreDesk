@@ -82,6 +82,16 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
     ven_descu1 = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     ven_descu2 = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
+    # Alias front-friendly: permiten que el frontend consuma los datos sin mapear vdi_* manualmente.
+    # Los campos originales vdi_* se mantienen por compatibilidad con la impresión de PDFs y código legacy.
+    denominacion = serializers.CharField(source='vdi_detalle1', read_only=True)
+    cantidad = serializers.DecimalField(source='vdi_cantidad', max_digits=15, decimal_places=4, read_only=True)
+    precioFinal = serializers.DecimalField(source='vdi_precio_unitario_final', max_digits=15, decimal_places=2, read_only=True, allow_null=True)
+    costo = serializers.DecimalField(source='vdi_costo', max_digits=15, decimal_places=4, read_only=True, allow_null=True)
+    margen = serializers.DecimalField(source='vdi_margen', max_digits=10, decimal_places=3, read_only=True)
+    bonificacion = serializers.DecimalField(source='vdi_bonifica', max_digits=10, decimal_places=2, read_only=True)
+    idaliiva = serializers.PrimaryKeyRelatedField(source='vdi_idaliiva', read_only=True)
+
     class Meta:
         model = VentaDetalleItem
         fields = [
@@ -97,6 +107,8 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
             'subtotal_neto', 'iva_monto', 'total_item',
             'margen_monto', 'margen_porcentaje',
             'ven_descu1', 'ven_descu2',
+            # Alias front-friendly (read-only, sin romper compatibilidad)
+            'denominacion', 'cantidad', 'precioFinal', 'costo', 'margen', 'bonificacion', 'idaliiva',
         ]
 
 class VentaSerializer(serializers.ModelSerializer):

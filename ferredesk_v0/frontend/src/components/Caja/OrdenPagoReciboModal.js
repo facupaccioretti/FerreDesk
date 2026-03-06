@@ -55,8 +55,7 @@ const OrdenPagoReciboModal = ({
     const [cuentasBanco, setCuentasBanco] = useState([])
     const [chequesCartera, setChequesCartera] = useState([])
 
-    // Estado de sesión de caja para filtrar métodos que requieren custodia física
-    const [cajaAbierta, setCajaAbierta] = useState(false)
+
 
     // Paso 1: Deudas (Facturas de Venta o Facturas de Compra)
     const [documentosPendientes, setDocumentosPendientes] = useState([])
@@ -128,7 +127,6 @@ const OrdenPagoReciboModal = ({
             // Detectar si la caja está abierta para filtrar métodos físicos
             // obtenerMiCaja() retorna {tiene_caja_abierta: bool} (useCajaAPI.js L73)
             const tieneCaja = miCaja?.tiene_caja_abierta || false
-            setCajaAbierta(tieneCaja)
 
             const docs = tipo === 'RECIBO' ? (pendientes.facturas || []) : (pendientes.compras_pendientes || [])
             setDocumentosPendientes(docs)

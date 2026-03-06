@@ -87,6 +87,13 @@ class Venta(models.Model):
     ven_observacion = models.TextField(db_column='VEN_OBSERVACION', null=True, blank=True)
     ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
+    # Número de lista de precios usada al crear el documento.
+    # 0 = Lista 0 (Minorista). Se almacena para restaurar la lista al editar/convertir.
+    ven_idlpa = models.SmallIntegerField(
+        db_column='VEN_IDLPA', default=0,
+        help_text='Número de lista de precios activa al momento de crear la venta/presupuesto'
+    )
+
     # Fecha hasta la cual el presupuesto/venta es válido.  En presupuestos se
     # usa para determinar su caducidad automática.
     ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)

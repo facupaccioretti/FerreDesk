@@ -148,32 +148,17 @@ const ConVentaForm = ({
   // Estado para la lista de precios activa (0 = Minorista por defecto)
   const [listaPrecioId, setListaPrecioId] = useState(0);
 
-  // Efecto de inicialización sincronizada (igual que VentaForm)
-  useEffect(() => {
-    if (!inicializado && comprobantes.length > 0) {
-      const comprobanteFacturaInterna = comprobantes.find((c) => (c.tipo || "").toLowerCase() === "factura_interna");
-      if (comprobanteFacturaInterna) {
-        setTipoComprobante("factura_interna");
-        setComprobanteId(comprobanteFacturaInterna.id);
-      } else {
-        setTipoComprobante(comprobantes[0].tipo?.toLowerCase() || "factura_interna");
-        setComprobanteId(comprobantes[0].id);
-      }
-      setInicializado(true);
-    }
-  }, [inicializado, comprobantes]);
-
-  useEffect(() => {
-    if (comprobantes.length > 0 && !comprobanteId) {
-      setComprobanteId(comprobantes[0].id);
-    }
-  }, [comprobantes, comprobanteId]);
-
   // Determinar origen de datos
   const origenDatos = facturaInternaOrigen || presupuestoOrigen;
   const esConversionFacturaI = tipoConversion === 'factura_i_factura';
   // Clave de borrador estable por origen (evita pérdida por cambios de tabKey)
   const claveDraft = `conVentaFormDraft_${esConversionFacturaI ? 'factura_interna' : 'presupuesto'}_${esConversionFacturaI ? (facturaInternaOrigen?.id ?? '0') : (presupuestoOrigen?.id ?? '0')}`;
+
+  // Sincronizar lista de precios del documento origen (presupuesto o cotización)
+  useEffect(() => {
+    const listaOrigen = origenDatos?.ven_idlpa ?? 0
+    setListaPrecioId(listaOrigen)
+  }, [origenDatos?.ven_idlpa])
 
   // (eliminado indicador isReady no utilizado)
 
@@ -206,6 +191,7 @@ const ConVentaForm = ({
         descu3: 0,
         copia: 1,
         cae: '',
+        tipoComprobante: 'factura_interna',
         // Metadatos de origen para asociar el borrador a esta conversión
         __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
         __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
@@ -254,6 +240,7 @@ const ConVentaForm = ({
         total: 0,
         __origenTipo: esConversionFacturaI ? 'factura_interna' : 'presupuesto',
         __origenId: esConversionFacturaI ? (facturaInternaOrigen?.id ?? null) : (presupuestoOrigen?.id ?? null),
+        tipoComprobante: data.tipoComprobante || (esConversionFacturaI ? 'factura' : 'factura_interna'),
       };
     },
     parametrosPorDefecto: [alicuotasMap, origenDatos, itemsSeleccionados, sucursales, puntosVenta],
@@ -280,6 +267,36 @@ const ConVentaForm = ({
       remountBorradorRef.current = true;
     }
   }, [formulario.items]);
+
+  // Efecto de inicialización sincronizada: restaurar tipo de comprobante del borrador
+  useEffect(() => {
+    if (!inicializado && comprobantes.length > 0) {
+      const tipoGuardado = formulario.tipoComprobante
+      if (tipoGuardado) {
+        setTipoComprobante(tipoGuardado)
+        const compGuardado = comprobantes.find((c) => (c.tipo || '').toLowerCase() === tipoGuardado)
+        if (compGuardado) {
+          setComprobanteId(compGuardado.id)
+        }
+      } else {
+        const comprobanteFacturaInterna = comprobantes.find((c) => (c.tipo || "").toLowerCase() === "factura_interna");
+        if (comprobanteFacturaInterna) {
+          setTipoComprobante("factura_interna");
+          setComprobanteId(comprobanteFacturaInterna.id);
+        } else {
+          setTipoComprobante(comprobantes[0].tipo?.toLowerCase() || "factura_interna");
+          setComprobanteId(comprobantes[0].id);
+        }
+      }
+      setInicializado(true);
+    }
+  }, [inicializado, comprobantes, formulario.tipoComprobante]);
+
+  useEffect(() => {
+    if (comprobantes.length > 0 && !comprobanteId) {
+      setComprobanteId(comprobantes[0].id);
+    }
+  }, [comprobantes, comprobanteId]);
 
   // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
   const [documentoInfo, setDocumentoInfo] = useState({
@@ -366,30 +383,7 @@ const ConVentaForm = ({
   // Comprobantes disponibles para venta (excluye presupuesto)
   const comprobantesVenta = comprobantes.filter(c => (c.tipo || '').toLowerCase() !== 'presupuesto');
 
-  // Efecto de inicialización sincronizada (similar a VentaForm)
-  useEffect(() => {
-    if (!inicializado && comprobantesVenta.length > 0) {
-      // Si es conversión de factura interna, forzar tipo 'factura'
-      if (esConversionFacturaI) {
-        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
-        if (compFactura) {
-          setTipoComprobante('factura');
-          setComprobanteId(compFactura.id);
-        }
-      } else {
-        // Para presupuestos, lógica normal
-        const compFactura = comprobantesVenta.find(c => (c.tipo || '').toLowerCase() === 'factura');
-        if (compFactura) {
-          setTipoComprobante('factura');
-          setComprobanteId(compFactura.id);
-        } else {
-          setTipoComprobante('venta');
-          setComprobanteId(comprobantesVenta[0].id);
-        }
-      }
-      setInicializado(true);
-    }
-  }, [inicializado, comprobantesVenta, esConversionFacturaI]);
+
 
   // Mantener comprobanteId sincronizado con tipoComprobante (segunda fase)
   useEffect(() => {
@@ -781,6 +775,7 @@ const ConVentaForm = ({
         ven_copia: formulario.copia || 1,
         comprobante_pagado: estaPagado,
         monto_pago: 0,
+        ven_idlpa: listaPrecioId,
       };
 
       // CORREGIDO: Agregar items según el tipo de conversión
@@ -1233,7 +1228,10 @@ const ConVentaForm = ({
                     <ComprobanteDropdown
                       opciones={opcionesComprobante}
                       value={tipoComprobante}
-                      onChange={setTipoComprobante}
+                      onChange={(tipo) => {
+                        setTipoComprobante(tipo)
+                        setFormulario(f => ({ ...f, tipoComprobante: tipo }))
+                      }}
                       disabled={isReadOnly || esConversionFacturaI}
                       className="w-full"
                     />
@@ -1248,6 +1246,20 @@ const ConVentaForm = ({
                       disabled={isReadOnly || esConversionFacturaI}
                       showLabel={false}
                     />
+                  </div>
+
+                  {/* Lista de Precios (read-only en conversión) */}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">Lista de Precios</label>
+                    <select
+                      value={listaPrecioId}
+                      disabled={true}
+                      className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 bg-slate-100 text-slate-600 cursor-not-allowed"
+                    >
+                      {listasPrecio.map((lista) => (
+                        <option key={lista.numero} value={lista.numero}>{lista.nombre}</option>
+                      ))}
+                    </select>
                   </div>
 
                 </div>

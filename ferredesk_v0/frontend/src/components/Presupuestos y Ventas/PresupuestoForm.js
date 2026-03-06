@@ -7,14 +7,14 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
+import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario'
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { useFormularioDraft } from "./herramientasforms/useFormularioDraft"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
-// import { normalizarItems } from './herramientasforms/normalizadorItems' // Ya no se usa
+import { normalizarItems } from './herramientasforms/normalizadorItems'
 import SelectorDocumento from "./herramientasforms/SelectorDocumento"
 import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 import { fechaHoyLocal } from "../../utils/fechas"
@@ -55,7 +55,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 // Agrego la función mergeWithDefaults
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => {
   const defaults = getInitialFormState(sucursales, puntosVenta)
-  return { ...defaults, ...data, items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [] }
+  return { ...defaults, ...data, items: Array.isArray(data?.items) ? normalizarItems(data.items, { modo: 'presupuesto' }) : [] }
 }
 
 const PresupuestoForm = ({
@@ -113,14 +113,7 @@ const PresupuestoForm = ({
     [alicuotas],
   )
 
-  // Función wrapper para normalizar items usando el normalizador unificado
-  // const normalizarItemsPresupuesto = (items) => {
-  //   return normalizarItems(items, { 
-  //     productos, 
-  //     modo: 'presupuesto', 
-  //     alicuotasMap 
-  //   })
-  // }
+
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
@@ -288,6 +281,7 @@ const PresupuestoForm = ({
           ven_idvdo: formulario.vendedorId,
           ven_copia: Number.parseInt(formulario.copia, 10) || 1,
           items: items.map((item, idx) => mapearCamposItem(item, idx)),
+          ven_idlpa: listaPrecioId,
           // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         }
         if (formulario.cuit) payload.ven_cuit = formulario.cuit;
@@ -318,6 +312,7 @@ const PresupuestoForm = ({
           ven_idvdo: formulario.vendedorId,
           ven_copia: formulario.copia || 1,
           items: items.map((item, idx) => mapearCamposItem(item, idx)),
+          ven_idlpa: listaPrecioId,
           // permitir_stock_negativo: se obtiene automáticamente del backend desde la configuración de la ferretería
         }
         if (formulario.cuit) payload.ven_cuit = formulario.cuit;

@@ -7,8 +7,8 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
-// import { normalizarItems } from "./herramientasforms/normalizadorItems" // Ya no se usa
+import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -52,7 +52,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => ({
   ...getInitialFormState(sucursales, puntosVenta),
   ...data,
-  items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
+  items: Array.isArray(data?.items) ? normalizarItems(data.items, { modo: 'venta' }) : [],
 })
 
 const getStockProveedoresMap = (productos) => {
@@ -163,14 +163,7 @@ const VentaForm = ({
     () => errorArca
   )
 
-  // Función para normalizar items
-  // const normalizarItemsVenta = (items) => {
-  //   return normalizarItems(items, { 
-  //     productos, 
-  //     modo: 'venta', 
-  //     alicuotasMap 
-  //   })
-  // }
+
 
   // Usar el hook useFormularioDraft
   const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({

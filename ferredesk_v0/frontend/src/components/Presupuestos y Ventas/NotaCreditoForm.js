@@ -3,8 +3,8 @@ import useNavegacionForm from '../../hooks/useNavegacionForm';
 import ItemsGrid from './ItemsGrid';
 import BuscadorProducto from '../BuscadorProducto';
 import { manejarCambioFormulario } from './herramientasforms/manejoFormulario';
-import { mapearCamposItem, normalizarItemsStock } from './herramientasforms/mapeoItems';
-// import { normalizarItems } from './herramientasforms/normalizadorItems'; // Ya no se usa
+import { mapearCamposItem } from './herramientasforms/mapeoItems';
+import { normalizarItems } from './herramientasforms/normalizadorItems';
 import { useCalculosFormulario } from './herramientasforms/useCalculosFormulario';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
 import SumarDuplicar from './herramientasforms/SumarDuplicar';
@@ -46,14 +46,6 @@ const getInitialFormState = (clienteSeleccionado, facturasAsociadas, sucursales 
   };
 };
 
-// Función de normalización adaptada para Nota de Crédito
-// function normalizarItemsNC(itemsSeleccionados, productosDisponibles = [], alicuotasMap = {}) {
-//   return normalizarItems(itemsSeleccionados, {
-//     productos: productosDisponibles,
-//     modo: 'nota_credito',
-//     alicuotasMap
-//   });
-// }
 
 // Definir constantes descriptivas para tipos y letras de comprobantes
 const TIPO_NOTA_CREDITO = 'nota_credito';
@@ -158,7 +150,7 @@ const NotaCreditoForm = ({
       return {
         ...base,
         ...data,
-        items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
+        items: Array.isArray(data?.items) ? normalizarItems(data.items, { modo: 'nota_credito' }) : [],
       };
     },
     parametrosPorDefecto: [],

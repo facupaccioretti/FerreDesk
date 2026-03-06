@@ -13,23 +13,23 @@
  * @returns {Object} Item mapeado SOLO con campos base
  */
 export const mapearCamposItem = (item, idx, esModificacion = false) => {
-  
+
 
   let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
   if (idaliiva && typeof idaliiva === 'object') {
     idaliiva = idaliiva.id;
   }
-  
+
   // VALOR POR DEFECTO PARA COSTOS INVÁLIDOS
   const COSTO_POR_DEFECTO = 0;
-  
+
   const vdi_costo = (() => {
     const valor = item.costo ?? item.vdi_costo ?? (item.producto?.costo ?? COSTO_POR_DEFECTO);
     const numero = Number(valor);
     return Number.isFinite(numero) ? numero : COSTO_POR_DEFECTO;
   })();
-  
-  
+
+
 
   // Lista de campos permitidos. Se mantiene como referencia estática
   // aunque el mapeo se hace explícitamente más abajo.
@@ -61,7 +61,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     // Si necesitas esos datos, agrégalos en el objeto principal de la venta, nunca en los ítems.
   };
 
-  
+
 
   // Eliminar cualquier campo calculado si accidentalmente se incluyó
   const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem', 'precioFinal'];
@@ -89,14 +89,14 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
 // Si necesitas agregar un campo nuevo, consulta primero la documentación y valida que sea un campo base físico, no calculado. 
 
 /**
- * Normaliza items de stock para asegurar que tengan la estructura correcta del objeto producto
- * Esta función se debe usar en las funciones de mapeo de datos de todos los formularios
- * @param {Array} items - Array de items a normalizar
- * @returns {Array} Array de items normalizados
+ * @deprecated Usar normalizarItems() de normalizadorItems.js en su lugar.
+ * Esta función se mantiene temporalmente por si queda algún consumidor legacy.
+ * TODO: Eliminar en próxima iteración tras verificar que no hay dependencias residuales.
  */
 export const normalizarItemsStock = (items) => {
+  console.warn('[DEPRECADO] normalizarItemsStock() está deprecada. Usar normalizarItems() de normalizadorItems.js.')
   if (!Array.isArray(items)) return [];
-  
+
   return items.map(item => {
     // Si el item es de stock (tiene vdi_idsto) pero no tiene objeto producto anidado
     if (item.vdi_idsto && !item.producto) {
@@ -119,7 +119,7 @@ export const normalizarItemsStock = (items) => {
         }
       };
     }
-    
+
     // Si ya tiene objeto producto, mantenerlo tal como está
     return item;
   });

@@ -52,6 +52,7 @@ const sonFormulariosIguales = (formA, formB) => {
     'descu2',
     'descu3',
     'copia',
+    'tipoComprobante',
   ];
 
   for (const clave of clavesEscalares) {
@@ -143,7 +144,7 @@ export const useFormularioDraft = ({
       if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
         try {
           combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!sonFormulariosIguales(formulario, combinado)) {
         setFormulario(combinado);
@@ -166,7 +167,7 @@ export const useFormularioDraft = ({
     if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
       try {
         combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
-      } catch (_) {}
+      } catch (_) { }
     }
     if (!sonFormulariosIguales(formulario, combinado)) {
       setFormulario(combinado);
