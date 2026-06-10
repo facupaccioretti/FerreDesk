@@ -16,6 +16,7 @@ const crearFirmaItems = (items) => {
         precio: item?.precio ?? '',
         precioFinal: item?.precioFinal ?? '',
         bonificacion: item?.bonificacion ?? 0,
+        precioEditadoManualmente: item?.precioEditadoManualmente ?? false,
         idaliiva: item?.idaliiva ?? null,
         productoId: item?.producto?.id ?? null,
         proveedorId: item?.proveedorId ?? null,
@@ -53,6 +54,7 @@ const sonFormulariosIguales = (formA, formB) => {
     'descu3',
     'copia',
     'tipoComprobante',
+    'listaPrecioId',
   ];
 
   for (const clave of clavesEscalares) {

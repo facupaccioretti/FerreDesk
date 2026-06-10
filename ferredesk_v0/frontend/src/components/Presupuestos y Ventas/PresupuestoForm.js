@@ -100,7 +100,7 @@ const PresupuestoForm = ({
   const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
 
   // Estado para la lista de precios activa (0 = Minorista por defecto)
-  const [listaPrecioId, setListaPrecioId] = useState(0)
+  // Ahora manejado por useFormularioDraft a través del formulario
 
   const alicuotasMap = useMemo(
     () =>
@@ -116,13 +116,18 @@ const PresupuestoForm = ({
 
 
   // Usar el hook useFormularioDraft
-  const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+  const { formulario, setFormulario, limpiarBorrador, actualizarItems, actualizarFormulario } = useFormularioDraft({
     claveAlmacenamiento: `presupuestoFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
     normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
   })
+
+  // Funciones y variables para mantener compatibilidad de API interna
+  const listaPrecioId = formulario.listaPrecioId || 0;
+  const setListaPrecioId = useCallback((val) => actualizarFormulario({ listaPrecioId: val }), [actualizarFormulario]);
+
 
   const { totales } = useCalculosFormulario(formulario.items, {
     bonificacionGeneral: formulario.bonificacionGeneral,
@@ -351,7 +356,7 @@ const PresupuestoForm = ({
     // Actualizar lista de precios según el cliente seleccionado
     const listaCliente = clienteSeleccionado.lista_precio_id ?? 0
     setListaPrecioId(listaCliente)
-  }, [setFormulario])
+  }, [setFormulario, setListaPrecioId])
 
   // Funciones de descuento estabilizadas con useCallback para evitar re-renders innecesarios
   const setDescu1 = useCallback((value) => {

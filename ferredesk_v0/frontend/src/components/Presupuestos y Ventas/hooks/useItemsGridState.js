@@ -277,8 +277,8 @@ export function useItemsGridState({
         setRows((prevRows) => {
             let huboCambios = false
             const nuevasFilas = prevRows.map((row) => {
-                // No actualizar ítems bloqueados o genéricos
-                if (!row.producto || row.esBloqueado) return row
+                // No actualizar ítems bloqueados, genéricos o con precio editado manualmente
+                if (!row.producto || row.esBloqueado || row.precioEditadoManualmente) return row
 
                 const proveedorHabitual = row.producto.stock_proveedores?.find(
                     sp => sp.proveedor?.id === row.producto.proveedor_habitual?.id
@@ -292,7 +292,7 @@ export function useItemsGridState({
                 if (nuevoPrecioFinal === 0 && Number(row.precioFinal || 0) > 0) return row
 
                 const aliPorc = obtenerPorcentajeIVA(row.idaliiva, aliMap)
-                const nuevoPrecioNeto = Math.round((nuevoPrecioFinal / (1 + aliPorc / 100)) * 100) / 100
+                const nuevoPrecioNeto = Math.round((nuevoPrecioFinal / (1 + aliPorc / 100)) * 10000) / 10000
 
                 if (row.precioFinal !== nuevoPrecioFinal || Math.abs((row.precio || 0) - nuevoPrecioNeto) > 0.001) {
                     huboCambios = true
@@ -488,6 +488,7 @@ export function useItemsGridState({
                 fila.precioFinal = esVacio ? '' : userInput
                 fila.precio = esVacio ? '' : (Number.isFinite(precioBaseCalc) ? Number(precioBaseCalc.toFixed(4)) : '')
                 fila.idaliiva = aliFinalId
+                fila.precioEditadoManualmente = !esVacio
 
                 newRows[idx] = fila
                 return ensureSoloUnEditable(newRows)

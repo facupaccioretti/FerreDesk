@@ -121,7 +121,7 @@ const VentaForm = ({
   const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
 
   // Estado para la lista de precios activa (0 = Minorista por defecto)
-  const [listaPrecioId, setListaPrecioId] = useState(0)
+  // Ahora manejado por useFormularioDraft a través del formulario
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -166,13 +166,17 @@ const VentaForm = ({
 
 
   // Usar el hook useFormularioDraft
-  const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+  const { formulario, setFormulario, limpiarBorrador, actualizarItems, actualizarFormulario } = useFormularioDraft({
     claveAlmacenamiento: `ventaFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
     normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
   })
+
+  // Funciones y variables para mantener compatibilidad de API interna
+  const listaPrecioId = formulario.listaPrecioId || 0;
+  const setListaPrecioId = (val) => actualizarFormulario({ listaPrecioId: val });
 
   const alicuotasMap = useMemo(
     () =>

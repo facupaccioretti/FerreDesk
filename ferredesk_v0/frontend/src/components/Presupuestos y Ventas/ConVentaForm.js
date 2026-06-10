@@ -146,7 +146,7 @@ const ConVentaForm = ({
   // Estado para evitar validación ARCA durante proceso de submit
   const [procesandoSubmit, setProcesandoSubmit] = useState(false);
   // Estado para la lista de precios activa (0 = Minorista por defecto)
-  const [listaPrecioId, setListaPrecioId] = useState(0);
+  // Ahora manejado por useFormularioDraft a través del formulario
 
   // Determinar origen de datos
   const origenDatos = facturaInternaOrigen || presupuestoOrigen;
@@ -154,11 +154,6 @@ const ConVentaForm = ({
   // Clave de borrador estable por origen (evita pérdida por cambios de tabKey)
   const claveDraft = `conVentaFormDraft_${esConversionFacturaI ? 'factura_interna' : 'presupuesto'}_${esConversionFacturaI ? (facturaInternaOrigen?.id ?? '0') : (presupuestoOrigen?.id ?? '0')}`;
 
-  // Sincronizar lista de precios del documento origen (presupuesto o cotización)
-  useEffect(() => {
-    const listaOrigen = origenDatos?.ven_idlpa ?? 0
-    setListaPrecioId(listaOrigen)
-  }, [origenDatos?.ven_idlpa])
 
   // (eliminado indicador isReady no utilizado)
 
@@ -167,7 +162,8 @@ const ConVentaForm = ({
     formulario,
     setFormulario,
     limpiarBorrador,
-    actualizarItems
+    actualizarItems,
+    actualizarFormulario
   } = useFormularioDraft({
     claveAlmacenamiento: claveDraft,
     datosIniciales: origenDatos,
@@ -256,6 +252,16 @@ const ConVentaForm = ({
       return coincideOrigen && coincideCliente;
     }
   });
+
+  // Funciones y variables para mantener compatibilidad de API interna
+  const listaPrecioId = formulario.listaPrecioId || 0;
+  const setListaPrecioId = useCallback((val) => actualizarFormulario({ listaPrecioId: val }), [actualizarFormulario]);
+
+  // Sincronizar lista de precios del documento origen (presupuesto o cotización)
+  useEffect(() => {
+    const listaOrigen = origenDatos?.ven_idlpa ?? 0
+    setListaPrecioId(listaOrigen)
+  }, [origenDatos?.ven_idlpa, setListaPrecioId])
 
 
   // Remontar el grid cuando el borrador haya sido rehidratado y existan items

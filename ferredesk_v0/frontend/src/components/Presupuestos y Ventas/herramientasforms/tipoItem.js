@@ -111,6 +111,7 @@ export function crearItemVacio() {
         esBloqueado: false,
         noDescontarStock: false,
         idOriginal: null,
+        precioEditadoManualmente: false,
     }
 }
 
@@ -230,6 +231,7 @@ export function crearItemDesdeProducto(producto, {
         esBloqueado: false,
         noDescontarStock: false,
         idOriginal: null,
+        precioEditadoManualmente: false,
     }
 }
 
@@ -287,6 +289,7 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
             esBloqueado,
             noDescontarStock,
             idOriginal,
+            precioEditadoManualmente: item.precioEditadoManualmente ?? false,
         }
     }
 
@@ -338,7 +341,7 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
         denominacion: valorNoVacio(item.denominacion) ?? item.vdi_detalle1 ?? producto?.deno ?? producto?.nombre ?? '',
         unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? producto?.unidad ?? producto?.unidadmedida ?? '-',
         cantidad: Number(item.cantidad ?? item.vdi_cantidad ?? 1),
-        precio: Number(precioBase.toFixed(2)),
+        precio: Number(precioBase.toFixed(4)),
         precioFinal,
         vdi_costo: producto
             ? Number(item.costo ?? item.vdi_costo ?? producto?.costo ?? 0)
@@ -349,5 +352,6 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
         esBloqueado,
         noDescontarStock,
         idOriginal,
+        precioEditadoManualmente: item.precioEditadoManualmente ?? false,
     }
 }

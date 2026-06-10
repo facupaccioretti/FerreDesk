@@ -112,13 +112,8 @@ const EditarPresupuestoForm = ({
 
   // Hook para listas de precios
   const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
-  const [listaPrecioId, setListaPrecioId] = useState(0)
-
-  // Sincronizar lista de precios con datos iniciales del presupuesto
-  useEffect(() => {
-    const listaGuardada = initialData?.ven_idlpa ?? 0
-    setListaPrecioId(listaGuardada)
-  }, [initialData?.ven_idlpa])
+  // Estado para la lista de precios activa (0 = Minorista por defecto)
+  // Ahora manejado por useFormularioDraft a través del formulario
 
   // Hook unificado de estado con soporte de borrador
   const [gridKey, setGridKey] = useState(Date.now());
@@ -127,7 +122,8 @@ const EditarPresupuestoForm = ({
     formulario,
     setFormulario,
     limpiarBorrador,
-    actualizarItems
+    actualizarItems,
+    actualizarFormulario
   } = useFormularioDraft({
     claveAlmacenamiento: (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo',
     datosIniciales: initialData,
@@ -140,6 +136,16 @@ const EditarPresupuestoForm = ({
       return String(saved?.id ?? '') === String(idOriginal ?? '');
     }
   });
+
+  // Funciones y variables para mantener compatibilidad de API interna
+  const listaPrecioId = formulario.listaPrecioId || 0;
+  const setListaPrecioId = useCallback((val) => actualizarFormulario({ listaPrecioId: val }), [actualizarFormulario]);
+
+  // Sincronizar lista de precios con datos iniciales del presupuesto
+  useEffect(() => {
+    const listaGuardada = initialData?.ven_idlpa ?? 0
+    setListaPrecioId(listaGuardada)
+  }, [initialData?.ven_idlpa, setListaPrecioId])
 
   // Remontar el grid una sola vez si detectamos borrador con items (rehidratación)
   const remountHechoRef = useRef(false);
