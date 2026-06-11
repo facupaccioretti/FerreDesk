@@ -1,0 +1,541 @@
+{
+  "proyecto": "FerreDesk V1 SaaS Multi-Tenant",
+  "version_plan": "1.0",
+  "fecha_inicio": "2026-06-11",
+  "ultima_actualizacion": "2026-06-11",
+  "agente_ultima_sesion": "inicializador",
+  "fases": {
+    "fase_1_preparacion": {
+      "nombre": "Preparación y compatibilidad base",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F1-T1",
+          "titulo": "Hacer campos direccion y telefono de Ferreteria opcionales en modelo",
+          "archivos": ["ferreapps/productos/models.py"],
+          "descripcion": "Cambiar direccion y telefono a blank=True para permitir creación programática con placeholders. El setup posterior forzará su completado.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F1-T2",
+          "titulo": "Crear modelo Sucursal en ferreapps/productos/models.py",
+          "archivos": ["ferreapps/productos/models.py"],
+          "descripcion": "Crear entidad Sucursal con FK a Ferreteria, campos: nombre, direccion, telefono, es_principal (BooleanField default=True), activa (BooleanField default=True). No reescribir lógica transaccional a Sucursal aún.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F1-T3",
+          "titulo": "Generar y aplicar migración de Fase 1",
+          "archivos": ["ferreapps/productos/migrations/"],
+          "descripcion": "makemigrations + migrate para los cambios de F1-T1 y F1-T2. Mostrar output.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_2_nucleo_tenant": {
+      "nombre": "Núcleo multi-tenant en Django",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F2-T1",
+          "titulo": "Agregar django-tenants a requirements.txt",
+          "archivos": ["requirements.txt"],
+          "descripcion": "Agregar django-tenants. Verificar compatibilidad con Django 5.0.1.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T2",
+          "titulo": "Configurar SHARED_APPS, TENANT_APPS e INSTALLED_APPS en base.py",
+          "archivos": ["ferredesk_backend/settings/base.py"],
+          "descripcion": "SHARED_APPS: django_tenants, admin, auth, contenttypes, sessions, messages, staticfiles, tenants, rest_framework, django_filters, django_extensions, corsheaders. TENANT_APPS: todas las ferreapps. INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]. Agregar TENANT_MODEL, TENANT_DOMAIN_MODEL, PUBLIC_SCHEMA_URLCONF. TenantMainMiddleware como primer middleware.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T3",
+          "titulo": "Configurar dev.py para django-tenants",
+          "archivos": ["ferredesk_backend/settings/dev.py"],
+          "descripcion": "Cambiar ENGINE a django_tenants.postgresql_backend. Agregar DATABASE_ROUTERS. Ampliar ALLOWED_HOSTS para subdominios locales. Definir SESSION_COOKIE_DOMAIN. Ajustar CSRF_TRUSTED_ORIGINS.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T4",
+          "titulo": "Configurar prod.py para django-tenants",
+          "archivos": ["ferredesk_backend/settings/prod.py"],
+          "descripcion": "Forzar ENGINE django_tenants.postgresql_backend. DATABASE_ROUTERS. ALLOWED_HOSTS restringido (NO *). SESSION_COOKIE_DOMAIN. CSRF_TRUSTED_ORIGINS. CORS para subdominios.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T5",
+          "titulo": "Crear urls_public.py",
+          "archivos": ["ferredesk_backend/urls_public.py"],
+          "descripcion": "Archivo nuevo con rutas del esquema public: landing mínima, onboarding SaaS, admin público. Nunca rutas del ERP tenant.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T6",
+          "titulo": "Ajustar urls.py para tenant",
+          "archivos": ["ferredesk_backend/urls.py"],
+          "descripcion": "Preservar rutas tenant actuales. Asegurar que catch-all de React siga al final. No mezclar rutas public aquí.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F2-T7",
+          "titulo": "Verificar que el servidor arranca con django-tenants",
+          "archivos": [],
+          "descripcion": "Ejecutar python manage.py check. Verificar que arranca sin errores. Mostrar output.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_3_app_tenants": {
+      "nombre": "App tenants y modelo SaaS en public",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F3-T1",
+          "titulo": "Crear app tenants con estructura completa",
+          "archivos": [
+            "tenants/__init__.py",
+            "tenants/apps.py",
+            "tenants/models.py",
+            "tenants/admin.py",
+            "tenants/views.py",
+            "tenants/urls.py",
+            "tenants/services.py",
+            "tenants/validators.py",
+            "tenants/constants.py"
+          ],
+          "descripcion": "Crear la app tenants en backend/tenants/ con todos los archivos base.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T2",
+          "titulo": "Crear modelo EmpresaTenant",
+          "archivos": ["tenants/models.py"],
+          "descripcion": "Modelo que hereda de TenantMixin. Campos: schema_name, nombre, slug_subdominio (unique), email_admin, estado_suscripcion (choices: trial/activo/suspendido/cancelado), fecha_fin_prueba, activo (BooleanField), fecha_creacion. auto_create_schema = True.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T3",
+          "titulo": "Crear modelo Dominio",
+          "archivos": ["tenants/models.py"],
+          "descripcion": "Modelo que hereda de DomainMixin. Mapeo dominio -> tenant.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T4",
+          "titulo": "Crear blacklist de subdominios reservados",
+          "archivos": ["tenants/constants.py"],
+          "descripcion": "Lista extensa de subdominios reservados: infraestructura (www, api, cdn, static, media, mail, smtp, ftp, ssh, vpn, dns, ns1, ns2), autenticación (login, logout, auth, oauth, sso, register, signup), entornos (staging, dev, test, demo, sandbox, beta, alpha, prod, production), correo (email, webmail, postmaster, abuse, noreply), soporte/corporativo (support, help, admin, dashboard, panel, billing, pay, blog, docs, status, about, terms, privacy, legal, security, contact, careers, press, investor), producto (app, desktop, mobile, download, update, store).",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T5",
+          "titulo": "Crear validadores de subdominio",
+          "archivos": ["tenants/validators.py"],
+          "descripcion": "Funciones: validar_slug_permitido (regex, longitud, caracteres), validar_no_reservado (contra blacklist), validar_unicidad. Inmutabilidad post-creación.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T6",
+          "titulo": "Crear servicio de creación de tenant",
+          "archivos": ["tenants/services.py"],
+          "descripcion": "Servicio explícito con funciones: validar_subdominio, crear_tenant, crear_dominio, inicializar_datos_tenant, registrar_trial. Toda la lógica centralizada, no dispersa en views.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T7",
+          "titulo": "Registrar modelos en admin",
+          "archivos": ["tenants/admin.py"],
+          "descripcion": "Registrar EmpresaTenant y Dominio en admin de Django para gestión desde public.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T8",
+          "titulo": "Migrar schemas public y tenant",
+          "archivos": [],
+          "descripcion": "Ejecutar migrate_schemas --shared y migrate_schemas --tenant. Crear tenant public si no existe. Mostrar output.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F3-T9",
+          "titulo": "Verificar creación de tenant desde admin/management command",
+          "archivos": [],
+          "descripcion": "Crear un tenant de prueba, verificar que se crea el schema, que el dominio resuelve correctamente.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_4_inicializacion_tenant": {
+      "nombre": "Inicialización completa del tenant",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F4-T1",
+          "titulo": "Crear lógica de inicialización de datos del tenant en services.py",
+          "archivos": ["tenants/services.py"],
+          "descripcion": "Al crear tenant: crear usuario admin inicial (con tipo_usuario='admin', sin is_staff/is_superuser), crear Ferreteria con placeholders mínimos, crear Sucursal default (es_principal=True).",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F4-T2",
+          "titulo": "Integrar inicialización en flujo de creación de tenant",
+          "archivos": ["tenants/services.py"],
+          "descripcion": "Asegurar que la creación de tenant ejecuta automáticamente la inicialización de datos dentro del schema recién creado usando connection.set_tenant().",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F4-T3",
+          "titulo": "Crear management command para crear tenant manualmente",
+          "archivos": ["tenants/management/commands/crear_tenant.py"],
+          "descripcion": "Command de Django para crear tenant desde CLI con nombre, slug, email, password del admin.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F4-T4",
+          "titulo": "Verificar login y flujo post-login en tenant nuevo",
+          "archivos": [],
+          "descripcion": "Crear tenant de prueba, loguear como admin, verificar que RutaPrivada no falla, que /api/ferreteria/ responde, que existe Ferreteria y Sucursal.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_5_setup_gating": {
+      "nombre": "Setup obligatorio y gating funcional",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F5-T1",
+          "titulo": "Agregar campo setup_completo a Ferreteria",
+          "archivos": ["ferreapps/productos/models.py"],
+          "descripcion": "BooleanField default=False. Agregar método verificar_setup_minimo() que valide: nombre, razon_social, cuit_cuil, situacion_iva, direccion, telefono. Si todos presentes, marcar setup_completo=True.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F5-T2",
+          "titulo": "Crear endpoint /api/ferreteria/estado-setup/",
+          "archivos": ["ferreapps/productos/views.py", "ferreapps/productos/urls.py"],
+          "descripcion": "Endpoint que devuelve {setup_completo: bool, campos_faltantes: [...]}. Usado por frontend para decisiones de gating.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F5-T3",
+          "titulo": "Agregar middleware o mixin de gating backend",
+          "archivos": ["ferreapps/productos/mixins.py"],
+          "descripcion": "Mixin para views de módulos críticos (ventas, presupuestos, ARCA) que retorne 403 si setup_completo=False.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F5-T4",
+          "titulo": "Adaptar RutaPrivada para setup gating",
+          "archivos": ["frontend/src/components/RutaPrivada.js"],
+          "descripcion": "Consultar /api/ferreteria/estado-setup/. Si setup incompleto, redirigir a /setup. Bloquear navegación a módulos críticos.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F5-T5",
+          "titulo": "Adaptar AsistenteConfiguracion para setup mínimo SaaS",
+          "archivos": ["frontend/src/components/AsistenteConfiguracion/"],
+          "descripcion": "Asegurar que el wizard exija: nombre, razón social, CUIT, condición IVA, dirección, teléfono. Al completar, marcar setup_completo=True via API.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F5-T6",
+          "titulo": "Verificar gating funcional",
+          "archivos": [],
+          "descripcion": "Tenant nuevo: no puede acceder a ventas. Completa setup: puede acceder. Mostrar evidencia.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_6_media": {
+      "nombre": "Media y archivos aislados por tenant",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F6-T1",
+          "titulo": "Cambiar upload_to de certificado_arca y clave_privada_arca",
+          "archivos": ["ferreapps/productos/models.py"],
+          "descripcion": "Crear función dinámica que use connection.schema_name para la ruta: arca/{schema_name}/certificados/ y arca/{schema_name}/claves_privadas/. Nunca hardcodear ferreteria_1.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F6-T2",
+          "titulo": "Cambiar normalización de logo_empresa",
+          "archivos": ["ferreapps/productos/models.py"],
+          "descripcion": "Modificar _normalizar_logo_empresa para usar ruta por tenant: logos/{schema_name}/logo.ext. No escribir en carpeta global compartida.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F6-T3",
+          "titulo": "Actualizar signals.py de ventas para paths por tenant",
+          "archivos": ["ferreapps/ventas/signals.py"],
+          "descripcion": "Cambiar normalizar_archivos_arca para usar connection.schema_name en lugar de ferreteria_{instance.id}. Asegurar que no borre archivos de otro tenant.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F6-T4",
+          "titulo": "Actualizar views de logo en productos/views.py",
+          "archivos": ["ferreapps/productos/views.py"],
+          "descripcion": "servir_logo_empresa debe resolver desde tenant actual. logo-arca queda global. Verificar servir_logo_arca.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F6-T5",
+          "titulo": "Verificar aislamiento de media",
+          "archivos": [],
+          "descripcion": "Dos tenants suben logos distintos sin colisión. Certificados ARCA aislados. Logo ARCA global sigue funcionando.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_7_backup": {
+      "nombre": "Backup por tenant",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F7-T1",
+          "titulo": "Modificar backup_service.py para backup por schema",
+          "archivos": ["ferreapps/sistema/services/backup_service.py"],
+          "descripcion": "Modificar pg_dump para incluir --schema={schema_name} del tenant actual. Nombre de archivo debe identificar tenant/schema. No incluir otros tenants.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F7-T2",
+          "titulo": "Definir comportamiento de backup en public",
+          "archivos": ["ferreapps/sistema/services/backup_service.py"],
+          "descripcion": "Si se ejecuta desde public, definir qué se respalda (solo public o error). Documentar.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F7-T3",
+          "titulo": "Verificar aislamiento de backup",
+          "archivos": [],
+          "descripcion": "Backup desde tenant A no contiene datos de tenant B. Verificar con pg_restore --list.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_8_frontend_saas": {
+      "nombre": "Frontend SaaS y subdominios",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F8-T1",
+          "titulo": "Crear vista y endpoint de onboarding SaaS (backend)",
+          "archivos": ["tenants/views.py", "tenants/urls.py", "tenants/serializers.py"],
+          "descripcion": "API endpoint POST para crear negocio: nombre, email_admin, password, slug. Validar slug, crear tenant, crear dominio, crear admin, inicializar datos. Retornar URL del subdominio.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T2",
+          "titulo": "Crear endpoint de validación de slug en tiempo real",
+          "archivos": ["tenants/views.py", "tenants/urls.py"],
+          "descripcion": "GET /api/public/validar-slug/?slug=xxx → {disponible: bool, sugerencia: string|null}",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T3",
+          "titulo": "Reemplazar Landing.js para SaaS",
+          "archivos": ["frontend/src/components/Landing.js"],
+          "descripcion": "Pasar de login/register genérico a: landing SaaS con CTA de 'Crear tu negocio' y 'Acceder a mi negocio'. Comunicar subdominios.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T4",
+          "titulo": "Reemplazar Register.js por Onboarding SaaS",
+          "archivos": ["frontend/src/components/Register.js"],
+          "descripcion": "Nuevo flujo: nombre del negocio, email admin, password, slug sugerido (autogenerado y editable), validación en tiempo real de disponibilidad. Al confirmar: crear tenant y redirigir al subdominio.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T5",
+          "titulo": "Adaptar App.js para rutas SaaS",
+          "archivos": ["frontend/src/App.js"],
+          "descripcion": "Revisar rutas públicas vs tenant. /register pasa a ser onboarding. Login en subdominio del tenant.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T6",
+          "titulo": "Adaptar RutaPrivada para trial vencido",
+          "archivos": ["frontend/src/components/RutaPrivada.js"],
+          "descripcion": "Agregar verificación de estado de trial/suscripción. Si trial vencido, bloquear acceso y mostrar mensaje.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F8-T7",
+          "titulo": "Verificar flujo completo de onboarding frontend",
+          "archivos": [],
+          "descripcion": "Registrarse como negocio → se crea tenant → se redirige al subdominio → login → setup → acceso al ERP.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_9_staging": {
+      "nombre": "Entorno local y staging",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F9-T1",
+          "titulo": "Configurar proxy local para subdominios",
+          "archivos": ["frontend/src/setupProxy.js"],
+          "descripcion": "Reemplazar proxy simple de package.json por setupProxy.js que preserve Host header para subdominios locales.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F9-T2",
+          "titulo": "Configurar dominios locales para desarrollo",
+          "archivos": ["ferredesk_backend/settings/dev.py"],
+          "descripcion": "Documentar y configurar subdominios sobre localhost (o lvh.me). Actualizar ALLOWED_HOSTS, CORS, CSRF.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F9-T3",
+          "titulo": "Preparar configuración Railway staging",
+          "archivos": ["ferredesk_backend/settings/prod.py", "Dockerfile"],
+          "descripcion": "Wildcard domain desde primer despliegue. Cookie domain por dominio. Validación real de subdominios.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F9-T4",
+          "titulo": "Verificar acceso multi-tenant local",
+          "archivos": [],
+          "descripcion": "Acceder a tenants distintos en local. Verificar aislamiento de datos.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    },
+    "fase_10_verificacion": {
+      "nombre": "Verificación integral",
+      "estado": "pendiente",
+      "tareas": [
+        {
+          "id": "F10-T1",
+          "titulo": "Checklist autenticación",
+          "archivos": [],
+          "descripcion": "Login tenant, logout tenant, sesión entre subdominios, acceso bloqueado si trial vencido.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T2",
+          "titulo": "Checklist setup",
+          "archivos": [],
+          "descripcion": "Redirección obligatoria, desbloqueo al completar, bloqueo de módulos críticos antes de setup.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T3",
+          "titulo": "Checklist ventas y presupuestos",
+          "archivos": [],
+          "descripcion": "Creación, listado, emisión de comprobantes, dependencias con Ferreteria.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T4",
+          "titulo": "Checklist productos y clientes",
+          "archivos": [],
+          "descripcion": "Alta, edición, listas de precios, importaciones. Clientes: alta, defaults, validación CUIT.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T5",
+          "titulo": "Checklist compras, caja y cuenta corriente",
+          "archivos": [],
+          "descripcion": "Alta compras, órdenes, PDF. Caja: sesión, medios pago, arqueo, cheques. CC: recibos, imputaciones.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T6",
+          "titulo": "Checklist ARCA",
+          "archivos": [],
+          "descripcion": "Setup no configurado, setup configurado, paths de archivos, operación por tenant.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T7",
+          "titulo": "Checklist archivos y backup",
+          "archivos": [],
+          "descripcion": "Logo empresa aislado, logo ARCA global, certificados aislados, PDFs. Backup tenant A vs B.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T8",
+          "titulo": "Checklist onboarding SaaS",
+          "archivos": [],
+          "descripcion": "Onboarding completo, validación slug, blacklist, trial, dos tenants simultáneos.",
+          "done": false,
+          "evidencia": null
+        },
+        {
+          "id": "F10-T9",
+          "titulo": "Validación manual: dos tenants distintos simultáneos",
+          "archivos": [],
+          "descripcion": "Productos y ventas aislados, logos aislados, trial vencido bloqueado, onboarding con slug reservado rechazado, onboarding con slug duplicado rechazado.",
+          "done": false,
+          "evidencia": null
+        }
+      ]
+    }
+  },
+  "resumen": {
+    "total_tareas": 48,
+    "completadas": 0,
+    "en_progreso": 0,
+    "pendientes": 48
+  }
+}
