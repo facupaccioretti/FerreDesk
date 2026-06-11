@@ -52,6 +52,7 @@ urlpatterns = [
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
     
     # ===== AUTENTICACIÓN =====
+    # Estas rutas aplican al tenant actual; no representan auth global de plataforma.
     path('api/', include('ferreapps.login.urls')),  # Solo APIs de autenticación
 ]
 

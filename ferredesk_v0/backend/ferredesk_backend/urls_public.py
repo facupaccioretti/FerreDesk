@@ -7,7 +7,6 @@ tenant ERP URLs.
 
 from importlib.util import find_spec
 
-from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import TemplateView
 
@@ -20,7 +19,8 @@ public_api_urls = (
 
 
 urlpatterns = [
+    # Placeholder de plataforma SaaS. No debe usarse para flujos ERP tenant.
+    # El admin interno de plataforma queda pospuesto hasta definir auth shared propio.
     path("", TemplateView.as_view(template_name="index.html"), name="public-landing"),
-    path("admin/", admin.site.urls),
     path("api/public/", public_api_urls),
 ]

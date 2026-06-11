@@ -14,11 +14,7 @@ if 'ferredesk_backend.urls_public' not in sys.modules:
 
 SHARED_APPS = (
     'django_tenants',
-    'django.contrib.admin',
-    'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
     'django.contrib.staticfiles',
     'tenants',
     'rest_framework',
@@ -28,7 +24,13 @@ SHARED_APPS = (
 )
 
 TENANT_APPS = (
+    # Auth y sesiones viven en tenant porque el usuario custom depende de Ferreteria,
+    # que es un modelo de negocio tenant-only.
+    'django.contrib.admin',
+    'django.contrib.auth',
     'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
     'ferreapps.usuarios',
     'ferreapps.productos',
     'ferreapps.proveedores',
