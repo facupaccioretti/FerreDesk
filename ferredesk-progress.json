@@ -20,17 +20,17 @@
         "F2-T2": { "done": true, "evidencia": "ferredesk_backend/settings/base.py configurado con SHARED_APPS, TENANT_APPS, INSTALLED_APPS, TENANT_MODEL, TENANT_DOMAIN_MODEL, PUBLIC_SCHEMA_URLCONF, DATABASE_ROUTERS y TenantMainMiddleware primero. venv\\Scripts\\python.exe manage.py check --settings=ferredesk_backend.settings.dev -> System check identified no issues (0 silenced)." },
         "F2-T3": { "done": true, "evidencia": "ferredesk_backend/settings/dev.py ajustado con ENGINE django_tenants.postgresql_backend, DATABASE_ROUTERS, ALLOWED_HOSTS para subdominios locales, SESSION_COOKIE_DOMAIN y CORS/CSRF para localhost y lvh.me. venv\\Scripts\\python.exe manage.py check --settings=ferredesk_backend.settings.dev -> System check identified no issues (0 silenced)." },
         "F2-T4": { "done": true, "evidencia": "ferredesk_backend/settings/prod.py parametrizado con ALLOWED_HOSTS, SESSION_COOKIE_DOMAIN, CSRF_TRUSTED_ORIGINS y CORS_ALLOWED_ORIGINS desde variables de entorno; DATABASES fuerza ENGINE django_tenants.postgresql_backend y DATABASE_ROUTERS usa TenantSyncRouter. Verificacion sintactica: venv\\Scripts\\python.exe -m py_compile ferredesk_backend\\settings\\prod.py." },
-        "F2-T5": { "done": false, "evidencia": null },
-        "F2-T6": { "done": false, "evidencia": null },
-        "F2-T7": { "done": false, "evidencia": null }
+        "F2-T5": { "done": true, "evidencia": "ferredesk_backend/urls_public.py creado con rutas public separadas de tenant: admin/, api/public/ y landing placeholder. Verificacion sintactica: python -m py_compile ferredesk_v0/backend/ferredesk_backend/urls_public.py -> exit code 0." },
+        "F2-T6": { "done": true, "evidencia": "ferredesk_backend/urls.py mantenido como URLConf tenant sin alterar rutas ERP; solo se agrego comentario aclarando separacion con urls_public.py y se confirmo que el catch-all React permanece al final. venv\\Scripts\\python.exe manage.py check --settings=ferredesk_backend.settings.dev -> System check identified no issues (0 silenced)." },
+        "F2-T7": { "done": true, "evidencia": "venv\\Scripts\\python.exe -m pip install django-tenants -> Requirement already satisfied: django-tenants (3.7.0). venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced). venv\\Scripts\\python.exe -u manage.py runserver 127.0.0.1:8000 --noreload -> Performing system checks... System check identified no issues (0 silenced). Starting development server at http://127.0.0.1:8000/ (proceso detenido por timeout controlado tras verificar arranque)." }
       }
     },
     "3_app_tenants": {
       "estado": "pendiente",
       "tareas": {
-        "F3-T1": { "done": false, "evidencia": null },
-        "F3-T2": { "done": false, "evidencia": null },
-        "F3-T3": { "done": false, "evidencia": null },
+        "F3-T1": { "done": true, "evidencia": "Estructura minima creada en ferredesk_v0/backend/tenants con paquetes views/ y services/ para mantener thin views. venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
+        "F3-T2": { "done": true, "evidencia": "Modelo EmpresaTenant agregado en ferredesk_v0/backend/tenants/models.py heredando de TenantMixin con campos de negocio en espanol, estado_suscripcion con choices y auto_create_schema = True. venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
+        "F3-T3": { "done": true, "evidencia": "Modelo Dominio agregado en ferredesk_v0/backend/tenants/models.py heredando de DomainMixin con metadatos en espanol. venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
         "F3-T4": { "done": false, "evidencia": null },
         "F3-T5": { "done": false, "evidencia": null },
         "F3-T6": { "done": false, "evidencia": null },

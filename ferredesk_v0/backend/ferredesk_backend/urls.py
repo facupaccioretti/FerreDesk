@@ -1,6 +1,9 @@
 """
 URL configuration for ferredesk_backend project.
 
+Tenant URLConf: this module serves ERP routes for tenant schemas only.
+Public platform routes live in ferredesk_backend.urls_public.
+
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.2/topics/http/urls/
 Examples:
