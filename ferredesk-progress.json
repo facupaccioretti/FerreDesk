@@ -8,8 +8,8 @@
     "1_preparacion": {
       "estado": "pendiente",
       "tareas": {
-        "F1-T1": { "done": false, "evidencia": null },
-        "F1-T2": { "done": false, "evidencia": null },
+        "F1-T1": { "done": true, "evidencia": "venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
+        "F1-T2": { "done": true, "evidencia": "venv\\Scripts\\python.exe -m py_compile ferreapps\\productos\\models.py; venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
         "F1-T3": { "done": false, "evidencia": null }
       }
     },

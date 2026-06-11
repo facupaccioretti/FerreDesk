@@ -581,6 +581,27 @@ class VistaStockProducto(models.Model):
         verbose_name_plural = 'Vistas de Stock de Productos'
 
 
+class Sucursal(models.Model):
+    ferreteria = models.ForeignKey(
+        Ferreteria,
+        on_delete=models.CASCADE,
+        related_name='sucursales',
+    )
+    nombre = models.CharField(max_length=100)
+    direccion = models.CharField(max_length=200, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    es_principal = models.BooleanField(default=True)
+    activa = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Sucursal'
+        verbose_name_plural = 'Sucursales'
+
+    def __str__(self):
+        return self.nombre
+
+
 # =============================================================================
 # SISTEMA DE LISTAS DE PRECIOS
 # =============================================================================
