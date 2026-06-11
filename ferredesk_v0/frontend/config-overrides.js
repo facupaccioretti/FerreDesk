@@ -9,6 +9,7 @@ module.exports = {
 
       // Configurar puerto 3000 para el frontend
       config.port = 3000;
+      config.host = "0.0.0.0";
       
       // Ajuste clave: permitir cualquier host
       config.allowedHosts = "all";

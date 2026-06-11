@@ -45,7 +45,7 @@
         "F4-T1": { "done": false, "evidencia": null },
         "F4-T2": { "done": false, "evidencia": null },
         "F4-T3": { "done": false, "evidencia": null },
-        "F4-T4": { "done": false, "evidencia": null }
+        "F4-T4": { "done": true, "evidencia": "Verificacion real sobre el host tenant ferretest.localhost usando sesion Django: 1) venv\\Scripts\\python.exe manage.py check --settings=ferredesk_backend.settings.dev -> System check identified no issues (0 silenced). 2) venv\\Scripts\\python.exe manage.py shell -c \"import sys; exec(sys.stdin.read())\" --settings=ferredesk_backend.settings.dev con django.test.Client y HTTP_HOST='ferretest.localhost' -> tenant_public [{'id': 3, 'schema_name': 'ferretest', 'slug_subdominio': 'ferretest', 'email_admin': 'admin@test.com'}]; POST /api/login/ status 200 con {'status': 'success', 'message': 'Login exitoso', 'user': {'username': 'admin@test.com', 'is_staff': false}} y cookie sessionid; GET /api/user/ status 200 con {'status': 'success', 'user': {'username': 'admin@test.com', 'is_staff': false}}; GET /api/ferreteria/ status 200 con Ferreteria id 1 nombre 'Ferretería Test' email 'admin@test.com'; conteos en schema_context('ferretest'): Ferreteria.objects.count() = 1 y Sucursal.objects.count() = 1 (ids [1] y [1]). RutaPrivada no tiene backend 500 en su contrato porque las dos APIs que consume responden 200 tras login." }
       }
     },
     "5_setup_gating": {
