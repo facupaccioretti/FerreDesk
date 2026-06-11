@@ -7,12 +7,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
 
-if 'tenants' not in sys.modules:
-    tenants_module = types.ModuleType('tenants')
-    tenants_module.__file__ = str(BASE_DIR / 'ferredesk_backend' / 'settings' / 'base.py')
-    tenants_module.__path__ = [str(BASE_DIR)]
-    sys.modules['tenants'] = tenants_module
-
 if 'ferredesk_backend.urls_public' not in sys.modules:
     urls_public_module = types.ModuleType('ferredesk_backend.urls_public')
     urls_public_module.urlpatterns = []
