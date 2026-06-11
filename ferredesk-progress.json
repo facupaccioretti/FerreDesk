@@ -6,11 +6,11 @@
   },
   "fases": {
     "1_preparacion": {
-      "estado": "pendiente",
+      "estado": "completada",
       "tareas": {
         "F1-T1": { "done": true, "evidencia": "venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
         "F1-T2": { "done": true, "evidencia": "venv\\Scripts\\python.exe -m py_compile ferreapps\\productos\\models.py; venv\\Scripts\\python.exe manage.py check -> System check identified no issues (0 silenced)." },
-        "F1-T3": { "done": false, "evidencia": null }
+        "F1-T3": { "done": true, "evidencia": "venv\\Scripts\\python.exe manage.py makemigrations productos --settings=ferredesk_backend.settings.dev -> 0015_alter_ferreteria_direccion_alter_ferreteria_telefono_and_more.py; venv\\Scripts\\python.exe manage.py migrate --settings=ferredesk_backend.settings.dev -> Applying productos.0015... OK" }
       }
     },
     "2_nucleo_tenant": {

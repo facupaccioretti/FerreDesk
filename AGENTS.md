@@ -107,7 +107,7 @@ ferredesk_v0/frontend/src/
 ## Convenciones
 
 - Campos de negocio/comercial en **español** (ej: `estado_suscripcion`, no `subscription_status`).
-- Commits descriptivos en español: `Fase X: descripción del cambio`.
+- Commits descriptivos en español estilo conventional commit (feat, fix etc..) pasarselo al usuario.
 - Cada tarea debe actualizar `ferredesk-progress.json` al terminar.
 
 ## Antes de marcar algo como completo
