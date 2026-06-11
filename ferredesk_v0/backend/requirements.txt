@@ -1,5 +1,6 @@
 #Se cambió Pillow a 11.2.1 para evitar errores de instalación en Windows
 Django==5.0.1
+django-tenants==3.7.0
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 python-dotenv==1.0.0

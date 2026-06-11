@@ -16,8 +16,8 @@
     "2_nucleo_tenant": {
       "estado": "pendiente",
       "tareas": {
-        "F2-T1": { "done": false, "evidencia": null },
-        "F2-T2": { "done": false, "evidencia": null },
+        "F2-T1": { "done": true, "evidencia": "requirements.txt actualizado con django-tenants==3.7.0. Compatibilidad verificada en PyPI para Django 5.0. Comandos sugeridos al usuario: venv\\Scripts\\pip.exe install -r requirements.txt y venv\\Scripts\\python.exe -c \"import django, django_tenants; print(django.get_version())\"." },
+        "F2-T2": { "done": true, "evidencia": "ferredesk_backend/settings/base.py configurado con SHARED_APPS, TENANT_APPS, INSTALLED_APPS, TENANT_MODEL, TENANT_DOMAIN_MODEL, PUBLIC_SCHEMA_URLCONF, DATABASE_ROUTERS y TenantMainMiddleware primero. venv\\Scripts\\python.exe manage.py check --settings=ferredesk_backend.settings.dev -> System check identified no issues (0 silenced)." },
         "F2-T3": { "done": false, "evidencia": null },
         "F2-T4": { "done": false, "evidencia": null },
         "F2-T5": { "done": false, "evidencia": null },

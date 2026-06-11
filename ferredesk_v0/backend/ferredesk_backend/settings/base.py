@@ -1,19 +1,40 @@
 from pathlib import Path
+import sys
+import types
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
 
-INSTALLED_APPS = [
+if 'tenants' not in sys.modules:
+    tenants_module = types.ModuleType('tenants')
+    tenants_module.__file__ = str(BASE_DIR / 'ferredesk_backend' / 'settings' / 'base.py')
+    tenants_module.__path__ = [str(BASE_DIR)]
+    sys.modules['tenants'] = tenants_module
+
+if 'ferredesk_backend.urls_public' not in sys.modules:
+    urls_public_module = types.ModuleType('ferredesk_backend.urls_public')
+    urls_public_module.urlpatterns = []
+    sys.modules['ferredesk_backend.urls_public'] = urls_public_module
+
+SHARED_APPS = (
+    'django_tenants',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'tenants',
+    'rest_framework',
+    'django_filters',
+    'django_extensions',
+    'corsheaders',
+)
 
-    # Apps propias
+TENANT_APPS = (
+    'django.contrib.contenttypes',
     'ferreapps.usuarios',
     'ferreapps.productos',
     'ferreapps.proveedores',
@@ -28,14 +49,12 @@ INSTALLED_APPS = [
     'ferreapps.cuenta_corriente',
     'ferreapps.caja',
     'ferreapps.sistema',
+)
 
-    'rest_framework',
-    'django_filters',
-    'django_extensions',
-    'corsheaders',
-]
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -48,6 +67,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'ferredesk_backend.urls'
+PUBLIC_SCHEMA_URLCONF = 'ferredesk_backend.urls_public'
+TENANT_MODEL = 'tenants.EmpresaTenant'
+TENANT_DOMAIN_MODEL = 'tenants.Dominio'
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 
 # TEMPLATES — AHORA EN BASE.PY
 TEMPLATES = [
