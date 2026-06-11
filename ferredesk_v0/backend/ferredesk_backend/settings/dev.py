@@ -5,7 +5,8 @@ import os
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
+SESSION_COOKIE_DOMAIN = ".localhost"
 
 # Ruta al build del frontend en desarrollo
 FRONTEND_BUILD_DIR = BASE_DIR.parent / "frontend" / "build"
@@ -27,7 +28,7 @@ STATICFILES_DIRS = [
 # Base de datos local
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': 'FerreDesk',
         'USER': 'postgres',
         'PASSWORD': 'fercien',
@@ -36,17 +37,34 @@ DATABASES = {
     }
 }
 
+DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
+
 # CORS & CSRF
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://lvh.me:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://lvh.me:8000",
+]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://[a-z0-9-]+\.localhost:3000$",
+    r"^http://[a-z0-9-]+\.localhost:8000$",
+    r"^http://[a-z0-9-]+\.lvh\.me:3000$",
+    r"^http://[a-z0-9-]+\.lvh\.me:8000$",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://*.localhost:3000",
+    "http://lvh.me:3000",
+    "http://*.lvh.me:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://*.localhost:8000",
+    "http://lvh.me:8000",
+    "http://*.lvh.me:8000",
 ]

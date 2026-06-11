@@ -1,12 +1,16 @@
-# ferredesk_backend/settings/prod.py
-
 from .base import *
 import os
 import dj_database_url
 
+
+def _split_env_list(value):
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", ""))
+SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
 
 # Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
 REACT_APP_DIR = os.path.join(BASE_DIR, 'react_frontend')
@@ -20,7 +24,7 @@ TEMPLATES[0]["DIRS"] = [
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Directorio de estáticos de React (apuntamos a la subcarpeta 'static')
+# Directorio de estaticos de React (apuntamos a la subcarpeta 'static')
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'react_frontend', 'static'),
 ]
@@ -43,12 +47,17 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
+DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 
-# CORS & CSRF para producción interna/local
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost",
-    "http://127.0.0.1",
-]
+# CORS & CSRF para subdominios del dominio principal
+CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
+CORS_ALLOWED_ORIGINS = _split_env_list(os.environ.get("CORS_ALLOWED_ORIGINS", ""))
 
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
-
+MAIN_DOMAIN = os.environ.get("MAIN_DOMAIN", "").strip()
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if MAIN_DOMAIN:
+    escaped_main_domain = MAIN_DOMAIN.replace(".", r"\.")
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        rf"^https://([a-z0-9-]+\.)*{escaped_main_domain}$",
+    ]
