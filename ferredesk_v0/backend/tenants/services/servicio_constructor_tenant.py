@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import connection, transaction
+from django.db import connection
 from django.utils import timezone
 
 from tenants.constants import TRIAL_DIAS_DEFAULT
@@ -36,7 +36,9 @@ def crear_tenant(nombre, slug, email_admin):
 
     connection.set_schema_to_public()
 
-    with transaction.atomic():
+    tenant = None
+
+    try:
         tenant = EmpresaTenant.objects.create(
             schema_name=slug,
             nombre=nombre,
@@ -51,5 +53,10 @@ def crear_tenant(nombre, slug, email_admin):
             tenant=tenant,
             is_primary=True,
         )
+    except Exception:
+        if tenant is not None and tenant.pk:
+            connection.set_schema_to_public()
+            tenant.delete(force_drop=True)
+        raise
 
     return tenant

@@ -1,6 +1,6 @@
 """Orquestacion de alta completa de tenants."""
 
-from django.db import connection, transaction
+from django.db import connection
 
 from tenants.services.servicio_constructor_tenant import crear_tenant
 from tenants.services.servicio_inicializacion_tenant import inicializar_datos_tenant
@@ -20,12 +20,11 @@ def crear_tenant_completo(nombre, slug, email, password):
     tenant = None
 
     try:
-        with transaction.atomic():
-            tenant = crear_tenant(
-                nombre=nombre,
-                slug=slug,
-                email_admin=email,
-            )
+        tenant = crear_tenant(
+            nombre=nombre,
+            slug=slug,
+            email_admin=email,
+        )
 
         datos_iniciales = inicializar_datos_tenant(
             tenant=tenant,
