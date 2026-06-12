@@ -2,6 +2,13 @@ from django.db import models, transaction
 from django.conf import settings
 import logging
 from .managers_productos_stock import ProductosStockQuerySet
+from .utils.file_paths import (
+    obtener_directorio_logo_empresa_absoluto,
+    obtener_logo_empresa_relativo,
+    upload_certificado_arca,
+    upload_clave_privada_arca,
+    upload_logo_empresa,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +82,7 @@ class Ferreteria(models.Model):
     
     # Logo de la Empresa
     logo_empresa = models.ImageField(
-        upload_to='logos/',
+        upload_to=upload_logo_empresa,
         blank=True,
         null=True,
         help_text='Logo de la empresa para comprobantes'
@@ -84,14 +91,14 @@ class Ferreteria(models.Model):
     
     # Configuración ARCA - Integración con servicios web de AFIP
     certificado_arca = models.FileField(
-        upload_to='arca/ferreteria_1/certificados/',
+        upload_to=upload_certificado_arca,
         blank=True,
         null=True,
         help_text='Certificado ARCA (.pem) para autenticación con servicios web de AFIP'
     )
     
     clave_privada_arca = models.FileField(
-        upload_to='arca/ferreteria_1/claves_privadas/',
+        upload_to=upload_clave_privada_arca,
         blank=True,
         null=True,
         help_text='Clave privada ARCA (.pem) para firma digital de comprobantes'
@@ -281,8 +288,8 @@ class Ferreteria(models.Model):
 
     def _normalizar_logo_empresa(self):
         """
-        Mueve el logo de empresa a un nombre estándar 'logos/logo.jpg' (o mantiene la extensión original 
-        si no es .jpg) y elimina archivos anteriores en esa carpeta, preservando 'logo-arca.jpg'.
+        Mueve el logo de empresa a un nombre estándar aislado por schema y
+        elimina archivos anteriores solo dentro del directorio del tenant.
         """
         import os
         import shutil
@@ -292,7 +299,7 @@ class Ferreteria(models.Model):
         if not self.logo_empresa:
             return
 
-        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
+        logos_dir = obtener_directorio_logo_empresa_absoluto(settings.MEDIA_ROOT)
         os.makedirs(logos_dir, exist_ok=True)
 
         # Determinar extensión del archivo subido
@@ -324,13 +331,13 @@ class Ferreteria(models.Model):
             # Si falló el move, no continuar
             return
 
-        # Actualizar referencia en el modelo a 'logos/logo.ext'
-        self.logo_empresa.name = f'logos/{destino_nombre}'
+        # Actualizar referencia en el modelo al path tenant-aware.
+        self.logo_empresa.name = obtener_logo_empresa_relativo(ext)
 
-        # Limpiar otros archivos en la carpeta 'logos', excepto el logo estándar y 'logo-arca.jpg'
+        # Limpiar otros archivos solo dentro de la carpeta del tenant.
         try:
             for archivo in os.listdir(logos_dir):
-                if archivo in {destino_nombre, 'logo-arca.jpg'}:
+                if archivo == destino_nombre:
                     continue
                 archivo_path = os.path.join(logos_dir, archivo)
                 # Solo eliminar archivos (no directorios)

@@ -13,6 +13,10 @@ import glob
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
+from ferreapps.productos.utils.file_paths import (
+    obtener_directorio_arca_por_schema_absoluto,
+    obtener_schema_name_para_archivos,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +119,13 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
         if not instance.certificado_arca and not instance.clave_privada_arca:
             return
             
-        logger.info(f"Normalizando archivos ARCA para ferretería {instance.id}")
+        logger.info("Normalizando archivos ARCA para schema %s", obtener_schema_name_para_archivos())
         
         # Crear directorios base
-        base_dir = os.path.join(settings.MEDIA_ROOT, 'arca', f'ferreteria_{instance.id}')
+        schema_name = obtener_schema_name_para_archivos()
+        base_dir = obtener_directorio_arca_por_schema_absoluto(
+            os.path.join(settings.MEDIA_ROOT, 'arca')
+        )
         certificados_dir = os.path.join(base_dir, 'certificados')
         claves_dir = os.path.join(base_dir, 'claves_privadas')
         
@@ -127,16 +134,16 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
         
         # Limpiar archivos anteriores de certificados
         if instance.certificado_arca:
-            _limpiar_archivos_anteriores(certificados_dir, instance.certificado_arca.name)
-            logger.info(f"✅ Certificado procesado: {instance.certificado_arca.name}")
+            _limpiar_archivos_anteriores(certificados_dir, instance.certificado_arca.path)
+            logger.info("✅ Certificado procesado: %s", instance.certificado_arca.path)
         
         # Limpiar archivos anteriores de claves privadas
         if instance.clave_privada_arca:
-            _limpiar_archivos_anteriores(claves_dir, instance.clave_privada_arca.name)
-            logger.info(f"✅ Clave privada procesada: {instance.clave_privada_arca.name}")
+            _limpiar_archivos_anteriores(claves_dir, instance.clave_privada_arca.path)
+            logger.info("✅ Clave privada procesada: %s", instance.clave_privada_arca.path)
         
-        logger.info(f"✅ Archivos ARCA procesados exitosamente para ferretería {instance.id}")
+        logger.info("✅ Archivos ARCA procesados exitosamente para schema %s", schema_name)
         
     except Exception as e:
-        logger.error(f"Error procesando archivos ARCA para ferretería {instance.id}: {e}")
+        logger.error("Error procesando archivos ARCA para ferretería %s: %s", instance.id, e)
         # No re-lanzar la excepción para no romper el save() original

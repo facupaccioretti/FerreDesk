@@ -10,6 +10,10 @@ import os
 import logging
 from typing import Dict, Any
 from django.conf import settings
+from ferreapps.productos.utils.file_paths import (
+    obtener_directorio_arca_por_schema_absoluto,
+    obtener_schema_name_para_archivos,
+)
 from ..settings_arca import (
     ARCA_URLS, ARCA_PATHS, ARCA_TOKEN_CONFIG, ARCA_VALIDATION_CONFIG,
     ARCA_LOGGING_CONFIG, ARCA_TIMEOUTS, ARCA_RETRY_CONFIG,
@@ -53,7 +57,12 @@ class ConfigManager:
         # Configurar logging (usar configuración original)
         self.logging_config = ARCA_LOGGING_CONFIG
         
-        logger.info(f"ConfigManager inicializado para ferretería {ferreteria_id} en modo {modo}")
+        logger.info(
+            "ConfigManager inicializado para ferretería %s en modo %s (schema=%s)",
+            ferreteria_id,
+            modo,
+            obtener_schema_name_para_archivos(),
+        )
     
     def _configurar_paths(self) -> Dict[str, str]:
         """
@@ -62,8 +71,7 @@ class ConfigManager:
         Returns:
             Diccionario con las rutas multi-tenant
         """
-        # Usar estructura multi-tenant completa como el original
-        base_dir = os.path.join(ARCA_PATHS['base_dir'], f'ferreteria_{self.ferreteria_id}')
+        base_dir = obtener_directorio_arca_por_schema_absoluto(ARCA_PATHS['base_dir'])
         certificados_dir = os.path.join(base_dir, 'certificados')
         claves_privadas_dir = os.path.join(base_dir, 'claves_privadas')
         tokens_dir = os.path.join(base_dir, 'tokens')
@@ -109,7 +117,7 @@ class ConfigManager:
         logs_dir = os.path.join(self.paths['base_dir'], 'logs')
         os.makedirs(logs_dir, exist_ok=True)
         
-        return os.path.join(logs_dir, f'arca_{self.ferreteria_id}.log')
+        return os.path.join(logs_dir, f'arca_{obtener_schema_name_para_archivos()}.log')
     
     def validate_configuration(self) -> Dict[str, Any]:
         """
