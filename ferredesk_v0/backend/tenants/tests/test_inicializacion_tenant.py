@@ -80,3 +80,88 @@ class InicializacionTenantTestCase(TenantTestCase):
         ferreteria_response = client.get("/api/ferreteria/")
         self.assertEqual(ferreteria_response.status_code, 200)
         self.assertEqual(ferreteria_response.json()["nombre"], "Tenant Test")
+
+    def test_estado_setup_endpoint_refleja_tenant_incompleto_y_completo(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="admin@tenant.test", password="testpass123")
+        )
+
+        estado_incompleto = client.get("/api/ferreteria/estado-setup/")
+        self.assertEqual(estado_incompleto.status_code, 200)
+        self.assertEqual(
+            estado_incompleto.json(),
+            {
+                "setup_completo": False,
+                "campos_setup_faltantes": [
+                    "razon_social",
+                    "cuit_cuil",
+                    "direccion",
+                    "telefono",
+                ],
+                "no_configurada": True,
+            },
+        )
+
+        ferreteria = Ferreteria.objects.get()
+        ferreteria.razon_social = "Tenant Test SA"
+        ferreteria.cuit_cuil = "20123456789"
+        ferreteria.direccion = "Calle 123"
+        ferreteria.telefono = "1111-2222"
+        ferreteria.save(
+            update_fields=["razon_social", "cuit_cuil", "direccion", "telefono"]
+        )
+
+        estado_completo = client.get("/api/ferreteria/estado-setup/")
+        self.assertEqual(estado_completo.status_code, 200)
+        self.assertEqual(
+            estado_completo.json(),
+            {
+                "setup_completo": True,
+                "campos_setup_faltantes": [],
+                "no_configurada": False,
+            },
+        )
+
+    def test_setup_incompleto_bloquea_venta_y_permite_consultar_estado(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="admin@tenant.test", password="testpass123")
+        )
+
+        venta_bloqueada = client.post(
+            "/api/ventas/",
+            data=json.dumps({"tipo_comprobante": "factura", "items": []}),
+            content_type="application/json",
+        )
+        self.assertEqual(venta_bloqueada.status_code, 409)
+        self.assertEqual(
+            venta_bloqueada.json(),
+            {
+                "detail": "Debe completar la configuración mínima de la ferretería antes de operar este módulo.",
+                "error_code": "SETUP_INCOMPLETO",
+                "setup_completo": False,
+                "campos_setup_faltantes": [
+                    "razon_social",
+                    "cuit_cuil",
+                    "direccion",
+                    "telefono",
+                ],
+            },
+        )
+
+        estado_setup = client.get("/api/ferreteria/estado-setup/")
+        self.assertEqual(estado_setup.status_code, 200)
+        self.assertFalse(estado_setup.json()["setup_completo"])

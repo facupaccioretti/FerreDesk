@@ -23,7 +23,7 @@ from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, FerreteriaAPIView
+from ferreapps.productos.views import StockViewSet, ProveedorViewSet, StockProveViewSet, FamiliaViewSet, AlicuotaIVAViewSet, EstadoSetupAPIView, FerreteriaAPIView
 
 router = DefaultRouter()
 router.register(r'productos/stock', StockViewSet, basename='stock')
@@ -50,6 +50,7 @@ urlpatterns = [
     path('api/caja/', include('ferreapps.caja.urls')),
     path('api/sistema/', include('ferreapps.sistema.urls')),
     path('api/ferreteria/', FerreteriaAPIView.as_view(), name='ferreteria-api'),
+    path('api/ferreteria/estado-setup/', EstadoSetupAPIView.as_view(), name='ferreteria-estado-setup'),
     
     # ===== AUTENTICACIÓN =====
     # Estas rutas aplican al tenant actual; no representan auth global de plataforma.

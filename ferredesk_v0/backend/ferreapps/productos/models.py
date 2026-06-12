@@ -6,6 +6,15 @@ from .managers_productos_stock import ProductosStockQuerySet
 logger = logging.getLogger(__name__)
 
 class Ferreteria(models.Model):
+    CAMPOS_SETUP_OBLIGATORIOS = (
+        ("nombre", "nombre"),
+        ("razon_social", "razon_social"),
+        ("cuit_cuil", "cuit_cuil"),
+        ("situacion_iva", "situacion_iva"),
+        ("direccion", "direccion"),
+        ("telefono", "telefono"),
+    )
+
     nombre = models.CharField(max_length=100)
     direccion = models.CharField(max_length=200, blank=True)
     telefono = models.CharField(max_length=20, blank=True)
@@ -143,6 +152,35 @@ class Ferreteria(models.Model):
     def __str__(self):
         return self.nombre
     
+    def obtener_campos_setup_faltantes(self):
+        """Retorna los campos mínimos faltantes para considerar completo el setup."""
+        faltantes = []
+
+        for nombre_campo, clave_salida in self.CAMPOS_SETUP_OBLIGATORIOS:
+            valor = getattr(self, nombre_campo, None)
+            if valor is None:
+                faltantes.append(clave_salida)
+                continue
+
+            if isinstance(valor, str) and not valor.strip():
+                faltantes.append(clave_salida)
+
+        return faltantes
+
+    def setup_completo(self):
+        """Indica si la configuración mínima del negocio está completa."""
+        return len(self.obtener_campos_setup_faltantes()) == 0
+
+    def obtener_estado_setup(self):
+        """Retorna el estado de setup mínimo del tenant en formato serializable."""
+        campos_faltantes = self.obtener_campos_setup_faltantes()
+        setup_completo = len(campos_faltantes) == 0
+        return {
+            "setup_completo": setup_completo,
+            "campos_setup_faltantes": campos_faltantes,
+            "no_configurada": not setup_completo,
+        }
+
     
     
     def validar_configuracion_arca(self):

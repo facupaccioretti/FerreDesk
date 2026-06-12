@@ -776,6 +776,15 @@ class FerreteriaAPIView(APIView):
             # Devolver esqueleto para configuración inicial sin romper la UI
             configuracion_inicial = {
                 'no_configurada': True,
+                'setup_completo': False,
+                'campos_setup_faltantes': [
+                    'nombre',
+                    'razon_social',
+                    'cuit_cuil',
+                    'situacion_iva',
+                    'direccion',
+                    'telefono',
+                ],
                 'nombre': '',
                 'direccion': '',
                 'telefono': '',
@@ -846,6 +855,31 @@ class FerreteriaAPIView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+
+class EstadoSetupAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ferreteria = Ferreteria.objects.first()
+        if not ferreteria:
+            return Response(
+                {
+                    'setup_completo': False,
+                    'campos_setup_faltantes': [
+                        'nombre',
+                        'razon_social',
+                        'cuit_cuil',
+                        'situacion_iva',
+                        'direccion',
+                        'telefono',
+                    ],
+                    'no_configurada': True,
+                },
+                status=200,
+            )
+
+        return Response(ferreteria.obtener_estado_setup(), status=200)
 
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""

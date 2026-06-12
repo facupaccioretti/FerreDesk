@@ -32,6 +32,7 @@ from .utils_stock import (
     _descontar_distribuyendo,
 )
 from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+from ferreapps.productos.setup import requerir_setup_completo
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         return super().get_filterset_class()
 
     @transaction.atomic
+    @requerir_setup_completo
     def create(self, request, *args, **kwargs):
         data = request.data
         items = data.get('items', [])
@@ -645,6 +647,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     @transaction.atomic
+    @requerir_setup_completo
     def convertir_a_venta(self, request, pk=None):
         venta = get_object_or_404(Venta, pk=pk)
         try:

@@ -193,6 +193,8 @@ class FerreteriaSerializer(serializers.ModelSerializer):
     # Exponer flags booleanos de presencia
     tiene_certificado_arca = serializers.SerializerMethodField()
     tiene_clave_privada_arca = serializers.SerializerMethodField()
+    setup_completo = serializers.SerializerMethodField()
+    campos_setup_faltantes = serializers.SerializerMethodField()
     
     class Meta:
         model = Ferreteria
@@ -209,6 +211,18 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             return bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
         except Exception:
             return False
+
+    def get_setup_completo(self, instance):
+        try:
+            return instance.obtener_estado_setup()["setup_completo"]
+        except Exception:
+            return False
+
+    def get_campos_setup_faltantes(self, instance):
+        try:
+            return instance.obtener_estado_setup()["campos_setup_faltantes"]
+        except Exception:
+            return []
 
     def to_representation(self, instance):
         """Mantener compatibilidad y robustez con archivos faltantes.
@@ -233,6 +247,13 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             rep['tiene_clave_privada_arca'] = bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
         except Exception:
             rep['tiene_clave_privada_arca'] = False
+
+        # Compatibilidad con el frontend actual: si falta setup mínimo, sigue
+        # tratándose como "no configurada" a efectos de redirección a /setup.
+        estado_setup = instance.obtener_estado_setup()
+        rep['setup_completo'] = estado_setup['setup_completo']
+        rep['campos_setup_faltantes'] = estado_setup['campos_setup_faltantes']
+        rep['no_configurada'] = estado_setup['no_configurada']
 
         # Compatibilidad hacia atrás con claves usadas por el frontend actual
         rep['certificado_arca'] = rep.get('tiene_certificado_arca', False)

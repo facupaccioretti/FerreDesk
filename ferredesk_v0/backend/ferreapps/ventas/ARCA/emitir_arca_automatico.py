@@ -13,6 +13,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from .services.FerreDeskARCA import FerreDeskARCA, FerreDeskARCAError
 from ..models import Venta
 from ferreapps.productos.models import Ferreteria
+from ferreapps.productos.setup import validar_setup_completo
 from .settings_arca import debe_emitir_arca
 
 logger = logging.getLogger('ferredesk_arca.automatico')
@@ -53,6 +54,11 @@ def emitir_arca_automatico(venta: Venta) -> Dict[str, Any]:
                 raise FerreDeskARCAError(f"No se encontró ferretería configurada")
         except ObjectDoesNotExist:
             raise FerreDeskARCAError(f"No se encontró la ferretería para la venta {venta.ven_id}")
+
+        try:
+            validar_setup_completo()
+        except Exception as exc:
+            raise FerreDeskARCAError(str(exc)) from exc
         
         # Verificar configuración ARCA
         if not ferreteria.modo_arca:
