@@ -51,7 +51,7 @@ def requerir_setup_completo(func):
         try:
             validar_setup_completo()
         except SetupIncompletoError as exc:
-            return Response(exc.como_respuesta(), status=status.HTTP_409_CONFLICT)
+            return Response(exc.como_respuesta(), status=status.HTTP_403_FORBIDDEN)
         return func(*args, **kwargs)
 
     return wrapper

@@ -200,6 +200,14 @@ class FerreteriaSerializer(serializers.ModelSerializer):
         model = Ferreteria
         fields = '__all__'
 
+    def validate_cuit_cuil(self, value):
+        valor = str(value).strip()
+        if not Ferreteria.es_cuit_cuil_valido(valor):
+            raise serializers.ValidationError(
+                "CUIT/CUIL debe contener exactamente 11 dígitos numéricos, sin guiones ni letras."
+            )
+        return valor
+
     def get_tiene_certificado_arca(self, instance):
         try:
             return bool(getattr(instance, 'certificado_arca', None) and getattr(instance.certificado_arca, 'name', None))

@@ -1,9 +1,18 @@
 import json
+from datetime import date
+from decimal import Decimal
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from ferreapps.productos.models import Ferreteria, Sucursal
+from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
+from ferreapps.productos.models import (
+    AlicuotaIVA,
+    Ferreteria,
+    Proveedor,
+    Stock,
+    Sucursal,
+)
 from ferreapps.usuarios.models import Usuario
 from tenants.services import inicializar_datos_tenant
 
@@ -146,7 +155,7 @@ class InicializacionTenantTestCase(TenantTestCase):
             data=json.dumps({"tipo_comprobante": "factura", "items": []}),
             content_type="application/json",
         )
-        self.assertEqual(venta_bloqueada.status_code, 409)
+        self.assertEqual(venta_bloqueada.status_code, 403)
         self.assertEqual(
             venta_bloqueada.json(),
             {
@@ -165,3 +174,178 @@ class InicializacionTenantTestCase(TenantTestCase):
         estado_setup = client.get("/api/ferreteria/estado-setup/")
         self.assertEqual(estado_setup.status_code, 200)
         self.assertFalse(estado_setup.json()["setup_completo"])
+
+    def test_setup_incompleto_permite_patch_valido_y_valida_cuit_e_iva(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="admin@tenant.test", password="testpass123")
+        )
+
+        cuit_invalido = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"cuit_cuil": "123"}),
+            content_type="application/json",
+        )
+        self.assertEqual(cuit_invalido.status_code, 400)
+        self.assertEqual(
+            cuit_invalido.json(),
+            {
+                "cuit_cuil": [
+                    "CUIT/CUIL debe contener exactamente 11 dígitos numéricos, sin guiones ni letras."
+                ]
+            },
+        )
+
+        iva_invalida = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"situacion_iva": "XX"}),
+            content_type="application/json",
+        )
+        self.assertEqual(iva_invalida.status_code, 400)
+        self.assertEqual(
+            iva_invalida.json(),
+            {"situacion_iva": ['"XX" is not a valid choice.']},
+        )
+
+        patch_valido = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps(
+                {
+                    "nombre": "Tenant Test",
+                    "razon_social": "Tenant Test SA",
+                    "cuit_cuil": "20123456789",
+                    "situacion_iva": "RI",
+                    "direccion": "Calle 123",
+                    "telefono": "11112222",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(patch_valido.status_code, 200)
+        self.assertTrue(patch_valido.json()["setup_completo"])
+
+        iva = TipoIVA.objects.first()
+        if not iva:
+            next_id = (
+                TipoIVA.objects.order_by("-id").values_list("id", flat=True).first() or 0
+            ) + 1
+            iva = TipoIVA.objects.create(id=next_id, nombre="Consumidor Final")
+
+        alicuota = AlicuotaIVA.objects.first()
+        if not alicuota:
+            next_id = (
+                AlicuotaIVA.objects.order_by("-id").values_list("id", flat=True).first()
+                or 0
+            ) + 1
+            alicuota = AlicuotaIVA.objects.create(
+                id=next_id,
+                codigo="5",
+                deno="21%",
+                porce=Decimal("21.00"),
+            )
+
+        plazo = Plazo.objects.first()
+        if not plazo:
+            next_id = (
+                Plazo.objects.order_by("-id").values_list("id", flat=True).first() or 0
+            ) + 1
+            plazo = Plazo.objects.create(id=next_id, nombre="Contado", activo="S")
+
+        next_vendedor_id = (
+            Vendedor.objects.order_by("-id").values_list("id", flat=True).first() or 0
+        ) + 1
+        vendedor = Vendedor.objects.create(
+            id=next_vendedor_id,
+            nombre="Vendedor Test",
+            domicilio="Calle 1",
+            dni="12345678",
+            tel="11111111",
+            comivta=Decimal("0.00"),
+            liquivta="N",
+            comicob=Decimal("0.00"),
+            liquicob="N",
+            activo="S",
+        )
+        next_cliente_id = (
+            Cliente.objects.order_by("-id").values_list("id", flat=True).first() or 0
+        ) + 1
+        cliente = Cliente.objects.create(
+            id=next_cliente_id,
+            razon="Cliente Test Presupuesto",
+            domicilio="Calle Cliente",
+            cuit="30123456789",
+            iva=iva,
+            activo="S",
+        )
+        next_proveedor_id = (
+            Proveedor.objects.order_by("-id").values_list("id", flat=True).first() or 0
+        ) + 1
+        proveedor = Proveedor.objects.create(
+            id=next_proveedor_id,
+            razon="Proveedor Test",
+            fantasia="Proveedor Test",
+            cuit="30111222333",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            acti="S",
+        )
+        next_stock_id = (
+            Stock.objects.order_by("-id").values_list("id", flat=True).first() or 0
+        ) + 1
+        stock = Stock.objects.create(
+            id=next_stock_id,
+            codvta="TESTSETUP",
+            deno="Producto Test Setup",
+            orden=1,
+            unidad="UN",
+            margen=Decimal("10.00"),
+            cantmin=0,
+            idaliiva=alicuota,
+            proveedor_habitual=proveedor,
+            acti="S",
+        )
+
+        venta_permitida = client.post(
+            "/api/ventas/",
+            data=json.dumps(
+                {
+                    "tipo_comprobante": "presupuesto",
+                    "items": [
+                        {
+                            "vdi_orden": 1,
+                            "vdi_idsto": stock.id,
+                            "vdi_idpro": proveedor.id,
+                            "vdi_cantidad": "1.00",
+                            "vdi_costo": "100.00",
+                            "vdi_margen": "10.00",
+                            "vdi_bonifica": "0.00",
+                            "vdi_precio_unitario_final": "121.00",
+                            "vdi_detalle1": "Producto Test Setup",
+                            "vdi_detalle2": "",
+                            "vdi_idaliiva": alicuota.id,
+                        }
+                    ],
+                    "ven_sucursal": 1,
+                    "ven_fecha": str(date.today()),
+                    "ven_descu1": "0.00",
+                    "ven_descu2": "0.00",
+                    "ven_descu3": "0.00",
+                    "ven_vdocomvta": "0.00",
+                    "ven_vdocomcob": "0.00",
+                    "ven_estado": "AB",
+                    "ven_idcli": cliente.id,
+                    "ven_idpla": plazo.id,
+                    "ven_idvdo": vendedor.id,
+                    "ven_copia": 1,
+                    "ven_punto": 99,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(venta_permitida.status_code, 201)

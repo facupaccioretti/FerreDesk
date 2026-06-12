@@ -151,6 +151,17 @@ class Ferreteria(models.Model):
     
     def __str__(self):
         return self.nombre
+
+    @classmethod
+    def es_cuit_cuil_valido(cls, valor):
+        if valor is None:
+            return False
+        valor_normalizado = str(valor).strip()
+        return valor_normalizado.isdigit() and len(valor_normalizado) == 11
+
+    @classmethod
+    def es_situacion_iva_valida(cls, valor):
+        return valor in {codigo for codigo, _ in cls.SITUACION_IVA_CHOICES}
     
     def obtener_campos_setup_faltantes(self):
         """Retorna los campos mínimos faltantes para considerar completo el setup."""
@@ -164,6 +175,12 @@ class Ferreteria(models.Model):
 
             if isinstance(valor, str) and not valor.strip():
                 faltantes.append(clave_salida)
+
+        if "cuit_cuil" not in faltantes and not self.es_cuit_cuil_valido(self.cuit_cuil):
+            faltantes.append("cuit_cuil")
+
+        if "situacion_iva" not in faltantes and not self.es_situacion_iva_valida(self.situacion_iva):
+            faltantes.append("situacion_iva")
 
         return faltantes
 
