@@ -207,4 +207,5 @@ htmlcov/
 arca_arg/
 
 # Curso / Codebase to Course
-codebase_to_course/
+codebase_to_course/
+.documentos/
