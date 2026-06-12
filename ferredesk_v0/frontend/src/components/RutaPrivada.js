@@ -29,6 +29,7 @@ export function esHostTenantValido(hostname) {
 export default function RutaPrivada({
     children,
     hostnameActual = window.location.hostname,
+    permitirSetupIncompleto = false,
 }) {
     const [estadoAcceso, setEstadoAcceso] = useState({
         cargando: true,
@@ -113,7 +114,11 @@ export default function RutaPrivada({
         return <Navigate to="/login" replace state={{ from: location.pathname }} />;
     }
 
-    if (!estadoAcceso.setupCompleto && location.pathname !== "/setup") {
+    if (
+        !estadoAcceso.setupCompleto &&
+        !permitirSetupIncompleto &&
+        location.pathname !== "/setup"
+    ) {
         return <Navigate to="/setup" replace />;
     }
 

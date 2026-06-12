@@ -11,7 +11,11 @@ function esperarMicrotareas() {
     });
 }
 
-async function renderRutaPrivada({ rutaInicial, hostnameActual = "ferretest.localhost" }) {
+async function renderRutaPrivada({
+    rutaInicial,
+    hostnameActual = "ferretest.localhost",
+    permitirSetupIncompleto = false,
+}) {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -23,7 +27,10 @@ async function renderRutaPrivada({ rutaInicial, hostnameActual = "ferretest.loca
                     <Route
                         path="/home"
                         element={
-                            <RutaPrivada hostnameActual={hostnameActual}>
+                            <RutaPrivada
+                                hostnameActual={hostnameActual}
+                                permitirSetupIncompleto={permitirSetupIncompleto}
+                            >
                                 <div>home protegida</div>
                             </RutaPrivada>
                         }
@@ -31,7 +38,10 @@ async function renderRutaPrivada({ rutaInicial, hostnameActual = "ferretest.loca
                     <Route
                         path="/setup"
                         element={
-                            <RutaPrivada hostnameActual={hostnameActual}>
+                            <RutaPrivada
+                                hostnameActual={hostnameActual}
+                                permitirSetupIncompleto={permitirSetupIncompleto}
+                            >
                                 <div>pantalla setup</div>
                             </RutaPrivada>
                         }
@@ -114,6 +124,34 @@ describe("RutaPrivada", () => {
             });
 
         const vista = await renderRutaPrivada({ rutaInicial: "/home" });
+
+        expect(vista.container.textContent).toContain("home protegida");
+
+        await vista.desmontar();
+    });
+
+    test("permite que un modulo maneje el setup incompleto dentro de su propia vista", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce({
+                status: 200,
+                ok: true,
+                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
+            })
+            .mockResolvedValueOnce({
+                status: 200,
+                ok: true,
+                json: async () => ({
+                    setup_completo: false,
+                    campos_setup_faltantes: ["razon_social"],
+                    no_configurada: true,
+                }),
+            });
+
+        const vista = await renderRutaPrivada({
+            rutaInicial: "/home",
+            permitirSetupIncompleto: true,
+        });
 
         expect(vista.container.textContent).toContain("home protegida");
 

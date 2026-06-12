@@ -9,7 +9,7 @@ function buildTenantAwareTarget(req) {
 
 module.exports = function setupProxy(app) {
   app.use(
-    ["/api", "/media", "/static"],
+    ["/api", "/media"],
     createProxyMiddleware({
       changeOrigin: false,
       secure: false,

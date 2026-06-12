@@ -72,6 +72,7 @@ const VentaForm = ({
   readOnlyOverride,
   comprobantes,
   ferreteria,
+  arcaListoParaEmitir: arcaListoParaEmitirProp,
   clientes,
   plazos,
   vendedores,
@@ -201,6 +202,11 @@ const VentaForm = ({
   // Temporizador para mostrar overlay ARCA solo si la espera es real (evita condiciones de carrera)
   const temporizadorArcaRef = useRef(null)
   const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+  const arcaListoParaEmitir = arcaListoParaEmitirProp ?? Boolean(
+    ferreteria?.tiene_certificado_arca &&
+    ferreteria?.tiene_clave_privada_arca &&
+    ferreteria?.punto_venta_arca
+  )
 
   // ------------------------------------------------------------
   // LOG DE DIAGNÓSTICO: ¿Cuándo se arma stockProveedores y qué trae?
@@ -232,6 +238,12 @@ const VentaForm = ({
       setComprobanteId(comprobantesVenta[0].id)
     }
   }, [comprobantesVenta, comprobanteId])
+
+  useEffect(() => {
+    if (!arcaListoParaEmitir && tipoComprobante === "factura") {
+      setTipoComprobante("factura_interna")
+    }
+  }, [arcaListoParaEmitir, tipoComprobante])
 
   useEffect(() => {
     if (!autoSumarDuplicados) {
@@ -799,6 +811,10 @@ const VentaForm = ({
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
 
+  const opcionesComprobanteDisponibles = arcaListoParaEmitir
+    ? opcionesComprobante
+    : opcionesComprobante.filter((opcion) => opcion.tipo === "factura_interna")
+
   // Renderizado condicional al final
   if (isLoading) {
     return (
@@ -1063,8 +1079,13 @@ const VentaForm = ({
                   {/* Tipo de Comprobante */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                    {!arcaListoParaEmitir && (
+                      <p className="mb-2 text-[11px] text-amber-700">
+                        ARCA no esta configurado. Solo se permiten comprobantes internos.
+                      </p>
+                    )}
                     <ComprobanteDropdown
-                      opciones={opcionesComprobante}
+                      opciones={opcionesComprobanteDisponibles}
                       value={tipoComprobante}
                       onChange={setTipoComprobante}
                       disabled={isReadOnly}

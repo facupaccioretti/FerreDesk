@@ -53,7 +53,13 @@ const PresupuestosManager = () => {
   const { descargarPDF } = useGeneradorPDF();
 
   // Hook para obtener la configuración de la ferretería
-  const { ferreteria, loading: loadingFerreteria } = useFerreteriaAPI();
+  const {
+    ferreteria,
+    loading: loadingFerreteria,
+    bloqueoTotalSetup,
+    camposSetupFaltantes,
+    arcaListoParaEmitir,
+  } = useFerreteriaAPI();
 
   useEffect(() => {
     fetch("/api/user/", { credentials: "include" })
@@ -263,6 +269,8 @@ const PresupuestosManager = () => {
     localStorage.removeItem("ventaFormDraft")
   }
 
+  const mostrarBloqueoSetup = !loadingFerreteria && bloqueoTotalSetup
+
   const handleNuevaNotaCredito = () => {
     // Agregar validación de comprobantes NC disponibles
     const tiposNC = ['nota_credito', 'nota_credito_interna'];
@@ -427,6 +435,37 @@ const PresupuestosManager = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
             </div>
+            {mostrarBloqueoSetup ? (
+              <div className="bg-white rounded-xl shadow-lg border border-amber-200 overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500"></div>
+                <div className="p-8">
+                  <div className="max-w-3xl">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 mb-4">
+                      Setup básico pendiente
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-800 mb-3">
+                      Completa la configuración fiscal básica antes de operar
+                    </h3>
+                    <p className="text-slate-700 mb-4">
+                      Por favor, completa los datos fiscales básicos de tu negocio en Configuración para poder operar.
+                    </p>
+                    {camposSetupFaltantes.length > 0 && (
+                      <p className="text-sm text-slate-600 mb-6">
+                        Campos faltantes: {camposSetupFaltantes.join(", ")}.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigate("/setup")}
+                      className="px-5 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+                    >
+                      Ir a completar setup
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <>
             {/* Errores no se muestran en página; se alertan vía useEffect(ventasError) */}
             <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
               {/* Tabs tipo browser - Encabezado azul oscuro */}
@@ -578,6 +617,8 @@ const PresupuestosManager = () => {
                       initialData={null}
                       readOnlyOverride={false}
                       comprobantes={comprobantes}
+                      ferreteria={ferreteria}
+                      arcaListoParaEmitir={arcaListoParaEmitir}
                       tiposComprobante={tiposComprobante}
                       tipoComprobante={tipoComprobante}
                       setTipoComprobante={setTipoComprobante}
@@ -784,7 +825,7 @@ const PresupuestosManager = () => {
                         key={tab.key}
                         presupuestoOrigen={tab.data.presupuestoOrigen}
                         itemsSeleccionados={tab.data.itemsSeleccionados}
-                        onSave={async (payload, tk) => {
+                      onSave={async (payload, tk) => {
                           const resultado = await handleConVentaFormSave(payload, tk)
                           // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
                           if (!resultado?.arca_emitido) {
@@ -794,7 +835,8 @@ const PresupuestosManager = () => {
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        ferreteria={ferreteria}
+                        arcaListoParaEmitir={arcaListoParaEmitir}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -840,7 +882,8 @@ const PresupuestosManager = () => {
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        ferreteria={ferreteria}
+                        arcaListoParaEmitir={arcaListoParaEmitir}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -868,6 +911,8 @@ const PresupuestosManager = () => {
                 )}
               </div>
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

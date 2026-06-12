@@ -6,7 +6,7 @@ import os
 DEBUG = True
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
-SESSION_COOKIE_DOMAIN = ".localhost"
+# SESSION_COOKIE_DOMAIN = ".localhost"
 
 # Ruta al build del frontend en desarrollo
 FRONTEND_BUILD_DIR = BASE_DIR.parent / "frontend" / "build"

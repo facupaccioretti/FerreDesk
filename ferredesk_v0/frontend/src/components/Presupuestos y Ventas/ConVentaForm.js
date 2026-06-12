@@ -34,6 +34,7 @@ const ConVentaForm = ({
   itemsSeleccionadosIds,
   comprobantes,
   ferreteria,
+  arcaListoParaEmitir: arcaListoParaEmitirProp,
   clientes,
   plazos,
   vendedores,
@@ -90,6 +91,11 @@ const ConVentaForm = ({
   const [mostrarModalCobro, setMostrarModalCobro] = useState(false);
   const [datosCobroPendientes, setDatosCobroPendientes] = useState(null);
   const [mostrarModalReciboParcial, setMostrarModalReciboParcial] = useState(false);
+  const arcaListoParaEmitir = arcaListoParaEmitirProp ?? Boolean(
+    ferreteria?.tiene_certificado_arca &&
+    ferreteria?.tiene_clave_privada_arca &&
+    ferreteria?.punto_venta_arca
+  );
 
 
   // Hook para manejar estado de ARCA
@@ -399,6 +405,13 @@ const ConVentaForm = ({
     }
   }, [tipoComprobante, comprobantesVenta, comprobanteId]);
 
+  useEffect(() => {
+    if (!arcaListoParaEmitir && !esConversionFacturaI && tipoComprobante === 'factura') {
+      setTipoComprobante('factura_interna');
+      setFormulario((previo) => ({ ...previo, tipoComprobante: 'factura_interna' }));
+    }
+  }, [arcaListoParaEmitir, esConversionFacturaI, tipoComprobante, setFormulario]);
+
   // HÍBRIDO: useComprobanteFiscal solo para preview visual
   // El backend ejecutará su propia lógica fiscal autoritaria
 
@@ -466,6 +479,11 @@ const ConVentaForm = ({
 
     // Activar flag para evitar validación ARCA durante el proceso
     setProcesandoSubmit(true);
+    if (esConversionFacturaI && !arcaListoParaEmitir) {
+      window.alert('ARCA no esta configurado. Completa certificados y punto de venta antes de fiscalizar una cotizacion.');
+      setProcesandoSubmit(false);
+      return;
+    }
     if (!itemsGridRef.current) return;
 
     try {
@@ -892,6 +910,21 @@ const ConVentaForm = ({
     ];
   }, [esConversionFacturaI]);
 
+  const opcionesComprobanteDisponibles = useMemo(() => {
+    if (esConversionFacturaI) {
+      return arcaListoParaEmitir
+        ? opcionesComprobante
+        : [];
+    }
+
+    if (arcaListoParaEmitir) {
+      return opcionesComprobante;
+    }
+
+    return opcionesComprobante.filter((opcion) => opcion.tipo === 'factura_interna');
+  }, [arcaListoParaEmitir, esConversionFacturaI, opcionesComprobante]);
+
+  const bloqueoConversionFiscalPorArca = esConversionFacturaI && !arcaListoParaEmitir;
   const isReadOnly = formulario.estado === 'Cerrado';
 
   // Función para actualizar los ítems en tiempo real desde ItemsGrid (memoizada)
@@ -1096,6 +1129,11 @@ const ConVentaForm = ({
                 </div>
                 {esConversionFacturaI ? 'Conversión de Cotización a Factura Fiscal' : 'Conversión de Presupuesto a Venta'}
               </h3>
+              {bloqueoConversionFiscalPorArca && (
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900">
+                  ARCA no esta configurado. Completa certificados y punto de venta antes de fiscalizar una cotizacion.
+                </div>
+              )}
               {isReadOnly && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100/80 border-l-4 border-amber-500 text-amber-900 rounded-xl shadow-sm">
                   <div className="flex items-center gap-2">
@@ -1231,14 +1269,19 @@ const ConVentaForm = ({
                   {/* Tipo de Comprobante */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                    {!arcaListoParaEmitir && (
+                      <p className="mb-2 text-[11px] text-amber-700">
+                        ARCA no esta configurado. Solo se permiten comprobantes internos.
+                      </p>
+                    )}
                     <ComprobanteDropdown
-                      opciones={opcionesComprobante}
+                      opciones={opcionesComprobanteDisponibles}
                       value={tipoComprobante}
                       onChange={(tipo) => {
                         setTipoComprobante(tipo)
                         setFormulario(f => ({ ...f, tipoComprobante: tipo }))
                       }}
-                      disabled={isReadOnly || esConversionFacturaI}
+                      disabled={isReadOnly || esConversionFacturaI || bloqueoConversionFiscalPorArca}
                       className="w-full"
                     />
                   </div>
@@ -1249,7 +1292,7 @@ const ConVentaForm = ({
                     <SumarDuplicar
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      disabled={isReadOnly || esConversionFacturaI}
+                      disabled={isReadOnly || esConversionFacturaI || bloqueoConversionFiscalPorArca}
                       showLabel={false}
                     />
                   </div>
@@ -1295,7 +1338,7 @@ const ConVentaForm = ({
                   alicuotasMap,
                   esConversionFacturaI: esConversionFacturaI
                 })}
-                readOnly={esConversionFacturaI || isReadOnly}
+                readOnly={esConversionFacturaI || isReadOnly || bloqueoConversionFiscalPorArca}
                 listaPrecioId={listaPrecioId}
                 listasPrecio={listasPrecio}
               />
@@ -1312,6 +1355,7 @@ const ConVentaForm = ({
               {!isReadOnly && (
                 <button
                   type="submit"
+                  disabled={bloqueoConversionFiscalPorArca}
                   className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   Crear Venta

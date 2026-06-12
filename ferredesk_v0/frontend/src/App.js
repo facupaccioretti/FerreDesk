@@ -104,7 +104,7 @@ export default function App() {
         <Route
           path="/home/presupuestos"
           element={
-            <RutaPrivada>
+            <RutaPrivada permitirSetupIncompleto={true}>
               <PresupuestosManager />
             </RutaPrivada>
           }
