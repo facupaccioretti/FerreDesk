@@ -974,31 +974,35 @@ def servir_logo_empresa(request):
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
         # Obtener la ruta del archivo
-        ruta_logo = ferreteria.logo_empresa.path
+        storage = ferreteria.logo_empresa.storage
+        nombre_logo = ferreteria.logo_empresa.name
+        ruta_logo = storage.path(nombre_logo) if hasattr(storage, 'path') else nombre_logo
         
-        print(f'DEBUG: Intentando servir logo empresa desde: {ruta_logo}')
+        print(f'DEBUG: Intentando servir logo empresa desde: {nombre_logo}')
         print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
         
-        if not os.path.exists(ruta_logo):
+        if not storage.exists(nombre_logo):
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
         # Determinar el tipo de contenido basado en la extensión
-        extension = os.path.splitext(ruta_logo)[1].lower()
-        content_type_map = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp'
-        }
-        content_type = content_type_map.get(extension, 'image/jpeg')
+        content_type, _ = mimetypes.guess_type(nombre_logo)
+        if not content_type:
+            extension = os.path.splitext(nombre_logo)[1].lower()
+            content_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+            }
+            content_type = content_type_map.get(extension, 'image/jpeg')
         
-        print(f'Sirviendo logo empresa desde {ruta_logo}')
+        print(f'Sirviendo logo empresa desde {nombre_logo}')
         response = FileResponse(
-            open(ruta_logo, 'rb'),
+            storage.open(nombre_logo, 'rb'),
             content_type=content_type,
             headers={
-                'Content-Disposition': f'inline; filename="{os.path.basename(ruta_logo)}"',
+                'Content-Disposition': f'inline; filename="{os.path.basename(nombre_logo)}"',
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',

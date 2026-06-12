@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista
+from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -207,6 +208,24 @@ class FerreteriaSerializer(serializers.ModelSerializer):
                 "CUIT/CUIL debe contener exactamente 11 dígitos numéricos, sin guiones ni letras."
             )
         return valor
+
+    def validate_certificado_arca(self, value):
+        try:
+            validar_certificado_pem(value)
+        except Exception as exc:
+            raise serializers.ValidationError(
+                "El archivo cargado como certificado ARCA no es un certificado PEM válido."
+            ) from exc
+        return value
+
+    def validate_clave_privada_arca(self, value):
+        try:
+            validar_clave_privada_pem(value)
+        except Exception as exc:
+            raise serializers.ValidationError(
+                "El archivo cargado como clave privada ARCA no es una clave privada PEM válida."
+            ) from exc
+        return value
 
     def get_tiene_certificado_arca(self, instance):
         try:
