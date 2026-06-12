@@ -1,16 +1,9 @@
 from pathlib import Path
-import sys
-import types
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
-
-if 'ferredesk_backend.urls_public' not in sys.modules:
-    urls_public_module = types.ModuleType('ferredesk_backend.urls_public')
-    urls_public_module.urlpatterns = []
-    sys.modules['ferredesk_backend.urls_public'] = urls_public_module
 
 SHARED_APPS = (
     'django_tenants',
