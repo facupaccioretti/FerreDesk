@@ -22,6 +22,21 @@ const Register = () => {
         localError
     } = useTenantRegistration();
 
+    React.useEffect(() => {
+        if (registroResult?.dominio?.url) {
+            let finalUrl = registroResult.dominio.url;
+            if (window.location.port) {
+                const parsedUrl = new URL(finalUrl);
+                parsedUrl.port = window.location.port;
+                finalUrl = parsedUrl.toString();
+            }
+            const timer = setTimeout(() => {
+                window.location.assign(finalUrl);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [registroResult]);
+
     if (registroResult) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">
@@ -50,6 +65,9 @@ const Register = () => {
                             >
                                 Ir a mi Negocio
                             </a>
+                            <p className="mt-4 text-center text-sm font-medium text-blue-600 animate-pulse">
+                                Redirigiendo automáticamente en unos segundos...
+                            </p>
                         </div>
                     </div>
                 </div>

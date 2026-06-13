@@ -2,6 +2,7 @@ from django.db import connection
 from django.test import TransactionTestCase
 from rest_framework.test import APIRequestFactory
 
+from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
 from tenants.models import EmpresaTenant
@@ -17,6 +18,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
     def tearDown(self):
         connection.set_schema_to_public()
         for tenant in EmpresaTenant.objects.filter(slug_subdominio__startswith="apitest"):
+            CuentaAccesoPublico.objects.filter(tenant_asignado=tenant).delete()
             tenant.delete(force_drop=True)
 
     def test_validar_slug_publico_devuelve_dominio_sugerido(self):
@@ -62,8 +64,59 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(data["admin_inicial"]["username"], "admin@apitestalta.com")
         self.assertEqual(data["admin_inicial"]["tipo_usuario"], "admin")
 
+        connection.set_schema_to_public()
+        tenant_publico = EmpresaTenant.objects.get(schema_name="apitestalta")
+        cuenta_publica = CuentaAccesoPublico.objects.get(email="admin@apitestalta.com")
+        self.assertEqual(cuenta_publica.tenant_asignado_id, tenant_publico.id)
+        self.assertEqual(cuenta_publica.username_tenant, "admin@apitestalta.com")
+        self.assertEqual(cuenta_publica.email_tenant, "admin@apitestalta.com")
+        self.assertTrue(cuenta_publica.check_password("testpass123"))
+
         connection.set_schema("apitestalta")
         self.assertEqual(Ferreteria.objects.count(), 1)
         self.assertEqual(Sucursal.objects.count(), 1)
         self.assertEqual(Usuario.objects.count(), 1)
         connection.set_schema_to_public()
+
+    def test_crear_tenant_publico_rechaza_email_global_duplicado(self):
+        primer_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Duplicado Uno",
+                "slug": "apitestdupuno",
+                "email_admin": "admin@apitestdup.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        primera_response = CrearTenantOnboardingAPIView.as_view()(primer_request)
+        self.assertEqual(primera_response.status_code, 201)
+
+        segundo_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Duplicado Dos",
+                "slug": "apitestdupdos",
+                "email_admin": "admin@apitestdup.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        segunda_response = CrearTenantOnboardingAPIView.as_view()(segundo_request)
+
+        self.assertEqual(segunda_response.status_code, 400)
+        self.assertEqual(
+            segunda_response.data,
+            {
+                "email_admin": [
+                    "Ya existe una cuenta global con ese email. La beta V1 permite una sola empresa por cuenta."
+                ]
+            },
+        )
+
+        connection.set_schema_to_public()
+        self.assertTrue(EmpresaTenant.objects.filter(schema_name="apitestdupuno").exists())
+        self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestdupdos").exists())
+        self.assertEqual(CuentaAccesoPublico.objects.filter(email="admin@apitestdup.com").count(), 1)

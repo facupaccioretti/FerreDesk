@@ -56,9 +56,19 @@ async function renderAsistente() {
 }
 
 describe("AsistenteConfiguracion", () => {
+    let locationOriginal;
+
+    beforeEach(() => {
+        locationOriginal = window.location;
+        delete window.location;
+        window.location = new URL("http://ferretest.localhost/setup");
+        window.location.assign = jest.fn();
+    });
+
     afterEach(() => {
         jest.clearAllMocks();
         document.body.innerHTML = "";
+        window.location = locationOriginal;
     });
 
     test("usa estado-setup como fuente de verdad y precarga la ferreteria incompleta sin redirigir", async () => {
@@ -127,7 +137,7 @@ describe("AsistenteConfiguracion", () => {
 
         const vista = await renderAsistente();
 
-        expect(mockNavigate).toHaveBeenCalledWith("/home");
+        expect(window.location.assign).toHaveBeenCalledWith("/home");
 
         await vista.desmontar();
     });

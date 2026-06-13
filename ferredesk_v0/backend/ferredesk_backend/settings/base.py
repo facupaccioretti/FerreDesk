@@ -10,6 +10,7 @@ SHARED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
     'tenants',
+    'acceso_publico',
     'rest_framework',
     'django_filters',
     'django_extensions',

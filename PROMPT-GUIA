@@ -1,0 +1,545 @@
+# FerreDesk V1 SaaS Multi-Tenant — Prompts Atómicos para Identidad Global Simple
+
+## Objetivo
+
+Este documento define una versión reducida y ejecutable de la migración de acceso para FerreDesk.
+
+Está pensado para este escenario de producto:
+
+- beta chica;
+- entre 5 y 10 ferreterías;
+- un solo usuario admin por negocio;
+- sin subusuarios en esta etapa;
+- login central desde la plataforma pública;
+- acceso automático al tenant sin doble ingreso de contraseña visible.
+
+La idea no es construir todavía un sistema completo tipo Jira con múltiples empresas por persona y selector avanzado de workspaces.
+
+La idea es implementar esta relación simple:
+
+- `1 cuenta global en public`
+- vinculada a
+- `1 tenant`
+- que a su vez tiene
+- `1 usuario admin tenant`
+
+Esto deja el producto mucho más prolijo hacia afuera sin obligar todavía a refactorizar toda la identidad interna del ERP.
+
+## Estado real actual
+
+Hoy FerreDesk funciona así:
+
+- el onboarding crea tenant, dominio, `Ferreteria`, `Sucursal` y `Usuario` admin dentro del tenant;
+- el login actual autentica contra `usuarios.Usuario`;
+- `usuarios.Usuario` depende de `Ferreteria`;
+- `AUTH_USER_MODEL` es tenant-only;
+- `public` no tiene identidad global de plataforma.
+
+Archivos clave del estado actual:
+
+- `ferredesk_v0/backend/ferreapps/usuarios/models.py`
+- `ferredesk_v0/backend/ferreapps/login/views.py`
+- `ferredesk_v0/backend/tenants/services/servicio_inicializacion_tenant.py`
+- `ferredesk_v0/backend/tenants/views/public_onboarding_views.py`
+- `ferredesk_v0/frontend/src/components/Login.js`
+
+## Decisión que este documento asume
+
+### Sí se hace
+
+- agregar cuenta global mínima en `public`;
+- vincular esa cuenta global a un solo tenant;
+- seguir usando el usuario admin tenant como identidad operativa interna;
+- crear un puente de sesión para que no haya doble login visible;
+- bloquear creación de más usuarios tenant en esta etapa.
+
+### No se hace
+
+- no se cambia `AUTH_USER_MODEL`;
+- no se vuelve global `usuarios.Usuario`;
+- no se soportan varias empresas por cuenta en esta etapa;
+- no se soportan subusuarios todavía;
+- no se migran permisos internos del ERP;
+- no se reescribe todo el sistema de auth.
+
+## Regla operativa
+
+Cada tarea de abajo está redactada con:
+
+- `Contexto`
+- `Tarea`
+- `Restricciones`
+- `Criterio de aceptación`
+
+Al cerrar cada tarea:
+
+- actualizar `ferredesk-progress.json` si se decide registrar esta iniciativa como fase o bloque nuevo;
+- adjuntar evidencia real;
+- no marcar nada como correcto sin output.
+
+---
+
+## Orden recomendado
+
+1. Crear app shared de acceso global simple
+2. Crear modelo de cuenta global
+3. Crear vínculo simple cuenta global -> tenant
+4. Extender onboarding para crear esa cuenta
+5. Crear login público central
+6. Crear token puente
+7. Crear `login-bridge` tenant
+8. Adaptar frontend público
+9. Bloquear subusuarios
+10. Verificar flujo completo
+
+---
+
+## S1-T1: Crear app shared `acceso_publico`
+
+```
+## Contexto
+Hoy no existe una capa de identidad global en `public`.
+
+Archivo a impactar:
+- ferredesk_v0/backend/ferredesk_backend/settings/base.py
+
+## Tarea
+Crear una nueva app shared llamada `acceso_publico`.
+
+Estructura mínima:
+- ferredesk_v0/backend/acceso_publico/__init__.py
+- ferredesk_v0/backend/acceso_publico/apps.py
+- ferredesk_v0/backend/acceso_publico/models.py
+- ferredesk_v0/backend/acceso_publico/admin.py
+- ferredesk_v0/backend/acceso_publico/serializers.py
+- ferredesk_v0/backend/acceso_publico/views.py
+- ferredesk_v0/backend/acceso_publico/urls.py
+- ferredesk_v0/backend/acceso_publico/services.py
+
+Agregar la app a `SHARED_APPS`.
+
+## Restricciones
+- No tocar `AUTH_USER_MODEL`
+- No mover `usuarios.Usuario`
+- No mezclar esta app con `TENANT_APPS`
+
+## Criterio de aceptación
+- `python manage.py check --settings=ferredesk_backend.settings.dev` pasa
+- la app figura en `SHARED_APPS`
+- el proyecto sigue arrancando correctamente
+```
+
+---
+
+## S1-T2: Crear `CuentaAccesoPublico`
+
+```
+## Contexto
+Hace falta una cuenta global mínima para entrar desde `ferredesk.com`.
+
+Archivo:
+- ferredesk_v0/backend/acceso_publico/models.py
+
+## Tarea
+Crear el modelo `CuentaAccesoPublico`.
+
+Campos mínimos:
+- email (único)
+- password
+- nombre_mostrar
+- tenant_asignado (FK a `tenants.EmpresaTenant`)
+- activo
+- fecha_creacion
+- ultimo_acceso
+
+En esta etapa se asume un solo tenant por cuenta.
+
+## Restricciones
+- No convertir este modelo en `AUTH_USER_MODEL`
+- No depender de `Ferreteria`
+- No soportar todavía múltiples tenants por cuenta
+
+## Criterio de aceptación
+- migración generada y aplicada
+- `python manage.py migrate_schemas --shared --settings=ferredesk_backend.settings.dev` pasa
+- `python manage.py check --settings=ferredesk_backend.settings.dev` pasa
+```
+
+---
+
+## S1-T3: Registrar referencia al admin tenant
+
+```
+## Contexto
+La cuenta global debe saber con qué usuario tenant abrir sesión dentro del ERP.
+
+Archivo:
+- ferredesk_v0/backend/acceso_publico/models.py
+
+## Tarea
+Agregar a `CuentaAccesoPublico` o a un modelo auxiliar simple los datos mínimos
+para resolver el usuario tenant real.
+
+Campos mínimos recomendados:
+- `username_tenant`
+- `email_tenant`
+
+No usar FK ORM directa a `usuarios.Usuario`, porque ese usuario vive dentro del schema tenant.
+
+## Restricciones
+- No guardar FK cross-schema
+- No asumir que el id numérico del usuario tenant es estable fuera del schema
+
+## Criterio de aceptación
+- queda claro cómo se resolverá el admin tenant dentro del bridge
+- existe prueba mínima de lookup del usuario tenant por `username`
+```
+
+---
+
+## S2-T1: Extender onboarding para crear cuenta global
+
+```
+## Contexto
+Hoy el onboarding SaaS crea el admin dentro del tenant, pero no crea cuenta global.
+
+Archivos:
+- ferredesk_v0/backend/tenants/services/orquestador_tenant.py
+- ferredesk_v0/backend/tenants/services/servicio_inicializacion_tenant.py
+
+## Tarea
+Extender el onboarding para que además:
+- cree `CuentaAccesoPublico`
+- le asigne el tenant recién creado
+- guarde `username_tenant` y `email_tenant` del admin creado en el tenant
+
+## Restricciones
+- No eliminar la creación del usuario admin tenant
+- No cambiar el usuario operativo del ERP
+- No soportar todavía reuso de una cuenta global en más de una empresa
+
+## Criterio de aceptación
+- el onboarding deja creados:
+  - tenant
+  - dominio
+  - ferreteria
+  - sucursal
+  - usuario admin tenant
+  - cuenta global
+- mostrar output real de shell o test con esos datos
+```
+
+---
+
+## S2-T2: Definir política para email duplicado en onboarding
+
+```
+## Contexto
+Si el email global ya existe y esta etapa permite solo 1 tenant por cuenta,
+hay que decidir qué pasa.
+
+## Tarea
+Implementar política explícita:
+- rechazar creación si ya existe `CuentaAccesoPublico` con ese email
+o
+- permitir solo si apunta al mismo tenant y el flujo es idempotente
+
+Elegir una política y documentarla.
+
+## Restricciones
+- No dejar comportamiento implícito
+- No crear dos cuentas globales con el mismo email
+
+## Criterio de aceptación
+- test del caso duplicado
+- mensaje claro de error o idempotencia explícita
+```
+
+---
+
+## S3-T1: Crear login público central
+
+```
+## Contexto
+Hoy `Login.js` en el dominio público no autentica una cuenta global real.
+
+Archivos:
+- ferredesk_v0/backend/acceso_publico/views.py
+- ferredesk_v0/backend/acceso_publico/urls.py
+- ferredesk_v0/backend/ferredesk_backend/urls_public.py
+
+## Tarea
+Crear endpoint:
+- `POST /api/public/acceso/login/`
+
+Debe:
+- autenticar contra `CuentaAccesoPublico`
+- devolver la URL del tenant asignado
+- devolver además la información mínima necesaria para abrir el bridge
+
+## Restricciones
+- No autenticar aquí contra `usuarios.Usuario`
+- Solo debe funcionar en schema `public`
+- No soportar lista de varias empresas en esta etapa
+
+## Criterio de aceptación
+- existe contrato JSON claro
+- test de credenciales válidas e inválidas
+- output real del caso exitoso
+```
+
+---
+
+## S3-T2: Crear token puente de un solo uso
+
+```
+## Contexto
+El usuario no debe poner la contraseña dos veces.
+
+Archivos:
+- ferredesk_v0/backend/acceso_publico/services.py
+- opcionalmente modelo en `acceso_publico/models.py`
+
+## Tarea
+Crear un token puente corto y de un solo uso que permita abrir la sesión tenant.
+
+Debe:
+- estar asociado al tenant correcto
+- estar asociado al `username_tenant`
+- expirar rápido
+- invalidarse tras uso exitoso
+
+## Restricciones
+- No reutilizar tokens
+- No permitir uso desde otro tenant
+- No dejar tokens permanentes
+
+## Criterio de aceptación
+- prueba del token válido
+- prueba de token expirado o usado
+- evidencia real del payload o validación
+```
+
+---
+
+## S4-T1: Implementar `login-bridge` en el tenant
+
+```
+## Contexto
+Hace falta que el tenant reciba el token y cree la sesión del usuario admin tenant.
+
+Archivos:
+- ferredesk_v0/backend/ferreapps/login/views.py
+- ferredesk_v0/backend/ferreapps/login/urls.py
+
+## Tarea
+Crear endpoint tenant:
+- `GET /api/login-bridge/`
+o
+- `GET /login-bridge/`
+
+Debe:
+- validar el token
+- confirmar que el token corresponde al tenant actual
+- buscar `Usuario` por `username_tenant`
+- hacer `login(request, usuario)`
+- redirigir a `/setup` o `/home`
+
+## Restricciones
+- No debe funcionar en `public`
+- No debe loguear si el token pertenece a otro tenant
+- Debe invalidar el token después de usarlo
+
+## Criterio de aceptación
+- prueba del bridge exitoso
+- prueba de rechazo por tenant incorrecto
+- evidencia de que `/api/user/` responde 200 después del bridge
+```
+
+---
+
+## S4-T2: Respetar gating de setup en el bridge
+
+```
+## Contexto
+No alcanza con abrir la sesión. Hay que entrar al lugar correcto según el estado del negocio.
+
+Archivos:
+- ferredesk_v0/backend/ferreapps/login/views.py
+- ferredesk_v0/backend/ferreapps/productos/views.py
+- ferredesk_v0/backend/ferreapps/productos/models.py
+
+## Tarea
+Hacer que el bridge redirija:
+- a `/setup` si el tenant tiene setup incompleto
+- a `/home` si el setup ya está completo
+
+## Restricciones
+- No duplicar lógica fuera de la fuente de verdad del setup
+- Reusar el criterio ya implementado
+
+## Criterio de aceptación
+- prueba explícita de ambos casos
+- output real del redirect final
+```
+
+---
+
+## S5-T1: Adaptar `Login.js` para dominio público
+
+```
+## Contexto
+Hoy `Login.js` muestra un mensaje orientando a usar subdominio, pero no resuelve el acceso.
+
+Archivo:
+- ferredesk_v0/frontend/src/components/Login.js
+
+## Tarea
+Modificar `Login.js` para que:
+- en dominio público haga login global
+- si las credenciales son válidas, pida el token puente y redirija al tenant
+- en subdominio siga permitiendo el login tenant directo como fallback
+
+## Restricciones
+- No romper el login tenant actual
+- No exigir recordar el subdominio como única vía de acceso
+- Mantener coherencia con el frontend actual
+
+## Criterio de aceptación
+- build del frontend pasa
+- flujo público validado
+- flujo tenant directo sigue funcionando
+```
+
+---
+
+## S5-T2: Cambiar copy pública de acceso
+
+```
+## Contexto
+Si existe login central, la UI pública ya no debe decir que solo se entra por subdominio.
+
+Archivo:
+- ferredesk_v0/frontend/src/components/Login.js
+
+## Tarea
+Actualizar el texto del login público para reflejar el nuevo flujo:
+- ingresar a FerreDesk
+- ser enviado automáticamente al negocio correspondiente
+
+## Restricciones
+- No inducir a usar `public` como ERP operativo
+- No dejar mensajes viejos contradictorios
+
+## Criterio de aceptación
+- el contenido visible coincide con el flujo real
+- no quedan mensajes legacy engañosos
+```
+
+---
+
+## S6-T1: Bloquear creación de subusuarios en V1
+
+```
+## Contexto
+Esta estrategia simple solo funciona limpiamente si hay un solo admin por negocio.
+
+## Tarea
+Bloquear la creación de nuevos usuarios tenant adicionales en esta etapa.
+
+Eso implica:
+- revisar backend de alta de usuarios
+- revisar UI que permita crear usuarios
+- impedir creación explícitamente
+
+Mostrar mensaje claro:
+- "La beta V1 solo permite un usuario administrador por negocio."
+
+## Restricciones
+- No dejar el bloqueo solo en frontend
+- No borrar usuarios existentes
+
+## Criterio de aceptación
+- intento de crear segundo usuario queda rechazado
+- output real del rechazo
+- UI y backend reflejan la misma regla
+```
+
+---
+
+## S6-T2: Decidir tratamiento de negocios ya creados sin cuenta global
+
+```
+## Contexto
+Puede haber ferreterías ya creadas con su admin tenant pero sin cuenta global.
+
+## Tarea
+Crear proceso simple de backfill para:
+- leer el admin tenant existente
+- crear `CuentaAccesoPublico`
+- asignarle el tenant
+- guardar `username_tenant`
+
+## Restricciones
+- No tocar permisos del usuario tenant
+- No duplicar cuentas globales
+- Mantener la operación idempotente
+
+## Criterio de aceptación
+- comando o servicio ejecutable
+- output real sobre tenants de prueba
+- resultado verificable en `public`
+```
+
+---
+
+## S7-T1: Verificación integral del flujo simple
+
+```
+## Contexto
+Después de implementar esta versión simple, hace falta validar todo de punta a punta.
+
+## Tarea
+Probar:
+- onboarding nuevo crea cuenta global + tenant + admin tenant
+- login público funciona
+- bridge crea sesión tenant
+- redirect correcto a `/setup` o `/home`
+- `/api/user/` responde con usuario tenant correcto
+- login directo por subdominio sigue funcionando
+- creación de subusuario queda bloqueada
+
+## Restricciones
+- No considerar suficiente `python manage.py check`
+- No cerrar sin evidencia real
+
+## Criterio de aceptación
+- evidencia completa del flujo
+- sin doble ingreso de contraseña visible
+- sin fuga entre tenants
+```
+
+---
+
+## Cierre recomendado
+
+Antes de considerar esta iniciativa lista deberían cumplirse estas condiciones:
+
+- existe `CuentaAccesoPublico` en `public`
+- el onboarding crea cuenta global además del admin tenant
+- el login público redirige correctamente al tenant
+- el bridge crea sesión tenant sin segundo login visible
+- el acceso directo por subdominio sigue funcionando
+- no se pueden crear subusuarios en esta etapa
+- los tenants ya existentes pueden vincularse a cuenta global sin romperse
+
+## Nota final
+
+Esta estrategia simple es válida solo si la restricción de producto se cumple de verdad:
+
+- un negocio;
+- un admin;
+- sin subusuarios.
+
+Si esa restricción se rompe, esta solución queda corta y hay que evolucionar a la
+versión completa de identidad global con múltiples vínculos por persona.

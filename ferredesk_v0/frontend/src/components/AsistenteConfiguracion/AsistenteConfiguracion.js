@@ -64,7 +64,7 @@ export default function AsistenteConfiguracion() {
                 }
 
                 if (estadoSetup?.setup_completo === true) {
-                    navegar('/home');
+                    window.location.assign('/home');
                     return;
                 }
 
@@ -126,7 +126,7 @@ export default function AsistenteConfiguracion() {
 
             if (respuesta.ok) {
                 toast.success('Configuración inicial completada con éxito.');
-                navegar('/home');
+                window.location.assign('/home');
             } else {
                 const datosError = await respuesta.json();
                 toast.error(datosError.detail || 'Error al guardar la configuración. Verifique los campos.');

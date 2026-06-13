@@ -3,8 +3,9 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from acceso_publico.models import CuentaAccesoPublico
 from tenants.services.servicio_constructor_tenant import _obtener_dominio_base
-from tenants.validators import validar_slug_completo, validar_slug_formato, validar_slug_no_reservado
+from tenants.validators import validar_slug_completo, validar_slug_formato, validar_slug_no_reservado, validar_slug_unico
 
 
 class ValidarSlugOnboardingSerializer(serializers.Serializer):
@@ -16,6 +17,7 @@ class ValidarSlugOnboardingSerializer(serializers.Serializer):
         try:
             validar_slug_formato(slug)
             validar_slug_no_reservado(slug)
+            validar_slug_unico(slug)
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
 
@@ -41,6 +43,17 @@ class CrearTenantOnboardingSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
         return slug
+
+    def validate_email_admin(self, value):
+        email = value.strip().lower()
+
+        # Politica V1: una cuenta global solo puede pertenecer a un tenant.
+        if CuentaAccesoPublico.objects.filter(email=email).exists():
+            raise serializers.ValidationError(
+                "Ya existe una cuenta global con ese email. La beta V1 permite una sola empresa por cuenta."
+            )
+
+        return email
 
     def to_respuesta(self, resultado):
         tenant = resultado["tenant"]

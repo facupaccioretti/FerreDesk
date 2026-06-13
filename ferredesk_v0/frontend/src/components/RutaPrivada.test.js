@@ -1,9 +1,21 @@
 import React from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-import RutaPrivada, { esHostTenantValido } from "./RutaPrivada";
+let mockPathnameActual = "/home";
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+jest.mock(
+    "react-router-dom",
+    () => ({
+        Navigate: ({ to }) => <div>redirigido:{to}</div>,
+        useLocation: () => ({ pathname: mockPathnameActual }),
+    }),
+    { virtual: true }
+);
+
+const RutaPrivada = require("./RutaPrivada").default;
+const { esHostTenantValido } = require("./RutaPrivada");
 
 function esperarMicrotareas() {
     return new Promise((resolve) => {
@@ -16,40 +28,19 @@ async function renderRutaPrivada({
     hostnameActual = "ferretest.localhost",
     permitirSetupIncompleto = false,
 }) {
+    mockPathnameActual = rutaInicial;
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
 
     await act(async () => {
         root.render(
-            <MemoryRouter initialEntries={[rutaInicial]}>
-                <Routes>
-                    <Route
-                        path="/home"
-                        element={
-                            <RutaPrivada
-                                hostnameActual={hostnameActual}
-                                permitirSetupIncompleto={permitirSetupIncompleto}
-                            >
-                                <div>home protegida</div>
-                            </RutaPrivada>
-                        }
-                    />
-                    <Route
-                        path="/setup"
-                        element={
-                            <RutaPrivada
-                                hostnameActual={hostnameActual}
-                                permitirSetupIncompleto={permitirSetupIncompleto}
-                            >
-                                <div>pantalla setup</div>
-                            </RutaPrivada>
-                        }
-                    />
-                    <Route path="/login" element={<div>pantalla login</div>} />
-                    <Route path="/" element={<div>landing publica</div>} />
-                </Routes>
-            </MemoryRouter>
+            <RutaPrivada
+                hostnameActual={hostnameActual}
+                permitirSetupIncompleto={permitirSetupIncompleto}
+            >
+                <div>contenido protegido</div>
+            </RutaPrivada>
         );
         await esperarMicrotareas();
         await esperarMicrotareas();
@@ -99,8 +90,8 @@ describe("RutaPrivada", () => {
 
         const vista = await renderRutaPrivada({ rutaInicial: "/home" });
 
-        expect(vista.container.textContent).toContain("pantalla setup");
-        expect(vista.container.textContent).not.toContain("home protegida");
+        expect(vista.container.textContent).toContain("redirigido:/setup");
+        expect(vista.container.textContent).not.toContain("contenido protegido");
 
         await vista.desmontar();
     });
@@ -125,7 +116,7 @@ describe("RutaPrivada", () => {
 
         const vista = await renderRutaPrivada({ rutaInicial: "/home" });
 
-        expect(vista.container.textContent).toContain("home protegida");
+        expect(vista.container.textContent).toContain("contenido protegido");
 
         await vista.desmontar();
     });
@@ -153,7 +144,7 @@ describe("RutaPrivada", () => {
             permitirSetupIncompleto: true,
         });
 
-        expect(vista.container.textContent).toContain("home protegida");
+        expect(vista.container.textContent).toContain("contenido protegido");
 
         await vista.desmontar();
     });
@@ -166,8 +157,34 @@ describe("RutaPrivada", () => {
             hostnameActual: "localhost",
         });
 
-        expect(vista.container.textContent).toContain("landing publica");
+        expect(vista.container.textContent).toContain("redirigido:/");
         expect(global.fetch).not.toHaveBeenCalled();
+
+        await vista.desmontar();
+    });
+
+    test("redirige a /home cuando el setup ya esta completo y el usuario entra a /setup", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce({
+                status: 200,
+                ok: true,
+                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
+            })
+            .mockResolvedValueOnce({
+                status: 200,
+                ok: true,
+                json: async () => ({
+                    setup_completo: true,
+                    campos_setup_faltantes: [],
+                    no_configurada: false,
+                }),
+            });
+
+        const vista = await renderRutaPrivada({ rutaInicial: "/setup" });
+
+        expect(vista.container.textContent).toContain("redirigido:/home");
+        expect(vista.container.textContent).not.toContain("contenido protegido");
 
         await vista.desmontar();
     });
