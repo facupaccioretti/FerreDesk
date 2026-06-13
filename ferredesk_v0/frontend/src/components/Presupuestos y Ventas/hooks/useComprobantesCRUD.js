@@ -1,5 +1,7 @@
 import { useState } from "react"
 import { getCookie } from "../../../utils/csrf"
+import useCajaAPI from "../../../utils/useCajaAPI"
+import { toast } from "react-toastify"
 
 /**
  * Hook personalizado para gestionar operaciones CRUD de comprobantes
@@ -27,6 +29,7 @@ const useComprobantesCRUD = ({
   loadingFerreteria,
   navigate,
 }) => {
+  const { obtenerMiCaja } = useCajaAPI()
   // Estados para gestión de conversiones
   const [conversionModal, setConversionModal] = useState({ open: false, presupuesto: null })
   const [isFetchingForConversion, setIsFetchingForConversion] = useState(false)
@@ -34,6 +37,20 @@ const useComprobantesCRUD = ({
 
   // Estado para el modal de vista
   const [vistaModal, setVistaModal] = useState({ open: false, data: null })
+
+  const validarCajaAntesDeOperar = async (mensaje) => {
+    try {
+      const miCaja = await obtenerMiCaja()
+      if (miCaja?.tiene_caja_abierta) {
+        return true
+      }
+      toast.error(mensaje)
+      return false
+    } catch (err) {
+      toast.error(err.message || "No se pudo validar el estado de caja.")
+      return false
+    }
+  }
 
   /**
    * Edita un presupuesto/venta
@@ -196,6 +213,9 @@ const useComprobantesCRUD = ({
       alert('Esta cotización ya fue convertida a factura fiscal.')
       return
     }
+
+    const puedeOperar = await validarCajaAntesDeOperar('Debe abrir una caja antes de convertir el presupuesto a venta.')
+    if (!puedeOperar) return
 
     setFetchingPresupuestoId(presupuesto.id)
     setIsFetchingForConversion(true)
@@ -437,6 +457,9 @@ const useComprobantesCRUD = ({
       alert('Esta cotización ya fue convertida a factura fiscal.')
       return
     }
+
+    const puedeOperar = await validarCajaAntesDeOperar('Debe abrir una caja antes de convertir la cotizacion a factura fiscal.')
+    if (!puedeOperar) return
 
     setFetchingPresupuestoId(facturaInterna.id);
     setIsFetchingForConversion(true);

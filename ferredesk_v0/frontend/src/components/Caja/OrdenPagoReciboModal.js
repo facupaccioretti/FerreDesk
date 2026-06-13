@@ -30,7 +30,6 @@ const OrdenPagoReciboModal = ({
     const apiCliente = useCuentaCorrienteAPI()
     const apiProveedor = useCuentaCorrienteProveedorAPI()
     const { validarCUIT, obtenerMiCaja } = useCajaAPI()
-
     // Extraemos métodos específicos para que las dependencias sean estables
     const {
         getFacturasPendientes,
@@ -124,21 +123,27 @@ const OrdenPagoReciboModal = ({
                 obtenerMiCaja()
             ])
 
-            // Detectar si la caja está abierta para filtrar métodos físicos
-            // obtenerMiCaja() retorna {tiene_caja_abierta: bool} (useCajaAPI.js L73)
             const tieneCaja = miCaja?.tiene_caja_abierta || false
 
             const docs = tipo === 'RECIBO' ? (pendientes.facturas || []) : (pendientes.compras_pendientes || [])
             setDocumentosPendientes(docs)
 
             // Si la caja NO está abierta, excluir métodos que requieren custodia física.
-            // 'efectivo' (models.py L41) y 'cheque' (models.py L47) requieren caja.
-            // m.codigo viene del MetodoPagoSerializer (serializers_metodo_pago.py L18).
             const todosMetodos = Array.isArray(metodos) ? metodos : metodos.results || []
             const CODIGOS_REQUIEREN_CAJA = ['efectivo', 'cheque']
-            const metodosFiltrados = tieneCaja
+            let metodosFiltrados = tieneCaja
                 ? todosMetodos
                 : todosMetodos.filter(m => !CODIGOS_REQUIEREN_CAJA.includes(m.codigo))
+            
+            // Filtrado contextual
+            if (tipo === 'RECIBO') {
+                // En un recibo (cobro a cliente), no se puede pagar con más deuda ni el dueño asume la deuda
+                metodosFiltrados = metodosFiltrados.filter(m => !['cuenta_corriente', 'fondos_propios'].includes(m.codigo))
+            } else if (tipo === 'ORDEN_PAGO') {
+                // En una orden de pago (pago a proveedor), no se puede "pagar" con cuenta corriente
+                metodosFiltrados = metodosFiltrados.filter(m => m.codigo !== 'cuenta_corriente')
+            }
+
             setMetodosPago(metodosFiltrados)
 
             setCuentasBanco(Array.isArray(cuentas) ? cuentas : cuentas.results || [])
@@ -339,7 +344,6 @@ const OrdenPagoReciboModal = ({
 
                             {/* Contenido Principal */}
                             <div className="px-6 py-6 overflow-y-auto flex-1 bg-slate-50/50">
-
                                 {/* PASO 1: IMPUTACIONES (DEUDAS) */}
                                 {paso === 1 && (
                                     <div className="space-y-4 animate-in fade-in duration-300">

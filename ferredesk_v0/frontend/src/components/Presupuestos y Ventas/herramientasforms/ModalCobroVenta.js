@@ -60,7 +60,10 @@ const ModalCobroVenta = ({
     setCargandoCuentasBanco(true)
     try {
       const listaMetodos = await obtenerMetodosPago(true)
-      setMetodosPago(Array.isArray(listaMetodos) ? listaMetodos : [])
+      const metodosActivos = Array.isArray(listaMetodos) ? listaMetodos : []
+      // En ventas de mostrador no se debe permitir usar fondos propios del dueño
+      const metodosFiltrados = metodosActivos.filter(m => m.codigo !== 'fondos_propios')
+      setMetodosPago(metodosFiltrados)
 
       const listaCuentas = await obtenerCuentasBanco(true)
       const datosCuentas = Array.isArray(listaCuentas)
