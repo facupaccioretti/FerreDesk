@@ -9,10 +9,10 @@ import './styles/utilities.css';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import Landing from './components/Landing';
+import Landing from './modules/onboarding/components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
-import Register from './components/Register';
+import Register from './modules/onboarding/components/Register';
 import ClientesManager from './components/Clientes/ClientesManager';
 import RutaPrivada from './components/RutaPrivada';
 import ProductosManager from './components/Productos/ProductosManager';
@@ -182,5 +182,3 @@ export default function App() {
     </Router >
   );
 }
-
-
