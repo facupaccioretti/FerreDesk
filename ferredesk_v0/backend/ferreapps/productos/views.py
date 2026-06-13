@@ -765,6 +765,201 @@ def editar_producto_con_relaciones(request):
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
 
+    productos = list(
+        PrecioProveedorExcel.objects.filter(
+            proveedor_id=proveedor_id,
+            nombre_archivo=ultimo_nombre_archivo
+        ).values('codigo_producto_excel', 'denominacion')
+    )
+    
+    # Formatear la respuesta para mantener compatibilidad
+    codigos = [item['codigo_producto_excel'] for item in productos]
+    productos_con_denominacion = [
+        {
+            'codigo': item['codigo_producto_excel'],
+            'denominacion': item['denominacion'] if item['denominacion'] else None
+        }
+        for item in productos
+    ]
+    
+    return Response({
+        'codigos': codigos,  # Mantener compatibilidad con código existente
+        'productos': productos_con_denominacion  # Nueva estructura con denominación
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
+def obtener_nuevo_id_temporal(request):
+    ultimo = ProductoTempID.objects.order_by('-id').first()
+    nuevo_id = 1 if not ultimo else ultimo.id + 5
+    ProductoTempID.objects.create(id=nuevo_id)
+    return Response({'id': nuevo_id})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def crear_producto_con_relaciones(request):
+    from django.db import transaction
+    try:
+        data = request.data
+        producto_data = data.get('producto')
+        stock_proveedores_data = data.get('stock_proveedores', [])
+        if not producto_data:
+            raise Exception('Faltan datos de producto.')
+
+        # Validar unicidad de codvta
+        codvta = producto_data.get('codvta')
+        if Stock.objects.filter(codvta=codvta).exists():
+            raise Exception('Ya existe un producto con ese código de venta (codvta).')
+
+        # PREVALIDAR todas las relaciones antes de crear el producto
+        for rel in stock_proveedores_data:
+            proveedor_id = rel.get('proveedor_id')
+            codigo_prov = rel.get('codigo_producto_proveedor')
+            # Solo validar duplicidad si el código está presente y no vacío
+            if proveedor_id and codigo_prov:
+                existe = StockProve.objects.filter(
+                    proveedor_id=proveedor_id,
+                    codigo_producto_proveedor=codigo_prov
+                ).exists()
+                if existe:
+                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+            # NO lanzar error si falta el código, es opcional
+            # Validación manual de campos relevantes antes de crear el producto
+            # No usamos el serializer aquí porque requiere el campo 'stock', que aún no existe
+            # Solo validamos que los campos necesarios estén presentes y sean válidos
+            if not proveedor_id:
+                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
+            if rel.get('cantidad') is None:
+                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
+            if rel.get('costo') is None:
+                raise Exception('Falta el costo en una relación de stock_proveedores.')
+
+        # Si todo es válido, crear producto y relaciones en bloque atómico
+        with transaction.atomic():
+            stock_serializer = StockSerializer(data=producto_data)
+            if not stock_serializer.is_valid():
+                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
+            stock = stock_serializer.save()
+
+            for rel in stock_proveedores_data:
+                rel_data = rel.copy()
+                rel_data['stock'] = stock.id
+                sp_serializer = StockProveSerializer(data=rel_data)
+                sp_serializer.is_valid(raise_exception=True)
+                sp_serializer.save()
+
+        return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
+    except serializers.ValidationError as ve:
+        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
+    except Exception as e:
+        return Response({'detail': str(e)}, status=400)
+
+@api_view(['PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def editar_producto_con_relaciones(request):
+    from django.db import transaction
+    try:
+        data = request.data
+        producto_data = data.get('producto')
+        stock_proveedores_data = data.get('stock_proveedores', [])
+        if not producto_data or not producto_data.get('id'):
+            raise Exception('Faltan datos de producto o ID.')
+        producto_id = producto_data['id']
+        # Validar unicidad de codvta (excluyendo el propio producto)
+        codvta = producto_data.get('codvta')
+        if Stock.objects.filter(codvta=codvta).exclude(id=producto_id).exists():
+            raise Exception('Ya existe un producto con ese código de venta (codvta).')
+        # PREVALIDAR todas las relaciones antes de editar el producto
+        for rel in stock_proveedores_data:
+            proveedor_id = rel.get('proveedor_id')
+            codigo_prov = rel.get('codigo_producto_proveedor')
+            if proveedor_id and codigo_prov:
+                existe = StockProve.objects.filter(
+                    proveedor_id=proveedor_id,
+                    codigo_producto_proveedor=codigo_prov
+                ).exclude(stock_id=producto_id).exists()
+                if existe:
+                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+            if not proveedor_id:
+                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
+            if rel.get('cantidad') is None:
+                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
+            if rel.get('costo') is None:
+                raise Exception('Falta el costo en una relación de stock_proveedores.')
+        # Si todo es válido, editar producto y relaciones en bloque atómico
+        with transaction.atomic():
+            stock = Stock.objects.filter(id=producto_id).first()
+            if not stock:
+                raise Exception('Producto no encontrado.')
+            stock_serializer = StockSerializer(stock, data=producto_data, partial=True)
+            if not stock_serializer.is_valid():
+                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
+            stock = stock_serializer.save()
+            # Actualización incremental de relaciones (preservar códigos si no se envían)
+            existentes = {sp.proveedor_id: sp for sp in StockProve.objects.filter(stock=stock)}
+            proveedores_enviados = set()
+            for rel in stock_proveedores_data:
+                proveedor_id = rel.get('proveedor_id')
+                if not proveedor_id:
+                    continue
+                proveedores_enviados.add(int(proveedor_id))
+                cantidad = rel.get('cantidad')
+                costo = rel.get('costo')
+                codigo_rel = rel.get('codigo_producto_proveedor')
+
+                sp_existente = existentes.get(int(proveedor_id))
+                if sp_existente:
+                    # Actualizar cantidad y costo
+                    if cantidad is not None:
+                        sp_existente.cantidad = cantidad
+                    if costo is not None:
+                        sp_existente.costo = costo
+                    # Actualizar código solo si viene presente y no vacío
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad del código dentro del proveedor, excluyendo este producto
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        sp_existente.codigo_producto_proveedor = codigo_rel
+                    sp_existente.save()
+                else:
+                    # Crear nueva relación. Solo setear código si viene y no es vacío
+                    create_kwargs = {
+                        'stock': stock,
+                        'proveedor_id': proveedor_id,
+                        'cantidad': cantidad if cantidad is not None else 0,
+                        'costo': costo if costo is not None else 0,
+                    }
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad antes de crear
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        create_kwargs['codigo_producto_proveedor'] = codigo_rel
+                    StockProve.objects.create(**create_kwargs)
+
+            # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
+        return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
+    except serializers.ValidationError as ve:
+        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
+    except Exception as e:
+        return Response({'detail': str(e)}, status=400)
+
 class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
@@ -807,32 +1002,6 @@ class FerreteriaAPIView(APIView):
             }
             return Response(configuracion_inicial, status=200)
         return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
-
-    def post(self, request):
-        """Crea la primera ferretería si aún no existe."""
-        if not request.user.is_authenticated:
-            return Response({'detail': 'No autenticado.'}, status=401)
-        
-        # Si ya existe una ferretería, prohibir creación (unicidad)
-        if Ferreteria.objects.exists():
-            return Response({'detail': 'Ya existe una ferretería configurada.'}, status=400)
-
-        # Manejar archivos subidos y normalizar datos
-        data = request.data.copy()
-
-        # Remover claves no soportadas por el modelo (compatibilidad UI legacy)
-        for legacy_key in [
-            'margen_ganancia_por_defecto', 'comprobante_por_defecto',
-            'notificaciones_email', 'notificaciones_stock_bajo',
-            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes'
-        ]:
-            data.pop(legacy_key, None)
-
-        serializer = FerreteriaSerializer(data=data, context={'request': request})
-        if serializer.is_valid():
-            instancia = serializer.save()
-            return Response(FerreteriaSerializer(instancia, context={'request': request}).data, status=201)
-        return Response(serializer.errors, status=400)
 
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()

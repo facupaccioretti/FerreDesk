@@ -495,7 +495,6 @@ const ConfiguracionManager = () => {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("negocio")
   const [feedback, setFeedback] = useState("")
-  const [esNueva, setEsNueva] = useState(false)
 
   // --------- Estado y lógica de Maestros (Clientes) movido desde ClientesManager ---------
   const { barrios, setBarrios, fetchBarrios } = useBarriosAPI()
@@ -626,9 +625,6 @@ const ConfiguracionManager = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data) {
-          if (data.no_configurada === true) {
-            setEsNueva(true)
-          }
           setConfig(data)
         }
       })
@@ -672,7 +668,11 @@ const ConfiguracionManager = () => {
         if (key !== 'logo_empresa_file' && key !== 'logo_empresa' &&
           key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
           key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca' &&
-          key !== 'no_configurada') {
+          key !== 'no_configurada' &&
+          key !== 'setup_completo' &&
+          key !== 'campos_setup_faltantes' &&
+          key !== 'tiene_certificado_arca' &&
+          key !== 'tiene_clave_privada_arca') {
           if (config[key] !== null && config[key] !== undefined) {
             formData.append(key, config[key])
           }
@@ -693,9 +693,8 @@ const ConfiguracionManager = () => {
         formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
 
-      const esCreacion = esNueva || config?.no_configurada === true
       const res = await fetch("/api/ferreteria/", {
-        method: esCreacion ? "POST" : "PATCH",
+        method: "PATCH",
         headers: {
           "X-CSRFToken": csrftoken,
           // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
@@ -704,11 +703,13 @@ const ConfiguracionManager = () => {
         body: formData,
       })
 
+      if (res.status === 404) {
+        throw new Error("No existe una ferretería inicial para este tenant. Revisa la inicialización del onboarding SaaS.")
+      }
       if (!res.ok) throw new Error("Error al guardar configuración")
 
       const data = await res.json()
       setConfig(data)
-      setEsNueva(false)
       // Subir logo ARCA si fue seleccionado (va por endpoint dedicado)
       if (config.logo_arca_file) {
         const fd = new FormData()
