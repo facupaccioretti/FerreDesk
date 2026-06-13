@@ -36,7 +36,20 @@ export default function App() {
   return (
     <Router>
       <Routes>
+        {/* ========================================== */}
+        {/* RUTAS PÚBLICAS (Plataforma SaaS Onboarding) */}
+        {/* ========================================== */}
         <Route path="/" element={<Landing />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* ========================================== */}
+        {/* RUTAS TENANT (Acceso a Negocio)            */}
+        {/* ========================================== */}
+        <Route path="/login" element={<Login />} />
+
+        {/* ========================================== */}
+        {/* RUTAS TENANT PROTEGIDAS (ERP Interno)      */}
+        {/* ========================================== */}
         <Route
           path="/setup"
           element={
@@ -173,8 +186,10 @@ export default function App() {
             </RutaPrivada>
           }
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        
+        {/* ========================================== */}
+        {/* RUTAS CATCH-ALL                            */}
+        {/* ========================================== */}
         {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
