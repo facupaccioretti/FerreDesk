@@ -1,14 +1,14 @@
 # Sistema de Agentes FerreDesk — Guía de Arquitectura
 
-Para abordar la migración de FerreDesk (ERP/POS Django + React) hacia un modelo SaaS multi-tenant con `django-tenants` en Railway, utilizamos una estructura de 3 agentes especializados para garantizar precisión, aislamiento de datos y código de alta calidad.
+Para abordar la migración de FerreDesk (ERP/POS Django + React) hacia un modelo SaaS multi-tenant con `django-tenants` en Render, utilizamos una estructura de 3 agentes especializados para garantizar precisión, aislamiento de datos y código de alta calidad.
 
 ## Estructura de Agentes
 
 ### 1. Agente 1 (Planificador)
 **Rol:** Arquitecto del plan.
-Lee el código base actual, analiza los requerimientos (las 10 Fases Obligatorias y los Riesgos Conocidos) y genera un roadmap atómico en formato `ferredesk-progress.json`.
+Lee el código base actual, analiza los requerimientos (las 12 Fases del Cloud Readiness y los Riesgos Conocidos) y genera un roadmap atómico en formato `ferredesk-progress.json`.
 - **Ejecución:** Una sola vez al inicio del proyecto o hito grande.
-- **Inputs:** Base de código, `RULE[AGENTS.md]`.
+- **Inputs:** Base de código, `PLAN-CLOUD-READINESS-FERREDESK.md`.
 - **Outputs:** `ferredesk-progress.json`.
 
 ### 2. Agente 2 (Revisor)

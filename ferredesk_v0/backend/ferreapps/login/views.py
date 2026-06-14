@@ -1,7 +1,7 @@
 from django.shortcuts import redirect, render
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -19,7 +19,6 @@ from ferreapps.usuarios.models import Usuario
 
 # Las funciones serve_react_app y serve_static_file están definidas en ferredesk_backend/urls.py
 
-@csrf_exempt
 def login_view(request):
     if request.method == 'POST':
         try:
@@ -67,7 +66,6 @@ def login_view(request):
         'message': 'Método no permitido'
     }, status=405)
 
-@csrf_exempt
 def logout_view(request):
     if request.method == 'POST':
         logout(request)
@@ -75,11 +73,16 @@ def logout_view(request):
     return JsonResponse({'status': 'error', 'message': 'Método no permitido'}, status=405)
 
 @ensure_csrf_cookie
+def get_csrf(request):
+    """
+    Endpoint para que el frontend obtenga la cookie CSRF.
+    """
+    return JsonResponse({'status': 'success', 'message': 'CSRF cookie establecida'})
+
+@ensure_csrf_cookie
 def user_view(request):
     if request.user.is_authenticated:
         return JsonResponse({
-            'status': 'success',
-            'user': {
                 'username': request.user.username,
                 'is_staff': request.user.is_staff,
                 # Agrega aquí más campos si lo deseas

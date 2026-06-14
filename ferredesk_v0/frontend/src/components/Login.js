@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme";
 import { esHostTenantValido } from "./RutaPrivada";
+import { getCookie } from "../utils/csrf";
 
 function resolverBasePublica(hostname) {
   const hostnameNormalizado = (hostname || "").toLowerCase();
@@ -57,10 +58,17 @@ function Login() {
 
 
   const loginTenantDirecto = React.useCallback(async ({ username, password }) => {
+    let csrftoken = getCookie("csrftoken");
+    if (!csrftoken) {
+      await fetch("/api/csrf/");
+      csrftoken = getCookie("csrftoken");
+    }
+
     const response = await fetch("/api/login/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-CSRFToken": csrftoken,
       },
       credentials: "include",
       body: JSON.stringify({ username, password }),
@@ -80,10 +88,17 @@ function Login() {
   }, []);
 
   const loginPublicoConBridge = React.useCallback(async ({ email, password }) => {
+    let csrftoken = getCookie("csrftoken");
+    if (!csrftoken) {
+      await fetch("/api/csrf/");
+      csrftoken = getCookie("csrftoken");
+    }
+
     const response = await fetch("/api/public/acceso/login/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-CSRFToken": csrftoken,
       },
       credentials: "include",
       body: JSON.stringify({ email, password }),

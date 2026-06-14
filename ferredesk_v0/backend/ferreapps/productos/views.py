@@ -28,7 +28,6 @@ from django.db.models.functions import Lower
 import os
 import pyexcel as pe
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser

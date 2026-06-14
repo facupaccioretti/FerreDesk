@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { getCookie } from '../../../utils/csrf';
 
 export const useTenantRegistration = () => {
     const [formData, setFormData] = useState({
@@ -49,9 +50,18 @@ export const useTenantRegistration = () => {
         setSlugResult(null);
 
         try {
+            let csrftoken = getCookie('csrftoken');
+            if (!csrftoken) {
+                await fetch('/api/csrf/');
+                csrftoken = getCookie('csrftoken');
+            }
+
             const response = await fetch('/api/public/onboarding/validar-slug/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
                 body: JSON.stringify({ slug: slugToValidate }),
             });
 
@@ -82,9 +92,18 @@ export const useTenantRegistration = () => {
         setRegistroResult(null);
 
         try {
+            let csrftoken = getCookie('csrftoken');
+            if (!csrftoken) {
+                await fetch('/api/csrf/');
+                csrftoken = getCookie('csrftoken');
+            }
+
             const response = await fetch('/api/public/onboarding/tenants/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
                 body: JSON.stringify(tenantData),
             });
 
