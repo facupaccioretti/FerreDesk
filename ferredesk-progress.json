@@ -2,7 +2,8 @@
   "meta": {
     "proyecto": "FerreDesk V1 SaaS Multi-Tenant",
     "fecha_inicio": "2026-06-11",
-    "docs": ["AGENTS.md", "DECISIONES-V1-SAAS-MULTITENANCY.md", "PLAN-TECNICO-V1-SAAS-MULTITENANCY.md", "PROMPTS-TAREAS-ATOMICAS.md"]
+    "docs": ["AGENTS.md", "DECISIONES-V1-SAAS-MULTITENANCY.md", "PLAN-TECNICO-V1-SAAS-MULTITENANCY.md", "PROMPTS-TAREAS-ATOMICAS.md"],
+    "ultima_actualizacion_documental": "2026-06-13: generado PLAN-CLOUD-READINESS-FERREDESK.md con recomendaciones cloud, seguridad, R2 y operacion V1."
   },
   "fases": {
     "1_preparacion": {
