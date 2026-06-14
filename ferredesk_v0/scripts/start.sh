@@ -42,4 +42,4 @@ echo "🌐 Iniciando servidor en http://localhost:8000"
 echo "👤 Usuario: admin"
 echo "🔑 Contraseña: admin123"
 echo ""
-python manage.py runserver 0.0.0.0:8000 
+exec gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:8000

@@ -22,4 +22,11 @@ Las tareas son completamente atómicas y los criterios de verificación cumplen 
 - Las verificaciones operativas son específicas (ej. curl a `/api/health/`).
 
 ## 4. Acciones Requeridas (Gaps a corregir)
-**Ninguna.** El plan cubre el 100% de los requisitos definidos en los prompts de Cloud Readiness y puede pasar a fase de ejecución.
+
+Se ha detectado una mejora esencial en el diseño del Gating Comercial (Fase 8). Para facilitar la administración manual de suscripciones en la V1 (sin sistema de billing complejo), se debe exigir al ejecutor de la **Fase 8 (F8-T1)** lo siguiente:
+
+- **Trial y Fecha de Vencimiento:** Además del `estado_suscripcion`, al modelo del Tenant se le debe agregar el campo `fecha_vencimiento`. El middleware deberá bloquear el acceso no solo por estado, sino también cuando la fecha actual supere este valor.
+- **Configuración Global:** La duración del trial debe configurarse mediante una variable en `settings.py` (ej. `DIAS_TRIAL_DEFAULT = 30`). Al crearse y activarse un tenant, su `fecha_vencimiento` se calculará como la fecha actual más estos días.
+- **Gestión Manual en DB/Admin:** Esto permite que el superadministrador pueda ingresar al Django Admin o directamente a la DB para modificar esta fecha una vez que el cliente realice un pago, reactivando el acceso de manera ágil.
+
+Aparte de este agregado funcional estratégico, el plan cubre el 100% de los requisitos definidos y puede pasar a fase de ejecución.

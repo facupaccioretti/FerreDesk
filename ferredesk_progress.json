@@ -70,8 +70,8 @@
             "ferredesk_v0/backend/requirements.txt"
           ],
           "criterio_verificacion": "gunicorn ferredesk_backend.wsgi --check-config",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true
         },
         {
           "id": "F4-T2",
