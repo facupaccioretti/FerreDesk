@@ -1,6 +1,8 @@
-import React from "react";
+import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { act } from "react-dom/test-utils";
+
+const mockLoginTenantDirecto = jest.fn();
+const mockLoginPublicoConBridge = jest.fn();
 
 jest.mock(
   "react-router-dom",
@@ -21,6 +23,13 @@ jest.mock("../hooks/useFerreDeskTheme", () => ({
   }),
 }));
 
+jest.mock("../utils/useAuthAPI", () => ({
+  useAuthAPI: () => ({
+    loginTenantDirecto: mockLoginTenantDirecto,
+    loginPublicoConBridge: mockLoginPublicoConBridge,
+  }),
+}));
+
 const { MemoryRouter } = require("react-router-dom");
 const Login = require("./Login").default;
 
@@ -35,10 +44,10 @@ describe("Login", () => {
   let root;
 
   beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    global.fetch = jest.fn();
   });
 
   afterEach(() => {
@@ -59,18 +68,10 @@ describe("Login", () => {
     });
   }
 
-  test("en dominio publico usa login global y redirige al bridge del tenant", async () => {
+  test("en dominio publico usa el hook de bridge y redirige al destino seguro", async () => {
     setWindowLocation("http://localhost:3000/login");
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tenant: {
-          url: "http://ferretest.lvh.me",
-        },
-        token_puente: {
-          token: "token-puente-123",
-        },
-      }),
+    mockLoginPublicoConBridge.mockResolvedValue({
+      redirectTo: "http://ferretest.lvh.me:3000/setup",
     });
 
     await renderLogin();
@@ -86,55 +87,20 @@ describe("Login", () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/public/acceso/login/",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({
-          email: "admin@ferretest.com",
-          password: "testpass123",
-        }),
-      })
-    );
-    expect(window.location.assign).toHaveBeenCalledWith(
-      "http://ferretest.lvh.me/api/login-bridge/?token=token-puente-123"
-    );
+    expect(mockLoginPublicoConBridge).toHaveBeenCalledWith({
+      email: "admin@ferretest.com",
+      password: "testpass123",
+    });
+    expect(window.location.assign).toHaveBeenCalledWith("http://ferretest.lvh.me:3000/setup");
   });
 
-  test("en subdominio mantiene login tenant directo como fallback", async () => {
+  test("en subdominio redirige al dominio publico sin renderizar el formulario", async () => {
     setWindowLocation("http://ferretest.lvh.me:3000/login");
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        status: "success",
-      }),
-    });
 
     await renderLogin();
 
-    const [usernameInput, passwordInput] = container.querySelectorAll("input");
-    const form = container.querySelector("form");
-
-    await act(async () => {
-      usernameInput.value = "admin@ferretest.com";
-      usernameInput.dispatchEvent(new Event("input", { bubbles: true }));
-      passwordInput.value = "testpass123";
-      passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/login/",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({
-          username: "admin@ferretest.com",
-          password: "testpass123",
-        }),
-      })
-    );
-    expect(window.location.assign).toHaveBeenCalledWith("/home");
+    expect(container.querySelector("form")).toBeNull();
+    expect(mockLoginTenantDirecto).not.toHaveBeenCalled();
+    expect(window.location.assign).toHaveBeenCalledWith("http://lvh.me:3000/");
   });
 });

@@ -15,6 +15,7 @@ SHARED_APPS = (
     'django_filters',
     'django_extensions',
     'corsheaders',
+    'axes',
 )
 
 TENANT_APPS = (
@@ -54,6 +55,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'ferredesk_backend.urls'
@@ -91,6 +93,7 @@ TIME_ZONE = 'America/Argentina/Buenos_Aires'
 USE_I18N = True
 USE_TZ = True
 
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
@@ -114,3 +117,11 @@ REST_FRAMEWORK = {
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
 TAM_PAGINA_POR_DEFECTO = 10
 TAM_PAGINA_MAXIMA = 200
+
+# Django Axes
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1

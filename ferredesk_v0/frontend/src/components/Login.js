@@ -2,8 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme";
+import { useAuthAPI } from "../utils/useAuthAPI";
 import { esHostTenantValido } from "./RutaPrivada";
-import { getCookie } from "../utils/csrf";
 
 function resolverBasePublica(hostname) {
   const hostnameNormalizado = (hostname || "").toLowerCase();
@@ -25,11 +25,9 @@ function resolverBasePublica(hostname) {
 
   const partes = hostnameNormalizado.split(".");
   if (partes.length >= 3) {
-    // Si termina en .localhost o .lvh.me, sabemos que el base domain tiene 2 partes
     if (hostnameNormalizado.endsWith(".localhost") || hostnameNormalizado.endsWith(".lvh.me")) {
       return `${window.location.protocol}//${partes.slice(-2).join(".")}${portStr}`;
     }
-    // Para dominios reales (ej: mi-negocio.ferredesk.com -> ferredesk.com)
     return `${window.location.protocol}//${partes.slice(1).join(".")}${portStr}`;
   }
 
@@ -43,6 +41,7 @@ function redirigirA(url) {
 function Login() {
   const theme = useFerreDeskTheme();
   const navigate = useNavigate();
+  const { loginTenantDirecto, loginPublicoConBridge } = useAuthAPI();
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
@@ -55,82 +54,6 @@ function Login() {
     }
   }, [isPublicDomain, hostname]);
 
-
-
-  const loginTenantDirecto = React.useCallback(async ({ username, password }) => {
-    let csrftoken = getCookie("csrftoken");
-    if (!csrftoken) {
-      await fetch("/api/csrf/");
-      csrftoken = getCookie("csrftoken");
-    }
-
-    const response = await fetch("/api/login/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrftoken,
-      },
-      credentials: "include",
-      body: JSON.stringify({ username, password }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok) {
-      redirigirA("/home");
-      return;
-    }
-
-    let message = data.message || "Error al iniciar sesión.";
-    message +=
-      " Por favor, verifica tus credenciales y asegúrate de estar ingresando al subdominio correcto de tu negocio.";
-    throw new Error(message);
-  }, []);
-
-  const loginPublicoConBridge = React.useCallback(async ({ email, password }) => {
-    let csrftoken = getCookie("csrftoken");
-    if (!csrftoken) {
-      await fetch("/api/csrf/");
-      csrftoken = getCookie("csrftoken");
-    }
-
-    const response = await fetch("/api/public/acceso/login/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrftoken,
-      },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || "No se pudo autenticar la cuenta global.");
-    }
-
-    let tenantUrl = data?.tenant?.url;
-    const tokenPuente = data?.token_puente?.token;
-    
-    if (!tenantUrl || !tokenPuente) {
-      throw new Error(
-        "La respuesta del login público no incluye el tenant o el token puente requerido."
-      );
-    }
-
-    // Fix for local development: if we are running on port 3000, append it to the tenant url
-    if (window.location.port) {
-      const parsedUrl = new URL(tenantUrl);
-      parsedUrl.port = window.location.port;
-      tenantUrl = parsedUrl.toString();
-    }
-
-    const bridgeUrl = new URL("/api/login-bridge/", tenantUrl);
-    bridgeUrl.searchParams.set("token", tokenPuente);
-    redirigirA(bridgeUrl.toString());
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -141,13 +64,12 @@ function Login() {
     const password = formData.get("password")?.toString() || "";
 
     try {
-      if (isPublicDomain) {
-        await loginPublicoConBridge({ email: username, password });
-      } else {
-        await loginTenantDirecto({ username, password });
-      }
+      const resultado = isPublicDomain
+        ? await loginPublicoConBridge({ email: username, password })
+        : await loginTenantDirecto({ username, password });
+      redirigirA(resultado.redirectTo);
     } catch (err) {
-      setError(err.message || "Error de conexión con el servidor.");
+      setError(err.message || "Error de conexiÃ³n con el servidor.");
     } finally {
       setLoading(false);
     }
@@ -177,7 +99,7 @@ function Login() {
             </h2>
             <p className="text-slate-600 mb-2">
               {isPublicDomain
-                ? "Ingresa con tu cuenta global y te enviaremos automáticamente a tu negocio."
+                ? "Ingresa con tu cuenta global y te enviaremos automÃ¡ticamente a tu negocio."
                 : "Ingresa con tus credenciales del tenant para operar tu negocio."}
             </p>
             {!isPublicDomain && (
@@ -187,8 +109,8 @@ function Login() {
             )}
             {isPublicDomain && (
               <div className="mt-2 bg-blue-50 border border-blue-200 text-blue-900 text-sm px-4 py-2 rounded-lg text-left shadow-sm">
-                <strong>Acceso unificado:</strong> inicia sesión aquí con tu cuenta global.
-                Si las credenciales son válidas, FerreDesk abrirá tu sesión en el tenant correcto sin pedirte recordar el subdominio.
+                <strong>Acceso unificado:</strong> inicia sesiÃ³n aquÃ­ con tu cuenta global.
+                Si las credenciales son vÃ¡lidas, FerreDesk abrirÃ¡ tu sesiÃ³n en el tenant correcto sin pedirte recordar el subdominio.
               </div>
             )}
           </div>
@@ -217,7 +139,7 @@ function Login() {
 
               <div className="space-y-2">
                 <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                  Contraseña
+                  ContraseÃ±a
                 </label>
                 <input
                   id="password"
@@ -225,7 +147,7 @@ function Login() {
                   type="password"
                   required
                   className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Ingrese su contraseña"
+                  placeholder="Ingrese su contraseÃ±a"
                 />
               </div>
 
@@ -244,7 +166,7 @@ function Login() {
 
             <div className="text-center mt-6 pt-6 border-t border-slate-200">
               <p className="text-sm text-slate-600">
-                ¿Aún no tienes tu espacio de trabajo?{" "}
+                Â¿AÃºn no tienes tu espacio de trabajo?{" "}
                 <br className="sm:hidden" />
                 <button
                   onClick={() => {

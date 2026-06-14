@@ -1,6 +1,7 @@
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
+from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -77,7 +78,11 @@ def get_csrf(request):
     """
     Endpoint para que el frontend obtenga la cookie CSRF.
     """
-    return JsonResponse({'status': 'success', 'message': 'CSRF cookie establecida'})
+    return JsonResponse({
+        'status': 'success',
+        'message': 'CSRF cookie establecida',
+        'csrfToken': get_token(request),
+    })
 
 @ensure_csrf_cookie
 def user_view(request):
@@ -92,7 +97,7 @@ def user_view(request):
 
 
 def login_bridge_view(request):
-    if request.method != "GET":
+    if request.method != "POST":
         return JsonResponse(
             {"status": "error", "message": "Método no permitido"},
             status=405,
@@ -108,7 +113,19 @@ def login_bridge_view(request):
             status=400,
         )
 
-    token = request.GET.get("token", "").strip()
+    token = request.headers.get("X-Bridge-Token", "").strip()
+    if not token:
+        try:
+            data = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Datos invalidos.",
+                },
+                status=400,
+            )
+        token = str(data.get("token", "")).strip()
     if not token:
         return JsonResponse(
             {
@@ -143,4 +160,10 @@ def login_bridge_view(request):
 
     estado_setup = obtener_estado_setup_actual()
     destino = "/home" if estado_setup["setup_completo"] else "/setup"
-    return redirect(destino)
+    return JsonResponse(
+        {
+            "status": "success",
+            "message": "Login bridge exitoso.",
+            "redirect_to": destino,
+        }
+    )

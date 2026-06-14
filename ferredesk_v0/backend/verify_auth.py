@@ -150,9 +150,13 @@ def run_tests():
         data = resp_public_login.json()
         token_puente = data.get('token_puente')
         if token_puente:
-            resp_bridge = client_tenant.get('/api/login-bridge/', {'token': token_puente['token'] if isinstance(token_puente, dict) else token_puente})
-            print_result("   Login Bridge hacia tenant", resp_bridge.status_code in [200, 302], f"Status: {resp_bridge.status_code} (Redirect to setup/home means success)")
-            if resp_bridge.status_code not in [200, 302]:
+            resp_bridge = client_tenant.post(
+                '/api/login-bridge/',
+                {'token': token_puente['token'] if isinstance(token_puente, dict) else token_puente},
+                content_type='application/json'
+            )
+            print_result("   Login Bridge hacia tenant", resp_bridge.status_code == 200, f"Status: {resp_bridge.status_code}")
+            if resp_bridge.status_code != 200:
                 print(f"      Response: {resp_bridge.content.decode('utf-8')}")
         else:
             print_result("   Login Bridge hacia tenant", False, "No se recibió token puente")

@@ -22,26 +22,27 @@
     {
       "id": "F2",
       "nombre": "Eliminar token puente por query string",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F2-T1",
           "nombre": "Migrar token temporal a POST/Headers",
           "descripcion": "Refactorizar la autenticación para evitar exponer tokens en las URLs.",
           "archivos_principales": [
-            "ferredesk_v0/backend/ferreapps/usuarios/views.py",
-            "ferredesk_v0/frontend/src/components/Login.js"
+            "ferredesk_v0/backend/ferreapps/login/views.py",
+            "ferredesk_v0/frontend/src/components/Login.js",
+            "ferredesk_v0/frontend/src/utils/useAuthAPI.js"
           ],
           "criterio_verificacion": "python manage.py test ferreapps.usuarios",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true
         }
       ]
     },
     {
       "id": "F3",
       "nombre": "Agregar rate limiting básico",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F3-T1",
@@ -52,8 +53,8 @@
             "ferredesk_v0/backend/ferredesk_backend/settings/base.py"
           ],
           "criterio_verificacion": "python manage.py check",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true
         }
       ]
     },

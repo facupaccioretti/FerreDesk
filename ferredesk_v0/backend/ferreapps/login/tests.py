@@ -32,17 +32,19 @@ class LoginBridgeTestCase(TransactionTestCase):
         token = crear_token_puente(cuenta=resultado["cuenta_acceso_publico"])
 
         client = Client()
-        response = client.get(
-            f"/api/login-bridge/?token={token.token}",
+        response = client.post(
+            "/api/login-bridge/",
+            data=json.dumps({"token": token.token}),
+            content_type="application/json",
             HTTP_HOST=f"{slug}.lvh.me",
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], "/setup")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["redirect_to"], "/setup")
 
         user_response = client.get("/api/user/", HTTP_HOST=f"{slug}.lvh.me")
         self.assertEqual(user_response.status_code, 200)
-        self.assertEqual(user_response.json()["user"]["username"], email)
+        self.assertEqual(user_response.json()["username"], email)
 
     def test_login_bridge_redirige_a_home_si_setup_esta_completo(self):
         slug = "bridgegatehome"
@@ -62,14 +64,16 @@ class LoginBridgeTestCase(TransactionTestCase):
         token = crear_token_puente(cuenta=resultado["cuenta_acceso_publico"])
 
         client = Client()
-        response = client.get(
-            f"/api/login-bridge/?token={token.token}",
+        response = client.post(
+            "/api/login-bridge/",
+            data=json.dumps({"token": token.token}),
+            content_type="application/json",
             HTTP_HOST=f"{slug}.lvh.me",
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], "/home")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["redirect_to"], "/home")
 
         user_response = client.get("/api/user/", HTTP_HOST=f"{slug}.lvh.me")
         self.assertEqual(user_response.status_code, 200)
-        self.assertEqual(user_response.json()["user"]["username"], email)
+        self.assertEqual(user_response.json()["username"], email)

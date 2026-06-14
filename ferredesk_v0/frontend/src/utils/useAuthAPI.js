@@ -1,0 +1,115 @@
+import { useCallback } from "react";
+
+import { getCookie } from "./csrf";
+
+async function asegurarCsrfLocal() {
+  let csrfToken = getCookie("csrftoken");
+  if (!csrfToken) {
+    await fetch("/api/csrf/", { credentials: "include" });
+    csrfToken = getCookie("csrftoken");
+  }
+  return csrfToken;
+}
+
+function normalizarTenantUrl(tenantUrl) {
+  const url = new URL(tenantUrl);
+  if (window.location.port) {
+    url.port = window.location.port;
+  }
+  return url.toString();
+}
+
+async function obtenerCsrfTenant(tenantUrl) {
+  const response = await fetch(new URL("/api/csrf/", tenantUrl).toString(), {
+    method: "GET",
+    credentials: "include",
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data?.csrfToken) {
+    throw new Error("No se pudo obtener el CSRF del tenant para abrir la sesion puente.");
+  }
+
+  return data.csrfToken;
+}
+
+export function useAuthAPI() {
+  const loginTenantDirecto = useCallback(async ({ username, password }) => {
+    const csrfToken = await asegurarCsrfLocal();
+    const response = await fetch("/api/login/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken,
+      },
+      credentials: "include",
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      return { redirectTo: "/home" };
+    }
+
+    let message = data.message || "Error al iniciar sesion.";
+    message +=
+      " Por favor, verifica tus credenciales y asegurate de estar ingresando al subdominio correcto de tu negocio.";
+    throw new Error(message);
+  }, []);
+
+  const loginPublicoConBridge = useCallback(async ({ email, password }) => {
+    const csrfToken = await asegurarCsrfLocal();
+    const response = await fetch("/api/public/acceso/login/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken,
+      },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "No se pudo autenticar la cuenta global.");
+    }
+
+    const tenantUrlOriginal = data?.tenant?.url;
+    const tokenPuente = data?.token_puente?.token;
+    if (!tenantUrlOriginal || !tokenPuente) {
+      throw new Error(
+        "La respuesta del login publico no incluye el tenant o el token puente requerido."
+      );
+    }
+
+    const tenantUrl = normalizarTenantUrl(tenantUrlOriginal);
+    const tenantCsrfToken = await obtenerCsrfTenant(tenantUrl);
+    const bridgeResponse = await fetch(new URL("/api/login-bridge/", tenantUrl).toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": tenantCsrfToken,
+      },
+      credentials: "include",
+      body: JSON.stringify({ token: tokenPuente }),
+    });
+
+    const bridgeData = await bridgeResponse.json();
+    if (!bridgeResponse.ok) {
+      throw new Error(bridgeData.message || "No se pudo abrir la sesion del tenant.");
+    }
+
+    if (!bridgeData?.redirect_to) {
+      throw new Error("El tenant no devolvio un destino valido para completar el acceso.");
+    }
+
+    return {
+      redirectTo: new URL(bridgeData.redirect_to, tenantUrl).toString(),
+    };
+  }, []);
+
+  return {
+    loginTenantDirecto,
+    loginPublicoConBridge,
+  };
+}

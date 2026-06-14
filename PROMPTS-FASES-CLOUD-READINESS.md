@@ -8,7 +8,7 @@ Cada prompt está diseñado para hacer cumplir estrictamente las **Reglas de Oro
 
 ## FASE 1: Corregir CSRF y sesiones
 
-### Tarea F1-T1: Restaurar protección CSRF y asegurar sesiones
+### Tarea F1-T1: Restaurar protección CSRF y asegurar sesiones `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F1-T1: "Restaurar protección CSRF y asegurar sesiones".
@@ -29,7 +29,7 @@ Ejecuta y muestra el output de: `python manage.py check && grep -r 'csrf_exempt'
 
 ## FASE 2: Eliminar token puente por query string
 
-### Tarea F2-T1: Migrar token temporal a POST/Headers
+### Tarea F2-T1: Migrar token temporal a POST/Headers `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F2-T1: "Migrar token temporal a POST/Headers".
@@ -50,7 +50,7 @@ Ejecuta los tests de la app usuarios: `python manage.py test ferreapps.usuarios`
 
 ## FASE 3: Agregar rate limiting básico
 
-### Tarea F3-T1: Instalar django-axes
+### Tarea F3-T1: Instalar django-axes `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F3-T1: "Instalar django-axes".
@@ -72,7 +72,7 @@ Ejecuta `python manage.py check` y asegúrate de que no haya advertencias de set
 
 ## FASE 4: Corregir arranque productivo
 
-### Tarea F4-T1: Implementar Gunicorn
+### Tarea F4-T1: Implementar Gunicorn `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F4-T1: "Implementar Gunicorn".
@@ -89,7 +89,7 @@ Criterio de Verificación:
 Instala las dependencias y ejecuta localmente `gunicorn ferredesk_backend.wsgi --check-config` (o arráncalo unos segundos y apágalo para verificar que no crashea). Muestra el output. Actualiza JSON y haz commit (`chore: configurar gunicorn para entorno productivo`).
 ```
 
-### Tarea F4-T2: Corregir ALLOWED_HOSTS
+### Tarea F4-T2: Corregir ALLOWED_HOSTS `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F4-T2: "Corregir ALLOWED_HOSTS".
@@ -106,12 +106,12 @@ Criterio de Verificación:
 Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Documenta que pase exitosamente sin el comodín. Actualiza el JSON y haz commit (`fix: restringir allowed_hosts en produccion`).
 ```
 
-### Tarea F4-T3: Auditar y configurar CORS
+### Tarea F4-T3: Auditar y configurar CORS `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F4-T3: "Auditar y configurar CORS".
 
-Contexto: Para mantener la seguridad en las cookies de sesión con un frontend desacoplado (como el SPA en React de FerreDesk), es vital configurar adecuadamente las políticas CORS. Un mal manejo aquí permitiría ataques cross-site u obstaculizaría el login de los tenants legítimos.
+Contexto: Para mantener la seguridad en las cookies de sesión con un frontend desacoplado (como el SPA en React de FerreDesk), es vital configurar adecuadamente las políticas CORS. Un mal manejo aquí permitiría ataques cross-site u obstaculizaría el login de tenants legítimos.
 Objetivo: Asegurar que `django-cors-headers` (si se usa) esté rigurosamente configurado.
 
 Instrucciones:
@@ -128,7 +128,7 @@ Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Doc
 
 ## FASE 5: Definir storage remoto para media
 
-### Tarea F5-T1: Configurar Storage con Cloudflare R2
+### Tarea F5-T1: Configurar Storage con Cloudflare R2 `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F5-T1: "Configurar Storage con Cloudflare R2".
@@ -145,7 +145,7 @@ Criterio de Verificación:
 Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Valida que las importaciones no fallen. Actualiza el JSON y haz commit (`feat: integrar django-storages para r2 cloudflare`).
 ```
 
-### Tarea F5-T2: Solucionar fuga de datos en uploads
+### Tarea F5-T2: Solucionar fuga de datos en uploads `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F5-T2: "Solucionar fuga de datos en uploads".
@@ -166,7 +166,7 @@ Muestra el código modificado de la función `upload_to`. Ejecuta `python manage
 
 ## FASE 6: Preparar despliegue cloud real
 
-### Tarea F6-T1: Archivos de despliegue y Health Check
+### Tarea F6-T1: Archivos de despliegue y Health Check `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F6-T1: "Archivos de despliegue y Health Check".
@@ -185,7 +185,7 @@ Criterio de Verificación:
 Ejecuta `python manage.py check`. Levanta el server momentáneamente o realiza una prueba interna para asegurar que `/api/health/` devuelve HTTP 200. Valida el manifiesto yaml. Actualiza el JSON y haz commit (`chore: agregar health check aislado y manifiesto de deploy`).
 ```
 
-### Tarea F6-T2: Corregir backup service (Riesgo)
+### Tarea F6-T2: Corregir backup service (Riesgo) `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F6-T2: "Corregir backup service".
@@ -206,7 +206,7 @@ Verifica mediante un test unitario o inspeccionando el comando construido. Ejecu
 
 ## FASE 7: Integrar R2 y probar media real
 
-### Tarea F7-T1: Pruebas de subida a R2
+### Tarea F7-T1: Pruebas de subida a R2 `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F7-T1: "Pruebas de subida a R2".
@@ -227,7 +227,7 @@ Muestra la ejecución exitosa de tu script automático (`python test_storage_int
 
 ## FASE 8: Gating comercial efectivo
 
-### Tarea F8-T1: Bloqueo por estado_suscripcion
+### Tarea F8-T1: Bloqueo por estado_suscripcion `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F8-T1: "Bloqueo por estado_suscripcion".
@@ -244,7 +244,7 @@ Criterio de Verificación:
 Ejecuta `python manage.py check`. Si puedes, añade un test rápido en un nuevo archivo `test_middlewares.py`. Muestra el resultado de las pruebas. Actualiza el JSON y haz commit (`feat: implementar middleware de bloqueo por estado_suscripcion`).
 ```
 
-### Tarea F8-T2: Re-diseñar Register.js
+### Tarea F8-T2: Re-diseñar Register.js `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F8-T2: "Re-diseñar Register.js".
@@ -268,7 +268,7 @@ Corre los tests si existen, o ejecuta `python manage.py check`. Muestra la lógi
 
 ## FASE 9: Validación de correo propia
 
-### Tarea F9-T1: Verificación de email en onboarding
+### Tarea F9-T1: Verificación de email en onboarding `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F9-T1: "Verificación de email en onboarding".
@@ -290,7 +290,7 @@ Ejecuta `python manage.py makemigrations` y `python manage.py check`. Muestra el
 
 ## FASE 10: Password reset
 
-### Tarea F10-T1: Habilitar reset seguro
+### Tarea F10-T1: Habilitar reset seguro `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F10-T1: "Habilitar reset seguro".
@@ -310,7 +310,7 @@ Ejecuta `python manage.py check`. Muestra la estructura de las rutas agregadas. 
 
 ## FASE 11: Logging y alertas más maduras
 
-### Tarea F11-T1: Centralizar logs a stdout
+### Tarea F11-T1: Centralizar logs a stdout `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F11-T1: "Centralizar logs a stdout".
@@ -327,7 +327,7 @@ Criterio de Verificación:
 Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Muestra el diccionario `LOGGING`. Actualiza el JSON y haz commit (`chore: configurar logs a stdout en prod`).
 ```
 
-### Tarea F11-T2: Auditar compatibilidad de VistaStockProducto
+### Tarea F11-T2: Auditar compatibilidad de VistaStockProducto `[Modelo: Antigravity]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F11-T2: "Auditar compatibilidad de VistaStockProducto".
@@ -348,7 +348,7 @@ Documenta el resultado del análisis. Si es necesario modificar migraciones, haz
 
 ## FASE 12: Error boundary global en frontend
 
-### Tarea F12-T1: Implementar ErrorBoundary
+### Tarea F12-T1: Implementar ErrorBoundary `[Modelo: Codex]`
 **Prompt para el Agente Ejecutor:**
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F12-T1: "Implementar ErrorBoundary".
