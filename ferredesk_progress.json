@@ -125,7 +125,7 @@
         {
           "id": "F6-T1",
           "nombre": "Archivos de despliegue",
-          "descripcion": "Actualizar render.yaml o railway.json para correr migraciones y servir estáticos de forma correcta.",
+          "descripcion": "Actualizar render.yaml para correr migraciones y servir estáticos de forma correcta.",
           "archivos_principales": [
             "render.yaml"
           ],
@@ -238,7 +238,7 @@
         {
           "id": "F11-T1",
           "nombre": "Centralizar logs a stdout",
-          "descripcion": "Ajustar la configuración de LOGGING para un entorno 12-factor en Render/Railway.",
+          "descripcion": "Ajustar la configuración de LOGGING para un entorno 12-factor en Render.",
           "archivos_principales": [
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],

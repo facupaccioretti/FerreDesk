@@ -6,7 +6,7 @@
 
 ## 1. Contexto y Problema
 Actualmente, FerreDesk opera bajo un modelo *Single-Tenant* (o con aislamiento híbrido incompleto). A medida que el negocio escala hacia un modelo SaaS comercial (estilo Contabilium o Xubio), desplegar instancias de base de datos separadas para cada ferretería o mezclar datos en tablas globales filtrando por aplicación se vuelve insostenible. 
-Mezclar clientes en tablas globales incrementa severamente el riesgo de fugas de datos (que una ferretería vea ventas de otra por un descuido en un `.filter()`), y multiplicar bases de datos incrementa los costos de infraestructura (AWS/Railway) y la complejidad operativa.
+Mezclar clientes en tablas globales incrementa severamente el riesgo de fugas de datos (que una ferretería vea ventas de otra por un descuido en un `.filter()`), y multiplicar bases de datos incrementa los costos de infraestructura (AWS/Render) y la complejidad operativa.
 
 ## 2. Objetivos (Goals)
 - **Aislamiento de Datos Total:** Garantizar que los datos de una ferretería nunca interactúen con los de otra a nivel de base de datos.
@@ -30,7 +30,7 @@ Se propone adoptar una arquitectura **Schema-per-Tenant** utilizando PostgreSQL 
    - El enrutamiento se realizará por **Subdominio** (ej. `pepe.ferredesk.com`).
    - `TenantMainMiddleware` interceptará cada petición, leerá el subdominio y ejecutará `SET search_path TO tenant_X`. A partir de ahí, todo el código ORM de Django interactuará solo con esa mini-db.
 3. **Manejo de Usuarios:** Tenant-Isolated. El superusuario global vive en `public`. Los dueños de las ferreterías y sus empleados viven exclusivamente en sus respectivos esquemas `tenant_X`.
-4. **Despliegue (Railway):** Registro DNS Wildcard `*.ferredesk.com` apuntando al contenedor web de Railway.
+4. **Despliegue (Render):** Registro DNS Wildcard `*.ferredesk.com` apuntando al contenedor web de Render.
 
 ## 5. Alternativas Consideradas
 
@@ -55,7 +55,7 @@ Se propone adoptar una arquitectura **Schema-per-Tenant** utilizando PostgreSQL 
 2. Reestructurar `settings.py` separando `SHARED_APPS` y `TENANT_APPS`.
 3. Recrear el historial de migraciones de Django (ya que no se requiere mantener datos legacy, se pueden reiniciar las migraciones).
 4. Implementar el endpoint de registro en la app `public`.
-5. Desplegar en un entorno de *Staging* en Railway con una base de datos de prueba para verificar flujos.
+5. Desplegar en un entorno de *Staging* en Render con una base de datos de prueba para verificar flujos.
 6. Pase a Producción (Beta).
 
 **Rollback:**

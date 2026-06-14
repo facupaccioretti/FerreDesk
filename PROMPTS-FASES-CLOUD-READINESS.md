@@ -100,7 +100,7 @@ Objetivo: Restringir los hosts permitidos a las variables de entorno y los domin
 Instrucciones:
 1. Abre `ferredesk_v0/backend/ferredesk_backend/settings/prod.py`.
 2. Reemplaza `ALLOWED_HOSTS = ["*"]` por una lista dinámica generada desde una variable de entorno (ej. `ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")`).
-3. Por defecto, puedes incluir de fallback los dominios base del SaaS (`.railway.app`, `.ferredesk.com` si existiese).
+3. Por defecto, puedes incluir de fallback los dominios base del SaaS (`.onrender.com`, `.ferredesk.com` si existiese).
 
 Criterio de Verificación:
 Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Documenta que pase exitosamente sin el comodín. Actualiza el JSON y haz commit (`fix: restringir allowed_hosts en produccion`).
@@ -133,7 +133,7 @@ Ejecuta `python manage.py check --settings=ferredesk_backend.settings.prod`. Doc
 ```text
 Actúa como el Agente Ejecutor de FerreDesk. Tu tarea es la F5-T1: "Configurar Storage con Cloudflare R2".
 
-Contexto: No podemos depender del sistema de archivos local del contenedor. Render/Railway son efímeros.
+Contexto: No podemos depender del sistema de archivos local del contenedor. Los contenedores de Render son efímeros.
 Objetivo: Instalar `django-storages` y `boto3` para conectar con Cloudflare R2 en producción.
 
 Instrucciones:

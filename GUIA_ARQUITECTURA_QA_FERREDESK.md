@@ -21,7 +21,7 @@ En una arquitectura Multi-Tenant, las pruebas unitarias no son suficientes para 
 6. **Fase 8 - Registro Público SaaS:**
    - *Validación Flujo Completo:* Llenar el formulario de registro en la landing, comprobar que los subdominios reservados (ej. `admin`) son rechazados, y validar la redirección automática al nuevo subdominio tras el registro.
 7. **Fase 9 - Deploy Staging / Producción:**
-   - *Validación Cookies:* Probar todo el flujo anterior bajo el dominio real de Railway (wildcard domain), asegurando que las cookies de sesión (CSRF / SessionID) se guardan correctamente entre el subdominio y el dominio raíz.
+   - *Validación Cookies:* Probar todo el flujo anterior bajo el dominio real de Render (wildcard domain), asegurando que las cookies de sesión (CSRF / SessionID) se guardan correctamente entre el subdominio y el dominio raíz.
 8. **Fase 10 - Auditoría QA Final:**
    - *Validación Cruzada:* Crear Tenant A y Tenant B. Generar transacciones completas en A. Ingresar a B y garantizar de manera paranoica que todo su tablero está vacío. Forzar la fecha de vencimiento del Trial de A en la DB y verificar el bloqueo.
 
@@ -97,6 +97,6 @@ Estas son las reglas del proyecto (Modus Operandi) que debes exigirle a los Agen
 - **Siguiendo el ejemplo de:** La configuración global actual del proyecto (donde usas Tailwind vía clases, según indicado en `AGENTS.md`).
 
 #### 3. Rutas de API Agnosticas
-- **Regla:** El Frontend no debe saber en qué dominio está desplegado el Backend para facilitar su deploy en Railway.
+- **Regla:** El Frontend no debe saber en qué dominio está desplegado el Backend para facilitar su deploy en Render.
 - **¿Cómo aplicarlo? (Instrucción al agente):** *"Utiliza únicamente rutas relativas para las peticiones al backend (ej. `fetch('/api/tenant/...')`). Nunca hardcodees dominios completos como `http://localhost:8000` o URLs de producción absolutas dentro del código."*
 - **Siguiendo el ejemplo de:** Los archivos centrales de React en tu proyecto actual (`App.js`), que asumen un servidor proxy o un empaquetado donde el frontend y el backend comparten dominio.

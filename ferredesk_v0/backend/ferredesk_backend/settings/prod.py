@@ -10,7 +10,7 @@ def _split_env_list(value):
 DEBUG = False
 
 ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", "")) + [
-    ".railway.app",
+    ".onrender.com",
     ".ferredesk.com",
     "localhost",
     "127.0.0.1",
@@ -56,8 +56,14 @@ DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 
 # CORS & CSRF para subdominios del dominio principal
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
 CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-CORS_ALLOWED_ORIGINS = _split_env_list(os.environ.get("CORS_ALLOWED_ORIGINS", ""))
+CORS_ALLOWED_ORIGINS = _split_env_list(os.environ.get("CORS_ALLOWED_ORIGINS", "")) + [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 MAIN_DOMAIN = os.environ.get("MAIN_DOMAIN", "").strip()
 CORS_ALLOWED_ORIGIN_REGEXES = []

@@ -1,7 +1,7 @@
 # PLAN TÉCNICO Y CLOUD READINESS — FERREDESK SaaS V1
 
 ## 1. Objetivo del documento
-Analizar la brecha real entre el estado actual de FerreDesk (ERP on-premise) y los requisitos técnicos, operativos y de seguridad necesarios para ejecutar un despliegue SaaS multi-tenant robusto utilizando `django-tenants` y hospedado en Railway.
+Analizar la brecha real entre el estado actual de FerreDesk (ERP on-premise) y los requisitos técnicos, operativos y de seguridad necesarios para ejecutar un despliegue SaaS multi-tenant robusto utilizando `django-tenants` y hospedado en Render.
 
 El foco principal es **AISLAMIENTO ANTES QUE CONVENIENCIA**.
 
@@ -17,8 +17,8 @@ Sin embargo, persisten prácticas de la era de "instalaciones locales" (Docker, 
 
 ## 3. Decisiones Arquitectónicas Estratégicas
 
-### A. Plataforma Cloud: Railway
-El proyecto se desplegará en **Railway** (tanto staging como producción).
+### A. Plataforma Cloud: Render
+El proyecto se desplegará en **Render** (tanto staging como producción).
 - Soporte excelente para PostgreSQL y procesos web (Django/Gunicorn).
 - Variables de entorno compartidas y pipelines CI/CD simples.
 
@@ -57,7 +57,7 @@ Los agentes de planificación y desarrollo deben prestar especial atención a lo
 | `_normalizar_logo_empresa` | Escribe a `logos/logo.ext` de forma global, causando colisión. | Guardar en paths relativos al tenant. |
 | `backup_service.py` | Hace un `pg_dump` de toda la DB, exponiendo datos cruzados y siendo ineficiente. | Modificar para aislar el dump a schemas específicos. |
 | `Register.js` | Crea usuarios a nivel global/compartido. | Rediseñar como onboarding SaaS (creación de tenant + usuario admin en schema). |
-| `prod.py` (settings) | Tiene `ALLOWED_HOSTS = ["*"]`, lo cual es muy inseguro. | Restringir explícitamente a dominios base y wildcards del SaaS (`.ferredesk.com`, `.railway.app`). |
+| `prod.py` (settings) | Tiene `ALLOWED_HOSTS = ["*"]`, lo cual es muy inseguro. | Restringir explícitamente a dominios base y wildcards del SaaS (`.ferredesk.com`, `.onrender.com`). |
 | `VistaStockProducto` | Usa una vista SQL nativa con `managed=False`. | Verificar y probar exhaustivamente que esta vista respete el `search_path` de PostgreSQL al consultar dentro de un schema. |
 
 ## 6. Reglas de Desarrollo y Nomenclatura

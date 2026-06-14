@@ -94,8 +94,8 @@
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],
           "criterio_verificacion": "python manage.py check --settings=ferredesk_backend.settings.prod",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true
         }
       ]
     },
@@ -138,7 +138,7 @@
         {
           "id": "F6-T1",
           "nombre": "Archivos de despliegue y Health Check",
-          "descripcion": "Crear vista /api/health/ aislada de middlewares y actualizar render.yaml o railway.json para usarla como health check, además de correr migraciones.",
+          "descripcion": "Crear vista /api/health/ aislada de middlewares y actualizar render.yaml para usarla como health check, además de correr migraciones.",
           "archivos_principales": [
             "render.yaml",
             "ferredesk_v0/backend/ferredesk_backend/urls.py"
@@ -252,7 +252,7 @@
         {
           "id": "F11-T1",
           "nombre": "Centralizar logs a stdout",
-          "descripcion": "Ajustar la configuración de LOGGING para un entorno 12-factor en Render/Railway.",
+          "descripcion": "Ajustar la configuración de LOGGING para un entorno 12-factor en Render.",
           "archivos_principales": [
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],

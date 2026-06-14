@@ -5,7 +5,7 @@
 ERP/POS Django + React migrando a SaaS multi-tenant con `django-tenants`.
 
 - **Stack:** Django 5.0.1, DRF 3.14, PostgreSQL, React (CRA), Whitenoise.
-- **Deploy:** Railway (staging y prod).
+- **Deploy:** Render (staging y prod).
 - **Auth actual:** Sesiones Django (se mantiene en V1).
 - **Custom user model:** `ferreapps.usuarios.Usuario` (AbstractUser con `tipo_usuario` y FK a `Ferreteria`).
 - **Modelo clave:** `Ferreteria` (en `ferreapps.productos.models`) = configuración comercial/fiscal del negocio. No renombrar en V1.
