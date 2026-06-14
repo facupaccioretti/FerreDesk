@@ -86,7 +86,6 @@ def user_view(request):
                 'username': request.user.username,
                 'is_staff': request.user.is_staff,
                 # Agrega aquí más campos si lo deseas
-            }
         })
     else:
         return JsonResponse({'status': 'error', 'message': 'No autenticado'}, status=401)

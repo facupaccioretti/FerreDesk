@@ -4,7 +4,7 @@
     {
       "id": "F1",
       "nombre": "Corregir CSRF y sesiones",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F1-T1",
