@@ -82,8 +82,8 @@
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],
           "criterio_verificacion": "python manage.py check --settings=ferredesk_backend.settings.prod",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true
         },
         {
           "id": "F4-T3",

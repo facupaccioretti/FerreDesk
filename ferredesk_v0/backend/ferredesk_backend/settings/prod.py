@@ -9,7 +9,12 @@ def _split_env_list(value):
 
 DEBUG = False
 
-ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", ""))
+ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", "")) + [
+    ".railway.app",
+    ".ferredesk.com",
+    "localhost",
+    "127.0.0.1",
+]
 SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
 
 # Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
