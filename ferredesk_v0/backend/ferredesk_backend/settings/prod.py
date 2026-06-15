@@ -37,12 +37,22 @@ STATICFILES_DIRS = [
 # Whitenoise sin manifest (mantiene nombres originales de React build)
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+# Storage - Cloudflare R2 (S3-compatible)
+AWS_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME')
+AWS_S3_ENDPOINT_URL = os.environ.get('R2_ENDPOINT_URL')
+AWS_S3_REGION_NAME = 'auto'
+AWS_S3_ADDRESSING_STYLE = 'path'
+AWS_QUERYSTRING_AUTH = False  # archivos públicos; cambiar a True si son privados
+AWS_S3_FILE_OVERWRITE = False  # evita colisiones de nombres
 
 # Base de datos desde variable de entorno
 DATABASES = {
@@ -72,3 +82,9 @@ if MAIN_DOMAIN:
     CORS_ALLOWED_ORIGIN_REGEXES = [
         rf"^https://([a-z0-9-]+\.)*{escaped_main_domain}$",
     ]
+
+# Seguridad de cookies en producción
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
