@@ -1,0 +1,62 @@
+"""Orquestacion de alta completa de tenants SaaS."""
+
+from django.db import connection, transaction
+
+from acceso_publico.models import CuentaAccesoPublico
+from acceso_publico.services import crear_cuenta_acceso_publico
+from tenants.services.servicio_constructor_tenant import crear_tenant
+from tenants.services.servicio_inicializacion_tenant import inicializar_datos_tenant
+
+
+def _eliminar_tenant_fallido(tenant):
+    """Elimina un tenant fallido y fuerza el drop del schema asociado."""
+    if tenant is None:
+        return
+
+    connection.set_schema_to_public()
+    CuentaAccesoPublico.objects.filter(tenant_asignado=tenant).delete()
+    tenant.delete(force_drop=True)
+
+
+def crear_tenant_completo(nombre, slug, email, password):
+    """
+    Crea el tenant, inicializa el schema y registra la cuenta publica.
+
+    `tenant.save()` crea el schema fuera del alcance transaccional habitual
+    de Django; por eso, ante cualquier fallo posterior, se fuerza el cleanup
+    manual del tenant para no dejar schemas huerfanos.
+    """
+    tenant = None
+
+    try:
+        tenant = crear_tenant(
+            nombre=nombre,
+            slug=slug,
+            email_admin=email,
+        )
+
+        with transaction.atomic():
+            datos_iniciales = inicializar_datos_tenant(
+                tenant=tenant,
+                email=email,
+                password=password,
+            )
+
+            cuenta_acceso_publico = crear_cuenta_acceso_publico(
+                email=email,
+                password=password,
+                nombre_mostrar=nombre,
+                tenant=tenant,
+                username_tenant=datos_iniciales["usuario"].username,
+                email_tenant=datos_iniciales["usuario"].email,
+            )
+
+        return {
+            "tenant": tenant,
+            "dominio": tenant.get_primary_domain(),
+            "usuario": datos_iniciales["usuario"],
+            "cuenta_acceso_publico": cuenta_acceso_publico,
+        }
+    except Exception:
+        _eliminar_tenant_fallido(tenant)
+        raise

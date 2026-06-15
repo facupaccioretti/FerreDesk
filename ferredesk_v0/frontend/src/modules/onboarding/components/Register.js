@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFerreDeskTheme } from '../../../hooks/useFerreDeskTheme';
-import { useTenantRegistration } from '../hooks/useTenantRegistration';
+import { useRegistroTenantAPI } from '../../../utils/useRegistroTenantAPI';
 
 const Register = () => {
     const theme = useFerreDeskTheme();
@@ -20,7 +20,7 @@ const Register = () => {
         registroResult,
         registroError,
         localError
-    } = useTenantRegistration();
+    } = useRegistroTenantAPI();
 
     React.useEffect(() => {
         if (registroResult?.dominio?.url) {

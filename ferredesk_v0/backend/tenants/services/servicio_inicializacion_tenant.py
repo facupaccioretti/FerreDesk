@@ -1,6 +1,7 @@
 """Servicios de inicializacion de datos base dentro del tenant."""
 
-from django.db import connection, transaction
+from django.db import transaction
+from django_tenants.utils import schema_context
 
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
@@ -8,11 +9,7 @@ from ferreapps.usuarios.models import Usuario
 
 def inicializar_datos_tenant(tenant, email, password):
     """Crea los datos minimos del tenant y retorna las entidades creadas."""
-    tenant_anterior = getattr(connection, "tenant", None)
-
-    try:
-        connection.set_tenant(tenant)
-
+    with schema_context(tenant.schema_name):
         with transaction.atomic():
             ferreteria = Ferreteria.objects.create(
                 nombre=tenant.nombre,
@@ -45,8 +42,3 @@ def inicializar_datos_tenant(tenant, email, password):
             "ferreteria": ferreteria,
             "sucursal": sucursal,
         }
-    finally:
-        if tenant_anterior is not None:
-            connection.set_tenant(tenant_anterior)
-        else:
-            connection.set_schema_to_public()

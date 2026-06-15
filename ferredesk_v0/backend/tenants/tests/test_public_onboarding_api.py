@@ -1,12 +1,17 @@
 from django.db import connection
 from django.test import TransactionTestCase
 from rest_framework.test import APIRequestFactory
+from unittest.mock import patch
 
 from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
 from tenants.models import EmpresaTenant
-from tenants.views import CrearTenantOnboardingAPIView, ValidarSlugOnboardingAPIView
+from tenants.views import (
+    CrearTenantOnboardingAPIView,
+    RegistroSaaSAPIView,
+    ValidarSlugOnboardingAPIView,
+)
 
 
 class PublicOnboardingAPITestCase(TransactionTestCase):
@@ -120,3 +125,33 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertTrue(EmpresaTenant.objects.filter(schema_name="apitestdupuno").exists())
         self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestdupdos").exists())
         self.assertEqual(CuentaAccesoPublico.objects.filter(email="admin@apitestdup.com").count(), 1)
+
+    def test_registro_saas_limpia_schema_si_falla_la_creacion_del_admin(self):
+        request = self.factory.post(
+            "/api/registro-saas/",
+            {
+                "nombre": "API Test Cleanup",
+                "slug": "apitestcleanup",
+                "email_admin": "admin@apitestcleanup.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        with patch(
+            "tenants.services.servicio_inicializacion_tenant.Usuario.objects.create_user",
+            side_effect=RuntimeError("fallo forzado"),
+        ):
+            with self.assertRaises(RuntimeError):
+                RegistroSaaSAPIView.as_view()(request)
+
+        connection.set_schema_to_public()
+        self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestcleanup").exists())
+        self.assertFalse(CuentaAccesoPublico.objects.filter(email="admin@apitestcleanup.com").exists())
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s",
+                ["apitestcleanup"],
+            )
+            self.assertIsNone(cursor.fetchone())

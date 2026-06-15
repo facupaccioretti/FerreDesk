@@ -77,3 +77,7 @@ class CrearTenantOnboardingAPIView(APIView):
             serializer.to_respuesta(resultado),
             status=status.HTTP_201_CREATED,
         )
+
+
+class RegistroSaaSAPIView(CrearTenantOnboardingAPIView):
+    """Alias publico explicito para el alta SaaS inicial."""

@@ -214,8 +214,9 @@
             "ferredesk_v0/backend/tenants/views.py"
           ],
           "criterio_verificacion": "python manage.py test tenants",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Onboarding SaaS expuesto en /api/registro-saas/ con vista delgada que valida con DRF y delega a tenants/services/tenant_orchestrator.py. La inicialización interna usa schema_context(tenant.schema_name) para crear Ferreteria, Sucursal y Usuario admin dentro del schema aislado, con cleanup manual por force_drop si falla cualquier paso posterior al tenant.save(). Frontend desacoplado a frontend/src/utils/useRegistroTenantAPI.js y Register declarativo consumiendo ese hook. Verificación ejecutada: python manage.py check con 'System check identified no issues (0 silenced)'."
         }
       ]
     },
