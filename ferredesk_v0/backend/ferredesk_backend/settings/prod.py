@@ -70,18 +70,11 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-CORS_ALLOWED_ORIGINS = _split_env_list(os.environ.get("CORS_ALLOWED_ORIGINS", "")) + [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOWED_ORIGINS = [os.getenv("FRONTEND_URL", "")]
 
-MAIN_DOMAIN = os.environ.get("MAIN_DOMAIN", "").strip()
-CORS_ALLOWED_ORIGIN_REGEXES = []
-if MAIN_DOMAIN:
-    escaped_main_domain = MAIN_DOMAIN.replace(".", r"\.")
-    CORS_ALLOWED_ORIGIN_REGEXES = [
-        rf"^https://([a-z0-9-]+\.)*{escaped_main_domain}$",
-    ]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://[\w\-]+\.ferredesk\.com$",
+]
 
 # Seguridad de cookies en producción
 CSRF_COOKIE_SECURE = True

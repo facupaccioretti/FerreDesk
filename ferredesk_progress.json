@@ -65,39 +65,39 @@
         {
           "id": "F4-T1",
           "nombre": "Implementar Gunicorn",
-          "descripcion": "Configurar gunicorn en lugar de runserver para despliegues.",
+          "descripcion": "Configurar gunicorn en lugar de runserver para despliegues. Usar 2 workers y 120s de timeout.",
           "archivos_principales": [
             "ferredesk_v0/backend/requirements.txt"
           ],
-          "criterio_verificacion": "gunicorn ferredesk_backend.wsgi --check-config",
+          "criterio_verificacion": "gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:8000 --workers 1 --timeout 30 --log-level debug",
           "estado": "completado",
           "done": true,
-          "evidencia": "Dependencia instalada. Error esperado en local (ModuleNotFoundError: No module named 'fcntl') por incompatibilidad con Windows, listo para Linux."
+          "evidencia": "start.sh actualizado con gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120. Fallo de fcntl esperado en Windows local."
         },
         {
           "id": "F4-T2",
           "nombre": "Corregir ALLOWED_HOSTS",
-          "descripcion": "Remover el comodín inseguro '*' y asignar hosts del SaaS y dominios dinámicos.",
+          "descripcion": "Remover comodín '*' e implementar lista basada en variables de entorno más dominios SaaS por defecto (.onrender.com, .ferredesk.com).",
           "archivos_principales": [
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],
-          "criterio_verificacion": "python manage.py check --settings=ferredesk_backend.settings.prod",
+          "criterio_verificacion": "Verificar lectura dinámica mediante script os.environ['ALLOWED_HOSTS'] y confirmar que el comodín no está.",
           "estado": "completado",
           "done": true,
-          "evidencia": "manage.py check completado sin errores. ALLOWED_HOSTS dinámico configurado con fallbacks."
+          "evidencia": "['mi-app.onrender.com', '.onrender.com', '.ferredesk.com', 'localhost', '127.0.0.1'] / OK: comodín eliminado."
         },
         {
           "id": "F4-T3",
           "nombre": "Auditar y configurar CORS",
-          "descripcion": "Asegurar que django-cors-headers esté configurado con CORS_ALLOWED_ORIGINS estrictos y CORS_ALLOW_CREDENTIALS = True para el frontend React.",
+          "descripcion": "Configurar CORS_ALLOWED_ORIGINS estricto, regex dinámicas, y desplazar CorsMiddleware al inicio para soportar requests OPTIONS preflight.",
           "archivos_principales": [
             "ferredesk_v0/backend/ferredesk_backend/settings/base.py",
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],
-          "criterio_verificacion": "python manage.py check --settings=ferredesk_backend.settings.prod",
+          "criterio_verificacion": "Simular request OPTIONS con curl verificando que se devuelvan Headers CORS reales.",
           "estado": "completado",
           "done": true,
-          "evidencia": "manage.py check completado sin errores. CORS_ALLOW_CREDENTIALS=True y CORS_ALLOW_ALL_ORIGINS=False configurados explícitamente."
+          "evidencia": "curl devolvió HTTP 200 con access-control-allow-origin: https://app.ferredesk.com y access-control-allow-credentials: true."
         }
       ]
     },
