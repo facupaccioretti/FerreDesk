@@ -7,10 +7,14 @@ monitorear su estado y realizar la limpieza de archivos antiguos.
 import logging
 import os
 import subprocess
+import tempfile
 import threading
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.core.files import File
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db import connection
 
 logger = logging.getLogger(__name__)
@@ -53,6 +57,18 @@ def _construir_nombre_archivo_backup(schema_name, marca_tiempo, extension):
     """
     schema_seguro = _normalizar_schema_para_archivo(schema_name)
     return f"backup_{schema_seguro}_{marca_tiempo}.{extension}"
+
+
+def _construir_ruta_storage_backup(schema_name, nombre_archivo):
+    """
+    Replica el esquema de particionado tenant-scoped usado en media: schema/backups/archivo.
+    """
+    schema_seguro = _normalizar_schema_para_archivo(_validar_schema_respaldo(schema_name))
+    segmentos = [schema_seguro, "backups"]
+    nombre_limpio = str(nombre_archivo).strip("/\\")
+    if nombre_limpio:
+        segmentos.append(nombre_limpio)
+    return "/".join(segmentos)
 
 
 def _construir_sentencia_pg_dump(comando_pg_dump, config_db, schema_name, ruta_archivo_tmp):
@@ -132,69 +148,59 @@ def _proceso_backup_interno(schema_name=None):
 
     try:
         schema_respaldo = _validar_schema_respaldo(schema_name or _obtener_schema_activo())
-        es_docker = os.environ.get('IN_DOCKER', 'False') == 'True'
-
-        if es_docker or os.name != 'nt':
-            comando_pg_dump = "pg_dump"
-            directorio_backup = "/app/backups"
-        else:
-            comando_pg_dump = _obtener_ruta_pg_dump_windows()
-
-            try:
-                base_backups = os.path.join(settings.BASE_DIR, "backups_locales")
-                os.makedirs(base_backups, exist_ok=True)
-                directorio_backup = base_backups
-            except PermissionError:
-                directorio_backup = os.path.join(
-                    os.environ.get('LOCALAPPDATA', 'C:\\Temp'),
-                    'FerreDesk',
-                    'backups',
-                )
-                os.makedirs(directorio_backup, exist_ok=True)
+        es_windows = os.name == 'nt'
+        comando_pg_dump = _obtener_ruta_pg_dump_windows() if es_windows else "pg_dump"
 
         marca_tiempo = datetime.now().strftime("%Y%m%d_%H%M%S")
         nombre_archivo_tmp = _construir_nombre_archivo_backup(schema_respaldo, marca_tiempo, "tmp")
         nombre_archivo_dump = _construir_nombre_archivo_backup(schema_respaldo, marca_tiempo, "dump")
-        ruta_archivo_tmp = os.path.join(directorio_backup, nombre_archivo_tmp)
-        ruta_archivo_dump = os.path.join(directorio_backup, nombre_archivo_dump)
+        nombre_archivo_error = _construir_nombre_archivo_backup(schema_respaldo, marca_tiempo, "err")
+        ruta_storage_dump = _construir_ruta_storage_backup(schema_respaldo, nombre_archivo_dump)
+        ruta_storage_error = _construir_ruta_storage_backup(schema_respaldo, nombre_archivo_error)
 
         config_db = settings.DATABASES['default']
         entorno = os.environ.copy()
         entorno['PGPASSWORD'] = str(config_db.get('PASSWORD', ''))
 
-        sentencia = _construir_sentencia_pg_dump(
-            comando_pg_dump=comando_pg_dump,
-            config_db=config_db,
-            schema_name=schema_respaldo,
-            ruta_archivo_tmp=ruta_archivo_tmp,
-        )
-
-        logger.info(
-            "Iniciando backup del schema '%s' en: %s",
-            schema_respaldo,
-            ruta_archivo_tmp,
-        )
-
-        resultado = subprocess.run(sentencia, env=entorno, capture_output=True, text=True, check=False)
-
-        if resultado.returncode == 0:
-            os.rename(ruta_archivo_tmp, ruta_archivo_dump)
-            ESTADO_BACKUP['estado'] = 'EXITO'
-            ESTADO_BACKUP['ultima_ejecucion'] = datetime.now().isoformat()
-            logger.info("Backup finalizado exitosamente: %s", ruta_archivo_dump)
-        else:
-            archivo_error = os.path.join(
-                directorio_backup,
-                _construir_nombre_archivo_backup(schema_respaldo, marca_tiempo, "err"),
+        with tempfile.TemporaryDirectory(prefix="ferredesk_backup_") as directorio_temporal:
+            ruta_archivo_tmp = os.path.join(directorio_temporal, nombre_archivo_tmp)
+            sentencia = _construir_sentencia_pg_dump(
+                comando_pg_dump=comando_pg_dump,
+                config_db=config_db,
+                schema_name=schema_respaldo,
+                ruta_archivo_tmp=ruta_archivo_tmp,
             )
-            if os.path.exists(ruta_archivo_tmp):
-                os.rename(ruta_archivo_tmp, archivo_error)
 
-            ESTADO_BACKUP['estado'] = 'ERROR'
-            ESTADO_BACKUP['error'] = resultado.stderr
-            logger.error("Fallo en pg_dump. Error: %s", resultado.stderr)
+            logger.info(
+                "Iniciando backup del schema '%s' hacia storage '%s'",
+                schema_respaldo,
+                ruta_storage_dump,
+            )
 
-        _limpiar_backups_antiguos(directorio_backup, dias_retencion=60)
+            resultado = subprocess.run(sentencia, env=entorno, capture_output=True, text=True, check=False)
+
+            if resultado.returncode == 0:
+                with open(ruta_archivo_tmp, 'rb') as archivo_tmp:
+                    default_storage.save(ruta_storage_dump, File(archivo_tmp, name=nombre_archivo_dump))
+
+                ESTADO_BACKUP['estado'] = 'EXITO'
+                ESTADO_BACKUP['ultima_ejecucion'] = datetime.now().isoformat()
+                logger.info("Backup finalizado exitosamente en storage: %s", ruta_storage_dump)
+            else:
+                if os.path.exists(ruta_archivo_tmp):
+                    with open(ruta_archivo_tmp, 'rb') as archivo_tmp:
+                        default_storage.save(ruta_storage_error, File(archivo_tmp, name=nombre_archivo_error))
+                elif resultado.stderr:
+                    default_storage.save(
+                        ruta_storage_error,
+                        ContentFile(resultado.stderr.encode('utf-8'), name=nombre_archivo_error),
+                    )
+
+                ESTADO_BACKUP['estado'] = 'ERROR'
+                ESTADO_BACKUP['error'] = resultado.stderr
+                logger.error("Fallo en pg_dump. Error: %s", resultado.stderr)
+
+            _limpiar_backups_antiguos(schema_respaldo, dias_retencion=60)
 
     except ValueError as e:
         ESTADO_BACKUP['estado'] = 'ERROR'
@@ -210,23 +216,27 @@ def _proceso_backup_interno(schema_name=None):
         logger.exception("Error critico no controlado durante el backup: %s", str(e))
 
 
-def _limpiar_backups_antiguos(directorio, dias_retencion=60):
+def _limpiar_backups_antiguos(schema_name, dias_retencion=60):
     """
-    Evita el llenado del disco eliminando backups antiguos.
+    Evita el crecimiento indefinido del storage eliminando backups antiguos del tenant.
     """
     try:
-        if not os.path.exists(directorio):
-            return
         ahora = datetime.now()
         limite = ahora - timedelta(days=dias_retencion)
+        directorio_storage = _construir_ruta_storage_backup(schema_name, "")
+        _, archivos = default_storage.listdir(directorio_storage)
 
-        for archivo in os.listdir(directorio):
-            if archivo.endswith(".dump") or archivo.endswith(".err"):
-                ruta_completa = os.path.join(directorio, archivo)
-                momento_modificacion = datetime.fromtimestamp(os.path.getmtime(ruta_completa))
+        for archivo in archivos:
+            if not (archivo.endswith(".dump") or archivo.endswith(".err")):
+                continue
 
-                if momento_modificacion < limite:
-                    os.remove(ruta_completa)
-                    logger.info("Limpieza: Backup antiguo eliminado: %s", archivo)
+            ruta_archivo = f"{directorio_storage.rstrip('/')}/{archivo}"
+            momento_modificacion = default_storage.get_modified_time(ruta_archivo)
+            if getattr(momento_modificacion, "tzinfo", None) is not None:
+                momento_modificacion = momento_modificacion.replace(tzinfo=None)
+
+            if momento_modificacion < limite:
+                default_storage.delete(ruta_archivo)
+                logger.info("Limpieza: Backup antiguo eliminado de storage: %s", ruta_archivo)
     except Exception:
         pass

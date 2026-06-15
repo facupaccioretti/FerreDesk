@@ -6,11 +6,13 @@ funcione correctamente bajo distintos escenarios.
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.db import connection
+from django.test import SimpleTestCase
 
 from ferreapps.sistema.services.backup_service import (
     ESTADO_BACKUP,
     _construir_nombre_archivo_backup,
+    _construir_ruta_storage_backup,
     _construir_sentencia_pg_dump,
     _obtener_ruta_pg_dump_windows,
     _proceso_backup_interno,
@@ -19,7 +21,7 @@ from ferreapps.sistema.services.backup_service import (
 )
 
 
-class BackupServiceTests(TestCase):
+class BackupServiceTests(SimpleTestCase):
 
     def setUp(self):
         """Reiniciamos el estado en memoria antes de cada test para evitar colisiones."""
@@ -72,6 +74,10 @@ class BackupServiceTests(TestCase):
         nombre = _construir_nombre_archivo_backup('tenant-demo', '20260612_120000', 'dump')
         self.assertEqual(nombre, 'backup_tenant-demo_20260612_120000.dump')
 
+    def test_construir_ruta_storage_backup_usa_particion_tenant(self):
+        ruta = _construir_ruta_storage_backup('tenant-demo', 'backup_tenant-demo_20260612_120000.dump')
+        self.assertEqual(ruta, 'tenant-demo/backups/backup_tenant-demo_20260612_120000.dump')
+
     def test_construir_sentencia_pg_dump_incluye_schema(self):
         sentencia = _construir_sentencia_pg_dump(
             comando_pg_dump='pg_dump',
@@ -95,39 +101,44 @@ class BackupServiceTests(TestCase):
         ):
             _validar_schema_respaldo('public')
 
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
-    @patch('ferreapps.sistema.services.backup_service.os.rename')
     @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
-    @patch('ferreapps.sistema.services.backup_service.os.makedirs')
-    def test_proceso_backup_interno_exito(self, mock_makedirs, mock_limpiar, mock_rename, mock_run):
+    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
+    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    def test_proceso_backup_interno_exito(self, mock_run, mock_storage_save, mock_limpiar):
         """
         Simulamos un backup exitoso de pg_dump (returncode = 0).
         Se debe actualizar el estado a EXITO y no debe existir error.
         """
         mock_resultado = MagicMock()
         mock_resultado.returncode = 0
-        mock_run.return_value = mock_resultado
+        mock_resultado.stderr = ""
+
+        def fake_run(sentencia, **kwargs):
+            ruta_tmp = sentencia[-1]
+            with open(ruta_tmp, 'wb') as archivo_tmp:
+                archivo_tmp.write(b'contenido-backup')
+            return mock_resultado
+
+        mock_run.side_effect = fake_run
 
         _proceso_backup_interno(schema_name='ferretest')
 
         self.assertEqual(ESTADO_BACKUP['estado'], 'EXITO')
         self.assertIsNotNone(ESTADO_BACKUP['ultima_ejecucion'])
         self.assertIsNone(ESTADO_BACKUP['error'])
-        mock_rename.assert_called_once()
         mock_limpiar.assert_called_once()
+        mock_storage_save.assert_called_once()
 
         sentencia = mock_run.call_args.args[0]
         self.assertIn('--schema=ferretest', sentencia)
         self.assertIn('backup_ferretest_', sentencia[-1])
-        self.assertIn('backup_ferretest_', mock_rename.call_args.args[0])
-        self.assertIn('backup_ferretest_', mock_rename.call_args.args[1])
+        self.assertEqual(mock_storage_save.call_args.args[0].split('/')[0], 'ferretest')
+        self.assertIn('/backups/backup_ferretest_', mock_storage_save.call_args.args[0])
 
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
-    @patch('ferreapps.sistema.services.backup_service.os.rename')
-    @patch('ferreapps.sistema.services.backup_service.os.path.exists', return_value=True)
     @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
-    @patch('ferreapps.sistema.services.backup_service.os.makedirs')
-    def test_proceso_backup_interno_error_comando(self, mock_makedirs, mock_limpiar, mock_exists, mock_rename, mock_run):
+    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
+    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    def test_proceso_backup_interno_error_comando(self, mock_run, mock_storage_save, mock_limpiar):
         """
         Simulamos que pg_dump falla (returncode diferente de 0).
         Se debe actualizar el estado a ERROR y guardar el stderr.
@@ -137,17 +148,26 @@ class BackupServiceTests(TestCase):
         mock_resultado = MagicMock()
         mock_resultado.returncode = 1
         mock_resultado.stderr = error_simulado
-        mock_run.return_value = mock_resultado
+
+        def fake_run(sentencia, **kwargs):
+            ruta_tmp = sentencia[-1]
+            with open(ruta_tmp, 'wb') as archivo_tmp:
+                archivo_tmp.write(b'backup-incompleto')
+            return mock_resultado
+
+        mock_run.side_effect = fake_run
 
         _proceso_backup_interno(schema_name='ferretest')
 
         self.assertEqual(ESTADO_BACKUP['estado'], 'ERROR')
         self.assertEqual(ESTADO_BACKUP['error'], error_simulado)
-        self.assertTrue(mock_rename.called)
+        mock_storage_save.assert_called_once()
 
         sentencia = mock_run.call_args.args[0]
         self.assertIn('--schema=ferretest', sentencia)
-        self.assertIn('backup_ferretest_', mock_rename.call_args.args[1])
+        self.assertEqual(mock_storage_save.call_args.args[0].split('/')[0], 'ferretest')
+        self.assertIn('/backups/backup_ferretest_', mock_storage_save.call_args.args[0])
+        self.assertTrue(mock_storage_save.call_args.args[0].endswith('.err'))
 
     @patch('ferreapps.sistema.services.backup_service.subprocess.run')
     def test_proceso_backup_interno_rechaza_public(self, mock_run):
@@ -188,3 +208,29 @@ class BackupServiceTests(TestCase):
 
         self.assertEqual(ESTADO_BACKUP['estado'], 'ERROR')
         self.assertIn("Fallo catastrofico", ESTADO_BACKUP['error'])
+
+    @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
+    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
+    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    def test_proceso_backup_interno_usa_schema_activo_y_no_public(self, mock_run, mock_storage_save, mock_limpiar):
+        """
+        Verifica que el comando real use connection.schema_name del tenant activo
+        y nunca degrade a public en el flag --schema.
+        """
+        mock_resultado = MagicMock(returncode=0, stderr="")
+
+        def fake_run(sentencia, **kwargs):
+            ruta_tmp = sentencia[-1]
+            with open(ruta_tmp, 'wb') as archivo_tmp:
+                archivo_tmp.write(b'contenido-backup')
+            return mock_resultado
+
+        mock_run.side_effect = fake_run
+
+        with patch.object(connection, 'schema_name', 'mi_tenant', create=True):
+            _proceso_backup_interno()
+
+        sentencia = mock_run.call_args.args[0]
+        self.assertIn('--schema=mi_tenant', sentencia)
+        self.assertNotIn('--schema=public', sentencia)
+        self.assertTrue(mock_storage_save.call_args.args[0].startswith('mi_tenant/backups/'))

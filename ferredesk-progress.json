@@ -162,8 +162,9 @@
             "ferredesk_v0/backend/ferreapps/sistema/backup_service.py"
           ],
           "criterio_verificacion": "python manage.py check && python manage.py test ferreapps.sistema",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "backup_service migrado a pg_dump con --schema=<tenant> y persistencia final en default_storage bajo schema/backups/*. python manage.py test ferreapps.sistema: Found 13 test(s) ... Ran 13 tests in 0.086s ... OK. python manage.py check: System check identified no issues (0 silenced)."
         }
       ]
     },
