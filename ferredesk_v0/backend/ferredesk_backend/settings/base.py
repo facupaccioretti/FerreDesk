@@ -47,6 +47,7 @@ INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in S
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'ferredesk_backend.utils.middleware.HealthCheckBypassMiddleware',
     'django_tenants.middleware.main.TenantMainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -64,6 +65,7 @@ PUBLIC_SCHEMA_URLCONF = 'ferredesk_backend.urls_public'
 TENANT_MODEL = 'tenants.EmpresaTenant'
 TENANT_DOMAIN_MODEL = 'tenants.Dominio'
 DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 
 # TEMPLATES — AHORA EN BASE.PY
 TEMPLATES = [

@@ -139,7 +139,7 @@
     {
       "id": "F6",
       "nombre": "Preparar despliegue cloud real",
-      "estado": "pendiente",
+      "estado": "en progreso",
       "tareas": [
         {
           "id": "F6-T1",
@@ -150,8 +150,9 @@
             "ferredesk_v0/backend/ferredesk_backend/urls.py"
           ],
           "criterio_verificacion": "python manage.py check && Ejecutar un request curl a la vista /api/health/ asegurando que devuelve 200.",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Health check bypass middleware implementado en base.py. Testeado con curl retornando 200 OK y JSON de manera agnóstica al Host header. Archivo render.yaml creado en el directorio raíz."
         },
         {
           "id": "F6-T2",

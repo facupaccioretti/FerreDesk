@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ferredesk-backend
+    env: python
+    buildCommand: pip install -r ferredesk_v0/backend/requirements.txt
+    startCommand: >
+      python ferredesk_v0/backend/manage.py migrate_schemas &&
+      gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120
+    healthCheckPath: /api/health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: ferredesk_backend.settings.prod
