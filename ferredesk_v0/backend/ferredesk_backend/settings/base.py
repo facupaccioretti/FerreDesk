@@ -47,8 +47,9 @@ INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in S
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'ferredesk_backend.utils.middleware.HealthCheckBypassMiddleware',
+    'ferredesk_backend.utils.middlewares.HealthCheckBypassMiddleware',
     'django_tenants.middleware.main.TenantMainMiddleware',
+    'ferredesk_backend.utils.middlewares.SuscripcionMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

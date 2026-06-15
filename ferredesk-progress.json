@@ -191,7 +191,7 @@
     {
       "id": "F8",
       "nombre": "Gating comercial efectivo",
-      "estado": "pendiente",
+      "estado": "en progreso",
       "tareas": [
         {
           "id": "F8-T1",
@@ -201,8 +201,9 @@
             "ferredesk_v0/backend/ferredesk_backend/utils/middlewares.py"
           ],
           "criterio_verificacion": "python manage.py test",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Sin migracion requerida: tenants.EmpresaTenant ya persistia estado_suscripcion junto con fecha_fin_prueba y activo, en linea con DECISIONES-V1. Middleware SuscripcionMiddleware agregado despues de TenantMainMiddleware. python manage.py check: System check identified no issues (0 silenced). python manage.py test ferredesk_backend.test_middlewares: Found 4 test(s) ... Ran 4 tests in 8.412s ... OK. Casos cubiertos: schema public permitido, tenant activo permitido, tenant suspendido bloqueado con 403, ruta exenta /api/health/ permitida aun con tenant suspendido."
         },
         {
           "id": "F8-T2",
