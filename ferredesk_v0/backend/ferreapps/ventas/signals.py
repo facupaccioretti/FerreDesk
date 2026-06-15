@@ -13,7 +13,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 from ferreapps.productos.utils.file_paths import (
-    obtener_directorio_arca_por_schema_absoluto,
+    obtener_directorio_arca_absoluto,
+    obtener_directorio_arca_relativo,
     obtener_schema_name_para_archivos,
 )
 
@@ -108,17 +109,16 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
         
         # Crear directorios base
         schema_name = obtener_schema_name_para_archivos()
-        base_dir = obtener_directorio_arca_por_schema_absoluto(
-            os.path.join(settings.MEDIA_ROOT, 'arca')
-        )
+        base_dir = obtener_directorio_arca_absoluto(settings.MEDIA_ROOT)
         certificados_dir = os.path.join(base_dir, 'certificados')
         claves_dir = os.path.join(base_dir, 'claves_privadas')
         
         os.makedirs(certificados_dir, exist_ok=True)
         os.makedirs(claves_dir, exist_ok=True)
         
-        certificado_relativo = f"arca/{schema_name}/certificados/certificado.pem"
-        clave_relativa = f"arca/{schema_name}/claves_privadas/clave_privada.pem"
+        directorio_arca_relativo = obtener_directorio_arca_relativo()
+        certificado_relativo = f"{directorio_arca_relativo}/certificados/certificado.pem"
+        clave_relativa = f"{directorio_arca_relativo}/claves_privadas/clave_privada.pem"
 
         if instance.certificado_arca:
             _normalizar_archivo_subido(

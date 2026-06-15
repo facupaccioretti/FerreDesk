@@ -70,7 +70,9 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-CORS_ALLOWED_ORIGINS = [os.getenv("FRONTEND_URL", "")]
+
+frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w\-]+\.ferredesk\.com$",

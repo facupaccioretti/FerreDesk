@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
 from django.middleware.csrf import get_token
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -88,14 +88,18 @@ def get_csrf(request):
 def user_view(request):
     if request.user.is_authenticated:
         return JsonResponse({
+            'status': 'success',
+            'user': {
                 'username': request.user.username,
                 'is_staff': request.user.is_staff,
                 # Agrega aquí más campos si lo deseas
+            }
         })
     else:
         return JsonResponse({'status': 'error', 'message': 'No autenticado'}, status=401)
 
 
+@csrf_exempt
 def login_bridge_view(request):
     if request.method != "POST":
         return JsonResponse(
@@ -113,19 +117,7 @@ def login_bridge_view(request):
             status=400,
         )
 
-    token = request.headers.get("X-Bridge-Token", "").strip()
-    if not token:
-        try:
-            data = json.loads(request.body or "{}")
-        except json.JSONDecodeError:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Datos invalidos.",
-                },
-                status=400,
-            )
-        token = str(data.get("token", "")).strip()
+    token = request.POST.get("token", "").strip()
     if not token:
         return JsonResponse(
             {
@@ -155,15 +147,13 @@ def login_bridge_view(request):
             status=404,
         )
 
-    login(request, usuario)
+    login(request, usuario, backend="django.contrib.auth.backends.ModelBackend")
     token_puente.marcar_usado()
 
     estado_setup = obtener_estado_setup_actual()
     destino = "/home" if estado_setup["setup_completo"] else "/setup"
-    return JsonResponse(
-        {
-            "status": "success",
-            "message": "Login bridge exitoso.",
-            "redirect_to": destino,
-        }
-    )
+    
+    from django.shortcuts import redirect
+    response = redirect(destino)
+    response.status_code = 303
+    return response

@@ -19,19 +19,7 @@ function normalizarTenantUrl(tenantUrl) {
   return url.toString();
 }
 
-async function obtenerCsrfTenant(tenantUrl) {
-  const response = await fetch(new URL("/api/csrf/", tenantUrl).toString(), {
-    method: "GET",
-    credentials: "include",
-  });
 
-  const data = await response.json();
-  if (!response.ok || !data?.csrfToken) {
-    throw new Error("No se pudo obtener el CSRF del tenant para abrir la sesion puente.");
-  }
-
-  return data.csrfToken;
-}
 
 export function useAuthAPI() {
   const loginTenantDirecto = useCallback(async ({ username, password }) => {
@@ -83,29 +71,22 @@ export function useAuthAPI() {
     }
 
     const tenantUrl = normalizarTenantUrl(tenantUrlOriginal);
-    const tenantCsrfToken = await obtenerCsrfTenant(tenantUrl);
-    const bridgeResponse = await fetch(new URL("/api/login-bridge/", tenantUrl).toString(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": tenantCsrfToken,
-      },
-      credentials: "include",
-      body: JSON.stringify({ token: tokenPuente }),
-    });
+    
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = new URL("/api/login-bridge/", tenantUrl).toString();
 
-    const bridgeData = await bridgeResponse.json();
-    if (!bridgeResponse.ok) {
-      throw new Error(bridgeData.message || "No se pudo abrir la sesion del tenant.");
-    }
+    const tokenInput = document.createElement("input");
+    tokenInput.type = "hidden";
+    tokenInput.name = "token";
+    tokenInput.value = tokenPuente;
 
-    if (!bridgeData?.redirect_to) {
-      throw new Error("El tenant no devolvio un destino valido para completar el acceso.");
-    }
+    form.appendChild(tokenInput);
+    document.body.appendChild(form);
+    form.submit();
 
-    return {
-      redirectTo: new URL(bridgeData.redirect_to, tenantUrl).toString(),
-    };
+    // Promesa pendiente; la recarga navegara hacia el tenant
+    return new Promise(() => {});
   }, []);
 
   return {

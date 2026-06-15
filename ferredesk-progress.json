@@ -35,7 +35,8 @@
           ],
           "criterio_verificacion": "python manage.py test ferreapps.usuarios",
           "estado": "completado",
-          "done": true
+          "done": true,
+          "evidencia": "Tests pasados con manage.py test ferreapps.login y manage.py test acceso_publico para validar navegación real con 303 See Other, eliminando dependencias cross-origin (CORS) de useAuthAPI.js."
         }
       ]
     },
@@ -61,7 +62,7 @@
     {
       "id": "F4",
       "nombre": "Corregir arranque productivo",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F4-T1",
@@ -105,7 +106,7 @@
     {
       "id": "F5",
       "nombre": "Definir storage remoto para media",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F5-T1",
@@ -129,8 +130,9 @@
             "ferredesk_v0/backend/ferreapps/ventas/signals.py"
           ],
           "criterio_verificacion": "python manage.py check",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Sin matches para rg -n \"ferreteria_1\" ferredesk_v0/backend --glob \"*.py\". python manage.py check: System check identified no issues (0 silenced). Runner puntual unittest sobre test_storage_uploads.py: Ran 4 tests in 0.001s, OK. Nota: python manage.py test ferreapps.productos.tests.test_storage_uploads sigue bloqueado por un ImportError preexistente en ferreapps.productos.tests.__init__ ajeno a F5-T2."
         }
       ]
     },
@@ -167,7 +169,7 @@
     {
       "id": "F7",
       "nombre": "Integrar R2 y probar media real",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F7-T1",
@@ -177,8 +179,9 @@
             "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
           ],
           "criterio_verificacion": "Ejecución exitosa del script automático de integración a R2 sin intervención manual.",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Ejecución exitosa de python test_r2_connection.py, logrando subir un archivo a Cloudflare R2 y posteriormente eliminarlo exitosamente confirmando Object Read & Write."
         }
       ]
     },

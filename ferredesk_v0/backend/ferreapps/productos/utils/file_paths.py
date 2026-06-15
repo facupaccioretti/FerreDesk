@@ -1,11 +1,13 @@
 import os
 
-from django.db import connection
+from ferredesk_backend.utils.storage import (
+    normalizar_nombre_archivo,
+    obtener_schema_tenant,
+)
 
 
 def obtener_schema_name_para_archivos() -> str:
-    schema_name = getattr(connection, "schema_name", None) or "public"
-    return os.path.basename(str(schema_name).strip()) or "public"
+    return obtener_schema_tenant()
 
 
 def obtener_directorio_logo_empresa_relativo() -> str:
@@ -25,19 +27,19 @@ def obtener_directorio_logo_empresa_absoluto(media_root: str) -> str:
 
 def upload_logo_empresa(instance, filename) -> str:
     directorio = obtener_directorio_logo_empresa_relativo()
-    nombre_archivo = os.path.basename(filename)
+    nombre_archivo = normalizar_nombre_archivo(filename)
     return f"{directorio}/{nombre_archivo}"
 
 
 def upload_certificado_arca(instance, filename) -> str:
     schema_name = obtener_schema_name_para_archivos()
-    nombre_archivo = os.path.basename(filename)
+    nombre_archivo = normalizar_nombre_archivo(filename)
     return f"arca/{schema_name}/certificados/{nombre_archivo}"
 
 
 def upload_clave_privada_arca(instance, filename) -> str:
     schema_name = obtener_schema_name_para_archivos()
-    nombre_archivo = os.path.basename(filename)
+    nombre_archivo = normalizar_nombre_archivo(filename)
     return f"arca/{schema_name}/claves_privadas/{nombre_archivo}"
 
 

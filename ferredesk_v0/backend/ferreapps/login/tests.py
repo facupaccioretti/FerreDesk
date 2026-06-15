@@ -34,17 +34,16 @@ class LoginBridgeTestCase(TransactionTestCase):
         client = Client()
         response = client.post(
             "/api/login-bridge/",
-            data=json.dumps({"token": token.token}),
-            content_type="application/json",
+            data={"token": token.token},
             HTTP_HOST=f"{slug}.lvh.me",
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["redirect_to"], "/setup")
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.url, "/setup")
 
         user_response = client.get("/api/user/", HTTP_HOST=f"{slug}.lvh.me")
         self.assertEqual(user_response.status_code, 200)
-        self.assertEqual(user_response.json()["username"], email)
+        self.assertEqual(user_response.json()["user"]["username"], email)
 
     def test_login_bridge_redirige_a_home_si_setup_esta_completo(self):
         slug = "bridgegatehome"
@@ -66,14 +65,13 @@ class LoginBridgeTestCase(TransactionTestCase):
         client = Client()
         response = client.post(
             "/api/login-bridge/",
-            data=json.dumps({"token": token.token}),
-            content_type="application/json",
+            data={"token": token.token},
             HTTP_HOST=f"{slug}.lvh.me",
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["redirect_to"], "/home")
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.url, "/home")
 
         user_response = client.get("/api/user/", HTTP_HOST=f"{slug}.lvh.me")
         self.assertEqual(user_response.status_code, 200)
-        self.assertEqual(user_response.json()["username"], email)
+        self.assertEqual(user_response.json()["user"]["username"], email)

@@ -1,4 +1,7 @@
 import os, django
+from dotenv import load_dotenv
+load_dotenv() # Carga las variables de entorno desde el archivo .env
+
 os.environ['DJANGO_SETTINGS_MODULE'] = 'ferredesk_backend.settings.prod'
 django.setup()
 from django.core.files.base import ContentFile
