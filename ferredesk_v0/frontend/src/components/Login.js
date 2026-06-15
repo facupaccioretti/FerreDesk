@@ -153,6 +153,16 @@ function Login() {
                 />
               </div>
 
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className={`text-sm font-medium ${theme.azulSecundario}`}
+                >
+                  Olvide mi contrasena
+                </button>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}

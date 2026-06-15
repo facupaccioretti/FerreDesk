@@ -16,6 +16,8 @@ ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", "")) + [
     "127.0.0.1",
 ]
 SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
 REACT_APP_DIR = os.path.join(BASE_DIR, 'react_frontend')

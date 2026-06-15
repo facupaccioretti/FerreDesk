@@ -3,8 +3,8 @@ from rest_framework import exceptions, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from acceso_publico.serializers import LoginPublicoSerializer
-from acceso_publico.services import autenticar_cuenta_acceso_publico
+from acceso_publico.serializers import LoginPublicoSerializer, PasswordResetPublicoSerializer
+from acceso_publico.services import autenticar_cuenta_acceso_publico, solicitar_reset_cuenta_publica
 
 
 class BaseAccesoPublicoAPIView(APIView):
@@ -67,6 +67,35 @@ class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
                 },
                 "bridge": resultado["bridge"],
                 "token_puente": resultado["token_puente"],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetPublicoAPIView(BaseAccesoPublicoAPIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        if not _esquema_publico_activo():
+            return Response(
+                {
+                    "detail": "El reset publico solo puede ejecutarse desde el schema publico."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = PasswordResetPublicoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        solicitar_reset_cuenta_publica(
+            email=serializer.validated_data["email"],
+            use_https=request.is_secure(),
+        )
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Si el correo existe, enviamos instrucciones para restablecer la contrasena.",
             },
             status=status.HTTP_200_OK,
         )

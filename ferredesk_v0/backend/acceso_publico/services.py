@@ -1,6 +1,7 @@
 """Servicios de acceso global en schema public."""
 
 from datetime import timedelta
+from django.db.models import Q
 
 from django.db import connection
 from django_tenants.utils import get_public_schema_name, schema_context
@@ -8,6 +9,7 @@ from django.utils import timezone
 from rest_framework import exceptions
 
 from acceso_publico.models import CuentaAccesoPublico, TokenPuenteAcceso
+from ferreapps.login.password_reset_service import enviar_email_reset_tenant
 
 
 TOKEN_PUENTE_DURACION_MINUTOS = 5
@@ -66,6 +68,42 @@ def crear_token_puente(*, cuenta):
             username_tenant=cuenta.username_tenant,
             expira_en=timezone.now() + timedelta(minutes=TOKEN_PUENTE_DURACION_MINUTOS),
         )
+
+
+def solicitar_reset_cuenta_publica(*, email, use_https):
+    with schema_context(PUBLIC_SCHEMA_NAME):
+        try:
+            cuenta = CuentaAccesoPublico.objects.select_related("tenant_asignado").get(
+                email=email,
+                activo=True,
+            )
+        except CuentaAccesoPublico.DoesNotExist:
+            return
+
+        tenant = cuenta.tenant_asignado
+        dominio = tenant.get_primary_domain()
+
+    with schema_context(tenant.schema_name):
+        enviar_email_reset_tenant(
+            email=cuenta.email_tenant,
+            domain=dominio.domain,
+            use_https=use_https,
+        )
+
+
+def sincronizar_password_cuenta_publica(*, schema_name, username_tenant, email_tenant, new_password):
+    with schema_context(PUBLIC_SCHEMA_NAME):
+        cuenta = (
+            CuentaAccesoPublico.objects.select_related("tenant_asignado")
+            .filter(tenant_asignado__schema_name=schema_name, activo=True)
+            .filter(Q(username_tenant=username_tenant) | Q(email_tenant=email_tenant))
+            .first()
+        )
+        if cuenta is None:
+            return
+
+        cuenta.set_password(new_password)
+        cuenta.save(update_fields=["password"])
 
 
 def validar_token_puente(*, token, schema_name):

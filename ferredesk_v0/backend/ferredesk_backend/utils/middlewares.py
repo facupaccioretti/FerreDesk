@@ -20,6 +20,8 @@ class SuscripcionMiddleware:
         "/api/health/",
         "/api/login/",
         "/api/registro/",
+        "/api/auth/password-reset/",
+        "/api/auth/password-reset/confirm/",
     }
     ESTADOS_BLOQUEADOS = {
         EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,

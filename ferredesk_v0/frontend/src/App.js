@@ -12,6 +12,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import Landing from './modules/onboarding/components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
 import Register from './modules/onboarding/components/Register';
 import ClientesManager from './components/Clientes/ClientesManager';
 import RutaPrivada from './components/RutaPrivada';
@@ -41,11 +43,13 @@ export default function App() {
         {/* ========================================== */}
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* ========================================== */}
         {/* RUTAS TENANT (Acceso a Negocio)            */}
         {/* ========================================== */}
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* ========================================== */}
         {/* RUTAS TENANT PROTEGIDAS (ERP Interno)      */}

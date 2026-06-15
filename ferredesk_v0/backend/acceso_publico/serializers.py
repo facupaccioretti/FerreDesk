@@ -7,3 +7,10 @@ class LoginPublicoSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         return value.strip().lower()
+
+
+class PasswordResetPublicoSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()

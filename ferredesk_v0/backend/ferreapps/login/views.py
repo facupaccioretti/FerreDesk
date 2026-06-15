@@ -10,8 +10,13 @@ from django.db import connection
 import json
 import os
 from rest_framework import exceptions
+from rest_framework import permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from acceso_publico.services import validar_token_puente
+from ferreapps.login.password_reset_service import confirmar_reset_password_tenant, enviar_email_reset_tenant
+from ferreapps.login.serializers import PasswordResetConfirmSerializer, PasswordResetRequestSerializer
 from ferreapps.productos.setup import obtener_estado_setup_actual
 from ferreapps.usuarios.models import CliUsuario
 from ferreapps.usuarios.models import Usuario
@@ -157,3 +162,61 @@ def login_bridge_view(request):
     response = redirect(destino)
     response.status_code = 303
     return response
+
+
+def password_reset_request_view(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {"status": "error", "message": "Metodo no permitido"},
+            status=405,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"status": "error", "message": "Datos invalidos"},
+            status=400,
+        )
+
+    serializer = PasswordResetRequestSerializer(data=data)
+    if not serializer.is_valid():
+        return JsonResponse(
+            {"status": "error", "errors": serializer.errors},
+            status=400,
+        )
+
+    enviar_email_reset_tenant(
+        email=serializer.validated_data["email"],
+        domain=request.get_host(),
+        use_https=request.is_secure(),
+    )
+    return JsonResponse(
+        {
+            "status": "success",
+            "message": "Si el correo existe, enviamos instrucciones para restablecer la contrasena.",
+        }
+    )
+
+
+class PasswordResetConfirmAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        confirmar_reset_password_tenant(
+            uid=serializer.validated_data["uid"],
+            token=serializer.validated_data["token"],
+            new_password1=serializer.validated_data["new_password1"],
+            new_password2=serializer.validated_data["new_password2"],
+        )
+
+        return Response(
+            {
+                "status": "success",
+                "message": "La contrasena fue actualizada correctamente.",
+            },
+            status=status.HTTP_200_OK,
+        )
