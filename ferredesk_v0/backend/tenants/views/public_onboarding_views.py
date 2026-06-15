@@ -6,10 +6,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from tenants.serializers import (
+    ActivarEmailOnboardingSerializer,
     CrearTenantOnboardingSerializer,
     ValidarSlugOnboardingSerializer,
 )
-from tenants.services import crear_tenant_completo
+from tenants.services import activar_tenant_por_token, crear_tenant_completo
 from tenants.services.servicio_constructor_tenant import _construir_dominio_primario
 
 
@@ -81,3 +82,38 @@ class CrearTenantOnboardingAPIView(APIView):
 
 class RegistroSaaSAPIView(CrearTenantOnboardingAPIView):
     """Alias publico explicito para el alta SaaS inicial."""
+
+
+class ActivarEmailOnboardingAPIView(APIView):
+    """Vista fina para validar el token de verificacion y activar el tenant."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        if not _esquema_publico_activo():
+            return Response(
+                {
+                    "detail": "La activacion SaaS solo puede ejecutarse desde el schema publico."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ActivarEmailOnboardingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        tenant = activar_tenant_por_token(
+            email=serializer.validated_data["email"],
+            token=serializer.validated_data["token"],
+        )
+
+        return Response(
+            {
+                "tenant": {
+                    "id": tenant.id,
+                    "schema_name": tenant.schema_name,
+                    "slug_subdominio": tenant.slug_subdominio,
+                    "estado_suscripcion": tenant.estado_suscripcion,
+                }
+            },
+            status=status.HTTP_200_OK,
+        )

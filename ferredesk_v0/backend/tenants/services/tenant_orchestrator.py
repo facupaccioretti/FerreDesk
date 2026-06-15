@@ -6,6 +6,7 @@ from acceso_publico.models import CuentaAccesoPublico
 from acceso_publico.services import crear_cuenta_acceso_publico
 from tenants.services.servicio_constructor_tenant import crear_tenant
 from tenants.services.servicio_inicializacion_tenant import inicializar_datos_tenant
+from tenants.services.verificacion_email_service import generar_y_enviar_token_verificacion
 
 
 def _eliminar_tenant_fallido(tenant):
@@ -50,6 +51,8 @@ def crear_tenant_completo(nombre, slug, email, password):
                 username_tenant=datos_iniciales["usuario"].username,
                 email_tenant=datos_iniciales["usuario"].email,
             )
+
+            generar_y_enviar_token_verificacion(tenant=tenant)
 
         return {
             "tenant": tenant,

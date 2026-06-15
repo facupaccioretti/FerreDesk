@@ -44,6 +44,7 @@ def crear_tenant(nombre, slug, email_admin):
             nombre=nombre,
             slug_subdominio=slug,
             email_admin=email_admin,
+            estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
             fecha_fin_prueba=timezone.now() + timedelta(days=TRIAL_DIAS_DEFAULT),
             activo=True,
         )

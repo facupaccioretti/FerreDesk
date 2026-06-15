@@ -83,3 +83,17 @@ class CrearTenantOnboardingSerializer(serializers.Serializer):
                 "tipo_usuario": usuario.tipo_usuario,
             },
         }
+
+
+class ActivarEmailOnboardingSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    token = serializers.CharField(max_length=64)
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def validate_token(self, value):
+        token = value.strip()
+        if not token:
+            raise serializers.ValidationError("El token es obligatorio.")
+        return token

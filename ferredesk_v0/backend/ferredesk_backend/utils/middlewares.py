@@ -22,6 +22,7 @@ class SuscripcionMiddleware:
         "/api/registro/",
     }
     ESTADOS_BLOQUEADOS = {
+        EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
         EmpresaTenant.ESTADO_SUSCRIPCION_SUSPENDIDO,
         EmpresaTenant.ESTADO_SUSCRIPCION_CANCELADO,
     }

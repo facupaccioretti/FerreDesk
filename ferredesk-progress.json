@@ -223,18 +223,21 @@
     {
       "id": "F9",
       "nombre": "Validación de correo propia",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F9-T1",
           "nombre": "Verificación de email en onboarding",
           "descripcion": "Implementar un flujo simple de envío de código para activar la cuenta y esquema SaaS.",
           "archivos_principales": [
-            "ferredesk_v0/backend/ferreapps/usuarios/models.py"
+            "ferredesk_v0/backend/tenants/models.py",
+            "ferredesk_v0/backend/tenants/services/email_service.py",
+            "ferredesk_v0/backend/tenants/views/public_onboarding_views.py"
           ],
           "criterio_verificacion": "python manage.py check",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "Onboarding SaaS ahora crea el tenant con estado_suscripcion='pendiente_verificacion', persiste TokenVerificacionEmail en schema public y envia el token mediante tenants/services/email_service.py usando EMAIL_BACKEND de consola en dev. Activacion publica agregada en /api/public/onboarding/activar-email/ con expiracion de 24 horas y promocion a estado 'activo'. Verificacion ejecutada: python manage.py makemigrations tenants (genera tenants.0002_alter_empresatenant_estado_suscripcion_and_more), python manage.py migrate_schemas --schema=public: Applying tenants.0002... OK, python manage.py check: System check identified no issues (0 silenced), python manage.py test tenants.tests.test_public_onboarding_api: Ran 6 tests in 35.411s, OK."
         }
       ]
     },

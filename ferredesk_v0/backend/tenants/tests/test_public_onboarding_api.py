@@ -1,13 +1,17 @@
+from datetime import timedelta
+
 from django.db import connection
 from django.test import TransactionTestCase
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 from unittest.mock import patch
 
 from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
-from tenants.models import EmpresaTenant
+from tenants.models import EmpresaTenant, TokenVerificacionEmail
 from tenants.views import (
+    ActivarEmailOnboardingAPIView,
     CrearTenantOnboardingAPIView,
     RegistroSaaSAPIView,
     ValidarSlugOnboardingAPIView,
@@ -22,6 +26,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
 
     def tearDown(self):
         connection.set_schema_to_public()
+        TokenVerificacionEmail.objects.filter(email__contains="@apitest").delete()
         for tenant in EmpresaTenant.objects.filter(slug_subdominio__startswith="apitest"):
             CuentaAccesoPublico.objects.filter(tenant_asignado=tenant).delete()
             tenant.delete(force_drop=True)
@@ -65,6 +70,10 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(data["tenant"]["schema_name"], "apitestalta")
         self.assertEqual(data["tenant"]["slug_subdominio"], "apitestalta")
         self.assertEqual(data["tenant"]["email_admin"], "admin@apitestalta.com")
+        self.assertEqual(
+            data["tenant"]["estado_suscripcion"],
+            EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
+        )
         self.assertEqual(data["dominio"]["host"], "apitestalta.lvh.me")
         self.assertEqual(data["admin_inicial"]["username"], "admin@apitestalta.com")
         self.assertEqual(data["admin_inicial"]["tipo_usuario"], "admin")
@@ -72,10 +81,12 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         connection.set_schema_to_public()
         tenant_publico = EmpresaTenant.objects.get(schema_name="apitestalta")
         cuenta_publica = CuentaAccesoPublico.objects.get(email="admin@apitestalta.com")
+        token_verificacion = TokenVerificacionEmail.objects.get(email="admin@apitestalta.com")
         self.assertEqual(cuenta_publica.tenant_asignado_id, tenant_publico.id)
         self.assertEqual(cuenta_publica.username_tenant, "admin@apitestalta.com")
         self.assertEqual(cuenta_publica.email_tenant, "admin@apitestalta.com")
         self.assertTrue(cuenta_publica.check_password("testpass123"))
+        self.assertEqual(token_verificacion.tenant_id, tenant_publico.id)
 
         connection.set_schema("apitestalta")
         self.assertEqual(Ferreteria.objects.count(), 1)
@@ -155,3 +166,77 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
                 ["apitestcleanup"],
             )
             self.assertIsNone(cursor.fetchone())
+
+    def test_activar_email_activa_tenant_y_elimina_token(self):
+        alta_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Activacion",
+                "slug": "apitestactivar",
+                "email_admin": "admin@apitestactivar.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+        alta_response = CrearTenantOnboardingAPIView.as_view()(alta_request)
+        self.assertEqual(alta_response.status_code, 201)
+
+        token_verificacion = TokenVerificacionEmail.objects.get(email="admin@apitestactivar.com")
+        activar_request = self.factory.post(
+            "/api/public/onboarding/activar-email/",
+            {
+                "email": "admin@apitestactivar.com",
+                "token": token_verificacion.token,
+            },
+            format="json",
+        )
+
+        activar_response = ActivarEmailOnboardingAPIView.as_view()(activar_request)
+
+        self.assertEqual(activar_response.status_code, 200)
+        self.assertEqual(
+            activar_response.data["tenant"]["estado_suscripcion"],
+            EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO,
+        )
+        self.assertFalse(
+            TokenVerificacionEmail.objects.filter(email="admin@apitestactivar.com").exists()
+        )
+        self.assertEqual(
+            EmpresaTenant.objects.get(schema_name="apitestactivar").estado_suscripcion,
+            EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO,
+        )
+
+    def test_activar_email_rechaza_token_expirado(self):
+        alta_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Expirado",
+                "slug": "apitestexpirado",
+                "email_admin": "admin@apitestexpirado.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+        alta_response = CrearTenantOnboardingAPIView.as_view()(alta_request)
+        self.assertEqual(alta_response.status_code, 201)
+
+        token_verificacion = TokenVerificacionEmail.objects.get(email="admin@apitestexpirado.com")
+        token_verificacion.creado_en = timezone.now() - timedelta(hours=25)
+        token_verificacion.save(update_fields=["creado_en"])
+
+        activar_request = self.factory.post(
+            "/api/public/onboarding/activar-email/",
+            {
+                "email": "admin@apitestexpirado.com",
+                "token": token_verificacion.token,
+            },
+            format="json",
+        )
+
+        activar_response = ActivarEmailOnboardingAPIView.as_view()(activar_request)
+
+        self.assertEqual(activar_response.status_code, 400)
+        self.assertEqual(
+            activar_response.data,
+            {"token": ["El token de verificacion expiro. Solicita un nuevo registro."]},
+        )
