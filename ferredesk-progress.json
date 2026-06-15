@@ -178,12 +178,13 @@
           "nombre": "Pruebas de subida a R2",
           "descripcion": "Configurar las credenciales en local/staging y ejecutar un test automático que intente subir y leer un comprobante.",
           "archivos_principales": [
-            "ferredesk_v0/backend/ferredesk_backend/settings/prod.py"
+            "ferredesk_v0/backend/ferredesk_backend/settings/prod.py",
+            "ferredesk_v0/backend/test_storage_integration.py"
           ],
           "criterio_verificacion": "Ejecución exitosa del script automático de integración a R2 sin intervención manual.",
           "estado": "completado",
           "done": true,
-          "evidencia": "Ejecución exitosa de python test_r2_connection.py, logrando subir un archivo a Cloudflare R2 y posteriormente eliminarlo exitosamente confirmando Object Read & Write."
+          "evidencia": "Script test_storage_integration.py agregado con validación explícita de variables R2_*, subida, lectura byte a byte y cleanup en finally. Ejecución validada con python test_storage_integration.py: 'OK: subida y lectura exitosa en _integration_tests/ae4eb57778e04291a916d239d1858385/test_upload.txt' y 'OK: archivo de test eliminado de R2: _integration_tests/ae4eb57778e04291a916d239d1858385/test_upload.txt'."
         }
       ]
     },
