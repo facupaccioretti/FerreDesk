@@ -20,7 +20,7 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
-REACT_APP_DIR = os.path.join(BASE_DIR, 'react_frontend')
+REACT_APP_DIR = os.path.join(BASE_DIR, "react_frontend")
 
 TEMPLATES[0]["DIRS"] = [
     REACT_APP_DIR,
@@ -33,7 +33,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # Directorio de estaticos de React (apuntamos a la subcarpeta 'static')
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'react_frontend', 'static'),
+    os.path.join(REACT_APP_DIR, "static"),
 ]
 
 # Whitenoise sin manifest (mantiene nombres originales de React build)

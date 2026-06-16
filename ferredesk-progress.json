@@ -37,6 +37,20 @@
             "Verificacion Docker real: docker build -t ferredesk_start_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0 -> build OK, con COPY scripts/start.prod.sh, COPY scripts/migrate.prod.sh y export final de la imagen ferredesk_start_test:latest.",
             "Inspeccion real de la imagen: docker inspect ferredesk_start_test --format '{{json .Config.Cmd}} {{json .Config.Entrypoint}}' -> [\"/app/start.prod.sh\"] null."
           ]
+        },
+        "FC3-T1": {
+          "done": true,
+          "decision": "Se alineo el build de React con la ruta servida por Django en produccion: el Dockerfile copia el artefacto real CRA `build/` hacia `/app/react_frontend`, y la imagen falla en build si no quedan `index.html` y `static/` dentro de ese destino.",
+          "evidencia": [
+            "Revision de C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\package.json: el script `build` es `react-app-rewired build`, por lo que la salida correcta es `build/` y no `dist/`.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile actualizado para mantener el destino final en `/app/react_frontend` y agregar `RUN test -f /app/react_frontend/index.html` y `RUN test -d /app/react_frontend/static` despues del COPY desde `frontend_builder`.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py validado y ajustado para usar `REACT_APP_DIR = os.path.join(BASE_DIR, \"react_frontend\")` en `TEMPLATES[0][\"DIRS\"]` y `STATICFILES_DIRS = [os.path.join(REACT_APP_DIR, \"static\")]`.",
+            "Verificacion real de build: `docker build -t ferredesk_front_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0` -> build OK; se ejecutaron y aprobaron las capas `COPY --from=frontend_builder /app/frontend/build /app/react_frontend`, `RUN test -f /app/react_frontend/index.html` y `RUN test -d /app/react_frontend/static`.",
+            "Verificacion real del contenedor final: `docker run --rm ferredesk_front_test test -f /app/react_frontend/index.html` -> exit code 0.",
+            "Verificacion real del contenedor final: `docker run --rm ferredesk_front_test test -d /app/react_frontend/static` -> exit code 0.",
+            "Verificacion real de assets JS: `docker run --rm ferredesk_front_test sh -c \"ls /app/react_frontend/static/js/*.js 2>/dev/null | head -3 || echo 'FALLO: no hay assets JS'\"` -> `/app/react_frontend/static/js/488.7213179a.chunk.js` y `/app/react_frontend/static/js/main.a279cffd.js`.",
+            "Verificacion real de settings: `rg -n \"react_frontend|STATICFILES_DIRS|TEMPLATES\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py` -> lineas 23, 25 y 35 confirman el uso de `react_frontend`."
+          ]
         }
       }
     }

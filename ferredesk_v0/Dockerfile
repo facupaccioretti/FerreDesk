@@ -5,14 +5,13 @@ FROM node:18-alpine AS frontend_builder
 
 WORKDIR /app/frontend
 
-# Copiar package.json (Asegúrate de que la ruta sea correcta relativa al contexto)
+# Copiar dependencias del frontend
 COPY frontend/package*.json ./
 RUN npm install
 
-# Copiar el código fuente del frontend y compilar
+# Compilar el artefacto React real
 COPY frontend/ .
 RUN npm run build
-# Esto genera la carpeta /app/frontend/dist (o build, depende de tu config de Vite/CRA)
 
 
 # ==========================================
@@ -22,8 +21,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para Postgres (pg_dump para backups).
-# Usamos postgresql-client sin versión para compatibilidad con Bookworm y Trixie.
+# Instalar dependencias del sistema necesarias para Postgres.
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     postgresql-client \
@@ -34,18 +32,17 @@ RUN apt-get update && apt-get install -y \
 # Copiar requirements
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Instalamos whitenoise explícitamente por si no está en requirements.txt
 RUN pip install whitenoise
 
-# Copiar el código del Backend
+# Copiar el cÃ³digo del backend
 COPY backend/ .
 
-# --- INTEGRACIÓN: Copiar el build de React desde la Etapa 1 ---
-# Asumo que tu build de React crea una carpeta 'dist' o 'build'. 
-# Si es Create-React-App es 'build', si es Vite es 'dist'. Ajusta abajo si es necesario:
+# Integrar el build de React en la ruta servida por Django
 COPY --from=frontend_builder /app/frontend/build /app/react_frontend
+RUN test -f /app/react_frontend/index.html
+RUN test -d /app/react_frontend/static
 
-# Crear directorios para estáticos y media
+# Crear directorios para estÃ¡ticos y media
 RUN mkdir -p /app/staticfiles /app/media
 
 # Copiar scripts productivos
@@ -53,7 +50,7 @@ COPY scripts/start.prod.sh /app/start.prod.sh
 COPY scripts/migrate.prod.sh /app/migrate.prod.sh
 RUN chmod +x /app/start.prod.sh /app/migrate.prod.sh && sed -i 's/\r$//g' /app/start.prod.sh /app/migrate.prod.sh
 
-# Exponer el único puerto necesario
+# Exponer el Ãºnico puerto necesario
 EXPOSE 8000
 
 CMD ["/app/start.prod.sh"]
