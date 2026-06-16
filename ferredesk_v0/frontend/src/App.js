@@ -34,13 +34,15 @@ import CuentaCorrienteManager from './components/CuentaCorriente/CuentaCorriente
 import CuentaCorrienteProveedorManager from './components/CuentaCorrienteProveedor/CuentaCorrienteProveedorManager';
 import CajaManager from './components/Caja/CajaManager';
 import AsistenteConfiguracion from './components/AsistenteConfiguracion/AsistenteConfiguracion';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Componente principal con rutas
 export default function App() {
   return (
     <Router>
-      <Routes>
-        {/* ========================================== */}
+      <ErrorBoundary>
+        <Routes>
+          {/* ========================================== */}
         {/* RUTAS PÚBLICAS (Plataforma SaaS Onboarding) */}
         {/* ========================================== */}
         <Route path="/" element={<Landing />} />
@@ -200,7 +202,8 @@ export default function App() {
         {/* ========================================== */}
         {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
       <ToastContainer position="bottom-right" theme="light" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover icon={false} />
     </Router >
   );

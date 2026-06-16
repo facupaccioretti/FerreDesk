@@ -293,7 +293,7 @@
     {
       "id": "F12",
       "nombre": "Error boundary global en frontend",
-      "estado": "pendiente",
+      "estado": "completado",
       "tareas": [
         {
           "id": "F12-T1",
@@ -304,8 +304,9 @@
             "ferredesk_v0/frontend/src/components/ErrorBoundary.js"
           ],
           "criterio_verificacion": "npm run build",
-          "estado": "pendiente",
-          "done": false
+          "estado": "completado",
+          "done": true,
+          "evidencia": "ErrorBoundary.js implementado y envolviendo las <Routes> en App.js. Verificado insertando intencionalmente ComponentePrueba que tira error en runtime y visualizando fallback UI. 'npm run build' completado exitosamente."
         }
       ]
     }
