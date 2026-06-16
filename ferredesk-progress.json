@@ -306,7 +306,7 @@
           "criterio_verificacion": "npm run build",
           "estado": "completado",
           "done": true,
-          "evidencia": "ErrorBoundary.js implementado y envolviendo las <Routes> en App.js. Verificado insertando intencionalmente ComponentePrueba que tira error en runtime y visualizando fallback UI. 'npm run build' completado exitosamente."
+          "evidencia": "ErrorBoundary de clase implementado en frontend/src/components/ErrorBoundary.js con getDerivedStateFromError y componentDidCatch, mostrando fallback UI con acciones de recarga e inicio. App.js envuelve las rutas principales dentro de <ErrorBoundary>. Verificacion ejecutada el 2026-06-15 con npm run build en frontend: compilacion completada exitosamente sin errores sintacticos."
         }
       ]
     }

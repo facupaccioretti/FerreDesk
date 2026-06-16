@@ -40,6 +40,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 export default function App() {
   return (
     <Router>
+      {/* Protege las rutas principales ante errores de render inesperados. */}
       <ErrorBoundary>
         <Routes>
           {/* ========================================== */}
