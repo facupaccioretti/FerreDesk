@@ -97,3 +97,10 @@ class ActivarEmailOnboardingSerializer(serializers.Serializer):
         if not token:
             raise serializers.ValidationError("El token es obligatorio.")
         return token
+
+
+class ReenviarEmailOnboardingSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()

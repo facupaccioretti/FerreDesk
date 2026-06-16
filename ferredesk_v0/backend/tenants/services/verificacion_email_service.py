@@ -9,7 +9,7 @@ from rest_framework import exceptions
 
 from tenants.models import EmpresaTenant, TokenVerificacionEmail
 from tenants.services.email_service import enviar_email_verificacion
-from tenants.services.servicio_constructor_tenant import _construir_dominio_primario
+from tenants.services.servicio_constructor_tenant import _obtener_dominio_base
 
 
 TOKEN_TTL_HORAS = 24
@@ -37,7 +37,7 @@ def generar_y_enviar_token_verificacion(*, tenant):
         destinatario=tenant.email_admin,
         nombre_empresa=tenant.nombre,
         token=token,
-        dominio_activacion=_construir_dominio_primario(tenant.slug_subdominio),
+        dominio_activacion=_obtener_dominio_base(),
     )
 
 
@@ -66,3 +66,21 @@ def activar_tenant_por_token(*, email, token):
         token_verificacion.delete()
 
     return tenant
+
+
+def reenviar_token_verificacion(*, email):
+    """Genera y envia un nuevo token solo si la cuenta esta pendiente de verificacion."""
+    try:
+        tenant = EmpresaTenant.objects.get(
+            email_admin=email,
+            estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
+        )
+    except EmpresaTenant.DoesNotExist:
+        # Falla silenciosamente si no existe o no esta pendiente, evitando enumeracion
+        return
+
+    # Invalida/elimina tokens anteriores para asegurar que solo uno es valido
+    TokenVerificacionEmail.objects.filter(email=email).delete()
+
+    # Genera y envia el nuevo token
+    generar_y_enviar_token_verificacion(tenant=tenant)

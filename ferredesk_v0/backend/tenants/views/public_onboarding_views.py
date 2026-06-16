@@ -9,8 +9,9 @@ from tenants.serializers import (
     ActivarEmailOnboardingSerializer,
     CrearTenantOnboardingSerializer,
     ValidarSlugOnboardingSerializer,
+    ReenviarEmailOnboardingSerializer,
 )
-from tenants.services import activar_tenant_por_token, crear_tenant_completo
+from tenants.services import activar_tenant_por_token, crear_tenant_completo, reenviar_token_verificacion
 from tenants.services.servicio_constructor_tenant import _construir_dominio_primario
 
 
@@ -114,6 +115,37 @@ class ActivarEmailOnboardingAPIView(APIView):
                     "slug_subdominio": tenant.slug_subdominio,
                     "estado_suscripcion": tenant.estado_suscripcion,
                 }
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ReenviarEmailOnboardingAPIView(APIView):
+    """
+    Endpoint publico para reenviar el email de verificacion.
+    Siempre devuelve 200 OK para evitar enumeracion de cuentas.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        if not _esquema_publico_activo():
+            return Response(
+                {
+                    "detail": "El reenvio de email solo puede ejecutarse desde el schema publico."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ReenviarEmailOnboardingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reenviar_token_verificacion(email=serializer.validated_data["email"])
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Si el correo corresponde a una cuenta pendiente, se ha enviado un enlace de verificacion."
             },
             status=status.HTTP_200_OK,
         )

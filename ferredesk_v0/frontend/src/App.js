@@ -15,6 +15,8 @@ import Login from './components/Login';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import Register from './modules/onboarding/components/Register';
+import ActivarEmail from './modules/onboarding/components/ActivarEmail';
+import PendienteVerificacion from './modules/onboarding/components/PendienteVerificacion';
 import ClientesManager from './components/Clientes/ClientesManager';
 import RutaPrivada from './components/RutaPrivada';
 import ProductosManager from './components/Productos/ProductosManager';
@@ -43,6 +45,8 @@ export default function App() {
         {/* ========================================== */}
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/activar-email" element={<ActivarEmail />} />
+        <Route path="/pendiente-verificacion" element={<PendienteVerificacion />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* ========================================== */}

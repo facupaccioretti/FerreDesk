@@ -23,6 +23,7 @@ class InicializacionTenantTestCase(TenantTestCase):
         tenant.nombre = "Tenant Test"
         tenant.slug_subdominio = "tenant-test"
         tenant.email_admin = "admin@tenant.test"
+        tenant.estado_suscripcion = "activo"
 
     @classmethod
     def get_test_schema_name(cls):

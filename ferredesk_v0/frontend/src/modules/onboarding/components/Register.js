@@ -23,57 +23,10 @@ const Register = () => {
     } = useRegistroTenantAPI();
 
     React.useEffect(() => {
-        if (registroResult?.dominio?.url) {
-            let finalUrl = registroResult.dominio.url;
-            if (window.location.port) {
-                const parsedUrl = new URL(finalUrl);
-                parsedUrl.port = window.location.port;
-                finalUrl = parsedUrl.toString();
-            }
-            const timer = setTimeout(() => {
-                window.location.assign(finalUrl);
-            }, 3000);
-            return () => clearTimeout(timer);
+        if (registroResult) {
+            navigate(`/pendiente-verificacion?email=${encodeURIComponent(formData.email_admin)}`);
         }
-    }, [registroResult]);
-
-    if (registroResult) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">
-                <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, rgba(71, 85, 105, 0.15) 1px, transparent 0)`, backgroundSize: "20px 20px" }}></div>
-                <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-                    <div className={`max-w-md w-full space-y-8 ${theme.tarjetaClara} p-8 rounded-2xl shadow-xl text-center`}>
-                        <h2 className="mt-6 text-3xl font-extrabold text-green-600">
-                            ¡Negocio Creado!
-                        </h2>
-                        <p className="mt-2 text-slate-600">
-                            Tu plataforma FerreDesk ha sido configurada con éxito.
-                        </p>
-                        <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-left">
-                            <p className="text-sm text-slate-500 mb-1">Tu nueva URL de acceso es:</p>
-                            <a href={registroResult.dominio.url} className={`text-lg font-medium ${theme.azulSecundario} hover:underline break-all`}>
-                                {registroResult.dominio.url}
-                            </a>
-                        </div>
-                        <p className="mt-4 text-sm text-slate-500">
-                            Guarda esta URL. Deberás iniciar sesión usando el correo <strong>{registroResult.admin_inicial.email}</strong>
-                        </p>
-                        <div className="mt-8">
-                            <a
-                                href={registroResult.dominio.url}
-                                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white ${theme.botonManager}`}
-                            >
-                                Ir a mi Negocio
-                            </a>
-                            <p className="mt-4 text-center text-sm font-medium text-blue-600 animate-pulse">
-                                Redirigiendo automáticamente en unos segundos...
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    }, [registroResult, navigate, formData.email_admin]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">

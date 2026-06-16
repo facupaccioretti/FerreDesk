@@ -3,6 +3,7 @@ from tenants.views.public_onboarding_views import (
     CrearTenantOnboardingAPIView,
     RegistroSaaSAPIView,
     ValidarSlugOnboardingAPIView,
+    ReenviarEmailOnboardingAPIView,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "CrearTenantOnboardingAPIView",
     "RegistroSaaSAPIView",
     "ValidarSlugOnboardingAPIView",
+    "ReenviarEmailOnboardingAPIView",
 ]

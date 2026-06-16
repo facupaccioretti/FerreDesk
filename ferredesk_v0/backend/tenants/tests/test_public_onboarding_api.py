@@ -15,6 +15,7 @@ from tenants.views import (
     CrearTenantOnboardingAPIView,
     RegistroSaaSAPIView,
     ValidarSlugOnboardingAPIView,
+    ReenviarEmailOnboardingAPIView,
 )
 
 
@@ -240,3 +241,46 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             activar_response.data,
             {"token": ["El token de verificacion expiro. Solicita un nuevo registro."]},
         )
+
+    def test_reenviar_email_publico_devuelve_200_con_email_existente_y_regenera_token(self):
+        # 1. Crear tenant pendiente
+        alta_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Reenvio",
+                "slug": "apitestreenvio",
+                "email_admin": "admin@apitestreenvio.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+        CrearTenantOnboardingAPIView.as_view()(alta_request)
+        token_viejo = TokenVerificacionEmail.objects.get(email="admin@apitestreenvio.com").token
+
+        # 2. Solicitar reenvio
+        reenviar_request = self.factory.post(
+            "/api/public/onboarding/reenviar-email/",
+            {"email": "admin@apitestreenvio.com"},
+            format="json",
+        )
+        reenviar_response = ReenviarEmailOnboardingAPIView.as_view()(reenviar_request)
+
+        # 3. Verificar respuesta
+        self.assertEqual(reenviar_response.status_code, 200)
+        self.assertEqual(reenviar_response.data["status"], "success")
+
+        # 4. Verificar regeneracion de token
+        token_nuevo = TokenVerificacionEmail.objects.get(email="admin@apitestreenvio.com").token
+        self.assertNotEqual(token_viejo, token_nuevo)
+
+    def test_reenviar_email_publico_devuelve_200_con_email_inexistente(self):
+        reenviar_request = self.factory.post(
+            "/api/public/onboarding/reenviar-email/",
+            {"email": "noexiste@apitest.com"},
+            format="json",
+        )
+        reenviar_response = ReenviarEmailOnboardingAPIView.as_view()(reenviar_request)
+
+        self.assertEqual(reenviar_response.status_code, 200)
+        self.assertEqual(reenviar_response.data["status"], "success")
+        self.assertFalse(TokenVerificacionEmail.objects.filter(email="noexiste@apitest.com").exists())
