@@ -1,20 +1,37 @@
 from .base import *
 import os
+import re
 import dj_database_url
+from urllib.parse import urlparse
+from django.core.exceptions import ImproperlyConfigured
 
 
 def _split_env_list(value):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _domain_from_url(url):
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    return (parsed.hostname or "").strip().lower()
+
+
 DEBUG = False
+
+PRIMARY_DOMAIN = (
+    os.environ.get("PRIMARY_DOMAIN", "").strip().lower()
+    or _domain_from_url(os.environ.get("PUBLIC_BASE_URL", ""))
+    or _domain_from_url(os.environ.get("FRONTEND_URL", ""))
+)
 
 ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", "")) + [
     ".onrender.com",
-    ".ferredesk.com",
     "localhost",
     "127.0.0.1",
 ]
+if PRIMARY_DOMAIN:
+    ALLOWED_HOSTS.extend([PRIMARY_DOMAIN, f".{PRIMARY_DOMAIN}"])
 SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -35,6 +52,26 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [
     os.path.join(REACT_APP_DIR, "static"),
 ]
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+
+_email_vars_requeridas = {
+    "EMAIL_HOST": EMAIL_HOST,
+    "EMAIL_HOST_USER": EMAIL_HOST_USER,
+    "EMAIL_HOST_PASSWORD": EMAIL_HOST_PASSWORD,
+    "DEFAULT_FROM_EMAIL": DEFAULT_FROM_EMAIL,
+}
+_faltantes = [clave for clave, valor in _email_vars_requeridas.items() if not valor]
+if _faltantes:
+    raise ImproperlyConfigured(
+        f"Variables de email requeridas en produccion: {', '.join(_faltantes)}"
+    )
 
 # Whitenoise sin manifest (mantiene nombres originales de React build)
 STORAGES = {
@@ -76,9 +113,10 @@ CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""
 frontend_url = os.environ.get("FRONTEND_URL", "").strip()
 CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
 
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://[\w\-]+\.ferredesk\.com$",
-]
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if PRIMARY_DOMAIN:
+    domain_pattern = re.escape(PRIMARY_DOMAIN)
+    CORS_ALLOWED_ORIGIN_REGEXES.append(rf"^https://[\w\-]+\.{domain_pattern}$")
 
 # Seguridad de cookies en producción
 CSRF_COOKIE_SECURE = True

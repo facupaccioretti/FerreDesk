@@ -51,6 +51,22 @@
             "Verificacion real de assets JS: `docker run --rm ferredesk_front_test sh -c \"ls /app/react_frontend/static/js/*.js 2>/dev/null | head -3 || echo 'FALLO: no hay assets JS'\"` -> `/app/react_frontend/static/js/488.7213179a.chunk.js` y `/app/react_frontend/static/js/main.a279cffd.js`.",
             "Verificacion real de settings: `rg -n \"react_frontend|STATICFILES_DIRS|TEMPLATES\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py` -> lineas 23, 25 y 35 confirman el uso de `react_frontend`."
           ]
+        },
+        "FC3-T2": {
+          "done": true,
+          "decision": "Se mantuvo el backend de consola en base.py para desarrollo y se activo SMTP obligatorio en prod.py via variables de entorno. Ademas se elimino el acople a `.ferredesk.com` derivando el dominio principal desde `PRIMARY_DOMAIN`, `PUBLIC_BASE_URL` o `FRONTEND_URL`, de modo que cambiar entre `.xyz`, `.com` o `.com.ar` requiera solo actualizar variables.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\base.py conserva `EMAIL_BACKEND = \"django.core.mail.backends.console.EmailBackend\"` para desarrollo y documenta esa decision.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py define `EMAIL_BACKEND = \"django.core.mail.backends.smtp.EmailBackend\"`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL` via `os.getenv(...)` sin credenciales hardcodeadas.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py agrega validacion explicita con `ImproperlyConfigured` si faltan `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` o `DEFAULT_FROM_EMAIL` en produccion.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py deja de hardcodear `.ferredesk.com`: calcula `PRIMARY_DOMAIN` desde env y deriva `ALLOWED_HOSTS` y `CORS_ALLOWED_ORIGIN_REGEXES` a partir de ese dominio.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Deprecado\\env.example documenta `ENVIRONMENT`, `PRIMARY_DOMAIN`, `PUBLIC_BASE_URL`, `FRONTEND_URL`, `SESSION_COOKIE_DOMAIN`, `CSRF_TRUSTED_ORIGINS` y las variables SMTP requeridas para produccion.",
+            "Verificacion real de backend SMTP: `python manage.py shell -c \"from django.conf import settings; print(settings.EMAIL_BACKEND)\" --settings=ferredesk_backend.settings.prod` con env de prueba -> `django.core.mail.backends.smtp.EmailBackend`.",
+            "Verificacion real de falla clara: `python manage.py check --settings=ferredesk_backend.settings.prod` con `EMAIL_HOST_PASSWORD` vacio -> `django.core.exceptions.ImproperlyConfigured: Variables de email requeridas en produccion: EMAIL_HOST_PASSWORD`.",
+            "Verificacion real de dev/base: `rg -n \"EMAIL_BACKEND\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\base.py` -> linea 107 mantiene `django.core.mail.backends.console.EmailBackend`.",
+            "Prueba SMTP real desde `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\venv\\Scripts\\python.exe` cargando `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\.env` y ejecutando `manage.py shell --settings=ferredesk_backend.settings.prod` con `send_mail(...)` -> primer intento rechazado por Resend con `SMTPDataError 550` porque `DEFAULT_FROM_EMAIL` apuntaba a `no-reply@send.ferredesk.xyz` mientras el dominio verificado era `ferredesk.xyz`.",
+            "Correccion operativa validada: tras cambiar `DEFAULT_FROM_EMAIL` a `no-reply@ferredesk.xyz`, la misma prueba devolvio `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`, `DESTINATARIO=no-reply@ferredesk.xyz` y `RESULTADO=1`, confirmando envio SMTP aceptado por Resend con `prod.py`."
+          ]
         }
       }
     }
