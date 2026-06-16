@@ -49,7 +49,8 @@
             "Verificacion real del contenedor final: `docker run --rm ferredesk_front_test test -f /app/react_frontend/index.html` -> exit code 0.",
             "Verificacion real del contenedor final: `docker run --rm ferredesk_front_test test -d /app/react_frontend/static` -> exit code 0.",
             "Verificacion real de assets JS: `docker run --rm ferredesk_front_test sh -c \"ls /app/react_frontend/static/js/*.js 2>/dev/null | head -3 || echo 'FALLO: no hay assets JS'\"` -> `/app/react_frontend/static/js/488.7213179a.chunk.js` y `/app/react_frontend/static/js/main.a279cffd.js`.",
-            "Verificacion real de settings: `rg -n \"react_frontend|STATICFILES_DIRS|TEMPLATES\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py` -> lineas 23, 25 y 35 confirman el uso de `react_frontend`."
+            "Verificacion real de settings: `rg -n \"react_frontend|STATICFILES_DIRS|TEMPLATES\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\prod.py` -> lineas 23, 25 y 35 confirman el uso de `react_frontend`.",
+            "Follow-up correctivo 2026-06-16 para staging Render: `ferredesk_v0/scripts/start.prod.sh` ahora ejecuta `python manage.py collectstatic --noinput` antes de gunicorn para poblar `STATIC_ROOT`, y `ferredesk_backend/urls_public.py` tambien sirve `favicon.ico`, `manifest.json`, `robots.txt` y `logo-arca.jpg`. Validacion real local: `python manage.py collectstatic --noinput` con settings prod de prueba -> `166 static files copied ... 156 post-processed`."
           ]
         },
         "FC3-T2": {

@@ -1,4 +1,27 @@
-from django.http import JsonResponse
+import os
+
+from django.conf import settings
+from django.http import FileResponse, Http404, JsonResponse
+
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
+
+
+def serve_react_root_file(request, filename):
+    """Sirve archivos ubicados en la raiz del build de React."""
+    file_path = os.path.join(settings.REACT_APP_DIR, filename)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        content_types = {
+            ".ico": "image/x-icon",
+            ".json": "application/json",
+            ".txt": "text/plain",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+        }
+        ext = os.path.splitext(filename)[1].lower()
+        content_type = content_types.get(ext, "application/octet-stream")
+        return FileResponse(open(file_path, "rb"), content_type=content_type)
+    raise Http404(f"Archivo no encontrado: {filename}")
