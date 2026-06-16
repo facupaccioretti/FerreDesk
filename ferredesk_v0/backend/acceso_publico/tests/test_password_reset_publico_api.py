@@ -10,7 +10,12 @@ from tenants.models import EmpresaTenant
 from tenants.services import crear_tenant_completo
 
 
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PUBLIC_BASE_URL="https://ferredesk.test",
+    FRONTEND_URL="https://ferredesk.test",
+    ALLOWED_HOSTS=["localhost", "127.0.0.1", ".lvh.me", "ferredesk.test", ".ferredesk.test"],
+)
 class PasswordResetPublicoAPITestCase(TransactionTestCase):
     def setUp(self):
         connection.set_schema_to_public()
@@ -42,7 +47,8 @@ class PasswordResetPublicoAPITestCase(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("http://apipwresetok.lvh.me/reset-password?uid=", mail.outbox[0].body)
+        self.assertIn("https://apipwresetok.ferredesk.test/reset-password?uid=", mail.outbox[0].body)
+        self.assertNotIn("localhost", mail.outbox[0].body)
 
     def test_password_reset_publico_no_filtra_existencia_de_email(self):
         mail.outbox.clear()

@@ -9,7 +9,12 @@ from tenants.models import EmpresaTenant
 from tenants.services import crear_tenant_completo
 
 
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PUBLIC_BASE_URL="https://ferredesk.test",
+    FRONTEND_URL="https://ferredesk.test",
+    ALLOWED_HOSTS=["localhost", "127.0.0.1", ".lvh.me", "ferredesk.test", ".ferredesk.test"],
+)
 class PasswordResetTenantTestCase(TransactionTestCase):
     def tearDown(self):
         with schema_context("public"):
@@ -28,7 +33,7 @@ class PasswordResetTenantTestCase(TransactionTestCase):
         )
         mail.outbox.clear()
 
-        client_tenant = Client(HTTP_HOST=f"{slug}.lvh.me")
+        client_tenant = Client(HTTP_HOST=f"{slug}.ferredesk.test")
         request_reset = client_tenant.post(
             "/api/auth/password-reset/",
             data=json.dumps({"email": email}),
@@ -36,6 +41,8 @@ class PasswordResetTenantTestCase(TransactionTestCase):
         )
         self.assertEqual(request_reset.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(f"https://{slug}.ferredesk.test/reset-password?uid=", mail.outbox[0].body)
+        self.assertNotIn("localhost", mail.outbox[0].body)
 
         cuerpo = mail.outbox[0].body
         uid = cuerpo.split("uid=")[1].split("&token=")[0]
@@ -63,7 +70,7 @@ class PasswordResetTenantTestCase(TransactionTestCase):
         )
         self.assertEqual(login_tenant.status_code, 200)
 
-        client_public = Client(HTTP_HOST="lvh.me")
+        client_public = Client(HTTP_HOST="ferredesk.test")
         login_publico = client_public.post(
             "/api/public/acceso/login/",
             data=json.dumps({"email": email, "password": "nuevoPass1234"}),

@@ -106,6 +106,8 @@ AUTH_USER_MODEL = "usuarios.Usuario"
 # En desarrollo mantenemos backend de consola para no depender de SMTP externo.
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@ferredesk.local")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

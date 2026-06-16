@@ -1,5 +1,5 @@
 from django.db import connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django_tenants.utils import schema_context
 from rest_framework.test import APIRequestFactory
 
@@ -9,6 +9,11 @@ from tenants.models import EmpresaTenant
 from tenants.services import crear_tenant_completo
 
 
+@override_settings(
+    PUBLIC_BASE_URL="https://ferredesk.test",
+    FRONTEND_URL="https://ferredesk.test",
+    ALLOWED_HOSTS=["localhost", "127.0.0.1", ".lvh.me", "ferredesk.test", ".ferredesk.test"],
+)
 class LoginPublicoAPITestCase(TransactionTestCase):
 
     def setUp(self):
@@ -43,7 +48,8 @@ class LoginPublicoAPITestCase(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "success")
         self.assertEqual(response.data["tenant"]["schema_name"], "apiloginvalid")
-        self.assertEqual(response.data["tenant"]["host"], "apiloginvalid.lvh.me")
+        self.assertEqual(response.data["tenant"]["host"], "apiloginvalid.ferredesk.test")
+        self.assertEqual(response.data["tenant"]["url"], "https://apiloginvalid.ferredesk.test/")
         self.assertIn("token_puente", response.data)
         self.assertIn("token", response.data["token_puente"])
         self.assertIn("expira_en", response.data["token_puente"])

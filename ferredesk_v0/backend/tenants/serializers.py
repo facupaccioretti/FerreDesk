@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from acceso_publico.models import CuentaAccesoPublico
 from tenants.services.servicio_constructor_tenant import _obtener_dominio_base
+from tenants.services.public_url_service import construir_url_tenant_publica
 from tenants.validators import validar_slug_completo, validar_slug_formato, validar_slug_no_reservado, validar_slug_unico
 
 
@@ -73,7 +74,7 @@ class CrearTenantOnboardingSerializer(serializers.Serializer):
             },
             "dominio": {
                 "host": dominio.domain,
-                "url": f"http://{dominio.domain}",
+                "url": construir_url_tenant_publica(host=dominio.domain, path="/"),
                 "is_primary": dominio.is_primary,
                 "dominio_base": _obtener_dominio_base(),
             },

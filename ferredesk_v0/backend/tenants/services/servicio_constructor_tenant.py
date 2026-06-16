@@ -1,6 +1,7 @@
 """Servicios de construccion de tenants y dominios."""
 
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import connection
@@ -8,6 +9,7 @@ from django.utils import timezone
 
 from tenants.constants import TRIAL_DIAS_DEFAULT
 from tenants.models import Dominio, EmpresaTenant
+from tenants.services.public_url_service import obtener_public_base_url
 from tenants.validators import validar_slug_completo
 
 
@@ -17,9 +19,19 @@ def _obtener_dominio_base():
     if main_domain:
         return main_domain
 
+    primary_domain = getattr(settings, "PRIMARY_DOMAIN", "").strip()
+    if primary_domain:
+        return primary_domain
+
     session_cookie_domain = (getattr(settings, "SESSION_COOKIE_DOMAIN", "") or "").strip()
     if session_cookie_domain:
         return session_cookie_domain.lstrip(".")
+
+    public_base_url = obtener_public_base_url()
+    if public_base_url:
+        hostname = urlparse(public_base_url).hostname
+        if hostname:
+            return hostname
 
     return "lvh.me"
 

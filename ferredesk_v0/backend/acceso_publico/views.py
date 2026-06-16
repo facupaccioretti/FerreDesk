@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from acceso_publico.serializers import LoginPublicoSerializer, PasswordResetPublicoSerializer
 from acceso_publico.services import autenticar_cuenta_acceso_publico, solicitar_reset_cuenta_publica
+from tenants.services.public_url_service import construir_url_tenant_publica
 
 
 class BaseAccesoPublicoAPIView(APIView):
@@ -63,7 +64,7 @@ class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
                     "schema_name": tenant.schema_name,
                     "slug_subdominio": tenant.slug_subdominio,
                     "host": dominio.domain,
-                    "url": f"http://{dominio.domain}",
+                    "url": construir_url_tenant_publica(host=dominio.domain, path="/"),
                 },
                 "bridge": resultado["bridge"],
                 "token_puente": resultado["token_puente"],

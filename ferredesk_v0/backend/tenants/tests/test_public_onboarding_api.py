@@ -1,7 +1,8 @@
 from datetime import timedelta
 
+from django.core import mail
 from django.db import connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 from unittest.mock import patch
@@ -19,11 +20,18 @@ from tenants.views import (
 )
 
 
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PUBLIC_BASE_URL="https://ferredesk.test",
+    FRONTEND_URL="https://ferredesk.test",
+    ALLOWED_HOSTS=["localhost", "127.0.0.1", ".lvh.me", "ferredesk.test", ".ferredesk.test"],
+)
 class PublicOnboardingAPITestCase(TransactionTestCase):
 
     def setUp(self):
         connection.set_schema_to_public()
         self.factory = APIRequestFactory()
+        mail.outbox.clear()
 
     def tearDown(self):
         connection.set_schema_to_public()
@@ -47,7 +55,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             {
                 "slug": "apitestslug",
                 "disponible": True,
-                "dominio_sugerido": "apitestslug.lvh.me",
+                "dominio_sugerido": "apitestslug.ferredesk.test",
             },
         )
 
@@ -75,9 +83,13 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             data["tenant"]["estado_suscripcion"],
             EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
         )
-        self.assertEqual(data["dominio"]["host"], "apitestalta.lvh.me")
+        self.assertEqual(data["dominio"]["host"], "apitestalta.ferredesk.test")
+        self.assertEqual(data["dominio"]["url"], "https://apitestalta.ferredesk.test/")
         self.assertEqual(data["admin_inicial"]["username"], "admin@apitestalta.com")
         self.assertEqual(data["admin_inicial"]["tipo_usuario"], "admin")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("https://ferredesk.test/activar-email/?token=", mail.outbox[0].body)
+        self.assertNotIn("localhost", mail.outbox[0].body)
 
         connection.set_schema_to_public()
         tenant_publico = EmpresaTenant.objects.get(schema_name="apitestalta")

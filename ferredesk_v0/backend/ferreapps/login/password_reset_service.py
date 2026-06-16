@@ -7,8 +7,18 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import exceptions
 
+from tenants.services.public_url_service import construir_url_tenant_publica
+
 
 RESET_FRONTEND_PATH = "/reset-password"
+
+
+def construir_url_reset_tenant(*, domain, uid, token):
+    return construir_url_tenant_publica(
+        host=domain,
+        path=RESET_FRONTEND_PATH,
+        query={"uid": uid, "token": token},
+    )
 
 
 def enviar_email_reset_tenant(*, email, domain, use_https):
@@ -18,7 +28,7 @@ def enviar_email_reset_tenant(*, email, domain, use_https):
 
     form.save(
         domain_override=domain,
-        use_https=use_https,
+        use_https=True,
         from_email=settings.DEFAULT_FROM_EMAIL,
         email_template_name="registration/password_reset_email.html",
         subject_template_name="registration/password_reset_subject.txt",

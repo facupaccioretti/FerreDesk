@@ -186,10 +186,30 @@ def password_reset_request_view(request):
             status=400,
         )
 
+    tenant_actual = getattr(request, "tenant", None) or getattr(connection, "tenant", None)
+    if tenant_actual is None or getattr(tenant_actual, "schema_name", "public") == "public":
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "No se pudo resolver el tenant actual para construir el enlace de recuperacion.",
+            },
+            status=400,
+        )
+
+    dominio_primario = tenant_actual.get_primary_domain()
+    if dominio_primario is None or not dominio_primario.domain:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "El tenant actual no tiene un dominio primario configurado.",
+            },
+            status=400,
+        )
+
     enviar_email_reset_tenant(
         email=serializer.validated_data["email"],
-        domain=request.get_host(),
-        use_https=request.is_secure(),
+        domain=dominio_primario.domain,
+        use_https=True,
     )
     return JsonResponse(
         {
