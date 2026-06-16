@@ -1,12 +1,8 @@
-services:
-  - type: web
-    name: ferredesk-backend
-    env: python
-    buildCommand: pip install -r ferredesk_v0/backend/requirements.txt
-    startCommand: >
-      python ferredesk_v0/backend/manage.py migrate_schemas &&
-      gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120
-    healthCheckPath: /api/health/
-    envVars:
-      - key: DJANGO_SETTINGS_MODULE
-        value: ferredesk_backend.settings.prod
+# Archivo inactivo.
+# La Blueprint operativa de Render vive en:
+# C:\Users\admin\Desktop\FerreDesk\render.yaml
+#
+# Se conserva este archivo solo como puntero documental para evitar
+# configuraciones paralelas contradictorias dentro del repo.
+#
+# No usar este archivo para crear ni sincronizar el servicio.

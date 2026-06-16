@@ -49,10 +49,8 @@ COPY --from=frontend_builder /app/frontend/build /app/react_frontend
 RUN mkdir -p /app/staticfiles /app/media
 
 # Copiar scripts
-COPY scripts/start.sh /app/start.sh
-RUN chmod +x /app/start.sh && sed -i 's/\r$//g' /app/start.sh
 
 # Exponer el único puerto necesario
 EXPOSE 8000
 
-CMD ["/app/start.sh"]
+CMD ["sh", "-c", "gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
