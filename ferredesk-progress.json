@@ -81,6 +81,30 @@
             "Pruebas reales: `python manage.py test tenants.tests.test_public_onboarding_api acceso_publico.tests.test_login_publico_api acceso_publico.tests.test_password_reset_publico_api ferreapps.login.tests_password_reset` -> `Ran 13 tests in 63.621s` y `OK`. Las pruebas verifican URLs `https://ferredesk.test` y ausencia de `localhost` en emails/respuestas.",
             "Validacion real pedida con settings productivos: `DJANGO_SETTINGS_MODULE=ferredesk_backend.settings.prod`, `PUBLIC_BASE_URL=https://ferredesk.xyz`, `FRONTEND_URL=https://ferredesk.xyz`, `PRIMARY_DOMAIN=ferredesk.xyz` y credenciales SMTP dummy, ejecutando `python -c ...` -> `ACTIVATION=https://ferredesk.xyz/activar-email/?token=tok123&email=admin%40example.com`, `RESET=https://demo.ferredesk.xyz/reset-password?uid=uid123&token=tok123`, `TENANT=https://demo.ferredesk.xyz/`; todas las aserciones `startswith('https://')` y `not contains localhost` pasaron."
           ]
+        },
+        "FC6-T1": {
+          "done": true,
+          "decision": "Se reclasifico el riesgo heredado de `VistaStockProducto` como legacy aceptado para release: el endpoint sigue registrado pero ya no depende de la vista SQL, el frontend del repo no lo consume de forma directa y las migraciones actuales eliminan `VISTA_STOCK_PRODUCTO` en favor del ORM anotado.",
+          "evidencia": [
+            "Consumo frontend real revisado con `rg -n \"vista-stock-producto|/api/productos/|stock-bajo|stock_total|necesita_reposicion\" C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend`: no hay fetch a `/api/productos/vista-stock-producto/`; el informe usa `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\utils\\useStockBajoAPI.js` con `/api/informes/stock-bajo/`, y la grilla de productos usa `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\utils\\useProductosAPI.js` con `/api/productos/stock/`.",
+            "El endpoint sigue registrado en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\urls.py` mediante `router.register(r'vista-stock-producto', VistaStockProductoViewSet, basename='vista-stock-producto')`.",
+            "El ViewSet actual no consulta el modelo `VistaStockProducto`: en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\views.py`, `VistaStockProductoViewSet` expone `queryset = Stock.objects.con_stock_total()` y serializa aliases anotados sobre `Stock`.",
+            "La logica real esta en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\managers_productos_stock.py`: `con_stock_total()` replica por ORM la vista historica con `Subquery`, `Sum`, `Coalesce`, aliases `denominacion`/`codigo_venta`/`cantidad_minima` y bandera `necesita_reposicion`.",
+            "Las migraciones muestran el reemplazo del enfoque SQL: `0002_vistas_productos.py` crea `VISTA_STOCK_PRODUCTO`, mientras `0014_drop_vistas_Stock.py` ejecuta `DROP VIEW IF EXISTS \"VISTA_STOCK_PRODUCTO\" CASCADE;`. No hay migraciones posteriores que la recreen.",
+            "El modulo de informes ya usa ORM anotado en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\informes\\views.py` (`Stock.objects.con_stock_total().filter(necesita_reposicion=1)`), aunque `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\informes\\models.py` conserva un comentario legacy desactualizado sobre `VistaStockProducto`.",
+            "Persisten restos legacy no bloqueantes: el modelo no gestionado `VistaStockProducto` sigue declarado en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\models.py`, e imports asociados siguen presentes en serializers/views aunque el runtime actual del endpoint no depende de la vista SQL."
+          ]
+        },
+        "FC7-T1": {
+          "done": true,
+          "decision": "Se valido `/api/health/` con entrypoint productivo real en Render staging. La ruta queda interceptada deliberadamente por middleware antes de la resolucion tenant, no requiere autenticacion y esta exenta del bloqueo por suscripcion.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\settings\\base.py define `HealthCheckBypassMiddleware` antes de `django_tenants.middleware.main.TenantMainMiddleware`, por lo que `/api/health/` se resuelve antes de cualquier lookup de tenant.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\utils\\middlewares.py implementa `if request.path == \"/api/health/\": return JsonResponse({\"status\": \"ok\"})`, lo que confirma payload simple y sin autenticacion.",
+            "La misma clase `SuscripcionMiddleware` en C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\utils\\middlewares.py incluye `/api/health/` dentro de `RUTAS_EXENTAS`, por lo que no queda bloqueada por estado de suscripcion.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\render.yaml mantiene `healthCheckPath: /api/health/`, alineado con el contrato del middleware.",
+            "Prueba real contra staging/preview con entrypoint productivo Render: `https://ferredesk-staging.onrender.com/api/health/` devolvio `HTTP 200` con payload `{ \"status\": \"ok\" }` sin requerir sesion ni tenant activo."
+          ]
         }
       }
     }
