@@ -5,6 +5,8 @@ services:
     dockerfilePath: ./ferredesk_v0/Dockerfile
     dockerContext: ./ferredesk_v0
     healthCheckPath: /api/health/
+    # Render Free: migrate_schemas se ejecuta como comando manual operativo.
+    # Ver procedimiento en INSTRUCCIONES-MIGRACION-MANUAL-RENDER.md.
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: ferredesk_backend.settings.prod

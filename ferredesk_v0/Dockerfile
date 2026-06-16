@@ -48,9 +48,12 @@ COPY --from=frontend_builder /app/frontend/build /app/react_frontend
 # Crear directorios para estáticos y media
 RUN mkdir -p /app/staticfiles /app/media
 
-# Copiar scripts
+# Copiar scripts productivos
+COPY scripts/start.prod.sh /app/start.prod.sh
+COPY scripts/migrate.prod.sh /app/migrate.prod.sh
+RUN chmod +x /app/start.prod.sh /app/migrate.prod.sh && sed -i 's/\r$//g' /app/start.prod.sh /app/migrate.prod.sh
 
 # Exponer el único puerto necesario
 EXPOSE 8000
 
-CMD ["sh", "-c", "gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+CMD ["/app/start.prod.sh"]

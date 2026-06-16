@@ -21,6 +21,21 @@
             "Validacion local del build con el mismo contexto declarado para Render: docker build -t ferredesk_render_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0",
             "Resultado real del build tras habilitar Docker: se completaron las etapas apt-get, pip install, npm install, npm run build y COPY --from=frontend_builder /app/frontend/build /app/react_frontend. El frontend compilo con 'Compiled successfully.' y se genero build/static/js/main.a279cffd.js. El export final fallo solo por colision de tag local existente: image docker.io/library/ferredesk_render_test:latest already exists.",
             "Inspeccion real de la imagen local: docker inspect ferredesk_render_test --format '{{json .Config.Cmd}} {{json .Config.Entrypoint}}' -> [\"sh\",\"-c\",\"gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120\"] null."
+          ],
+          "nota_operativa": "La migracion real en Render Free se ejecuto manualmente desde entorno operador contra la External Database URL. Procedimiento documentado en C:\\Users\\admin\\Desktop\\FerreDesk\\INSTRUCCIONES-MIGRACION-MANUAL-RENDER.md. La formalizacion definitiva del mecanismo queda pendiente para FC2-T2."
+        },
+        "FC2-T2": {
+          "done": true,
+          "decision": "Se separa el flujo local del productivo: start.sh queda clasificado como script de desarrollo, start.prod.sh queda como arranque cloud sin migraciones ni bootstrap inseguro, y migrate.prod.sh concentra el paso controlado de migrate_schemas.",
+          "evidencia": [
+            "ferredesk_v0/scripts/start.sh redefinido como script local/dev con comportamiento explicito de desarrollo.",
+            "ferredesk_v0/scripts/start.prod.sh creado sin nc postgres, sin create_superuser, sin admin123, sin manage.py migrate y con exec gunicorn ferredesk_backend.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120.",
+            "ferredesk_v0/scripts/migrate.prod.sh creado con python manage.py migrate_schemas --noinput como paso productivo controlado.",
+            "ferredesk_v0/Dockerfile actualizado para copiar /app/start.prod.sh y /app/migrate.prod.sh y usar CMD [\"/app/start.prod.sh\"].",
+            "render.yaml documenta que en Render Free migrate_schemas sigue ejecutandose como comando manual operativo, referenciando INSTRUCCIONES-MIGRACION-MANUAL-RENDER.md.",
+            "Verificacion de contenido realizada: start.prod.sh contiene gunicorn y ${PORT:-8000}; migrate.prod.sh contiene migrate_schemas; Dockerfile referencia start.prod.sh.",
+            "Verificacion Docker real: docker build -t ferredesk_start_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0 -> build OK, con COPY scripts/start.prod.sh, COPY scripts/migrate.prod.sh y export final de la imagen ferredesk_start_test:latest.",
+            "Inspeccion real de la imagen: docker inspect ferredesk_start_test --format '{{json .Config.Cmd}} {{json .Config.Entrypoint}}' -> [\"/app/start.prod.sh\"] null."
           ]
         }
       }
