@@ -5,7 +5,7 @@ These routes are reserved for SaaS platform concerns and must not expose
 tenant ERP URLs.
 """
 
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
 from ferreapps.login.views import get_csrf
@@ -23,4 +23,5 @@ urlpatterns = [
     path("api/csrf/", get_csrf, name="public-csrf"),
     path("api/public/", include("tenants.urls")),
     path("api/public/acceso/", include("acceso_publico.urls")),
+    re_path(r"^.*$", TemplateView.as_view(template_name="index.html"), name="public_react_spa"),
 ]
