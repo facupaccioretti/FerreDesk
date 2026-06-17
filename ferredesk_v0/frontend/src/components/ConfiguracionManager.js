@@ -14,26 +14,7 @@ import { useTransportesAPI } from "../utils/useTransportesAPI"
 import { usePlazosAPI } from "../utils/usePlazosAPI"
 import { useCategoriasAPI } from "../utils/useCategoriasAPI"
 import MaestroModal from "./Clientes/MaestrosModales"
-
-// Función para obtener el valor de una cookie por nombre
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== "") {
-    const cookies = document.cookie.split(";")
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
-
-
-
-
+import { clienteAPI } from "../utils/clienteAPI"
 
 // Pestaña: Información del Negocio
 const InformacionNegocio = ({ config, onConfigChange, loading }) => {
@@ -511,6 +492,7 @@ const ConfiguracionManager = () => {
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState("")
+  const esAdminTenant = user?.es_admin_tenant === true || user?.tipo_usuario === "admin"
 
   const obtenerColeccionActual = () => {
     switch (catalogoSeleccionado) {
@@ -593,13 +575,10 @@ const ConfiguracionManager = () => {
           break
       }
 
-      const res = await window.fetch(endpoint, {
+      await clienteAPI(endpoint, {
         method: esEdicion ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        credentials: "include",
-        body: JSON.stringify(body),
+        body,
       })
-      if (!res.ok) throw new Error("Error al guardar")
       await refetchColeccion()
       cerrarModal()
     } catch (e) {
@@ -646,8 +625,6 @@ const ConfiguracionManager = () => {
     setFeedback("")
 
     try {
-      const csrftoken = getCookie("csrftoken")
-
       // Validar que los archivos no estén vacíos
       if (config.certificado_arca_file && config.certificado_arca_file.size === 0) {
         setFeedback("Error: El archivo de certificado seleccionado está vacío.");
@@ -693,37 +670,21 @@ const ConfiguracionManager = () => {
         formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
 
-      const res = await fetch("/api/ferreteria/", {
+      const data = await clienteAPI("/api/ferreteria/", {
         method: "PATCH",
-        headers: {
-          "X-CSRFToken": csrftoken,
-          // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
-        },
-        credentials: "include",
+        // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
         body: formData,
       })
 
-      if (res.status === 404) {
-        throw new Error("No existe una ferretería inicial para este tenant. Revisa la inicialización del onboarding SaaS.")
-      }
-      if (!res.ok) throw new Error("Error al guardar configuración")
-
-      const data = await res.json()
       setConfig(data)
       // Subir logo ARCA si fue seleccionado (va por endpoint dedicado)
       if (config.logo_arca_file) {
         const fd = new FormData()
         fd.append('logo_arca', config.logo_arca_file)
-        const r2 = await fetch('/api/productos/subir-logo-arca/', {
+        await clienteAPI('/api/productos/subir-logo-arca/', {
           method: 'POST',
-          headers: { 'X-CSRFToken': csrftoken },
-          credentials: 'include',
           body: fd,
         })
-        if (!r2.ok) {
-          const errText = await r2.text().catch(() => '')
-          throw new Error('Error al subir logo ARCA: ' + errText)
-        }
       }
 
       setFeedback("Configuración guardada correctamente")
@@ -768,7 +729,7 @@ const ConfiguracionManager = () => {
 
   const renderActiveTab = () => {
     // Si el usuario no es admin y está en la pestaña ARCA, redirigir a negocio
-    if (activeTab === "arca" && !user?.is_staff) {
+    if (activeTab === "arca" && !esAdminTenant) {
       setActiveTab("negocio")
       return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
     }
@@ -871,7 +832,7 @@ const ConfiguracionManager = () => {
             <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
               {tabs.map((tab) => {
                 // Solo mostrar pestaña ARCA a usuarios admin
-                if (tab.key === "arca" && !user?.is_staff) {
+                if (tab.key === "arca" && !esAdminTenant) {
                   return null
                 }
 

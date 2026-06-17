@@ -1,7 +1,10 @@
 import json
+import tempfile
 from datetime import date
 from decimal import Decimal
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -86,10 +89,128 @@ class InicializacionTenantTestCase(TenantTestCase):
         self.assertEqual(
             user_response.json()["user"]["username"], "admin@tenant.test"
         )
+        self.assertFalse(user_response.json()["user"]["is_staff"])
+        self.assertEqual(user_response.json()["user"]["tipo_usuario"], "admin")
+        self.assertTrue(user_response.json()["user"]["es_admin_tenant"])
 
         ferreteria_response = client.get("/api/ferreteria/")
         self.assertEqual(ferreteria_response.status_code, 200)
         self.assertEqual(ferreteria_response.json()["nombre"], "Tenant Test")
+
+    def test_admin_tenant_sin_staff_puede_modificar_configuracion(self):
+        datos = inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        datos["usuario"].refresh_from_db()
+        self.assertEqual(datos["usuario"].tipo_usuario, "admin")
+        self.assertFalse(datos["usuario"].is_staff)
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="admin@tenant.test", password="testpass123")
+        )
+
+        response = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"telefono": "3511111111"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["telefono"], "3511111111")
+
+    def test_usuario_no_admin_no_puede_modificar_configuracion(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        ferreteria = Ferreteria.objects.get()
+        Usuario.objects.create_user(
+            username="operador@tenant.test",
+            email="operador@tenant.test",
+            password="testpass123",
+            tipo_usuario="cli_user",
+            ferreteria=ferreteria,
+        )
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="operador@tenant.test", password="testpass123")
+        )
+
+        get_response = client.get("/api/ferreteria/")
+        self.assertEqual(get_response.status_code, 200)
+
+        patch_response = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"telefono": "3512222222"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(patch_response.status_code, 403)
+
+    def test_admin_tenant_sin_staff_puede_subir_logo_arca(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        usuario = Usuario.objects.get(username="admin@tenant.test")
+        self.assertFalse(usuario.is_staff)
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="admin@tenant.test", password="testpass123")
+        )
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                archivo = SimpleUploadedFile(
+                    "logo.jpg",
+                    b"contenido-logo",
+                    content_type="image/jpeg",
+                )
+                response = client.post(
+                    "/api/productos/subir-logo-arca/",
+                    data={"logo_arca": archivo},
+                )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_usuario_no_admin_no_puede_subir_logo_arca(self):
+        inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        ferreteria = Ferreteria.objects.get()
+        Usuario.objects.create_user(
+            username="operador@tenant.test",
+            email="operador@tenant.test",
+            password="testpass123",
+            tipo_usuario="cli_user",
+            ferreteria=ferreteria,
+        )
+
+        client = TenantClient(self.tenant)
+        self.assertTrue(
+            client.login(username="operador@tenant.test", password="testpass123")
+        )
+
+        archivo = SimpleUploadedFile(
+            "logo.jpg",
+            b"contenido-logo",
+            content_type="image/jpeg",
+        )
+        response = client.post(
+            "/api/productos/subir-logo-arca/",
+            data={"logo_arca": archivo},
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_estado_setup_endpoint_refleja_tenant_incompleto_y_completo(self):
         inicializar_datos_tenant(

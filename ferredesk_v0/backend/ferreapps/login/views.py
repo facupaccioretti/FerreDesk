@@ -52,7 +52,8 @@ def login_view(request):
                     'user': {
                         'username': user.username,
                         'is_staff': user.is_staff,
-                        # Agrega aquí más información del usuario que necesites
+                        'tipo_usuario': user.tipo_usuario,
+                        'es_admin_tenant': user.tipo_usuario == "admin",
                     }
                 })
             else:
@@ -97,7 +98,8 @@ def user_view(request):
             'user': {
                 'username': request.user.username,
                 'is_staff': request.user.is_staff,
-                # Agrega aquí más campos si lo deseas
+                'tipo_usuario': request.user.tipo_usuario,
+                'es_admin_tenant': request.user.tipo_usuario == "admin",
             }
         })
     else:

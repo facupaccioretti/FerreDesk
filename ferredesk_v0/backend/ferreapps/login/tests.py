@@ -1,6 +1,6 @@
 import json
 
-from django.test import Client, TransactionTestCase
+from django.test import Client, TransactionTestCase, override_settings
 from django_tenants.utils import schema_context
 
 from acceso_publico.models import CuentaAccesoPublico
@@ -10,6 +10,11 @@ from tenants.models import EmpresaTenant
 from tenants.services import crear_tenant_completo
 
 
+@override_settings(
+    PUBLIC_BASE_URL="http://lvh.me",
+    ALLOW_INSECURE_PUBLIC_URLS=True,
+    ALLOWED_HOSTS=["testserver", "lvh.me", ".lvh.me"],
+)
 class LoginBridgeTestCase(TransactionTestCase):
     def tearDown(self):
         with schema_context("public"):
@@ -18,12 +23,17 @@ class LoginBridgeTestCase(TransactionTestCase):
                 tenant.delete(force_drop=True)
 
     def _crear_tenant_y_cuenta(self, slug, email):
-        return crear_tenant_completo(
+        resultado = crear_tenant_completo(
             nombre=f"Bridge {slug}",
             slug=slug,
             email=email,
             password="testpass123",
         )
+        with schema_context("public"):
+            tenant = EmpresaTenant.objects.get(schema_name=slug)
+            tenant.estado_suscripcion = EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO
+            tenant.save(update_fields=["estado_suscripcion"])
+        return resultado
 
     def test_login_bridge_redirige_a_setup_si_falta_configuracion(self):
         slug = "bridgegatesetup"

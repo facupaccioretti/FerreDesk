@@ -37,6 +37,7 @@ import base64
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
+from ferredesk_backend.permissions import EsAdminTenant
 
 # Create your views here.
 
@@ -963,6 +964,11 @@ class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return [EsAdminTenant()]
+        return [IsAuthenticated()]
+
     def get(self, request):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
         ferreteria = Ferreteria.objects.first()
@@ -1098,7 +1104,7 @@ def servir_logo_arca(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([EsAdminTenant])
 @transaction.atomic
 def subir_logo_arca(request):
     """
@@ -1106,9 +1112,6 @@ def subir_logo_arca(request):
     Requiere usuario autenticado con permisos (staff recomendado a nivel URL/permiso).
     """
     try:
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
-
         archivo = request.FILES.get('logo_arca')
         if not archivo:
             return Response({'detail': 'No se envió archivo logo_arca.'}, status=400)

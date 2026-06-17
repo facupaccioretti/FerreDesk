@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { instalarFetchConCSRF } from './utils/clienteAPI';
 
 // Polyfills para módulos de Node.js
 import { Buffer } from 'buffer';
@@ -11,6 +12,7 @@ import process from 'process';
 window.Buffer = Buffer;
 window.process = process;
 window.global = window; // Ajuste para mayor compatibilidad
+instalarFetchConCSRF();
 
 // Verificar si hay una redirección pendiente
 const redirectHeader = document.querySelector('meta[name="x-redirect"]')?.content;
