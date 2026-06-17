@@ -5,10 +5,36 @@ import { getCookie } from "./csrf";
 async function asegurarCsrfLocal() {
   let csrfToken = getCookie("csrftoken");
   if (!csrfToken) {
-    await fetch("/api/csrf/", { credentials: "include" });
-    csrfToken = getCookie("csrftoken");
+    const response = await fetch("/api/csrf/", { credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    csrfToken = data.csrfToken || getCookie("csrftoken");
   }
   return csrfToken;
+}
+
+function crearHeadersJson(csrfToken) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  if (csrfToken) {
+    headers["X-CSRFToken"] = csrfToken;
+  }
+
+  return headers;
+}
+
+async function leerRespuestaApi(response, mensajeFallback) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  const texto = await response.text().catch(() => "");
+  const error = new Error(mensajeFallback);
+  error.status = response.status;
+  error.responseText = texto;
+  throw error;
 }
 
 function normalizarTenantUrl(tenantUrl) {
@@ -26,15 +52,15 @@ export function useAuthAPI() {
     const csrfToken = await asegurarCsrfLocal();
     const response = await fetch("/api/login/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrfToken,
-      },
+      headers: crearHeadersJson(csrfToken),
       credentials: "include",
       body: JSON.stringify({ username, password }),
     });
 
-    const data = await response.json();
+    const data = await leerRespuestaApi(
+      response,
+      "El servidor no devolvio una respuesta valida al iniciar sesion."
+    );
     if (response.ok) {
       return { redirectTo: "/home" };
     }
@@ -49,15 +75,15 @@ export function useAuthAPI() {
     const csrfToken = await asegurarCsrfLocal();
     const response = await fetch("/api/public/acceso/login/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrfToken,
-      },
+      headers: crearHeadersJson(csrfToken),
       credentials: "include",
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    const data = await leerRespuestaApi(
+      response,
+      "No pudimos iniciar sesion por un error del servidor. Intenta nuevamente o contacta soporte."
+    );
     if (!response.ok) {
       const error = new Error(data.message || "No se pudo autenticar la cuenta global.");
       error.errorCode = data.error_code || "";

@@ -4,7 +4,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from acceso_publico.serializers import LoginPublicoSerializer, PasswordResetPublicoSerializer
-from acceso_publico.services import autenticar_cuenta_acceso_publico, solicitar_reset_cuenta_publica
+from acceso_publico.services import (
+    AccesoPublicoErrorConfiguracion,
+    autenticar_cuenta_acceso_publico,
+    solicitar_reset_cuenta_publica,
+)
 from tenants.services.public_url_service import construir_url_tenant_publica
 
 
@@ -49,6 +53,15 @@ class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
                     "error_code": error_code,
                 },
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+        except AccesoPublicoErrorConfiguracion as exc:
+            return Response(
+                {
+                    "status": "error",
+                    "message": exc.mensaje_publico,
+                    "error_code": exc.codigo,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         cuenta = resultado["cuenta"]

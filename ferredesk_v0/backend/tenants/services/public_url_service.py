@@ -13,6 +13,10 @@ def _debug_activo():
     return bool(getattr(settings, "DEBUG", False))
 
 
+def _permitir_urls_inseguras():
+    return _debug_activo() or bool(getattr(settings, "ALLOW_INSECURE_PUBLIC_URLS", False))
+
+
 def _normalizar_base_url(url, *, setting_name):
     valor = (url or "").strip()
     if not valor:
@@ -24,7 +28,7 @@ def _normalizar_base_url(url, *, setting_name):
             f"{setting_name} debe ser una URL absoluta con esquema y host."
         )
 
-    if not _debug_activo() and parsed.scheme != "https":
+    if not _permitir_urls_inseguras() and parsed.scheme != "https":
         raise ImproperlyConfigured(
             f"{setting_name} debe usar https en produccion."
         )

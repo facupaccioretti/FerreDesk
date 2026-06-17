@@ -1,6 +1,7 @@
 """Servicios de acceso global en schema public."""
 
 from datetime import timedelta
+import logging
 
 from django.db.models import Q
 
@@ -16,6 +17,16 @@ from tenants.models import EmpresaTenant
 
 TOKEN_PUENTE_DURACION_MINUTOS = 5
 PUBLIC_SCHEMA_NAME = get_public_schema_name()
+logger = logging.getLogger(__name__)
+
+
+class AccesoPublicoErrorConfiguracion(Exception):
+    """Error controlado cuando la cuenta global apunta a datos SaaS inconsistentes."""
+
+    def __init__(self, *, codigo, mensaje_publico):
+        super().__init__(codigo)
+        self.codigo = codigo
+        self.mensaje_publico = mensaje_publico
 
 
 def _validar_estado_tenant_para_login(tenant):
@@ -65,8 +76,27 @@ def autenticar_cuenta_acceso_publico(*, email, password):
             raise exceptions.AuthenticationFailed("Credenciales invalidas.")
 
         tenant = cuenta.tenant_asignado
+        if tenant is None:
+            logger.error("Login publico tenant_asignado_inexistente email=%s", email)
+            raise AccesoPublicoErrorConfiguracion(
+                codigo="tenant_inconsistente",
+                mensaje_publico="No pudimos resolver el negocio asociado a tu cuenta. Contacta soporte.",
+            )
+
         _validar_estado_tenant_para_login(tenant)
         dominio = tenant.get_primary_domain()
+        if dominio is None or not getattr(dominio, "domain", ""):
+            logger.error(
+                "Login publico dominio_primario_inexistente email=%s tenant_id=%s schema=%s",
+                email,
+                tenant.id,
+                tenant.schema_name,
+            )
+            raise AccesoPublicoErrorConfiguracion(
+                codigo="tenant_sin_dominio",
+                mensaje_publico="No pudimos resolver la URL de tu negocio. Contacta soporte.",
+            )
+
         token_puente = crear_token_puente(cuenta=cuenta)
 
         return {
