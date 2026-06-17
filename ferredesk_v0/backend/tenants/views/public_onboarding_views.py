@@ -1,5 +1,7 @@
 """Views publicas del onboarding SaaS."""
 
+import logging
+
 from django.db import connection
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
@@ -22,6 +24,8 @@ from tenants.services import (
 )
 from tenants.services.provisioning_onboarding_service import ProvisioningOnboardingError
 from tenants.services.servicio_constructor_tenant import _construir_dominio_primario
+
+logger = logging.getLogger(__name__)
 
 
 def _esquema_publico_activo():
@@ -169,6 +173,10 @@ class ReenviarEmailOnboardingAPIView(APIView):
         try:
             reenviar_token_verificacion(email=serializer.validated_data["email"])
         except Exception:
+            logger.exception(
+                "Reenvio email_verificacion_fallido email=%s",
+                serializer.validated_data["email"],
+            )
             return Response(
                 {
                     "status": "error",
