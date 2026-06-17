@@ -1,6 +1,7 @@
 """Views publicas del onboarding SaaS."""
 
 from django.db import connection
+from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,10 +9,18 @@ from rest_framework.views import APIView
 from tenants.serializers import (
     ActivarEmailOnboardingSerializer,
     CrearTenantOnboardingSerializer,
+    SolicitudOnboardingEstadoSerializer,
     ValidarSlugOnboardingSerializer,
     ReenviarEmailOnboardingSerializer,
 )
-from tenants.services import activar_tenant_por_token, crear_tenant_completo, reenviar_token_verificacion
+from tenants.models import SolicitudOnboardingTenant
+from tenants.services import (
+    activar_tenant_por_token,
+    crear_solicitud_onboarding,
+    provisionar_tenant_completo,
+    reenviar_token_verificacion,
+)
+from tenants.services.provisioning_onboarding_service import ProvisioningOnboardingError
 from tenants.services.servicio_constructor_tenant import _construir_dominio_primario
 
 
@@ -68,17 +77,34 @@ class CrearTenantOnboardingAPIView(APIView):
         serializer = CrearTenantOnboardingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        resultado = crear_tenant_completo(
+        solicitud = crear_solicitud_onboarding(
             nombre=serializer.validated_data["nombre"],
             slug=serializer.validated_data["slug"],
-            email=serializer.validated_data["email_admin"],
-            password=serializer.validated_data["password"],
+            email_admin=serializer.validated_data["email_admin"],
         )
 
-        return Response(
-            serializer.to_respuesta(resultado),
-            status=status.HTTP_201_CREATED,
-        )
+        try:
+            resultado = provisionar_tenant_completo(
+                nombre=serializer.validated_data["nombre"],
+                slug=serializer.validated_data["slug"],
+                email=serializer.validated_data["email_admin"],
+                password=serializer.validated_data["password"],
+                solicitud=solicitud,
+            )
+        except ProvisioningOnboardingError as exc:
+            return Response(
+                {
+                    "status": "error",
+                    "message": exc.mensaje_publico,
+                    "solicitud_id": solicitud.id,
+                    "error_codigo": exc.error_codigo,
+                },
+                status=exc.status_code,
+            )
+
+        payload = serializer.to_respuesta(resultado)
+        payload["solicitud_id"] = solicitud.id
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class RegistroSaaSAPIView(CrearTenantOnboardingAPIView):
@@ -149,3 +175,25 @@ class ReenviarEmailOnboardingAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class EstadoSolicitudOnboardingAPIView(APIView):
+    """Consulta publica del estado de una solicitud de onboarding."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, solicitud_id):
+        if not _esquema_publico_activo():
+            return Response(
+                {
+                    "detail": "La consulta de onboarding solo puede ejecutarse desde el schema publico."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        solicitud = get_object_or_404(
+            SolicitudOnboardingTenant.objects.select_related("tenant"),
+            pk=solicitud_id,
+        )
+        serializer = SolicitudOnboardingEstadoSerializer(solicitud)
+        return Response(serializer.data, status=status.HTTP_200_OK)

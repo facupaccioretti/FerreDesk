@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from acceso_publico.models import CuentaAccesoPublico
+from tenants.models import SolicitudOnboardingTenant
 from tenants.services.servicio_constructor_tenant import _obtener_dominio_base
 from tenants.services.public_url_service import construir_url_tenant_publica
 from tenants.validators import validar_slug_completo, validar_slug_formato, validar_slug_no_reservado, validar_slug_unico
@@ -105,3 +106,47 @@ class ReenviarEmailOnboardingSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         return value.strip().lower()
+
+
+class SolicitudOnboardingEstadoSerializer(serializers.ModelSerializer):
+    solicitud_id = serializers.IntegerField(source="id", read_only=True)
+    tenant = serializers.SerializerMethodField()
+    dominio = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SolicitudOnboardingTenant
+        fields = (
+            "solicitud_id",
+            "estado",
+            "error_codigo",
+            "error_detalle",
+            "intentos",
+            "creado_en",
+            "actualizado_en",
+            "tenant",
+            "dominio",
+        )
+
+    def get_tenant(self, instance):
+        if instance.tenant_id is None:
+            return None
+
+        return {
+            "id": instance.tenant.id,
+            "schema_name": instance.tenant.schema_name,
+            "slug_subdominio": instance.tenant.slug_subdominio,
+            "estado_suscripcion": instance.tenant.estado_suscripcion,
+        }
+
+    def get_dominio(self, instance):
+        if instance.tenant_id is None:
+            return None
+
+        dominio = instance.tenant.get_primary_domain()
+        if dominio is None:
+            return None
+
+        return {
+            "host": dominio.domain,
+            "url": construir_url_tenant_publica(host=dominio.domain, path="/"),
+        }

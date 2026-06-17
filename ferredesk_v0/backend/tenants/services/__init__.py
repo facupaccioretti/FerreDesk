@@ -29,10 +29,24 @@ def inicializar_datos_tenant(*args, **kwargs):
 
     return impl(*args, **kwargs)
 
+
+def crear_solicitud_onboarding(*args, **kwargs):
+    from tenants.services.provisioning_onboarding_service import crear_solicitud_onboarding as impl
+
+    return impl(*args, **kwargs)
+
+
+def provisionar_tenant_completo(*args, **kwargs):
+    from tenants.services.provisioning_onboarding_service import provisionar_tenant_completo as impl
+
+    return impl(*args, **kwargs)
+
 __all__ = [
     "activar_tenant_por_token",
     "crear_tenant",
     "inicializar_datos_tenant",
     "crear_tenant_completo",
+    "crear_solicitud_onboarding",
+    "provisionar_tenant_completo",
     "reenviar_token_verificacion",
 ]

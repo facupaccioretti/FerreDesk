@@ -11,6 +11,11 @@ async function asegurarCsrf() {
 }
 
 function normalizarErrorRespuesta(data, fallback) {
+  if (data?.message) {
+    const solicitudId = data?.solicitud_id ? ` Solicitud #${data.solicitud_id}.` : '';
+    return `${data.message}${solicitudId}`;
+  }
+
   if (data?.detail) {
     return data.detail;
   }
@@ -39,6 +44,7 @@ export function useRegistroTenantAPI() {
   const [loadingRegistro, setLoadingRegistro] = useState(false);
   const [registroResult, setRegistroResult] = useState(null);
   const [registroError, setRegistroError] = useState('');
+  const [solicitudId, setSolicitudId] = useState(null);
   const [localError, setLocalError] = useState('');
 
   const handleChange = useCallback((event) => {
@@ -113,6 +119,7 @@ export function useRegistroTenantAPI() {
     setLoadingRegistro(true);
     setRegistroError('');
     setRegistroResult(null);
+    setSolicitudId(null);
 
     try {
       const csrftoken = await asegurarCsrf();
@@ -128,6 +135,7 @@ export function useRegistroTenantAPI() {
       const data = await response.json();
 
       if (!response.ok) {
+        setSolicitudId(data?.solicitud_id ?? null);
         setRegistroError(normalizarErrorRespuesta(data, 'Error al registrar el negocio.'));
         return null;
       }
@@ -179,6 +187,7 @@ export function useRegistroTenantAPI() {
     localError,
     registroError,
     registroResult,
+    solicitudId,
     slugError,
     slugResult,
   };

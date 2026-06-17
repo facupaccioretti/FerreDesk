@@ -10,10 +10,11 @@ from unittest.mock import patch
 from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
-from tenants.models import EmpresaTenant, TokenVerificacionEmail
+from tenants.models import EmpresaTenant, SolicitudOnboardingTenant, TokenVerificacionEmail
 from tenants.views import (
     ActivarEmailOnboardingAPIView,
     CrearTenantOnboardingAPIView,
+    EstadoSolicitudOnboardingAPIView,
     RegistroSaaSAPIView,
     ValidarSlugOnboardingAPIView,
     ReenviarEmailOnboardingAPIView,
@@ -79,6 +80,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(data["tenant"]["schema_name"], "apitestalta")
         self.assertEqual(data["tenant"]["slug_subdominio"], "apitestalta")
         self.assertEqual(data["tenant"]["email_admin"], "admin@apitestalta.com")
+        self.assertIsInstance(data["solicitud_id"], int)
         self.assertEqual(
             data["tenant"]["estado_suscripcion"],
             EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
@@ -95,11 +97,14 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         tenant_publico = EmpresaTenant.objects.get(schema_name="apitestalta")
         cuenta_publica = CuentaAccesoPublico.objects.get(email="admin@apitestalta.com")
         token_verificacion = TokenVerificacionEmail.objects.get(email="admin@apitestalta.com")
+        solicitud = SolicitudOnboardingTenant.objects.get(pk=data["solicitud_id"])
         self.assertEqual(cuenta_publica.tenant_asignado_id, tenant_publico.id)
         self.assertEqual(cuenta_publica.username_tenant, "admin@apitestalta.com")
         self.assertEqual(cuenta_publica.email_tenant, "admin@apitestalta.com")
         self.assertTrue(cuenta_publica.check_password("testpass123"))
         self.assertEqual(token_verificacion.tenant_id, tenant_publico.id)
+        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_COMPLETADO)
+        self.assertEqual(solicitud.tenant_id, tenant_publico.id)
 
         connection.set_schema("apitestalta")
         self.assertEqual(Ferreteria.objects.count(), 1)
@@ -166,12 +171,18 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             "tenants.services.servicio_inicializacion_tenant.Usuario.objects.create_user",
             side_effect=RuntimeError("fallo forzado"),
         ):
-            with self.assertRaises(RuntimeError):
-                RegistroSaaSAPIView.as_view()(request)
+            response = RegistroSaaSAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.data["error_codigo"], "provisioning_error")
+        self.assertIsInstance(response.data["solicitud_id"], int)
 
         connection.set_schema_to_public()
         self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestcleanup").exists())
         self.assertFalse(CuentaAccesoPublico.objects.filter(email="admin@apitestcleanup.com").exists())
+        solicitud = SolicitudOnboardingTenant.objects.get(pk=response.data["solicitud_id"])
+        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_ERROR)
+        self.assertEqual(solicitud.error_codigo, "provisioning_error")
 
         with connection.cursor() as cursor:
             cursor.execute(
@@ -179,6 +190,63 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
                 ["apitestcleanup"],
             )
             self.assertIsNone(cursor.fetchone())
+
+    def test_registro_saas_persiste_error_si_falla_el_email(self):
+        request = self.factory.post(
+            "/api/registro-saas/",
+            {
+                "nombre": "API Test Email Fail",
+                "slug": "apitestemailfail",
+                "email_admin": "admin@apitestemailfail.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        with patch(
+            "tenants.services.provisioning_onboarding_service.generar_y_enviar_token_verificacion",
+            side_effect=RuntimeError("smtp down"),
+        ):
+            response = RegistroSaaSAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 500)
+        solicitud = SolicitudOnboardingTenant.objects.get(pk=response.data["solicitud_id"])
+        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_ERROR)
+        self.assertEqual(solicitud.error_codigo, "provisioning_error")
+        self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestemailfail").exists())
+
+    def test_estado_solicitud_publico_devuelve_payload_esperado(self):
+        alta_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Estado",
+                "slug": "apitestestado",
+                "email_admin": "admin@apitestestado.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        alta_response = CrearTenantOnboardingAPIView.as_view()(alta_request)
+        self.assertEqual(alta_response.status_code, 201)
+
+        estado_request = self.factory.get(
+            f"/api/public/onboarding/solicitudes/{alta_response.data['solicitud_id']}/"
+        )
+        estado_response = EstadoSolicitudOnboardingAPIView.as_view()(
+            estado_request,
+            solicitud_id=alta_response.data["solicitud_id"],
+        )
+
+        self.assertEqual(estado_response.status_code, 200)
+        self.assertEqual(estado_response.data["estado"], SolicitudOnboardingTenant.ESTADO_COMPLETADO)
+        self.assertEqual(estado_response.data["tenant"]["slug_subdominio"], "apitestestado")
+        self.assertEqual(estado_response.data["dominio"]["host"], "apitestestado.ferredesk.test")
+
+    def test_estado_solicitud_publico_devuelve_404_si_no_existe(self):
+        request = self.factory.get("/api/public/onboarding/solicitudes/999999/")
+        response = EstadoSolicitudOnboardingAPIView.as_view()(request, solicitud_id=999999)
+        self.assertEqual(response.status_code, 404)
 
     def test_activar_email_activa_tenant_y_elimina_token(self):
         alta_request = self.factory.post(

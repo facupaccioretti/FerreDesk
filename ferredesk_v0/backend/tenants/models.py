@@ -56,6 +56,45 @@ class TokenVerificacionEmail(models.Model):
         verbose_name_plural = "Tokens de verificacion de email"
 
 
+class SolicitudOnboardingTenant(models.Model):
+    """Audita y persiste el provisioning del onboarding SaaS en schema public."""
+
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_EN_PROCESO = "en_proceso"
+    ESTADO_COMPLETADO = "completado"
+    ESTADO_ERROR = "error"
+
+    ESTADOS = (
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_EN_PROCESO, "En proceso"),
+        (ESTADO_COMPLETADO, "Completado"),
+        (ESTADO_ERROR, "Error"),
+    )
+
+    nombre = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=63)
+    email_admin = models.EmailField()
+    estado = models.CharField(max_length=32, choices=ESTADOS, default=ESTADO_PENDIENTE)
+    error_codigo = models.CharField(max_length=64, blank=True)
+    error_detalle = models.TextField(blank=True)
+    tenant = models.ForeignKey(
+        "tenants.EmpresaTenant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="solicitudes_onboarding",
+    )
+    payload_resumen = models.JSONField(default=dict, blank=True)
+    intentos = models.PositiveIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Solicitud de onboarding SaaS"
+        verbose_name_plural = "Solicitudes de onboarding SaaS"
+        ordering = ("-creado_en",)
+
+
 class Dominio(DomainMixin):
     """Dominio/subdominio asociado a una empresa tenant."""
 
