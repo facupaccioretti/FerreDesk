@@ -204,16 +204,24 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         )
 
         with patch(
-            "tenants.services.provisioning_onboarding_service.generar_y_enviar_token_verificacion",
+            "tenants.services.verificacion_email_service.enviar_email_verificacion",
             side_effect=RuntimeError("smtp down"),
         ):
             response = RegistroSaaSAPIView.as_view()(request)
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["email_verificacion"]["enviado"], False)
+        self.assertEqual(response.data["email_verificacion"]["requiere_reenvio"], True)
+
         solicitud = SolicitudOnboardingTenant.objects.get(pk=response.data["solicitud_id"])
-        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_ERROR)
-        self.assertEqual(solicitud.error_codigo, "provisioning_error")
-        self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestemailfail").exists())
+        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_COMPLETADO)
+        self.assertTrue(EmpresaTenant.objects.filter(schema_name="apitestemailfail").exists())
+        self.assertTrue(CuentaAccesoPublico.objects.filter(email="admin@apitestemailfail.com").exists())
+        self.assertTrue(TokenVerificacionEmail.objects.filter(email="admin@apitestemailfail.com").exists())
+        self.assertEqual(
+            solicitud.payload_resumen["email_verificacion"]["enviado"],
+            False,
+        )
 
     def test_estado_solicitud_publico_devuelve_payload_esperado(self):
         alta_request = self.factory.post(
@@ -242,6 +250,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(estado_response.data["estado"], SolicitudOnboardingTenant.ESTADO_COMPLETADO)
         self.assertEqual(estado_response.data["tenant"]["slug_subdominio"], "apitestestado")
         self.assertEqual(estado_response.data["dominio"]["host"], "apitestestado.ferredesk.test")
+        self.assertTrue("payload_resumen" in estado_response.data)
 
     def test_estado_solicitud_publico_devuelve_404_si_no_existe(self):
         request = self.factory.get("/api/public/onboarding/solicitudes/999999/")
@@ -364,3 +373,30 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(reenviar_response.status_code, 200)
         self.assertEqual(reenviar_response.data["status"], "success")
         self.assertFalse(TokenVerificacionEmail.objects.filter(email="noexiste@apitest.com").exists())
+
+    def test_reenviar_email_publico_devuelve_503_si_falla_el_envio(self):
+        alta_request = self.factory.post(
+            "/api/public/onboarding/tenants/",
+            {
+                "nombre": "API Test Reenvio Falla",
+                "slug": "apitestreenviofalla",
+                "email_admin": "admin@apitestreenviofalla.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+        CrearTenantOnboardingAPIView.as_view()(alta_request)
+
+        with patch(
+            "tenants.views.public_onboarding_views.reenviar_token_verificacion",
+            side_effect=RuntimeError("smtp down"),
+        ):
+            reenviar_request = self.factory.post(
+                "/api/public/onboarding/reenviar-email/",
+                {"email": "admin@apitestreenviofalla.com"},
+                format="json",
+            )
+            reenviar_response = ReenviarEmailOnboardingAPIView.as_view()(reenviar_request)
+
+        self.assertEqual(reenviar_response.status_code, 503)
+        self.assertEqual(reenviar_response.data["status"], "error")

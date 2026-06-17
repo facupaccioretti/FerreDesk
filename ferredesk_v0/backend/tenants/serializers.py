@@ -84,6 +84,14 @@ class CrearTenantOnboardingSerializer(serializers.Serializer):
                 "email": usuario.email,
                 "tipo_usuario": usuario.tipo_usuario,
             },
+            "email_verificacion": resultado.get(
+                "email_verificacion",
+                {
+                    "enviado": False,
+                    "requiere_reenvio": True,
+                    "mensaje": "",
+                },
+            ),
         }
 
 
@@ -125,6 +133,7 @@ class SolicitudOnboardingEstadoSerializer(serializers.ModelSerializer):
             "actualizado_en",
             "tenant",
             "dominio",
+            "payload_resumen",
         )
 
     def get_tenant(self, instance):

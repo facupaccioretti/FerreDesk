@@ -59,7 +59,9 @@ export function useAuthAPI() {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || "No se pudo autenticar la cuenta global.");
+      const error = new Error(data.message || "No se pudo autenticar la cuenta global.");
+      error.errorCode = data.error_code || "";
+      throw error;
     }
 
     const tenantUrlOriginal = data?.tenant?.url;

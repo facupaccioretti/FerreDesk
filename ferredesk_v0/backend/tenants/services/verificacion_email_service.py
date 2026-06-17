@@ -39,6 +39,7 @@ def generar_y_enviar_token_verificacion(*, tenant):
         token=token,
         dominio_activacion=_obtener_dominio_base(),
     )
+    return token
 
 
 def activar_tenant_por_token(*, email, token):

@@ -43,6 +43,8 @@ function Login() {
   const navigate = useNavigate();
   const { loginTenantDirecto, loginPublicoConBridge } = useAuthAPI();
   const [error, setError] = React.useState("");
+  const [errorCode, setErrorCode] = React.useState("");
+  const [ultimoEmailIntentado, setUltimoEmailIntentado] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
   const hostname = window.location.hostname;
@@ -57,11 +59,13 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setErrorCode("");
     setLoading(true);
 
     const formData = new FormData(e.target);
     const username = formData.get("username")?.toString().trim() || "";
     const password = formData.get("password")?.toString() || "";
+    setUltimoEmailIntentado(username);
 
     try {
       if (isPublicDomain) {
@@ -71,7 +75,8 @@ function Login() {
         redirigirA(resultado.redirectTo);
       }
     } catch (err) {
-      setError(err.message || "Error de conexión con el servidor.");
+      setErrorCode(err.errorCode || "");
+      setError(err.message || "Error de conexion con el servidor.");
     } finally {
       setLoading(false);
     }
@@ -101,7 +106,7 @@ function Login() {
             </h2>
             <p className="text-slate-600 mb-2">
               {isPublicDomain
-                ? "Ingresa con tu cuenta global y te enviaremos automáticamente a tu negocio."
+                ? "Ingresa con tu cuenta global y te enviaremos automaticamente a tu negocio."
                 : "Ingresa con tus credenciales del tenant para operar tu negocio."}
             </p>
             {!isPublicDomain && (
@@ -111,8 +116,9 @@ function Login() {
             )}
             {isPublicDomain && (
               <div className="mt-2 bg-blue-50 border border-blue-200 text-blue-900 text-sm px-4 py-2 rounded-lg text-left shadow-sm">
-                <strong>Acceso unificado:</strong> inicia sesión aquí con tu cuenta global.
-                Si las credenciales son válidas, FerreDesk abrirá tu sesión en el tenant correcto sin pedirte recordar el subdominio.
+                <strong>Acceso unificado:</strong> inicia sesion aqui con tu cuenta global. Si las
+                credenciales son validas, FerreDesk abrira tu sesion en el tenant correcto sin
+                pedirte recordar el subdominio.
               </div>
             )}
           </div>
@@ -121,7 +127,24 @@ function Login() {
             <form className="space-y-6" onSubmit={handleSubmit}>
               {error && (
                 <div className="rounded-lg bg-red-50 p-4 text-sm text-red-600 transform transition-all duration-300 ease-in-out">
-                  {error}
+                  <div>{error}</div>
+                  {isPublicDomain && errorCode === "pending_verification" && ultimoEmailIntentado && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/pendiente-verificacion?email=${encodeURIComponent(
+                              ultimoEmailIntentado
+                            )}&emailEnviado=false&origen=login`
+                          )
+                        }
+                        className={`font-medium ${theme.azulSecundario}`}
+                      >
+                        Ir a la pantalla de verificacion
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -141,15 +164,16 @@ function Login() {
 
               <div className="space-y-2">
                 <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                  Contraseña
+                  Contrasena
                 </label>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   required
+                  autoComplete="current-password"
                   className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Ingrese su contraseña"
+                  placeholder="Ingrese su contrasena"
                 />
               </div>
 
@@ -178,8 +202,7 @@ function Login() {
 
             <div className="text-center mt-6 pt-6 border-t border-slate-200">
               <p className="text-sm text-slate-600">
-                ¿Aún no tienes tu espacio de trabajo?{" "}
-                <br className="sm:hidden" />
+                Aun no tienes tu espacio de trabajo? <br className="sm:hidden" />
                 <button
                   onClick={() => {
                     if (!isPublicDomain) {

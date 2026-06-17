@@ -39,10 +39,14 @@ class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
                 password=serializer.validated_data["password"],
             )
         except exceptions.AuthenticationFailed as exc:
+            error_code = exc.get_codes()
+            if isinstance(error_code, list):
+                error_code = error_code[0]
             return Response(
                 {
                     "status": "error",
                     "message": str(exc.detail),
+                    "error_code": error_code,
                 },
                 status=status.HTTP_401_UNAUTHORIZED,
             )

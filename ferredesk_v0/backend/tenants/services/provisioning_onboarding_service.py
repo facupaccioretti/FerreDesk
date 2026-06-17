@@ -30,6 +30,11 @@ def _payload_resumen_base(*, nombre, slug, email_admin):
         "nombre": nombre,
         "slug": slug,
         "email_admin": email_admin,
+        "email_verificacion": {
+            "enviado": False,
+            "requiere_reenvio": False,
+            "mensaje": "",
+        },
     }
 
 
@@ -91,6 +96,30 @@ def _eliminar_tenant_fallido(tenant):
     tenant.delete(force_drop=True)
 
 
+def _enviar_email_verificacion_controlado(*, tenant, contexto):
+    try:
+        logger.info("Onboarding etapa email_verificacion %s schema=%s", contexto, tenant.schema_name)
+        generar_y_enviar_token_verificacion(tenant=tenant)
+        return {
+            "enviado": True,
+            "requiere_reenvio": False,
+            "mensaje": "Enviamos el email de verificacion correctamente.",
+        }
+    except Exception as exc:
+        logger.warning(
+            "Onboarding email_verificacion_fallido %s schema=%s detalle=%s",
+            contexto,
+            tenant.schema_name,
+            str(exc),
+        )
+        return {
+            "enviado": False,
+            "requiere_reenvio": True,
+            "mensaje": "La cuenta fue creada, pero no pudimos enviar el email de verificacion en este momento. Reintenta el reenvio desde la pantalla de verificacion.",
+            "error_detalle": str(exc),
+        }
+
+
 def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None):
     tenant = None
     contexto = f"solicitud_id={solicitud.id} slug={slug}" if solicitud else f"slug={slug}"
@@ -126,14 +155,17 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
                 email_tenant=datos_iniciales["usuario"].email,
             )
 
-            logger.info("Onboarding etapa email_verificacion %s schema=%s", contexto, tenant.schema_name)
-            generar_y_enviar_token_verificacion(tenant=tenant)
+        email_verificacion = _enviar_email_verificacion_controlado(
+            tenant=tenant,
+            contexto=contexto,
+        )
 
         resultado = {
             "tenant": tenant,
             "dominio": tenant.get_primary_domain(),
             "usuario": datos_iniciales["usuario"],
             "cuenta_acceso_publico": cuenta_acceso_publico,
+            "email_verificacion": email_verificacion,
         }
 
         if solicitud is not None:
@@ -146,6 +178,7 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
                     "schema_name": tenant.schema_name,
                     "dominio": resultado["dominio"].domain if resultado["dominio"] else "",
                     "usuario_admin": datos_iniciales["usuario"].username,
+                    "email_verificacion": email_verificacion,
                 },
             )
 

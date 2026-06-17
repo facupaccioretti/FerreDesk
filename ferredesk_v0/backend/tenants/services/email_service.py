@@ -1,7 +1,7 @@
 """Servicio puro para armado y envio de email de verificacion."""
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import get_connection, send_mail
 
 from tenants.services.public_url_service import construir_url_publica
 
@@ -24,10 +24,13 @@ def enviar_email_verificacion(*, destinatario, nombre_empresa, token, dominio_ac
         f"Si no solicitaste este alta, ignora este mensaje."
     )
 
+    connection = get_connection(timeout=getattr(settings, "EMAIL_TIMEOUT", 15))
+
     send_mail(
         subject=asunto,
         message=mensaje,
         from_email=remitente,
         recipient_list=[destinatario],
         fail_silently=False,
+        connection=connection,
     )

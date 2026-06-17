@@ -29,7 +29,8 @@ const useOnboardingVerificationAPI = () => {
         });
 
         if (!respuesta.ok) {
-            throw new Error('Error al intentar reenviar el correo.');
+            const data = await respuesta.json();
+            throw new Error(data.message || 'Error al intentar reenviar el correo.');
         }
 
         return await respuesta.json();

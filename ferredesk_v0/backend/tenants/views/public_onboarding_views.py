@@ -166,7 +166,16 @@ class ReenviarEmailOnboardingAPIView(APIView):
         serializer = ReenviarEmailOnboardingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        reenviar_token_verificacion(email=serializer.validated_data["email"])
+        try:
+            reenviar_token_verificacion(email=serializer.validated_data["email"])
+        except Exception:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "No pudimos procesar el reenvio en este momento. Reintenta en unos minutos.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         return Response(
             {

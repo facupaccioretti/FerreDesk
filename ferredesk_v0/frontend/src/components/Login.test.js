@@ -3,12 +3,13 @@ import { createRoot } from "react-dom/client";
 
 const mockLoginTenantDirecto = jest.fn();
 const mockLoginPublicoConBridge = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock(
   "react-router-dom",
   () => ({
     MemoryRouter: ({ children }) => <>{children}</>,
-    useNavigate: () => jest.fn(),
+    useNavigate: () => mockNavigate,
     Navigate: ({ children }) => <>{children}</>,
     useLocation: () => ({ pathname: "/login" }),
   }),
@@ -111,5 +112,41 @@ describe("Login", () => {
 
     expect(container.querySelector("form")).not.toBeNull();
     expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  test("en dominio publico ofrece ir a verificacion si el login falla por email pendiente", async () => {
+    setWindowLocation("https://staging.ferredesk.xyz/login");
+    mockLoginPublicoConBridge.mockRejectedValue(
+      Object.assign(new Error("Tu cuenta todavia no verifico el email."), {
+        errorCode: "pending_verification",
+      })
+    );
+
+    await renderLogin();
+
+    const [usernameInput, passwordInput] = container.querySelectorAll("input");
+    const form = container.querySelector("form");
+
+    await act(async () => {
+      usernameInput.value = "admin@ferretest.com";
+      usernameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      passwordInput.value = "testpass123";
+      passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const botonVerificacion = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent.includes("pantalla de verificacion")
+    );
+
+    expect(botonVerificacion).toBeTruthy();
+
+    await act(async () => {
+      botonVerificacion.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/pendiente-verificacion?email=admin%40ferretest.com&emailEnviado=false&origen=login"
+    );
   });
 });

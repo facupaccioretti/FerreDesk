@@ -1,6 +1,7 @@
 """Servicios de acceso global en schema public."""
 
 from datetime import timedelta
+
 from django.db.models import Q
 
 from django.db import connection
@@ -10,10 +11,30 @@ from rest_framework import exceptions
 
 from acceso_publico.models import CuentaAccesoPublico, TokenPuenteAcceso
 from ferreapps.login.password_reset_service import enviar_email_reset_tenant
+from tenants.models import EmpresaTenant
 
 
 TOKEN_PUENTE_DURACION_MINUTOS = 5
 PUBLIC_SCHEMA_NAME = get_public_schema_name()
+
+
+def _validar_estado_tenant_para_login(tenant):
+    if tenant.estado_suscripcion == EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION:
+        raise exceptions.AuthenticationFailed(
+            detail=(
+                "Tu cuenta todavia no verifico el email. Revisa tu bandeja o solicita un nuevo enlace de verificacion."
+            ),
+            code="pending_verification",
+        )
+
+    if tenant.estado_suscripcion in {
+        EmpresaTenant.ESTADO_SUSCRIPCION_SUSPENDIDO,
+        EmpresaTenant.ESTADO_SUSCRIPCION_CANCELADO,
+    }:
+        raise exceptions.AuthenticationFailed(
+            detail="La suscripcion de este negocio no permite iniciar sesion. Contacta soporte.",
+            code="inactive_subscription",
+        )
 
 
 def crear_cuenta_acceso_publico(*, email, password, nombre_mostrar, tenant, username_tenant, email_tenant):
@@ -44,6 +65,7 @@ def autenticar_cuenta_acceso_publico(*, email, password):
             raise exceptions.AuthenticationFailed("Credenciales invalidas.")
 
         tenant = cuenta.tenant_asignado
+        _validar_estado_tenant_para_login(tenant)
         dominio = tenant.get_primary_domain()
         token_puente = crear_token_puente(cuenta=cuenta)
 

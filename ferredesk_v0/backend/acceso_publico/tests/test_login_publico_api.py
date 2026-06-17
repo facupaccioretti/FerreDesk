@@ -5,7 +5,7 @@ from rest_framework.test import APIRequestFactory
 
 from acceso_publico.models import CuentaAccesoPublico, TokenPuenteAcceso
 from acceso_publico.views import LoginPublicoAPIView
-from tenants.models import EmpresaTenant
+from tenants.models import EmpresaTenant, TokenVerificacionEmail
 from tenants.services import crear_tenant_completo
 
 
@@ -27,12 +27,17 @@ class LoginPublicoAPITestCase(TransactionTestCase):
                 tenant.delete(force_drop=True)
 
     def test_login_publico_acepta_credenciales_validas(self):
-        crear_tenant_completo(
+        resultado = crear_tenant_completo(
             nombre="API Login Valido",
             slug="apiloginvalid",
             email="admin@apiloginvalid.com",
             password="testpass123",
         )
+        tenant = resultado["tenant"]
+        token = TokenVerificacionEmail.objects.get(email="admin@apiloginvalid.com")
+        tenant.estado_suscripcion = EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO
+        tenant.save(update_fields=["estado_suscripcion"])
+        token.delete()
 
         request = self.factory.post(
             "/api/public/acceso/login/",
@@ -72,12 +77,16 @@ class LoginPublicoAPITestCase(TransactionTestCase):
             )
 
     def test_login_publico_rechaza_credenciales_invalidas(self):
-        crear_tenant_completo(
+        resultado = crear_tenant_completo(
             nombre="API Login Invalido",
             slug="apiloginbad",
             email="admin@apiloginbad.com",
             password="testpass123",
         )
+        tenant = resultado["tenant"]
+        tenant.estado_suscripcion = EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO
+        tenant.save(update_fields=["estado_suscripcion"])
+        TokenVerificacionEmail.objects.filter(email="admin@apiloginbad.com").delete()
 
         request = self.factory.post(
             "/api/public/acceso/login/",
@@ -96,5 +105,32 @@ class LoginPublicoAPITestCase(TransactionTestCase):
             {
                 "status": "error",
                 "message": "Credenciales invalidas.",
+                "error_code": "authentication_failed",
             },
         )
+
+    def test_login_publico_rechaza_cuenta_pendiente_de_verificacion(self):
+        crear_tenant_completo(
+            nombre="API Login Pendiente",
+            slug="apiloginpend",
+            email="admin@apiloginpend.com",
+            password="testpass123",
+        )
+
+        request = self.factory.post(
+            "/api/public/acceso/login/",
+            {
+                "email": "admin@apiloginpend.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        response = LoginPublicoAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["status"], "error")
+        self.assertEqual(response.data["error_code"], "pending_verification")
+        self.assertIn("todavia no verifico el email", response.data["message"])
+        with schema_context("public"):
+            self.assertFalse(TokenPuenteAcceso.objects.filter(tenant_asignado__schema_name="apiloginpend").exists())
