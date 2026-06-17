@@ -1,799 +1,89 @@
-estoy teniendo muchos problemas de csrf, not valid json etc.. en ferredesk.xyz probando en render. Ahora en desarrollo local con runserver y npm start no se replican estos errores. Pero cada vez que arreglo algo y quiero ver si funciona tengo que hacer re deploy en render etc.. Hay alguna forma efectiva de replicar este entorno web?
-Pensado durante unos segundos
-
-Sí. La forma efectiva es dejar de probar solo con runserver + npm start y crear un entorno local tipo producción. No tiene que ser igual a Render al 100%, pero sí tiene que replicar las partes que te rompen CSRF, cookies, HTTPS, CORS, dominios y JSON.
-
-Tu problema seguramente viene de esta diferencia:
-
-En local tenés algo así:
-
-Frontend: http://localhost:3000
-Backend:  http://localhost:8000
-DEBUG=True
-Sin HTTPS real
-Cookies laxas
-Dominio simple
-
-En Render tenés algo así:
-
-Frontend: https://ferredesk.xyz
-Backend/API: https://api.ferredesk.xyz o https://ferredesk.xyz/api
-DEBUG=False
-HTTPS
-Cookies con dominio real
-CSRF trusted origins
-Proxy de Render/Cloudflare
-Headers reales
-
-Ahí aparecen problemas que local no ve.
-
-Lo correcto sería tener 3 niveles.
-
-Primero: desarrollo rápido.
-
-npm start
-python manage.py runserver
-DEBUG=True
-SQLite/Postgres local
-
-Esto sirve para programar pantallas, serializers, views, lógica de negocio, etc. Pero no sirve para validar deploy web.
-
-Segundo: entorno local tipo producción.
-
-Esto es lo que necesitás ahora.
-
-Docker Compose
-Django con DEBUG=False
-Frontend compilado con npm run build
-Nginx o Caddy como reverse proxy
-PostgreSQL local
-Variables .env parecidas a Render
-HTTPS local opcional con mkcert
-
-La idea es que vos levantes algo como:
-
-docker compose -f docker-compose.prod-local.yml up --build
-
-Y pruebes localmente con algo parecido a:
-
-https://ferredesk.localhost
-https://api.ferredesk.localhost
-
-O más simple:
-
-http://localhost
-http://localhost/api
-
-Pero usando build real del frontend, Django con DEBUG=False y Gunicorn, no runserver.
-
-Tercero: staging en Render.
-
-staging.ferredesk.xyz
-*.staging.ferredesk.xyz
-Base de datos staging
-Variables staging
-DEBUG=False
-
-Eso sirve para validar cosas que dependen realmente de internet: dominio real, Cloudflare, certificados, Resend, Render, headers del proxy, etc.
-
-Pero no deberías depender de Render para cada prueba mínima. Render debería ser la última verificación, no el lugar donde debugueás todo.
-
-Para tus errores concretos:
-
-CSRF Failed suele venir de alguna de estas cosas:
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://ferredesk.xyz",
-    "https://www.ferredesk.xyz",
-    "https://staging.ferredesk.xyz",
-]
-
-Si usás subdominios por tenant:
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://ferredesk.xyz",
-    "https://*.ferredesk.xyz",
-]
-
-También revisar:
-
-CORS_ALLOWED_ORIGINS = [
-    "https://ferredesk.xyz",
-    "https://www.ferredesk.xyz",
-]
-
-O si tenés tenants/subdominios:
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https:\/\/.*\.ferredesk\.xyz$",
-]
-
-Y cookies:
-
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SAMESITE = "Lax"
-
-Si frontend y backend están en subdominios distintos, por ejemplo:
-
-app.ferredesk.xyz
-api.ferredesk.xyz
-
-puede hacer falta:
-
-CSRF_COOKIE_DOMAIN = ".ferredesk.xyz"
-SESSION_COOKIE_DOMAIN = ".ferredesk.xyz"
-
-Pero si servís todo desde el mismo dominio, por ejemplo:
-
-ferredesk.xyz/api/
-ferredesk.xyz/app/
-
-mejor no tocar COOKIE_DOMAIN al principio.
-
-El error not valid JSON muchas veces no significa que tu JSON esté mal. Significa que el frontend esperaba JSON, pero el backend devolvió HTML.
-
-Ejemplo típico:
-
-Frontend espera:
-{ "error": "csrf failed" }
-
-Pero recibe:
-<html>
-  <title>403 Forbidden</title>
-  ...
-</html>
-
-Entonces React intenta hacer:
-
-await response.json()
-
-y explota con:
-
-Unexpected token < in JSON
-not valid JSON
-
-Eso se arregla haciendo que el frontend no asuma siempre JSON:
-
-const contentType = response.headers.get("content-type");
-
-if (contentType && contentType.includes("application/json")) {
-  const data = await response.json();
-  return data;
-}
-
-const text = await response.text();
-throw new Error(text);
-
-Pero eso solo mejora el diagnóstico. La causa real suele ser CSRF, CORS, login, redirect o endpoint incorrecto.
-
-Mi recomendación práctica para FerreDesk:
-
-No intentes replicar Render completo de una. Armá este camino:
-
-1. docker-compose.local.yml
-   Para desarrollo normal.
-
-2. docker-compose.prod-local.yml
-   Para simular producción:
-   - DEBUG=False
-   - Gunicorn
-   - npm run build
-   - Nginx/Caddy
-   - Postgres
-   - variables parecidas a Render
-
-3. staging.ferredesk.xyz en Render
-   Para última validación real.
-
-Para tu caso, lo más importante es que el entorno local tipo producción tenga:
-
-DEBUG=False
-ALLOWED_HOSTS configurado
-CSRF_TRUSTED_ORIGINS configurado
-CORS configurado
-Frontend con build real
-Backend detrás de proxy
-Gunicorn en vez de runserver
-Postgres en vez de SQLite
-
-La diferencia clave es esta:
-
-runserver + npm start = desarrollo cómodo
-docker compose prod-local = detectar errores de producción antes de Render
-Render staging = confirmar que internet/dominio/proxy real funciona
-Render producción = clientes reales
-
-No necesitás ser experto DevOps para esto. Necesitás una receta reproducible.
-
-Y sí: esto es exactamente el tipo de problema que justifica tener un staging y un prod-local. Porque CSRF, cookies, dominios, CORS y HTTPS casi nunca fallan igual en localhost que en un dominio real.
-
-from .base import *
-import os
-import re
-import dj_database_url
-from urllib.parse import urlparse
-from django.core.exceptions import ImproperlyConfigured
-
-
-def _split_env_list(value):
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def _domain_from_url(url):
-    if not url:
-    parsed = urlparse(url)
-    return (parsed.hostname or "").strip().lower()
-
-
-DEBUG = False
-
-PRIMARY_DOMAIN = (
-    os.environ.get("PRIMARY_DOMAIN", "").strip().lower()
-    or _domain_from_url(os.environ.get("PUBLIC_BASE_URL", ""))
-    or _domain_from_url(os.environ.get("FRONTEND_URL", ""))
-)
-
-ALLOWED_HOSTS = _split_env_list(os.environ.get("ALLOWED_HOSTS", "")) + [
-    ".onrender.com",
-    "localhost",
-    "127.0.0.1",
-]
-if PRIMARY_DOMAIN:
-    ALLOWED_HOSTS.extend([PRIMARY_DOMAIN, f".{PRIMARY_DOMAIN}"])
-SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
-USE_X_FORWARDED_HOST = True
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-# Ruta donde Docker coloca el build del frontend (copiado por Dockerfile)
-REACT_APP_DIR = os.path.join(BASE_DIR, "react_frontend")
-
-TEMPLATES[0]["DIRS"] = [
-    REACT_APP_DIR,
-    os.path.join(BASE_DIR, "templates"),
-]
-
-# Staticfiles
-STATIC_URL = "/static/"
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-
-# Directorio de estaticos de React (apuntamos a la subcarpeta 'static')
-STATICFILES_DIRS = [
-    os.path.join(REACT_APP_DIR, "static"),
-]
-
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
-RESEND_TIMEOUT = int(os.getenv("RESEND_TIMEOUT", "10"))
-
-_email_vars_requeridas = {
-    "DEFAULT_FROM_EMAIL": DEFAULT_FROM_EMAIL,
-    "RESEND_API_KEY": RESEND_API_KEY,
-}
-_faltantes = [clave for clave, valor in _email_vars_requeridas.items() if not valor]
-if _faltantes:
-    raise ImproperlyConfigured(
-        f"Variables de email requeridas en produccion: {', '.join(_faltantes)}"
-    )
-
-# Whitenoise sin manifest (mantiene nombres originales de React build)
-STORAGES = {
-    "default": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
-    },
-}
-
-# Storage - Cloudflare R2 (S3-compatible)
-AWS_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME')
-AWS_S3_ENDPOINT_URL = os.environ.get('R2_ENDPOINT_URL')
-AWS_S3_REGION_NAME = 'auto'
-AWS_S3_ADDRESSING_STYLE = 'path'
-AWS_QUERYSTRING_AUTH = False  # archivos públicos; cambiar a True si son privados
-AWS_S3_FILE_OVERWRITE = False  # evita colisiones de nombres
-
-# Base de datos desde variable de entorno
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get("DATABASE_URL"),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
-DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
-DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
-
-# CORS & CSRF para subdominios del dominio principal
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOW_CREDENTIALS = True
-
-CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-
-frontend_url = os.environ.get("FRONTEND_URL", "").strip()
-CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
-
-CORS_ALLOWED_ORIGIN_REGEXES = []
-if PRIMARY_DOMAIN:
-    domain_pattern = re.escape(PRIMARY_DOMAIN)
-    CORS_ALLOWED_ORIGIN_REGEXES.append(rf"^https://[\w\-]+\.{domain_pattern}$")
-
-# Seguridad de cookies en producción
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = True
-
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'django.request': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-        'django.security': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-    },
-} este es prod y este es dev :# ferredesk_backend/settings/dev.py
-
-from .base import *
-import os
-
-DEBUG = False
-
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
-# SESSION_COOKIE_DOMAIN = ".localhost"
-
-# Ruta al build del frontend en desarrollo
-FRONTEND_BUILD_DIR = BASE_DIR.parent / "frontend" / "build"
-# Directorio raíz del build de React que usan las vistas de serve_react_app
-REACT_APP_DIR = FRONTEND_BUILD_DIR
-
-TEMPLATES[0]["DIRS"] = [
-    FRONTEND_BUILD_DIR,
-    BASE_DIR / "templates",
-]
-
-STATIC_URL = '/static/'
-
-STATICFILES_DIRS = [
-    FRONTEND_BUILD_DIR,
-    FRONTEND_BUILD_DIR / "static",
-]
-
-# Base de datos local
-DATABASES = {
-    'default': {
-        'ENGINE': 'django_tenants.postgresql_backend',
-        'NAME': 'FerreDesk',
-        'USER': 'postgres',
-        'PASSWORD': 'fercien',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
-
-DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
-
-# CORS & CSRF
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://lvh.me:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://lvh.me:8000",
-]
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://[a-z0-9-]+\.localhost:3000$",
-    r"^http://[a-z0-9-]+\.localhost:8000$",
-    r"^http://[a-z0-9-]+\.lvh\.me:3000$",
-    r"^http://[a-z0-9-]+\.lvh\.me:8000$",
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://*.localhost:3000",
-    "http://lvh.me:3000",
-    "http://*.lvh.me:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://*.localhost:8000",
-    "http://lvh.me:8000",
-    "http://*.lvh.me:8000",
-]
- 
-
-Voy a separar esto en dos partes: problemas concretos que ya se ven en tus settings, y cómo armar un prod-local para reproducirlos sin redeploy constante.
-
-Pensado durante 6s
-
-Sí. En lo que pegaste ya hay varios puntos que explican por qué en local no falla y en Render sí.
-
-Primero, hay un error directo en prod.py:
-
-def _domain_from_url(url):
-    if not url:
-    parsed = urlparse(url)
-    return (parsed.hostname or "").strip().lower()
-
-Eso debería ser:
-
-def _domain_from_url(url):
-    if not url:
-        return ""
-    parsed = urlparse(url)
-    return (parsed.hostname or "").strip().lower()
-
-Así como está pegado, debería romper por indentación. Capaz en tu archivo real está bien, pero si está igual, eso es un bug.
-
-El problema más importante de CSRF probablemente está acá:
-
-CSRF_COOKIE_HTTPONLY = True
-
-Si tu frontend React necesita leer la cookie csrftoken desde JavaScript para mandarla en el header:
-
-X-CSRFToken: ...
-
-entonces con CSRF_COOKIE_HTTPONLY = True no la puede leer.
-
-Eso en local quizás no se nota porque usás otra configuración, otro flujo, o no estás pasando por el mismo dominio/build. Para una SPA React separada, normalmente necesitás:
-
-CSRF_COOKIE_HTTPONLY = False
-
-No porque sea “más seguro”, sino porque si el frontend tiene que leer la cookie, no puede ser HttpOnly.
-
-Quedaría así en producción:
-
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = False
-
-SESSION_COOKIE_HTTPONLY = True está bien. La sesión no debería leerla React. Pero el CSRF token muchas veces sí.
-
-Otro punto: en prod.py, esto no alcanza:
-
-CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-
-Tu regex de CORS no aplica a CSRF. Esto:
-
-CORS_ALLOWED_ORIGIN_REGEXES.append(rf"^https://[\w\-]+\.{domain_pattern}$")
-
-sirve para CORS, pero no agrega nada a CSRF_TRUSTED_ORIGINS.
-
-Entonces en Render deberías tener explícitamente una variable:
-
-CSRF_TRUSTED_ORIGINS=https://ferredesk.xyz,https://www.ferredesk.xyz,https://*.ferredesk.xyz
-
-Y si usás staging:
-
-CSRF_TRUSTED_ORIGINS=https://ferredesk.xyz,https://www.ferredesk.xyz,https://*.ferredesk.xyz,https://staging.ferredesk.xyz,https://*.staging.ferredesk.xyz
-
-También revisaría FRONTEND_URL. Si en producción tu frontend está en:
-
-https://ferredesk.xyz
-
-entonces:
-
-FRONTEND_URL=https://ferredesk.xyz
-PRIMARY_DOMAIN=ferredesk.xyz
-
-Y en ALLOWED_HOSTS debería terminar quedando algo equivalente a:
-
-ALLOWED_HOSTS = [
-    ".onrender.com",
-    "localhost",
-    "127.0.0.1",
-    "ferredesk.xyz",
-    ".ferredesk.xyz",
-]
-
-Eso está bastante bien.
-
-Pero ojo con esto:
-
-SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", None)
-
-Si pusiste en Render:
-
-SESSION_COOKIE_DOMAIN=ferredesk.xyz
-
-puede limitarte las cookies solo al dominio exacto. Para compartir sesión entre subdominios normalmente sería:
-
-SESSION_COOKIE_DOMAIN=.ferredesk.xyz
-
-Pero si al principio querés evitar dolores de cabeza, mejor no usar subdominios separados para app/api todavía. La forma más simple es:
-
-https://ferredesk.xyz/
-https://ferredesk.xyz/api/
-
-Mismo dominio. Menos CORS, menos cookies cruzadas, menos CSRF raro.
-
-Tu dev.py también tiene algo raro:
-
-DEBUG = False
-
-Para desarrollo común debería ser:
-
-DEBUG = True
-
-Pero entiendo que quizá lo pusiste así para simular producción. El problema es que ese archivo mezcla “dev local” con “prod-like local”. Conviene separarlos.
-
-Yo haría esto:
-
-settings/
-  base.py
-  dev.py
-  prod.py
-  prod_local.py
-
-dev.py sería cómodo:
-
-DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_HTTPONLY = False
-
-prod.py sería Render real:
-
-DEBUG = False
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_HTTPONLY = True
-
-Y prod_local.py sería para reproducir producción sin Render:
-
-from .prod import *
-
-DEBUG = False
-
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    ".localhost",
-    ".lvh.me",
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost",
-    "http://localhost:8000",
-    "http://localhost:3000",
-    "http://lvh.me",
-    "http://lvh.me:8000",
-    "http://lvh.me:3000",
-    "http://*.lvh.me",
-    "http://*.lvh.me:8000",
-    "http://*.lvh.me:3000",
-]
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "http://lvh.me:3000",
-    "http://lvh.me:8000",
-]
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://[a-z0-9-]+\.lvh\.me:3000$",
-    r"^http://[a-z0-9-]+\.lvh\.me:8000$",
-]
-
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
-
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_HTTPONLY = True
-
-SESSION_COOKIE_DOMAIN = None
-CSRF_COOKIE_DOMAIN = None
-
-La clave es esta: si probás local con HTTP, no podés tener:
-
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-
-porque esas cookies solo viajan por HTTPS. Entonces en prod_local.py las bajás a False, pero mantenés lo demás parecido a producción.
-
-Después levantás con:
-
-DJANGO_SETTINGS_MODULE=ferredesk_backend.settings.prod_local
-
-Y probás con:
-
-http://lvh.me:8000
-http://tenant1.lvh.me:8000
-
-lvh.me es útil porque apunta a 127.0.0.1 y permite simular subdominios:
-
-lvh.me -> localhost
-cliente1.lvh.me -> localhost
-cliente2.lvh.me -> localhost
-
-Para multi-tenant es mejor que usar solo localhost.
-
-Sobre el error not valid JSON: muy probablemente no es que estés mandando JSON inválido. Es que React espera JSON, pero Django le está devolviendo HTML, por ejemplo una página 403 CSRF, una página 500, una redirección al login o el index.html de React.
-
-En el frontend conviene cambiar temporalmente el helper de requests para diagnosticar mejor:
-
-const response = await fetch(url, options);
-
-const contentType = response.headers.get("content-type") || "";
-
-if (!contentType.includes("application/json")) {
-  const text = await response.text();
-  console.error("Respuesta no JSON:", {
-    status: response.status,
-    url: response.url,
-    contentType,
-    body: text.slice(0, 1000),
-  });
-  throw new Error(`Respuesta no JSON. Status ${response.status}`);
-}
-
-const data = await response.json();
-
-if (!response.ok) {
-  console.error("Error API:", data);
-  throw new Error(data.detail || "Error en la API");
-}
-
-return data;
-
-Eso te va a mostrar si realmente recibís:
-
-<!DOCTYPE html>
-<html>
-...
-
-o una respuesta de Django tipo CSRF.
-
-Para probar CSRF específicamente, revisá que tus requests mutantes (POST, PUT, PATCH, DELETE) tengan:
-
-credentials: "include"
-
-Ejemplo:
-
-fetch("/api/clientes/", {
-  method: "POST",
-  credentials: "include",
-  headers: {
-    "Content-Type": "application/json",
-    "X-CSRFToken": csrfToken,
-  },
-  body: JSON.stringify(data),
-});
-
-Si usás URL absoluta:
-
-fetch("https://ferredesk.xyz/api/clientes/", ...)
-
-también va con:
-
-credentials: "include"
-
-Y si estás usando subdominios distintos, por ejemplo:
-
-frontend: https://ferredesk.xyz
-backend: https://api.ferredesk.xyz
-
-entonces necesitás cookies y CORS mucho más finos:
-
-CORS_ALLOW_CREDENTIALS = True
-CSRF_COOKIE_DOMAIN = ".ferredesk.xyz"
-SESSION_COOKIE_DOMAIN = ".ferredesk.xyz"
-CSRF_TRUSTED_ORIGINS = [
-    "https://ferredesk.xyz",
-    "https://*.ferredesk.xyz",
-]
-
-Pero, de nuevo: para reducir problemas, mejor servir todo desde el mismo dominio y que React llame a rutas relativas:
-
-fetch("/api/clientes/")
-
-en vez de:
-
-fetch("https://api.ferredesk.xyz/api/clientes/")
-
-Mi diagnóstico principal sobre tu configuración actual:
-
-1. CSRF_COOKIE_HTTPONLY = True probablemente te rompe React si leés csrftoken desde JS.
-
-2. CSRF_TRUSTED_ORIGINS depende 100% de la env var; no estás agregando automáticamente PRIMARY_DOMAIN ahí.
-
-3. CORS_ALLOWED_ORIGIN_REGEXES no reemplaza CSRF_TRUSTED_ORIGINS.
-
-4. Tu dev.py no replica prod porque usa HTTP, otros dominios, otra build y probablemente otro flujo de cookies.
-
-5. "not valid JSON" seguramente es una respuesta HTML de error, no JSON mal formado.
-
-6. Necesitás un settings prod_local.py, no seguir deformando dev.py.
-
-Cambio mínimo que haría ya en prod.py:
-
-CSRF_TRUSTED_ORIGINS = _split_env_list(os.environ.get("CSRF_TRUSTED_ORIGINS", ""))
-
-if PRIMARY_DOMAIN:
-    CSRF_TRUSTED_ORIGINS.extend([
-        f"https://{PRIMARY_DOMAIN}",
-        f"https://www.{PRIMARY_DOMAIN}",
-        f"https://*.{PRIMARY_DOMAIN}",
-    ])
-
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = False
-
-Y en Render pondría:
-
-PRIMARY_DOMAIN=ferredesk.xyz
-FRONTEND_URL=https://ferredesk.xyz
-ALLOWED_HOSTS=ferredesk.xyz,.ferredesk.xyz
-CSRF_TRUSTED_ORIGINS=https://ferredesk.xyz,https://www.ferredesk.xyz,https://*.ferredesk.xyz
-
-Si tenés staging:
-
-PRIMARY_DOMAIN=staging.ferredesk.xyz
-FRONTEND_URL=https://staging.ferredesk.xyz
-ALLOWED_HOSTS=staging.ferredesk.xyz,.staging.ferredesk.xyz
-CSRF_TRUSTED_ORIGINS=https://staging.ferredesk.xyz,https://*.staging.ferredesk.xyz
-
-Pero no mezclaría producción y staging en las mismas variables si podés evitarlo. Cada servicio de Render debería tener sus propias env vars.
-
-La solución efectiva para no redeployar a ciegas es esta:
-
-dev.py
-Para programar rápido.
-
-prod_local.py
-Para reproducir DEBUG=False, build real, tenants, cookies y CSRF localmente.
-
-prod.py
-Para Render.
-
-Y para FerreDesk, usaría lvh.me como dominio local de tenants:
-
-http://lvh.me:8000
-http://demo.lvh.me:8000
-http://cliente1.lvh.me:8000
-
-Eso te va a detectar muchos errores de ALLOWED_HOSTS, tenant domain, CSRF y cookies antes de tocar Render.
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 497, in dispatch
+    self.initial(request, *args, **kwargs)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 414, in initial
+    self.perform_authentication(request)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 324, in perform_authentication
+    request.user
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/request.py", line 227, in user
+    self._authenticate()
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/request.py", line 380, in _authenticate
+    user_auth_tuple = authenticator.authenticate(self)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/authentication.py", line 127, in authenticate
+    if not user or not user.is_active:
+  File "/usr/local/lib/python3.11/site-packages/django/utils/functional.py", line 251, in inner
+    self._setup()
+  File "/usr/local/lib/python3.11/site-packages/django/utils/functional.py", line 404, in _setup
+    self._wrapped = self._setupfunc()
+                    ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/middleware.py", line 33, in <lambda>
+    request.user = SimpleLazyObject(lambda: get_user(request))
+                                            ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/middleware.py", line 13, in get_user
+    request._cached_user = auth.get_user(request)
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/__init__.py", line 209, in get_user
+    user_id = _get_user_session_key(request)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/__init__.py", line 62, in _get_user_session_key
+    return get_user_model()._meta.pk.to_python(request.session[SESSION_KEY])
+                                               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/base.py", line 53, in __getitem__
+    return self._session[key]
+           ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/base.py", line 192, in _get_session
+    self._session_cache = self.load()
+                          ^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/db.py", line 42, in load
+    s = self._get_session_from_db()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/db.py", line 32, in _get_session_from_db
+    return self.model.objects.get(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 643, in get
+    num = len(clone)
+          ^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 380, in __len__
+    self._fetch_all()
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1926, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 91, in __iter__
+    results = compiler.execute_sql(
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1562, in execute_sql
+    cursor.execute(sql, params)
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/usr/local/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.ProgrammingError: relation "django_session" does not exist
+LINE 1: ...ession_data", "django_session"."expire_date" FROM "django_se...
+                                           

@@ -32,12 +32,17 @@ def _esquema_publico_activo():
     return getattr(connection, "schema_name", "public") == "public"
 
 
-class ValidarSlugOnboardingAPIView(APIView):
+class BaseOnboardingPublicoAPIView(APIView):
+    """Base para endpoints publicos de plataforma sin sesion tenant."""
+
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+
+class ValidarSlugOnboardingAPIView(BaseOnboardingPublicoAPIView):
     """
     Endpoint publico para validar disponibilidad de subdominio antes del alta.
     """
-
-    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         if not _esquema_publico_activo():
@@ -62,12 +67,10 @@ class ValidarSlugOnboardingAPIView(APIView):
         )
 
 
-class CrearTenantOnboardingAPIView(APIView):
+class CrearTenantOnboardingAPIView(BaseOnboardingPublicoAPIView):
     """
     Endpoint publico para crear un tenant completo desde el schema publico.
     """
-
-    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         if not _esquema_publico_activo():
@@ -115,10 +118,8 @@ class RegistroSaaSAPIView(CrearTenantOnboardingAPIView):
     """Alias publico explicito para el alta SaaS inicial."""
 
 
-class ActivarEmailOnboardingAPIView(APIView):
+class ActivarEmailOnboardingAPIView(BaseOnboardingPublicoAPIView):
     """Vista fina para validar el token de verificacion y activar el tenant."""
-
-    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         if not _esquema_publico_activo():
@@ -150,13 +151,11 @@ class ActivarEmailOnboardingAPIView(APIView):
         )
 
 
-class ReenviarEmailOnboardingAPIView(APIView):
+class ReenviarEmailOnboardingAPIView(BaseOnboardingPublicoAPIView):
     """
     Endpoint publico para reenviar el email de verificacion.
     Siempre devuelve 200 OK para evitar enumeracion de cuentas.
     """
-
-    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         if not _esquema_publico_activo():
@@ -194,10 +193,8 @@ class ReenviarEmailOnboardingAPIView(APIView):
         )
 
 
-class EstadoSolicitudOnboardingAPIView(APIView):
+class EstadoSolicitudOnboardingAPIView(BaseOnboardingPublicoAPIView):
     """Consulta publica del estado de una solicitud de onboarding."""
-
-    permission_classes = [permissions.AllowAny]
 
     def get(self, request, solicitud_id):
         if not _esquema_publico_activo():

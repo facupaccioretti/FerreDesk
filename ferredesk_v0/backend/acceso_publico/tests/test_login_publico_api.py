@@ -76,6 +76,10 @@ class LoginPublicoAPITestCase(TransactionTestCase):
                 ).exists()
             )
 
+    def test_login_publico_no_usa_session_authentication_global(self):
+        view = LoginPublicoAPIView()
+        self.assertEqual(view.authentication_classes, [])
+
     def test_login_publico_rechaza_credenciales_invalidas(self):
         resultado = crear_tenant_completo(
             nombre="API Login Invalido",

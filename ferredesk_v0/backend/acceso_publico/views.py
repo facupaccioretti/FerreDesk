@@ -15,6 +15,9 @@ from tenants.services.public_url_service import construir_url_tenant_publica
 class BaseAccesoPublicoAPIView(APIView):
     """Base reservada para endpoints public/shared de acceso global."""
 
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
 
 def _esquema_publico_activo():
     return getattr(connection, "schema_name", "public") == "public"
@@ -22,8 +25,6 @@ def _esquema_publico_activo():
 
 class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
     """Login central de la plataforma publica contra CuentaAccesoPublico."""
-
-    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         if not _esquema_publico_activo():
@@ -91,8 +92,6 @@ class LoginPublicoAPIView(BaseAccesoPublicoAPIView):
 
 
 class PasswordResetPublicoAPIView(BaseAccesoPublicoAPIView):
-    permission_classes = [permissions.AllowAny]
-
     def post(self, request):
         if not _esquema_publico_activo():
             return Response(

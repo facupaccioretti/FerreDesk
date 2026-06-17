@@ -68,6 +68,17 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             },
         )
 
+    def test_views_publicas_no_usan_session_authentication_global(self):
+        for view_cls in [
+            ValidarSlugOnboardingAPIView,
+            CrearTenantOnboardingAPIView,
+            RegistroSaaSAPIView,
+            ActivarEmailOnboardingAPIView,
+            ReenviarEmailOnboardingAPIView,
+            EstadoSolicitudOnboardingAPIView,
+        ]:
+            self.assertEqual(view_cls().authentication_classes, [])
+
     def test_crear_tenant_publico_crea_tenant_dominio_y_admin_inicial(self):
         request = self.factory.post(
             "/api/public/onboarding/tenants/",

@@ -99,6 +99,8 @@ venv/
 env/
 ENV/
 .env
+ferredesk_v0/ferredesk-staging.env
+ferredesk_v0/local.env
 
 # Migraciones (opcional)
 # **/migrations/*.py
