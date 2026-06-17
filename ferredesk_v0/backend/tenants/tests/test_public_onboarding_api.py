@@ -11,6 +11,7 @@ from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
 from ferreapps.usuarios.models import Usuario
 from tenants.models import EmpresaTenant, SolicitudOnboardingTenant, TokenVerificacionEmail
+from tenants.services.servicio_constructor_tenant import crear_tenant
 from tenants.views import (
     ActivarEmailOnboardingAPIView,
     CrearTenantOnboardingAPIView,
@@ -223,6 +224,39 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             False,
         )
 
+    def test_registro_saas_rechaza_email_con_alta_pendiente_parcial(self):
+        connection.set_schema_to_public()
+        tenant_pendiente = crear_tenant(
+            nombre="API Test Pendiente Parcial",
+            slug="apitestpendparcial",
+            email_admin="admin@apitestpendparcial.com",
+        )
+        TokenVerificacionEmail.objects.create(
+            email="admin@apitestpendparcial.com",
+            token="token-pendiente-parcial",
+            tenant=tenant_pendiente,
+        )
+
+        request = self.factory.post(
+            "/api/registro-saas/",
+            {
+                "nombre": "API Test Pendiente Reintento",
+                "slug": "apitestpendparcialdos",
+                "email_admin": "admin@apitestpendparcial.com",
+                "password": "testpass123",
+            },
+            format="json",
+        )
+
+        response = RegistroSaaSAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error_codigo"], "alta_pendiente_existente")
+        self.assertFalse(EmpresaTenant.objects.filter(schema_name="apitestpendparcialdos").exists())
+        solicitud = SolicitudOnboardingTenant.objects.get(pk=response.data["solicitud_id"])
+        self.assertEqual(solicitud.estado, SolicitudOnboardingTenant.ESTADO_ERROR)
+        self.assertEqual(solicitud.error_codigo, "alta_pendiente_existente")
+
     def test_estado_solicitud_publico_devuelve_payload_esperado(self):
         alta_request = self.factory.post(
             "/api/public/onboarding/tenants/",
@@ -361,6 +395,46 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         # 4. Verificar regeneracion de token
         token_nuevo = TokenVerificacionEmail.objects.get(email="admin@apitestreenvio.com").token
         self.assertNotEqual(token_viejo, token_nuevo)
+
+    def test_reenviar_email_publico_resuelve_tenant_canonico_con_duplicados_pendientes(self):
+        connection.set_schema_to_public()
+        tenant_canonico = crear_tenant(
+            nombre="API Test Reenvio Canonico",
+            slug="apitestreencanonico",
+            email_admin="admin@apitestreendup.com",
+        )
+        tenant_duplicado = crear_tenant(
+            nombre="API Test Reenvio Duplicado",
+            slug="apitestreenduplicado",
+            email_admin="admin@apitestreendup.com",
+        )
+        cuenta = CuentaAccesoPublico(
+            email="admin@apitestreendup.com",
+            nombre_mostrar="API Test Reenvio Canonico",
+            tenant_asignado=tenant_canonico,
+            username_tenant="admin@apitestreendup.com",
+            email_tenant="admin@apitestreendup.com",
+            activo=True,
+        )
+        cuenta.set_password("testpass123")
+        cuenta.save()
+        TokenVerificacionEmail.objects.create(
+            email="admin@apitestreendup.com",
+            token="token-duplicado-previo",
+            tenant=tenant_duplicado,
+        )
+
+        reenviar_request = self.factory.post(
+            "/api/public/onboarding/reenviar-email/",
+            {"email": "admin@apitestreendup.com"},
+            format="json",
+        )
+        reenviar_response = ReenviarEmailOnboardingAPIView.as_view()(reenviar_request)
+
+        self.assertEqual(reenviar_response.status_code, 200)
+        self.assertEqual(reenviar_response.data["status"], "success")
+        token_actual = TokenVerificacionEmail.objects.get(email="admin@apitestreendup.com")
+        self.assertEqual(token_actual.tenant_id, tenant_canonico.id)
 
     def test_reenviar_email_publico_devuelve_200_con_email_inexistente(self):
         reenviar_request = self.factory.post(

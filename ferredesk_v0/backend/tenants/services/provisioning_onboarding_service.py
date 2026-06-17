@@ -6,7 +6,7 @@ from django.db import IntegrityError, connection, transaction
 
 from acceso_publico.models import CuentaAccesoPublico
 from acceso_publico.services import crear_cuenta_acceso_publico
-from tenants.models import SolicitudOnboardingTenant
+from tenants.models import EmpresaTenant, SolicitudOnboardingTenant, TokenVerificacionEmail
 from tenants.services.servicio_constructor_tenant import crear_tenant
 from tenants.services.servicio_inicializacion_tenant import inicializar_datos_tenant
 from tenants.services.verificacion_email_service import generar_y_enviar_token_verificacion
@@ -96,6 +96,45 @@ def _eliminar_tenant_fallido(tenant):
     tenant.delete(force_drop=True)
 
 
+def _bloquear_email_onboarding(email):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_lock(hashtext(%s))", [f"onboarding:{email}"])
+
+
+def _desbloquear_email_onboarding(email):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_unlock(hashtext(%s))", [f"onboarding:{email}"])
+
+
+def _validar_email_onboarding_disponible(email):
+    if CuentaAccesoPublico.objects.filter(email=email).exists():
+        raise ProvisioningOnboardingError(
+            error_codigo="email_global_existente",
+            error_detalle=f"Ya existe una cuenta global para {email}.",
+            mensaje_publico="Ya existe una cuenta global con ese email. La beta V1 permite una sola empresa por cuenta.",
+            status_code=400,
+        )
+
+    if TokenVerificacionEmail.objects.filter(email=email).exists():
+        raise ProvisioningOnboardingError(
+            error_codigo="alta_pendiente_existente",
+            error_detalle=f"Ya existe un token de verificacion pendiente para {email}.",
+            mensaje_publico="Ya existe un alta pendiente para ese email. Revisa tu correo o solicita un reenvio desde la pantalla de verificacion.",
+            status_code=409,
+        )
+
+    if EmpresaTenant.objects.filter(
+        email_admin=email,
+        estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
+    ).exists():
+        raise ProvisioningOnboardingError(
+            error_codigo="tenant_pendiente_existente",
+            error_detalle=f"Ya existe un tenant pendiente para {email}.",
+            mensaje_publico="Ya existe un alta pendiente para ese email. Contacta soporte si no podes recuperar la verificacion.",
+            status_code=409,
+        )
+
+
 def _enviar_email_verificacion_controlado(*, tenant, contexto):
     try:
         logger.info("Onboarding etapa email_verificacion %s schema=%s", contexto, tenant.schema_name)
@@ -123,6 +162,7 @@ def _enviar_email_verificacion_controlado(*, tenant, contexto):
 def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None):
     tenant = None
     contexto = f"solicitud_id={solicitud.id} slug={slug}" if solicitud else f"slug={slug}"
+    email_bloqueado = False
 
     if solicitud is not None:
         _marcar_solicitud_en_proceso(solicitud)
@@ -130,6 +170,11 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
     logger.info("Onboarding provisioning iniciado %s", contexto)
 
     try:
+        logger.info("Onboarding etapa lock_email %s email=%s", contexto, email)
+        _bloquear_email_onboarding(email)
+        email_bloqueado = True
+        _validar_email_onboarding_disponible(email)
+
         logger.info("Onboarding etapa crear_tenant %s", contexto)
         tenant = crear_tenant(
             nombre=nombre,
@@ -154,6 +199,9 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
                 username_tenant=datos_iniciales["usuario"].username,
                 email_tenant=datos_iniciales["usuario"].email,
             )
+
+        _desbloquear_email_onboarding(email)
+        email_bloqueado = False
 
         email_verificacion = _enviar_email_verificacion_controlado(
             tenant=tenant,
@@ -184,6 +232,16 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
 
         logger.info("Onboarding provisioning completado %s schema=%s", contexto, tenant.schema_name)
         return resultado
+    except ProvisioningOnboardingError as exc:
+        logger.warning("Onboarding error_controlado %s codigo=%s", contexto, exc.error_codigo)
+        if solicitud is not None:
+            _actualizar_solicitud_estado(
+                solicitud,
+                estado=SolicitudOnboardingTenant.ESTADO_ERROR,
+                error_codigo=exc.error_codigo,
+                error_detalle=exc.error_detalle,
+            )
+        raise
     except IntegrityError as exc:
         logger.warning("Onboarding conflicto_integridad %s detalle=%s", contexto, str(exc))
         _eliminar_tenant_fallido(tenant)
@@ -216,3 +274,6 @@ def provisionar_tenant_completo(*, nombre, slug, email, password, solicitud=None
             mensaje_publico="No se pudo completar el alta del negocio. Reintenta mas tarde o usa el identificador de solicitud para soporte.",
             status_code=500,
         ) from exc
+    finally:
+        if email_bloqueado:
+            _desbloquear_email_onboarding(email)

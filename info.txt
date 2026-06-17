@@ -1,0 +1,120 @@
+Contexto para el próximo chat:
+Estado general
+El repo está en C:\Users\admin\Desktop\FerreDesk.
+Branch actual usada: cloud.
+Hay cambios ya implementados para onboarding SaaS, login público, endurecimiento de errores y logging SMTP.
+El sistema en staging relevante está en:https://staging.ferredesk.xyz
+wildcard tenant funcionando en https://qa-a.staging.ferredesk.xyz y https://qa-b.staging.ferredesk.xyz
+
+ferredesk.xyz root no está operativo como dominio principal de app y no hace falta para seguir con staging/wildcard.
+Lo que ya quedó implementado
+registro-saas ya no depende de que salga el mail en el mismo request.
+Si falla SMTP:se crea igual el tenant
+se crea la cuenta pública
+se genera/persiste token de verificación
+la solicitud queda completada
+el frontend muestra pantalla de pendiente-verificacion
+
+El login público ya no deja entrar tenants pendiente_verificacion.ahora devuelve error_code=pending_verification
+el frontend redirige a la pantalla de verificación/reenvío
+
+Se agregó logging extra para el endpoint reenviar-email:archivo: [public_onboarding_views.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/tenants/views/public_onboarding_views.py)
+
+Commits relevantes ya hechos
+1e526cafix: endurece onboarding y login publico
+
+También se preparó un cambio pequeño de logging para reenvío SMTP, pero al final el usuario pidió solo el mensaje de commit para VSCode, no se confirmó si lo commitió o no.revisar git status al retomar
+
+Diagnóstico actual del problema de email
+El problema no parece ser credenciales SMTP.
+Variables confirmadas en Render:EMAIL_HOST=smtp.resend.com
+EMAIL_HOST_USER=resend
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL correcto y del dominio verificado
+
+Resend no muestra los intentos que salen desde staging.
+Sí mostró una prueba SMTP manual anterior.
+Eso indica que el request desde Render probablemente ni siquiera llega a Resend.
+En logs de Render ya apareció esto en alta real:Onboarding etapa email_verificacion ...
+luego Onboarding email_verificacion_fallido ... detalle=timed out
+luego Onboarding provisioning completado ...
+
+El endpoint POST /api/public/onboarding/reenviar-email/ devuelve 503 de forma controlada cuando falla el SMTP.
+Antes faltaba logging fino del reenvío; ya se agregó logger.exception(...) en ese endpoint para que el próximo intento muestre la excepción real.
+Caso real probado
+Se creó solicitud/tenant con:solicitudId=3
+slug tercertest
+email lautarojuarez2002@gmail.com
+
+El frontend mostró:“Cuenta pendiente de verificacion”
+“La cuenta se creo, pero el email no pudo enviarse en ese momento. Usa el reenvio para intentar otra vez.”
+
+El reenvío devolvió:503 Service Unavailable
+
+Esto hoy significa: el reenvío entra bien al endpoint, pero vuelve a fallar el envío SMTP.
+Bug de frontend/router detectado
+Hay un problema separado del SMTP:recargar o abrir directo /login, /register, /pendiente-verificacion en dominio público falla
+
+Causa ya localizada en código:[urls_public.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferredesk_backend/urls_public.py) no tiene catch-all SPA
+solo sirve "" con index.html
+no tiene re_path(r"^.*$", TemplateView.as_view(template_name="index.html"), ...)
+
+En cambio [urls.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferredesk_backend/urls.py) sí tiene catch-all para tenant
+Conclusión:404/Not Found al refrescar rutas públicas = falta catch-all en urls_public.py
+503 al tocar reenvío dentro de pendiente-verificación = SMTP fallando
+
+Qué debería hacer el próximo agente
+Verificar git statusconfirmar si quedó sin commit el cambio de logging en public_onboarding_views.py
+
+Probar el nuevo logging SMTPredeploy si hace falta
+desde staging intentar otra vez:POST /api/public/onboarding/reenviar-email/
+
+mirar Render logs y capturar la excepción exacta del logger.exception(...)
+objetivo: saber si sigue siendo timed out o si ahora aparece algo más específico (SSL, auth, etc.)
+
+Corregir el bug del router públicoagregar catch-all SPA en:[urls_public.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferredesk_backend/urls_public.py)
+
+debe quedar al final, después de:api/...
+favicon.ico
+manifest.json
+robots.txt
+logo-arca.jpg
+
+esperado:/login
+/register
+/pendiente-verificacion
+/activar-email
+cargan React correctamente también al refrescar o abrir directo
+
+
+Si SMTP sigue fallando con 587probar 2587 manteniendo:EMAIL_USE_TLS=True
+
+no usar 465 con la config actual sin adaptar EMAIL_USE_SSL
+
+No mezclar diagnósticossi una pantalla pública da 404 al refrescar, eso es router público
+si reenviar-email da 503, eso es SMTP
+
+Tests ya corridos y válidos
+Backend:python manage.py test tenants.tests.test_public_onboarding_api acceso_publico.tests.test_login_publico_api
+pasó: Ran 15 tests ... OK
+
+Backend:python manage.py check
+pasó
+
+Frontend:CI=true npm test -- --runInBand src/utils/useRegistroTenantAPI.test.js src/components/Login.test.js
+pasó
+
+Archivos clave para retomar
+[urls_public.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferredesk_backend/urls_public.py)
+[urls.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferredesk_backend/urls.py)
+[public_onboarding_views.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/tenants/views/public_onboarding_views.py)
+[provisioning_onboarding_service.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/tenants/services/provisioning_onboarding_service.py)
+[acceso_publico/services.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/acceso_publico/services.py)
+[Login.js](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/frontend/src/components/Login.js)
+[Register.js](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/frontend/src/modules/onboarding/components/Register.js)
+[PendienteVerificacion.js](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/frontend/src/modules/onboarding/components/PendienteVerificacion.js)
+Resumen ejecutivo
+Onboarding SaaS ya quedó bastante mejor y no rompe por fallo de mail.
+El bloqueo actual de email es infraestructura/conectividad SMTP desde Render o handshake, no lógica de alta.
+Hay un bug aparte y claro de catch-all en rutas públicas que hay que arreglar sí o sí.

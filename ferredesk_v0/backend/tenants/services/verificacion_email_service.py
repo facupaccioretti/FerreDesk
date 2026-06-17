@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import exceptions
 
+from acceso_publico.models import CuentaAccesoPublico
 from tenants.models import EmpresaTenant, TokenVerificacionEmail
 from tenants.services.email_service import enviar_email_verificacion
 from tenants.services.servicio_constructor_tenant import _obtener_dominio_base
@@ -69,14 +70,61 @@ def activar_tenant_por_token(*, email, token):
     return tenant
 
 
-def reenviar_token_verificacion(*, email):
-    """Genera y envia un nuevo token solo si la cuenta esta pendiente de verificacion."""
-    try:
-        tenant = EmpresaTenant.objects.get(
+def _tenant_pendiente_desde_cuenta_publica(email):
+    cuenta = (
+        CuentaAccesoPublico.objects.select_related("tenant_asignado")
+        .filter(email=email, activo=True)
+        .first()
+    )
+    if cuenta is None:
+        return None
+
+    tenant = cuenta.tenant_asignado
+    if tenant.estado_suscripcion != EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION:
+        return None
+
+    return tenant
+
+
+def _tenant_pendiente_desde_token(email):
+    token_verificacion = (
+        TokenVerificacionEmail.objects.select_related("tenant")
+        .filter(email=email)
+        .first()
+    )
+    if token_verificacion is None:
+        return None
+
+    tenant = token_verificacion.tenant
+    if tenant.estado_suscripcion != EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION:
+        return None
+
+    return tenant
+
+
+def _resolver_tenant_pendiente_para_reenvio(email):
+    tenant = _tenant_pendiente_desde_cuenta_publica(email)
+    if tenant is not None:
+        return tenant
+
+    tenant = _tenant_pendiente_desde_token(email)
+    if tenant is not None:
+        return tenant
+
+    return (
+        EmpresaTenant.objects.filter(
             email_admin=email,
             estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_PENDIENTE_VERIFICACION,
         )
-    except EmpresaTenant.DoesNotExist:
+        .order_by("-fecha_creacion", "-id")
+        .first()
+    )
+
+
+def reenviar_token_verificacion(*, email):
+    """Genera y envia un nuevo token solo si la cuenta esta pendiente de verificacion."""
+    tenant = _resolver_tenant_pendiente_para_reenvio(email)
+    if tenant is None:
         # Falla silenciosamente si no existe o no esta pendiente, evitando enumeracion
         return
 
