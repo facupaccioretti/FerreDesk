@@ -66,6 +66,9 @@ describe("RutaPrivada", () => {
     test("detecta hosts tenant validos y publicos", () => {
         expect(esHostTenantValido("ferretest.localhost")).toBe(true);
         expect(esHostTenantValido("tenant.demo.example.com")).toBe(true);
+        expect(esHostTenantValido("qa-a.staging.ferredesk.xyz")).toBe(true);
+        expect(esHostTenantValido("staging.ferredesk.xyz")).toBe(false);
+        expect(esHostTenantValido("preview.ferredesk.xyz")).toBe(false);
         expect(esHostTenantValido("localhost")).toBe(false);
         expect(esHostTenantValido("127.0.0.1")).toBe(false);
     });

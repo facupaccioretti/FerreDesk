@@ -68,7 +68,7 @@ describe("Login", () => {
     });
   }
 
-  test("en dominio publico usa el hook de bridge y redirige al destino seguro", async () => {
+  test("en dominio publico usa el hook de bridge", async () => {
     setWindowLocation("http://localhost:3000/login");
     mockLoginPublicoConBridge.mockResolvedValue({
       redirectTo: "http://ferretest.lvh.me:3000/setup",
@@ -91,7 +91,7 @@ describe("Login", () => {
       email: "admin@ferretest.com",
       password: "testpass123",
     });
-    expect(window.location.assign).toHaveBeenCalledWith("http://ferretest.lvh.me:3000/setup");
+    expect(window.location.assign).not.toHaveBeenCalled();
   });
 
   test("en subdominio redirige al dominio publico sin renderizar el formulario", async () => {
@@ -102,5 +102,14 @@ describe("Login", () => {
     expect(container.querySelector("form")).toBeNull();
     expect(mockLoginTenantDirecto).not.toHaveBeenCalled();
     expect(window.location.assign).toHaveBeenCalledWith("http://lvh.me:3000/");
+  });
+
+  test("en staging publico renderiza el formulario y no redirige al root inexistente", async () => {
+    setWindowLocation("https://staging.ferredesk.xyz/login");
+
+    await renderLogin();
+
+    expect(container.querySelector("form")).not.toBeNull();
+    expect(window.location.assign).not.toHaveBeenCalled();
   });
 });

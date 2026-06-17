@@ -2,6 +2,21 @@ import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 const HOSTS_PUBLICOS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
+    "www",
+    "staging",
+    "dev",
+    "test",
+    "demo",
+    "sandbox",
+    "beta",
+    "alpha",
+    "prod",
+    "production",
+    "qa",
+    "uat",
+    "preview",
+]);
 
 export function esHostTenantValido(hostname) {
     if (!hostname) {
@@ -20,7 +35,12 @@ export function esHostTenantValido(hostname) {
         return true;
     }
 
-    return hostnameNormalizado.split(".").length >= 3;
+    const partes = hostnameNormalizado.split(".");
+    if (partes.length < 3) {
+        return false;
+    }
+
+    return !SUBDOMINIOS_PUBLICOS_RESERVADOS.has(partes[0]);
 }
 
 /**
