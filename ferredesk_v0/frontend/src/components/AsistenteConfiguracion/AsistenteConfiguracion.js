@@ -32,6 +32,39 @@ function normalizarDatosFormulario(ferreteria) {
     };
 }
 
+async function obtenerTokenCSRF() {
+    const respuesta = await fetch('/api/csrf/', { credentials: 'include' });
+    if (!respuesta.ok) {
+        throw new Error('csrf_unavailable');
+    }
+
+    const datos = await respuesta.json();
+    if (!datos?.csrfToken) {
+        throw new Error('csrf_unavailable');
+    }
+
+    return datos.csrfToken;
+}
+
+function obtenerMensajeErrorSetup(respuesta, datosError) {
+    if (respuesta.status === 403) {
+        return 'No pudimos validar tu sesion. Actualiza la pagina e intenta guardar nuevamente.';
+    }
+
+    if (datosError?.detail) {
+        return datosError.detail;
+    }
+
+    if (datosError && typeof datosError === 'object') {
+        const primerCampoConError = Object.values(datosError).find((valor) => Array.isArray(valor) && valor.length > 0);
+        if (primerCampoConError) {
+            return primerCampoConError[0];
+        }
+    }
+
+    return 'Error al guardar la configuracion. Verifique los campos.';
+}
+
 export default function AsistenteConfiguracion() {
     const tema = useFerreDeskTheme();
     const navegar = useNavigate();
@@ -98,22 +131,7 @@ export default function AsistenteConfiguracion() {
         setCargando(true);
 
         try {
-            const obtenerCookie = (nombre) => {
-                let valorCookie = null;
-                if (document.cookie && document.cookie !== "") {
-                    const cookies = document.cookie.split(";");
-                    for (let i = 0; i < cookies.length; i++) {
-                        const cookie = cookies[i].trim();
-                        if (cookie.substring(0, nombre.length + 1) === nombre + "=") {
-                            valorCookie = decodeURIComponent(cookie.substring(nombre.length + 1));
-                            break;
-                        }
-                    }
-                }
-                return valorCookie;
-            };
-
-            const tokenCSRF = obtenerCookie("csrftoken");
+            const tokenCSRF = await obtenerTokenCSRF();
             const respuesta = await fetch('/api/ferreteria/', {
                 method: 'PATCH',
                 headers: {
@@ -128,7 +146,8 @@ export default function AsistenteConfiguracion() {
                 toast.success('Configuración inicial completada con éxito.');
                 window.location.assign('/home');
             } else {
-                const datosError = await respuesta.json();
+                const datosError = await respuesta.json().catch(() => ({}));
+                datosError.detail = obtenerMensajeErrorSetup(respuesta, datosError);
                 toast.error(datosError.detail || 'Error al guardar la configuración. Verifique los campos.');
             }
         } catch (error) {
