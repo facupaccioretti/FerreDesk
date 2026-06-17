@@ -1,20 +1,19 @@
 """Servicio puro para armado y envio de email de verificacion."""
 
-from django.conf import settings
-from django.core.mail import get_connection, send_mail
+from html import escape
 
+from ferredesk_backend.utils.resend_api import enviar_email_resend
 from tenants.services.public_url_service import construir_url_publica
 
 
 def enviar_email_verificacion(*, destinatario, nombre_empresa, token, dominio_activacion):
-    """Envia el email de activacion inicial usando el backend configurado."""
+    """Envia el email de activacion inicial usando Resend API."""
     asunto = "Verifica tu email para activar FerreDesk"
-    remitente = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@ferredesk.local")
     url_activacion = construir_url_publica(
         "/activar-email/",
         query={"token": token, "email": destinatario},
     )
-    mensaje = (
+    texto = (
         f"Hola,\n\n"
         f"Recibimos el alta de {nombre_empresa} en FerreDesk.\n"
         f"Para activar tu tenant, verifica este email dentro de las proximas 24 horas.\n\n"
@@ -23,14 +22,23 @@ def enviar_email_verificacion(*, destinatario, nombre_empresa, token, dominio_ac
         f"Link de activacion: {url_activacion}\n\n"
         f"Si no solicitaste este alta, ignora este mensaje."
     )
+    html = f"""
+    <p>Hola,</p>
+    <p>Recibimos el alta de <strong>{escape(nombre_empresa)}</strong> en FerreDesk.</p>
+    <p>Para activar tu tenant, verifica este email dentro de las proximas 24 horas.</p>
+    <p><a href="{escape(url_activacion)}">Activar cuenta</a></p>
+    <p>Dominio base del tenant: {escape(dominio_activacion)}</p>
+    <p>Si no solicitaste este alta, ignora este mensaje.</p>
+    """
 
-    connection = get_connection(timeout=getattr(settings, "EMAIL_TIMEOUT", 15))
-
-    send_mail(
+    return enviar_email_resend(
+        to=destinatario,
         subject=asunto,
-        message=mensaje,
-        from_email=remitente,
-        recipient_list=[destinatario],
-        fail_silently=False,
-        connection=connection,
+        text=texto,
+        html=html,
+        idempotency_key=f"email-verificacion/{token}",
+        tags=[
+            {"name": "tipo", "value": "email_verificacion"},
+            {"name": "app", "value": "ferredesk"},
+        ],
     )

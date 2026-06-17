@@ -32,13 +32,9 @@ services:
         sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false
-      - key: EMAIL_HOST
+      - key: RESEND_API_KEY
         sync: false
-      - key: EMAIL_PORT
+      - key: RESEND_API_URL
         sync: false
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: EMAIL_USE_TLS
+      - key: RESEND_TIMEOUT
         sync: false

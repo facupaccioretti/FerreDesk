@@ -1,11 +1,10 @@
 from datetime import timedelta
 
-from django.core import mail
 from django.db import connection
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from acceso_publico.models import CuentaAccesoPublico
 from ferreapps.productos.models import Ferreteria, Sucursal
@@ -24,6 +23,7 @@ from tenants.views import (
 
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    RESEND_API_KEY="re_test",
     PUBLIC_BASE_URL="https://ferredesk.test",
     FRONTEND_URL="https://ferredesk.test",
     ALLOWED_HOSTS=["localhost", "127.0.0.1", ".lvh.me", "ferredesk.test", ".ferredesk.test"],
@@ -33,9 +33,16 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
     def setUp(self):
         connection.set_schema_to_public()
         self.factory = APIRequestFactory()
-        mail.outbox.clear()
+        self.resend_patcher = patch("ferredesk_backend.utils.resend_api.requests.post")
+        self.resend_post = self.resend_patcher.start()
+        self.resend_post.return_value = Mock(
+            status_code=200,
+            json=Mock(return_value={"id": "email-test-id"}),
+            text='{"id":"email-test-id"}',
+        )
 
     def tearDown(self):
+        self.resend_patcher.stop()
         connection.set_schema_to_public()
         TokenVerificacionEmail.objects.filter(email__contains="@apitest").delete()
         for tenant in EmpresaTenant.objects.filter(slug_subdominio__startswith="apitest"):
@@ -90,9 +97,12 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
         self.assertEqual(data["dominio"]["url"], "https://apitestalta.ferredesk.test/")
         self.assertEqual(data["admin_inicial"]["username"], "admin@apitestalta.com")
         self.assertEqual(data["admin_inicial"]["tipo_usuario"], "admin")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("https://ferredesk.test/activar-email/?token=", mail.outbox[0].body)
-        self.assertNotIn("localhost", mail.outbox[0].body)
+        self.assertEqual(self.resend_post.call_count, 1)
+        payload_email = self.resend_post.call_args.kwargs["json"]
+        self.assertIn("https://ferredesk.test/activar-email/?token=", payload_email["text"])
+        self.assertIn("https://ferredesk.test/activar-email/?token=", payload_email["html"])
+        self.assertNotIn("localhost", payload_email["text"])
+        self.assertTrue(self.resend_post.call_args.kwargs["headers"]["Idempotency-Key"].startswith("email-verificacion/"))
 
         connection.set_schema_to_public()
         tenant_publico = EmpresaTenant.objects.get(schema_name="apitestalta")
