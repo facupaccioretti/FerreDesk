@@ -39,6 +39,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 from ferredesk_backend.permissions import EsAdminTenant
+from ferredesk_backend.utils.observability import medir_proceso
 from .services.importacion_lista_precios_service import importar_lista_precios_proveedor
 
 # Create your views here.
@@ -322,7 +323,7 @@ class UploadListaPreciosProveedor(APIView):
     permission_classes = [permissions.IsAuthenticated]  # O ajusta según tu seguridad
 
     @transaction.atomic
-    def post(self, request, proveedor_id):
+    def post_legado(self, request, proveedor_id):
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
             return Response({'detail': 'Proveedor no encontrado.'}, status=404)
@@ -358,6 +359,54 @@ class UploadListaPreciosProveedor(APIView):
             }, status=201)
         except Exception as e:
             return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
+
+    @transaction.atomic
+    def post(self, request, proveedor_id):
+        with medir_proceso(
+            "endpoint_upload_lista_precios_proveedor",
+            proveedor_id=proveedor_id,
+            usuario_id=getattr(request.user, 'id', None),
+            metodo=request.method,
+        ) as medicion:
+            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+            if not proveedor:
+                return Response({'detail': 'Proveedor no encontrado.'}, status=404)
+
+            excel_file = request.FILES.get('excel_file')
+            col_codigo = request.POST.get('col_codigo', 'A').upper()
+            col_precio = request.POST.get('col_precio', 'B').upper()
+            col_denominacion = request.POST.get('col_denominacion', 'C').upper()
+            fila_inicio = int(request.POST.get('fila_inicio', 2))
+
+            if not excel_file:
+                return Response({'detail': 'No se enviÃ³ archivo.'}, status=400)
+
+            try:
+                resultado = importar_lista_precios_proveedor(
+                    proveedor=proveedor,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                precios_cargados = resultado['precios_cargados']
+                registros_actualizados = resultado['registros_actualizados']
+                medicion.registrar_metricas(
+                    filas_procesadas=precios_cargados,
+                    registros_actualizados=registros_actualizados,
+                )
+
+                return Response({
+                    'message': (
+                        f'Lista importada correctamente. {precios_cargados} precios cargados.' +
+                        (" Advertencia: no se actualizÃ³ ningÃºn costo para este proveedor. Verifique que el archivo corresponda." if registros_actualizados == 0 else "")
+                    ),
+                    'registros_procesados': precios_cargados,
+                    'registros_actualizados': registros_actualizados
+                }, status=201)
+            except Exception as e:
+                return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
 
 class PrecioProductoProveedorAPIView(APIView):
     """
@@ -985,6 +1034,54 @@ class FerreteriaAPIView(APIView):
     def put(self, request):
         return self.patch(request)
 
+    def get(self, request):
+        with medir_proceso(
+            "ferreteria_detalle_get",
+            usuario_id=getattr(request.user, "id", None),
+        ) as medicion:
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                configuracion_inicial = {
+                    "no_configurada": True,
+                    "setup_completo": False,
+                    "campos_setup_faltantes": [
+                        "nombre",
+                        "razon_social",
+                        "cuit_cuil",
+                        "situacion_iva",
+                        "direccion",
+                        "telefono",
+                    ],
+                    "nombre": "",
+                    "direccion": "",
+                    "telefono": "",
+                    "email": None,
+                    "situacion_iva": "RI",
+                    "punto_venta_arca": "",
+                    "cuit_cuil": "",
+                    "razon_social": "",
+                    "ingresos_brutos": "",
+                    "inicio_actividad": None,
+                    "logo_empresa": None,
+                    "certificado_arca": None,
+                    "clave_privada_arca": None,
+                    "modo_arca": "HOM",
+                    "arca_habilitado": False,
+                    "arca_configurado": False,
+                    "arca_ultima_validacion": None,
+                    "arca_error_configuracion": None,
+                    "permitir_stock_negativo": False,
+                }
+                medicion.registrar_metricas(no_configurada=True, setup_completo=False)
+                return Response(configuracion_inicial, status=200)
+
+            estado_setup = ferreteria.obtener_estado_setup()
+            medicion.registrar_metricas(
+                no_configurada=False,
+                setup_completo=estado_setup.get("setup_completo"),
+            )
+            return Response(FerreteriaSerializer(ferreteria, context={"request": request}).data)
+
 
 class EstadoSetupAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1009,6 +1106,40 @@ class EstadoSetupAPIView(APIView):
             )
 
         return Response(ferreteria.obtener_estado_setup(), status=200)
+
+    def get(self, request):
+        with medir_proceso(
+            "ferreteria_estado_setup_get",
+            usuario_id=getattr(request.user, "id", None),
+        ) as medicion:
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                payload = {
+                    "setup_completo": False,
+                    "campos_setup_faltantes": [
+                        "nombre",
+                        "razon_social",
+                        "cuit_cuil",
+                        "situacion_iva",
+                        "direccion",
+                        "telefono",
+                    ],
+                    "no_configurada": True,
+                }
+                medicion.registrar_metricas(
+                    no_configurada=True,
+                    setup_completo=False,
+                    campos_faltantes=len(payload["campos_setup_faltantes"]),
+                )
+                return Response(payload, status=200)
+
+            estado_setup = ferreteria.obtener_estado_setup()
+            medicion.registrar_metricas(
+                no_configurada=False,
+                setup_completo=estado_setup.get("setup_completo"),
+                campos_faltantes=len(estado_setup.get("campos_setup_faltantes", [])),
+            )
+            return Response(estado_setup, status=200)
 
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""

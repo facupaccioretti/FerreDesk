@@ -171,6 +171,22 @@
             "Validacion real automatica: `python manage.py test ferreapps.ventas.tests.TestIndicesDeAltoImpacto ferreapps.ventas.tests.TestVentaViewSetPaginacion` -> `Ran 3 tests in 13.203s` y `OK`."
           ]
         },
+        "FC-OPT-T14": {
+          "done": true,
+          "decision": "Se agrego observabilidad liviana sin dependencias externas para medir duracion, cantidad de queries y memoria en procesos criticos por tenant/schema. La instrumentacion quedo centralizada en un helper reusable y se conecto a importacion de listas, configuracion tenant y listado de ventas, junto con un management command para auditar volumen de tablas clave.",
+          "evidencia": [
+            "Nuevo helper reusable `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\utils\\observability.py` con context manager `medir_proceso(...)`. Registra `schema`, `duracion_ms`, `queries`, `memoria_actual_kb`, `memoria_peak_kb` y metricas adicionales serializadas como JSON en el logger `ferredesk.observabilidad`.",
+            "Prueba unitaria nueva en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferredesk_backend\\tests\\test_observability.py` que valida emision de log, conteo de queries y schema activo. Validacion real: `python manage.py test ferredesk_backend.tests.test_observability` -> `Ran 1 test in 0.004s` y `OK`.",
+            "La importacion de listas proveedor en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\services\\importacion_lista_precios_service.py` ahora mide archivo, bytes, fila de inicio, filas procesadas y registros actualizados. `UploadListaPreciosProveedor` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\views.py` agrega una medicion adicional a nivel endpoint con `proveedor_id`, `usuario_id` y metodo HTTP.",
+            "Los endpoints `FerreteriaAPIView.get` y `EstadoSetupAPIView.get` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\views.py` quedaron instrumentados para registrar estado de setup, cantidad de campos faltantes y si el tenant todavia no tiene configuracion.",
+            "El listado de ventas en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\views\\views_ventas.py` ahora instrumenta pagina, limit, filtro `comprobante_tipo`, registros devueltos y registros totales cuando hay paginacion.",
+            "Nuevo command `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\sistema\\management\\commands\\auditar_volumen_tenant.py` para contar filas por schema tenant en `Stock`, `StockProve`, `PrecioProveedorExcel`, `Venta`, `VentaDetalleItem`, `Compra`, `CompraDetalleItem`, `Cliente`, `Imputacion` y `PagoVenta`.",
+            "Chequeo real de Django tras la instrumentacion: `python manage.py check` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real de regresion en ventas: `python manage.py test ferreapps.ventas.tests.TestVentaViewSetPaginacion --keepdb` -> `Ran 2 tests in 9.050s` y `OK`.",
+            "Salida real del command sobre tenant local: `python manage.py auditar_volumen_tenant --schema alphax` -> `Stock: 3`, `StockProve: 3`, `PrecioProveedorExcel: 0`, `Venta: 0`, `VentaDetalleItem: 0`, `Compra: 0`, `CompraDetalleItem: 0`, `Cliente: 1`, `Imputacion: 0`, `PagoVenta: 0`.",
+            "Log real del helper con logging inicializado manualmente: `INFO:ferredesk.observabilidad:OBSERVABILIDAD {\"duracion_ms\": 41.95, \"estado\": \"ok\", \"filas_procesadas\": 1, \"memoria_actual_kb\": 4, \"memoria_peak_kb\": 6, \"origen\": \"manual\", \"proceso\": \"observabilidad_demo\", \"queries\": 3, \"schema\": \"public\"}`."
+          ]
+        },
         "FC-OPT-T7": {
           "done": true,
           "decision": "Se elimino el N+1 principal del listado de productos moviendo el costo de relaciones y precios de listas al queryset del `StockViewSet` y reutilizando una cache de margenes de `ListaPrecio` en el serializer.",

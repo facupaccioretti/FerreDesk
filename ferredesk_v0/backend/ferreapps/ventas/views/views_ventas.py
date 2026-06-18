@@ -34,6 +34,7 @@ from .utils_stock import (
 from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
 from ferreapps.productos.setup import requerir_setup_completo
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
+from ferredesk_backend.utils.observability import medir_proceso
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,29 @@ class VentaViewSet(viewsets.ModelViewSet):
         if getattr(self, 'action', None) == 'list':
             return VentaCalculadaFilter
         return super().get_filterset_class()
+
+    def list(self, request, *args, **kwargs):
+        with medir_proceso(
+            "ventas_listado",
+            usuario_id=getattr(request.user, "id", None),
+            page=request.query_params.get("page"),
+            limit=request.query_params.get("limit"),
+            comprobante_tipo=request.query_params.get("comprobante_tipo"),
+        ) as medicion:
+            queryset = self.filter_queryset(self.get_queryset())
+            page = self.paginate_queryset(queryset)
+
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                medicion.registrar_metricas(
+                    registros_devueltos=len(serializer.data),
+                    registros_totales=self.paginator.page.paginator.count,
+                )
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            medicion.registrar_metricas(registros_devueltos=len(serializer.data))
+            return Response(serializer.data)
 
     @transaction.atomic
     @requerir_setup_completo
