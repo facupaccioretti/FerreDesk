@@ -747,6 +747,13 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         return str(getattr(obj, 'subtotal_bruto', None) or 0)
 
     def get_iva_desglose(self, obj):
+        # OPTIMIZACIÓN N+1: En listados masivos (acción 'list') este campo hace
+        # una query al ORM por cada venta mostrada. Se omite aquí y solo se calcula
+        # al ver el detalle de una venta individual (retrieve), donde el costo es cero.
+        # El ViewSet inyecta 'is_list': True en el context cuando llama a esta vista.
+        if self.context.get('is_list'):
+            return {}
+
         # Refactorización: Usamos el manager de item para obtener el desglose por alícuota
         from .models import VentaDetalleItem
         items_anotados = VentaDetalleItem.objects.filter(vdi_idve=obj.pk).con_calculos()

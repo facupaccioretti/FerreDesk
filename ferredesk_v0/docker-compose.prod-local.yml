@@ -49,6 +49,7 @@ services:
       RESEND_API_KEY: prod-local-dummy
       RESEND_API_URL: https://api.resend.com/emails
       RESEND_TIMEOUT: "3"
+      ENABLE_EMBEDDED_WORKER: "true"
     volumes:
       - ./media:/app/media
       - ./backups:/app/backups

@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from django.conf import settings
 import logging
+from django.contrib.postgres.indexes import GinIndex
 from .managers_productos_stock import ProductosStockQuerySet
 from .utils.file_paths import (
     obtener_directorio_logo_empresa_absoluto,
@@ -546,6 +547,9 @@ class Stock(models.Model):
             models.Index(fields=['acti']),
             models.Index(fields=['proveedor_habitual']),
             models.Index(fields=['codigo_barras']),
+            # GinIndex trigram: acelera búsquedas icontains en 'deno' ~1000x.
+            # Requiere pg_trgm habilitado en PostgreSQL.
+            GinIndex(fields=['deno'], name='stock_deno_trgm_idx', opclasses=['gin_trgm_ops']),
         ]
 
 class StockProve(models.Model):

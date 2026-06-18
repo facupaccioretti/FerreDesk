@@ -25,6 +25,10 @@ import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
+import logging
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models.functions import Lower
 import os
 import pyexcel as pe
@@ -32,6 +36,8 @@ from django.utils import timezone
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from django.views.decorators.cache import cache_page
+
 from django.conf import settings
 import mimetypes
 import base64
@@ -313,12 +319,16 @@ class FamiliaFilter(FilterSet):
         model = Familia
         fields = ['deno', 'comentario', 'nivel', 'acti', 'search']
 
+# cache_page de 12hs: Familias y Alícuotas son datos maestros que rara vez cambian.
+# Se aplica solo a 'list' para no interferir con create/update/delete.
+@method_decorator(cache_page(60 * 60 * 12), name='list')
 class FamiliaViewSet(viewsets.ModelViewSet):
     queryset = Familia.objects.all()
     serializer_class = FamiliaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = FamiliaFilter
 
+@method_decorator(cache_page(60 * 60 * 12), name='list')
 class AlicuotaIVAViewSet(viewsets.ModelViewSet):
     queryset = AlicuotaIVA.objects.all()
     serializer_class = AlicuotaIVASerializer

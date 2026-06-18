@@ -159,6 +159,16 @@ class VentaViewSet(viewsets.ModelViewSet):
             return VentaCalculadaSerializer
         return super().get_serializer_class()
 
+    def get_serializer_context(self):
+        """
+        Inyecta 'is_list' en el contexto del serializer.
+        VentaCalculadaSerializer lo usa para evitar la query N+1 de
+        iva_desglose en listados masivos (solo se calcula en retrieve/detalle).
+        """
+        context = super().get_serializer_context()
+        context['is_list'] = getattr(self, 'action', None) == 'list'
+        return context
+
     def get_filterset_class(self):
         if getattr(self, 'action', None) == 'list':
             return VentaCalculadaFilter

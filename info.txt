@@ -1,280 +1,54 @@
-Objetivo
-Convertir Importar válidas de carga inicial de proveedor desde flujo síncrono a diferido, para que el request web no haga el trabajo pesado y no choque con el timeout de Gunicorn.
-Flujo actual
-Frontend:
-[CargaInicialProveedor.js](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/frontend/src/components/Carga Inicial/CargaInicialProveedor.js)
-Backend:
-preview/validación: [ferreapps/proveedores/views.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/proveedores/views.py)
-CargaInicialProveedorPreviewAPIView
-importación final síncrona: [ferreapps/proveedores/views.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/proveedores/views.py)
-CargaInicialProveedorImportAPIView
-Problema actual:
-el botón Importar válidas hace POST /api/proveedores/<id>/carga-inicial/importar/
-ese endpoint crea productos y StockProve dentro del mismo request
-si el lote es grande, el worker muere por timeout
-el usuario espera mucho y ve error al final
-Patrón a replicar
-Ya existe un patrón parcial para imports pesados en listas de precios:
-modelo pendiente por tenant
-endpoint que responde rápido
-command para procesar pendientes
-estado persistido
-Referencias:
-[ferreapps/productos/models.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/productos/models.py)
-ImportacionListaPreciosProveedor
-[ferreapps/productos/services/importacion_lista_precios_service.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/productos/services/importacion_lista_precios_service.py)
-[ferreapps/productos/management/commands/procesar_importaciones_pendientes.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/productos/management/commands/procesar_importaciones_pendientes.py)
-La nueva carga inicial debería seguir ese patrón, pero con su propio modelo/servicio/command.
-Diseño propuesto
-1. Nuevo modelo
-Archivo sugerido:
-[ferreapps/proveedores/models.py](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/backend/ferreapps/proveedores/models.py)
-Nombre sugerido:
-SolicitudCargaInicialProveedor
-Campos:
-proveedor: FK a Proveedor
-usuario: FK nullable a AUTH_USER_MODEL
-estado: pendiente, procesando, completada, error
-nombre_archivo: CharField
-payload_lote: JSONField
-Debe guardar:parametros_lote
-filas_validas
-opcionalmente totales_preview
+# Implementación del Worker Centralizado (SaaS Multi-tenant)
 
-idempotency_key: CharField, indexado
-Puede derivarse de proveedor + nombre_archivo + hash de filas/parametros
-registros_procesados: int
-registros_creados: int
-registros_saltados: int
-mensaje_error: text
-creado_en
-actualizado_en
-iniciado_en
-finalizado_en
-Notas:
-como este flujo ya manda JSON validado desde preview, no hace falta guardar Excel temporal
-eso simplifica storage y evita otra vez parsear archivo
-al ser tenant app, vive por schema y mantiene aislamiento
-2. Nuevo servicio reusable
-Archivo sugerido:
-nuevo: ferredesk_v0/backend/ferreapps/proveedores/services/carga_inicial_proveedor_service.py
-Funciones sugeridas:
-crear_solicitud_carga_inicial_pendiente(...)
-procesar_solicitud_carga_inicial(solicitud_id)
-opcional: calcular_idempotency_key(...)
-Reglas:
-crear_* persiste el payload validado y deja estado=pendiente
-procesar_*:toma lock con select_for_update() solo sobre la solicitud
-si no está en pendiente, no reprocesa
-marca procesando
-ejecuta la lógica de creación
-actualiza completada o error
-persiste resumen final
+Se construirá un worker centralizado continuo dentro de un único comando de Django (`worker_tareas_pendientes.py`) para consumir las colas de manera eficiente, evitando costos adicionales en Render y garantizando alta resiliencia.
 
-3. Extraer la lógica pesada del endpoint actual
-Hoy CargaInicialProveedorImportAPIView.post() contiene toda la creación.
-Esa lógica debe moverse al servicio.
-Separar en dos capas:
-endpoint HTTP: validar input mínimo y crear solicitud
-servicio: ejecutar alta real de productos
-4. Optimización interna del proceso
-La implementación actual hace trabajo por fila:
-chequeos de colisión por fila
-ProductoTempID por fila
-serializers por fila
-StockProve por fila
-Eso hay que bajar de costo.
-Objetivo mínimo:
-precargar colisiones en bloque
-precargar códigos de proveedor existentes en bloque
-reservar IDs una sola vez o en bloque
-usar bulk_create para Stock
-usar bulk_create para StockProve
-Puntos concretos:
-juntar todos los codvta_propuesto
-consultar Stock.objects.filter(codvta__in=...) una vez
-juntar todos los codigo_proveedor
-consultar StockProve.objects.filter(proveedor_id=..., codigo_producto_proveedor__in=...) una vez
-resolver colisiones en memoria antes de persistir
-generar IDs temporales en bloquesi no se puede cambiar ProductoTempID mucho, al menos calcular un rango una vez y crear los ProductoTempID juntos
+## User Review Required
 
-validar denominación/costo en memoria y no con serializer por fila si no es indispensable
-si se siguen usando serializers, que sea una decisión explícita, sabiendo que penaliza rendimiento
-5. Nuevo command
-Archivo sugerido:
-ferredesk_v0/backend/ferreapps/proveedores/management/commands/procesar_cargas_iniciales_pendientes.py
-Comportamiento:
-recorre tenants activos desde public
-entra por schema_context
-busca SolicitudCargaInicialProveedor.estado='pendiente'
-procesa en orden por creado_en
-opciones:--schema
---limit
+> [!IMPORTANT]
+> El enfoque acordado elimina la necesidad de One-Off Jobs o Cron Jobs pagos. Vamos a embeber un worker persistente protegido. Se requiere confirmación antes de iniciar la programación.
 
-Esto debe ser equivalente al command de importaciones de listas.
-6. Endpoint HTTP nuevo o adaptación del actual
-Opción recomendada:
-mantener POST /api/proveedores/<id>/carga-inicial/importar/
-pero cambiar su semántica:ya no importa en el request
-crea solicitud y responde rápido
+## Proposed Changes
 
-Respuesta sugerida:
-HTTP 202
-{
-  "message": "Importación iniciada.",
-  "solicitud_id": 123,
-  "estado": "pendiente",
-  "modo_procesamiento": "diferido"
-}
-7. Endpoint de estado
-Necesitás un GET de consulta para polling.
-Sugerencia:
-GET /api/proveedores/<id>/carga-inicial/importaciones/<solicitud_id>/
-Respuesta sugerida:
-{
-  "id": 123,
-  "estado": "pendiente|procesando|completada|error",
-  "registros_procesados": 100,
-  "registros_creados": 80,
-  "registros_saltados": 20,
-  "mensaje_error": "",
-  "creado_en": "...",
-  "iniciado_en": "...",
-  "finalizado_en": "..."
-}
-Opcional:
-incluir resultados_resumen
-no devolver miles de filas salvo que realmente haga falta
-8. Idempotencia
-Hay que evitar doble alta si el usuario toca dos veces.
-Regla recomendada:
-si existe una solicitud reciente con igual idempotency_key y estado pendiente o procesando, devolver esa misma en vez de crear otra
-si existe una completada con misma key, decidir:o devolver referencia a la ya completada
-o forzar nueva solo con parámetro explícito
+### Backend (Comandos y Servicios)
 
-para V1, alcanza con deduplicar pendientes/en proceso
-9. Frontend
-Archivo:
-[CargaInicialProveedor.js](/C:/Users/admin/Desktop/FerreDesk/ferredesk_v0/frontend/src/components/Carga Inicial/CargaInicialProveedor.js)
-Cambios:
-al tocar Importar válidas, si el POST devuelve 202:no mostrar Importación finalizada...
-mostrar estado tipo:Importación iniciada
-Procesando...
+#### [NEW] `ferreapps/sistema/management/commands/worker_tareas_pendientes.py`
+Crearemos el núcleo del worker. Este comando se quedará vivo en un `while True:` y hará lo siguiente:
+1.  **Cierre de conexiones:** Llamará a `django.db.close_old_connections()` en cada iteración para evitar el clásico error de PostgreSQL de conexión cerrada por inactividad.
+2.  **Límites por ciclo:** Extraerá como máximo un bloque (ej. 5 o 10) de cargas iniciales y listas de precios, iterando sobre los tenants activos.
+3.  **Recuperación de trabados:** Buscará importaciones o cargas iniciales en estado `ESTADO_PROCESANDO` que tengan más de 1 hora de antigüedad, y las devolverá a `ESTADO_ERROR` con un mensaje indicando que el proceso falló inesperadamente.
+4.  **Graceful Shutdown:** Atraparemos la señal `SIGTERM` (la que envía Render al apagar o reiniciar el contenedor) para que el worker intente terminar ordenadamente la tarea actual antes de cerrarse o al menos salir limpio.
 
+#### [MODIFY] `ferreapps/productos/services/importacion_lista_precios_service.py`
+Se actualizará la consulta de obtención de tarea para hacerla segura ante concurrencia (por si Render lanza dos contenedores solapados durante un deploy):
+Se ajustará el código para que al tomar la tarea se controle de manera robusta usando bloqueos condicionales si fuera necesario o asegurando que el estado actualice correctamente.
 
-guardar solicitud_id
-hacer polling cada 2-5 segundos al endpoint de estado
-estados UX:pendiente
-procesando
-completada
-error
+#### [MODIFY] `ferreapps/proveedores/services/carga_inicial_proveedor_service.py`
+Misma protección concurrente y optimización para el flujo de carga inicial.
 
-al completar:mostrar resumen final:creados
-saltados
-procesados
+### Infraestructura (Render)
 
+#### [MODIFY] `start.prod.sh` (en la raíz o carpeta de scripts)
+Se ajustará el archivo de arranque de Render para incluir el escudo nivel 2 (el bucle bash) condicionado por variable de entorno:
+```bash
+if [ "$ENABLE_EMBEDDED_WORKER" = "true" ]; then
+  (
+    while true; do
+      python manage.py worker_tareas_pendientes
+      echo "El worker se cerró, reiniciando en 5 segundos..."
+      sleep 5
+    done
+  ) &
+fi
+```
 
-al error:mostrar mensaje_error
+## Verification Plan
 
-Además:
-deshabilitar el botón mientras haya una solicitud activa
-evitar doble click
-mantener visible el resumen de preview original
-10. Observabilidad
-Agregar medir_proceso(...) en:
-creación de solicitud
-procesamiento real por command
-Registrar:
-proveedor_id
-solicitud_id
-cantidad_filas
-creados
-saltados
-duracion_ms
-schema
-11. Migraciones
-Crear migración nueva para el modelo.
-Validar con:
-python manage.py makemigrations --check --dry-run
-python manage.py check
-12. Tests mínimos obligatorios
-Archivo sugerido:
-nuevo test en ferreapps/proveedores/tests/
-Casos:
-POST import crea solicitud pendiente y responde 202
-GET estado devuelve pendiente
-command procesa solicitud en tenant schema correcto
-solicitud queda completada con resumen correcto
-si el servicio falla, queda error con mensaje_error
-deduplicación por idempotency_key
-no mezcla datos entre tenants
-13. Criterios de aceptación
-El trabajo está bien hecho solo si se cumple esto:
-tocar Importar válidas responde rápido, no espera la importación completa
-el usuario ve estado visible de proceso
-la importación real corre fuera del request web
-existe auditoría persistida por solicitud
-el command procesa por tenant sin mezclar schemas
-si el usuario reintenta no duplica ciegamente
-tests pasan
-ferredesk-progress.json se actualiza
-14. Decisiones importantes
-no subir timeout como solución principal
-no usar one-off job manual como flujo normal de usuario
-no hacer polling sobre logs
-no guardar el Excel si el preview ya normalizó filas válidas
-sí persistir payload validado de la solicitud
-sí procesar por cron/management command
-15. Riesgos técnicos
-ProductoTempID puede ser cuello de botella o generar complejidad de concurrencia
-si se deja serializer por fila, el cambio a diferido arregla timeout web pero no necesariamente el costo total
-si el payload JSON es enorme, puede convenir comprimir o paginar resultados, pero para V1 probablemente alcance
-16. Orden de implementación recomendado
-modelo + migración
-servicio de solicitud pendiente
-endpoint POST que responda 202
-command por tenant
-endpoint GET estado
-polling frontend
-optimización interna con bulk
-tests y observabilidad
-17. Prompt listo para otro agente
-Implementá la carga inicial diferida de proveedor para FerreDesk.
+### Automated Tests
+- Correr tests unitarios asegurando que no se rompan las importaciones existentes.
 
-Contexto:
-- El frontend actual usa `frontend/src/components/Carga Inicial/CargaInicialProveedor.js`
-- El backend actual usa `ferreapps/proveedores/views.py`
-  - `CargaInicialProveedorPreviewAPIView`
-  - `CargaInicialProveedorImportAPIView`
-- El botón "Importar válidas" hoy ejecuta toda la importación en el mismo request HTTP y puede chocar con el timeout de Gunicorn.
-- Ya existe un patrón similar en importaciones de listas pesadas:
-  - `ferreapps/productos/models.py::ImportacionListaPreciosProveedor`
-  - `ferreapps/productos/services/importacion_lista_precios_service.py`
-  - `ferreapps/productos/management/commands/procesar_importaciones_pendientes.py`
-
-Objetivo:
-- Convertir la importación final de carga inicial a flujo diferido.
-- El POST no debe hacer el trabajo pesado; debe crear una solicitud persistida y responder rápido con HTTP 202.
-- Un management command debe procesar solicitudes pendientes por tenant/schema.
-- El frontend debe hacer polling de estado y mostrar pendiente/procesando/completada/error.
-- Debe haber idempotencia básica para evitar duplicados por doble click/reintento.
-- Debe respetar django-tenants.
-
-Cambios esperados:
-- nuevo modelo `SolicitudCargaInicialProveedor`
-- nueva migración
-- nuevo servicio reusable
-- nuevo command `procesar_cargas_iniciales_pendientes`
-- refactor de `CargaInicialProveedorImportAPIView`
-- nuevo endpoint GET de estado
-- frontend con polling
-- tests backend tenant-aware
-- update de `ferredesk-progress.json`
-
-Restricciones:
-- usar `apply_patch` para editar
-- no revertir cambios ajenos
-- validar con `python manage.py check`
-- validar con tests reales
-- no declarar completo sin evidencia real
-Si querés, en el próximo paso te lo dejo todavía más operativo: archivo por archivo, función por función, casi como checklist de implementación.
+### Manual Verification
+1.  Arrancar el `start.prod.sh` o el entorno local con `ENABLE_EMBEDDED_WORKER=true`.
+2.  Cargar un archivo desde el frontend.
+3.  Observar el output del worker en consola.
+4.  Detener la base de datos a la mitad del proceso para simular un crash, y verificar que:
+    *   La tarea interrumpida sea recuperada (marcada como Error) en el siguiente ciclo al volver a conectarse.

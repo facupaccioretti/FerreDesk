@@ -241,6 +241,29 @@
             "Validacion real de migraciones: `python manage.py makemigrations --check --dry-run` -> `No changes detected`.",
             "Nota operativa: los tests legacy `ferreapps.productos.tests.test_stock_serializer_precios` siguen montados sobre `APITestCase` en schema publico y fallan por infraestructura previa (`usuarios_usuario` ausente); no se usaron como evidencia de esta tarea porque el patron correcto del repo para apps tenant-only es `TenantTestCase`."
           ]
+        },
+        "FC-OPT-T11": {
+          "done": true,
+          "decision": "Se eliminaron las subqueries pesadas de calculo de totales en vivo de VentaQuerySet.con_calculos, reemplazandolas por campos denormalizados (total_guardado, neto_guardado, iva_guardado, subtotal_bruto_guardado) que se recalculan de forma incremental via Django Signals al modificar/guardar/eliminar VentaDetalleItem.",
+          "evidencia": [
+            "Campos fisicos agregados al modelo Venta en `ferreapps/ventas/models.py`.",
+            "Signals de recalculo incremental en `ferreapps/ventas/signals.py` para post_save y post_delete de VentaDetalleItem.",
+            "Reemplazo de subqueries por expresiones F() en `ferreapps/ventas/managers_ventas_calculos.py`.",
+            "Migraciones de base de datos creadas y ejecutadas exitosamente a lo largo de los 15 schemas tenant (`migrate_schemas`).",
+            "Mover pg_trgm a esquema public para que todos los schemas tenant puedan resolver el operador de busqueda trigram.",
+            "9/9 unit tests de ventas y denormalizacion pasados con exito en Django."
+          ]
+        },
+        "FC-OPT-T16": {
+          "done": true,
+          "decision": "Se implemento un custom hook generico usePaginacionAPI envolviendo TanStack React Query para cachear consultas paginadas y de busqueda en el frontend. Se integro en la gestion de productos (ProductosManager) y se mejoro la UX atenuando los datos obsoletos (stale-while-revalidate) en Tabla.js.",
+          "evidencia": [
+            "Instalacion de `@tanstack/react-query` en package.json.",
+            "Configuracion global del QueryClientProvider en index.js.",
+            "Creacion de `hooks/usePaginacionAPI.js` para busqueda, ordenamiento y paginacion con cache.",
+            "Integracion de usePaginacionAPI e invalidacion en ProductosManager.js ante mutaciones (CRUD).",
+            "Clases CSS de atenuacion en Tabla.js para evitar el salto del loader al recargar paginas."
+          ]
         }
       }
     }

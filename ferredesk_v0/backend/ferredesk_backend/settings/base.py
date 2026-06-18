@@ -10,6 +10,7 @@ SHARED_APPS = (
     'django_tenants',
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',  # Habilita GinIndex y búsquedas trigram en PostgreSQL
     'tenants',
     'acceso_publico',
     'rest_framework',

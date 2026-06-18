@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useState, useMemo, useCallback } from "react"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
@@ -8,6 +6,7 @@ import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useStockProveAPI } from "../../utils/useStockProveAPI"
+import { usePaginacionAPI } from "../../hooks/usePaginacionAPI"
 
 // Importar el modal de familias
 import FamiliasModal from "./FamiliasModal"
@@ -29,8 +28,8 @@ const ProductosManager = () => {
     document.title = "Productos FerreDesk"
   }, [])
 
-  // Hooks API
-  const { productos, total, loading: loadingProductos, fetchProductos, addProducto, updateProducto, deleteProducto } = useProductosAPI()
+  // Hooks API: mutaciones (alta, baja, modificación) siguen usando useProductosAPI
+  const { addProducto, updateProducto, deleteProducto } = useProductosAPI()
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -157,6 +156,8 @@ const ProductosManager = () => {
         // Solo crear si NO tiene id (es decir, si no fue creado por el endpoint atómico)
         await addProducto(data)
       }
+      // Invalidar caché para que la tabla se refresque sin recargar la página
+      invalidarCache()
       closeTab(key)
     } catch (err) {
       // Mostrar el error como alerta nativa del navegador
@@ -230,6 +231,38 @@ const ProductosManager = () => {
   // Permite que StockForm pueda actualizar el estado de edición
   window.setEditStatesProductosManager = setEditStates
 
+  // Función para manejar cambios de ordenamiento
+  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
+    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
+    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
+  }, []);
+
+  // Construir los filtros de forma reactiva para que el hook los detecte
+  const filtrosProductos = useMemo(() => {
+    const f = {}
+    if (fam1Filtro) f.idfam1 = fam1Filtro
+    if (fam2Filtro) f.idfam2 = fam2Filtro
+    if (fam3Filtro) f.idfam3 = fam3Filtro
+    if (activeTab === "lista") f.acti = "S"
+    else if (activeTab === "inactivos") f.acti = "N"
+    if ((searchProductos || '').trim()) {
+      if (buscarPorCodigoProveedor) f.search_codigo_proveedor = searchProductos.trim()
+      else f.search = searchProductos.trim()
+    }
+    f.orden = 'id'
+    f.direccion = ordenamiento
+    return f
+  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, searchProductos, buscarPorCodigoProveedor, ordenamiento])
+
+  // Hook genérico para consultar datos paginados con caché de TanStack Query
+  const { datos: productos, total, cargando: loadingProductos, invalidarCache } = usePaginacionAPI(
+    'productos',
+    '/api/productos/stock/',
+    filtrosProductos,
+    pagina,
+    itemsPorPagina
+  )
+
   // Filtrar productos activos/inactivos con memo para rendimiento
   // Si el campo acti no está presente, mostrar todos los productos como activos
   const productosActivosBase = useMemo(() => {
@@ -261,43 +294,11 @@ const ProductosManager = () => {
   const productosActivos = useMemo(() => productosActivosBase.filter(aplicaFiltrosFamilia), [productosActivosBase, aplicaFiltrosFamilia])
   const productosInactivos = useMemo(() => productosInactivosBase.filter(aplicaFiltrosFamilia), [productosInactivosBase, aplicaFiltrosFamilia])
 
-  // ------------------------------------------------------------------
-  // Paginación controlada y recarga server-side
-  // Función para manejar cambios de ordenamiento
-  const handleOrdenamientoChange = useCallback((nuevoOrdenamiento) => {
-    setOrdenamiento(nuevoOrdenamiento ? 'asc' : 'desc');
-    setPagina(1); // Resetear a página 1 cuando cambia el ordenamiento
-  }, []);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      const filtros = {};
-      if (fam1Filtro) filtros.idfam1 = fam1Filtro;
-      if (fam2Filtro) filtros.idfam2 = fam2Filtro;
-      if (fam3Filtro) filtros.idfam3 = fam3Filtro;
-      // Filtro por estado según la tab activa
-      if (activeTab === "lista") {
-        filtros.acti = "S";
-      } else if (activeTab === "inactivos") {
-        filtros.acti = "N";
-      }
-      // Búsqueda remota: por código de proveedor o por código de venta/denominación
-      if ((searchProductos || '').trim()) {
-        if (buscarPorCodigoProveedor) {
-          filtros['search_codigo_proveedor'] = searchProductos.trim();
-        } else {
-          filtros['search'] = searchProductos.trim();
-        }
-      }
-      fetchProductos(filtros, pagina, itemsPorPagina, 'id', ordenamiento);
-    }, 200);
-    return () => clearTimeout(timeout);
-  }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, pagina, itemsPorPagina, searchProductos, ordenamiento, buscarPorCodigoProveedor, fetchProductos]);
-
   // Resetear a página 1 cuando cambian filtros o búsqueda
   useEffect(() => {
     setPagina(1)
   }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, searchProductos])
+
 
   // Exponer handlers para ProductosTable sin romper la API del componente
   if (typeof window !== 'undefined') {

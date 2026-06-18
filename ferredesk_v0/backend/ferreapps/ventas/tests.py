@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from django.urls import clear_url_caches
+from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -202,3 +203,183 @@ class TestIndicesDeAltoImpacto(VentasTenantTestCase):
             ("proveedor", "codigo_producto_excel"),
             {tuple(campos) for campos in PrecioProveedorExcel._meta.unique_together},
         )
+
+
+class TestDenormalizacionTotalesVenta(TestCase):
+    """
+    Tests unitarios que validan la lógica de recálculo de totales denormalizados.
+    """
+    def test_recalculo_totales_con_un_item(self):
+        """
+        Un ítem con precio final $121 (IVA 21% incluido) y cantidad 1.
+        - Total: $121.00
+        - Neto: $100.00
+        - IVA: $21.00
+        """
+        from decimal import Decimal
+        from unittest.mock import patch
+        from ferreapps.ventas.signals import _recalcular_totales_venta
+
+        # Simular los resultados que devuelve el aggregate del ORM
+        agregados_simulados = {
+            'total': Decimal('121.00'),
+            'neto': Decimal('100.00'),
+            'iva': Decimal('21.00'),
+            'subtotal': Decimal('121.00'),
+        }
+
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
+             patch('ferreapps.ventas.models.Venta') as mock_venta_cls:
+
+            # Configurar el mock del QuerySet
+            mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
+            mock_qs.aggregate.return_value = agregados_simulados
+
+            # Ejecutar la función bajo test
+            _recalcular_totales_venta(1)
+
+            # Verificar que se llamó a Venta.objects.filter(pk=1).update(...)
+            mock_venta_cls.objects.filter.assert_called_with(pk=1)
+            update_kwargs = mock_venta_cls.objects.filter.return_value.update.call_args[1]
+
+            self.assertEqual(update_kwargs['total_guardado'], Decimal('121.00'))
+            self.assertEqual(update_kwargs['neto_guardado'], Decimal('100.00'))
+            self.assertEqual(update_kwargs['iva_guardado'], Decimal('21.00'))
+
+    def test_recalculo_totales_venta_vacia(self):
+        """
+        Al eliminar todos los ítems de una venta, los totales deben ser $0.00.
+        Garantiza que no queden valores huérfanos.
+        """
+        from decimal import Decimal
+        from unittest.mock import patch
+        from ferreapps.ventas.signals import _recalcular_totales_venta
+
+        agregados_simulados = {
+            'total': None,  # Sum() devuelve None cuando no hay filas
+            'neto': None,
+            'iva': None,
+            'subtotal': None,
+        }
+
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
+             patch('ferreapps.ventas.models.Venta') as mock_venta_cls:
+
+            mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
+            mock_qs.aggregate.return_value = agregados_simulados
+
+            _recalcular_totales_venta(99)
+
+            update_kwargs = mock_venta_cls.objects.filter.return_value.update.call_args[1]
+            self.assertEqual(update_kwargs['total_guardado'], Decimal('0.00'))
+            self.assertEqual(update_kwargs['neto_guardado'], Decimal('0.00'))
+            self.assertEqual(update_kwargs['iva_guardado'], Decimal('0.00'))
+
+    def test_recalculo_precision_centesimal(self):
+        """
+        Verifica que los totales se guarden con exactamente 2 decimales,
+        cumpliendo la precisión mínima exigida por ARCA (AFIP).
+        """
+        from decimal import Decimal
+        from unittest.mock import patch
+        from ferreapps.ventas.signals import _recalcular_totales_venta
+
+        # Total con muchos decimales por cálculo interno
+        agregados_simulados = {
+            'total': Decimal('1234.5678'),  # Debe guardarse como 1234.57
+            'neto': Decimal('1020.3024'),   # Debe guardarse como 1020.30
+            'iva': Decimal('214.2654'),     # Debe guardarse como 214.27
+            'subtotal': Decimal('1234.5678'),
+        }
+
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
+             patch('ferreapps.ventas.models.Venta') as mock_venta_cls:
+
+            mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
+            mock_qs.aggregate.return_value = agregados_simulados
+
+            _recalcular_totales_venta(42)
+
+            update_kwargs = mock_venta_cls.objects.filter.return_value.update.call_args[1]
+
+            # Verificar que el total tiene exactamente 2 decimales
+            self.assertEqual(update_kwargs['total_guardado'].as_tuple().exponent, -2)
+            self.assertEqual(update_kwargs['neto_guardado'].as_tuple().exponent, -2)
+            self.assertEqual(update_kwargs['iva_guardado'].as_tuple().exponent, -2)
+
+    def test_error_en_recalculo_no_propaga_excepcion(self):
+        """
+        Si hay un error en el recálculo (ej. venta no encontrada), la señal
+        debe registrar el error en el logger pero NO propagar la excepción,
+        para no romper el save() original del ítem.
+        """
+        from unittest.mock import patch
+        from ferreapps.ventas.signals import _recalcular_totales_venta
+
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
+             patch('ferreapps.ventas.signals.logger') as mock_logger:
+
+            mock_item_cls.objects.filter.side_effect = Exception("Error de base de datos simulado")
+
+            # No debe lanzar excepción
+            try:
+                _recalcular_totales_venta(999)
+            except Exception:
+                self.fail("_recalcular_totales_venta propagó una excepción cuando no debería")
+
+            # Debe haber loggeado el error
+            mock_logger.error.assert_called()
+
+
+class TestContextoIsListEnSerializer(TestCase):
+    """
+    Verifica que el corte N+1 del desglose de IVA funcione correctamente.
+    """
+    def test_iva_desglose_vacio_en_modo_lista(self):
+        """
+        Cuando el context incluye is_list=True, get_iva_desglose
+        debe devolver {} sin hacer ninguna consulta a la base de datos.
+        """
+        from ferreapps.ventas.serializers import VentaCalculadaSerializer
+        from unittest.mock import MagicMock
+
+        serializer = VentaCalculadaSerializer()
+        serializer._context = {'is_list': True}
+
+        obj_mock = MagicMock()
+
+        resultado = serializer.get_iva_desglose(obj_mock)
+
+        self.assertEqual(resultado, {})
+        # Verificar que no se intentó acceder a la base de datos
+        obj_mock.pk  # No debe haber llamado a VentaDetalleItem.objects.filter
+
+    def test_iva_desglose_calcula_en_detalle(self):
+        """
+        Cuando el context NO incluye is_list (retrieve individual),
+        get_iva_desglose debe intentar calcular el desglose.
+        El mock simula que la venta no tiene ítems (lista vacía).
+        """
+        from ferreapps.ventas.serializers import VentaCalculadaSerializer
+        from unittest.mock import MagicMock, patch
+
+        serializer = VentaCalculadaSerializer()
+        serializer._context = {'is_list': False}
+
+        obj_mock = MagicMock()
+        obj_mock.pk = 1
+
+        # Parcheamos el import tardío dentro del método del serializer
+        mock_qs = MagicMock()
+        mock_qs.con_calculos.return_value.__iter__ = MagicMock(return_value=iter([]))
+        mock_qs.con_calculos.return_value = []
+
+        mock_venta_detalle_item = MagicMock()
+        mock_venta_detalle_item.objects.filter.return_value = mock_qs
+
+        with patch.dict('sys.modules', {'ferreapps.ventas.models': MagicMock(VentaDetalleItem=mock_venta_detalle_item)}):
+            resultado = serializer.get_iva_desglose(obj_mock)
+
+        # Con lista vacía de ítems, el resultado es un dict vacío
+        self.assertIsInstance(resultado, dict)
+

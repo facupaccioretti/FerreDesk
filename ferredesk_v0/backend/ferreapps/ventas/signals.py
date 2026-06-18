@@ -145,3 +145,75 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
     except Exception as e:
         logger.error("Error procesando archivos ARCA para ferretería %s: %s", instance.id, e)
         # No re-lanzar la excepción para no romper el save() original
+
+
+# =============================================================================
+# Señales de Denormalización de Totales de Venta
+# =============================================================================
+# Problema resuelto: VentaQuerySet.con_calculos() usaba Subqueries para calcular
+# totales en vivo en cada listado, lo que saturaba la CPU en el plan Starter de Render.
+# Solución: guardar los totales físicamente en la tabla Venta y actualizarlos aquí.
+# =============================================================================
+
+def _recalcular_totales_venta(venta_id: int) -> None:
+    """
+    Recalcula los campos denormalizados de totales para una Venta específica
+    y los guarda con .update() (sin disparar señales adicionales).
+
+    Usa el QuerySet con_calculos() de VentaDetalleItem que ya tiene la lógica
+    matemática correcta (descuentos en cascada, IVA por alícuota, etc.).
+    """
+    # Imports tardíos para evitar dependencias circulares al momento de carga del módulo
+    from decimal import Decimal
+    from django.db.models import Sum, ExpressionWrapper, F, DecimalField
+    from ferreapps.ventas.models import Venta, VentaDetalleItem
+
+    try:
+        items_qs = VentaDetalleItem.objects.filter(vdi_idve_id=venta_id).con_calculos()
+        agregados = items_qs.aggregate(
+            total=Sum('total_item'),
+            neto=Sum('subtotal_neto'),
+            iva=Sum('iva_monto'),
+            subtotal=Sum(
+                ExpressionWrapper(
+                    F('precio_unitario_bonificado') * F('vdi_cantidad'),
+                    output_field=DecimalField(max_digits=15, decimal_places=2)
+                )
+            )
+        )
+
+        total = (agregados['total'] or Decimal('0')).quantize(Decimal('0.01'))
+        neto = (agregados['neto'] or Decimal('0')).quantize(Decimal('0.01'))
+        iva = (agregados['iva'] or Decimal('0')).quantize(Decimal('0.01'))
+        subtotal_bruto = (agregados['subtotal'] or Decimal('0')).quantize(Decimal('0.01'))
+
+        Venta.objects.filter(pk=venta_id).update(
+            total_guardado=total,
+            neto_guardado=neto,
+            iva_guardado=iva,
+            subtotal_bruto_guardado=subtotal_bruto,
+        )
+        logger.debug("Totales recalculados para Venta %s: total=%s neto=%s iva=%s", venta_id, total, neto, iva)
+    except Exception as e:
+        logger.error("Error recalculando totales para Venta %s: %s", venta_id, e)
+
+
+
+@receiver(post_save, sender='ventas.VentaDetalleItem')
+def actualizar_totales_al_guardar_item(sender, instance, **kwargs):
+    """
+    Dispara el recálculo de totales de la Venta cuando se guarda un ítem de venta.
+    Aplica tanto a creaciones (created=True) como a actualizaciones (created=False).
+    """
+    if instance.vdi_idve_id:
+        _recalcular_totales_venta(instance.vdi_idve_id)
+
+
+@receiver(post_save, sender='ventas.VentaDetalleItem')
+def actualizar_totales_al_eliminar_item(sender, instance, **kwargs):
+    """
+    Dispara el recálculo de totales de la Venta cuando se elimina un ítem de venta.
+    Al eliminar, el ítem ya no existe en BD, por lo que la suma reflejará el estado real.
+    """
+    if instance.vdi_idve_id:
+        _recalcular_totales_venta(instance.vdi_idve_id)

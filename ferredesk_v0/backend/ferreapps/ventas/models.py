@@ -190,6 +190,34 @@ class Venta(models.Model):
         related_name='notas_de_credito_que_la_afectan'
     )
 
+    # === CAMPOS DENORMALIZADOS DE TOTALES ===
+    # Se guardan físicamente para evitar recalcular via Subqueries en cada listado.
+    # Se actualizan automáticamente via signals cuando cambia un VentaDetalleItem.
+    total_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_TOTAL_GUARDADO',
+        help_text='Total final. Se actualiza via signals al cambiar ítems.'
+    )
+    neto_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_NETO_GUARDADO',
+        help_text='Importe neto gravado. Se actualiza via signals al cambiar ítems.'
+    )
+    iva_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_IVA_GUARDADO',
+        help_text='IVA total. Se actualiza via signals al cambiar ítems.'
+    )
+    subtotal_bruto_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_SUBTOTAL_BRUTO_GUARDADO',
+        help_text='Subtotal bruto antes de descuentos. Se actualiza via signals al cambiar ítems.'
+    )
+
     @property
     def ven_total(self):
         """Total venta (annotated o calculado en vivo)"""
