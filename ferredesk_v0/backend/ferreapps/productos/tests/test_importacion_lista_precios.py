@@ -134,9 +134,21 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["registros_procesados"], 3)
-        self.assertEqual(response.json()["registros_actualizados"], 2)
+        self.assertEqual(response.status_code, 202)
+        data = response.json()
+        self.assertEqual(data["modo_procesamiento"], "diferido")
+        self.assertEqual(data["estado"], ImportacionListaPreciosProveedor.ESTADO_PENDIENTE)
+
+        call_command(
+            "procesar_importaciones_pendientes",
+            schema_name=self.tenant.schema_name,
+            limit=1,
+        )
+
+        importacion = ImportacionListaPreciosProveedor.objects.get(id=data["importacion_id"])
+        self.assertEqual(importacion.estado, ImportacionListaPreciosProveedor.ESTADO_COMPLETADA)
+        self.assertEqual(importacion.registros_procesados, 3)
+        self.assertEqual(importacion.registros_actualizados, 2)
 
         self.stock_prove_a.refresh_from_db()
         self.stock_prove_b.refresh_from_db()

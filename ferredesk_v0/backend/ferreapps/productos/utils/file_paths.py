@@ -29,19 +29,21 @@ def obtener_directorio_logo_empresa_absoluto(media_root: str) -> str:
 def upload_logo_empresa(instance, filename) -> str:
     directorio = obtener_directorio_logo_empresa_relativo()
     nombre_archivo = normalizar_nombre_archivo(filename)
-    return f"{directorio}/{nombre_archivo}"
+    _, extension = os.path.splitext(nombre_archivo)
+    extension = extension.lower() if extension else ".jpg"
+    if extension not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
+        extension = ".jpg"
+    return f"{directorio}/logo{extension}"
 
 
 def upload_certificado_arca(instance, filename) -> str:
     schema_name = obtener_schema_name_para_archivos()
-    nombre_archivo = normalizar_nombre_archivo(filename)
-    return f"arca/{schema_name}/certificados/{nombre_archivo}"
+    return f"arca/{schema_name}/certificados/certificado.pem"
 
 
 def upload_clave_privada_arca(instance, filename) -> str:
     schema_name = obtener_schema_name_para_archivos()
-    nombre_archivo = normalizar_nombre_archivo(filename)
-    return f"arca/{schema_name}/claves_privadas/{nombre_archivo}"
+    return f"arca/{schema_name}/claves_privadas/clave_privada.pem"
 
 
 upload_importacion_lista_precios_temporal = tenant_upload_path(

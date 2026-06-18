@@ -4,6 +4,7 @@ import re
 import dj_database_url
 from urllib.parse import urlparse
 from django.core.exceptions import ImproperlyConfigured
+from botocore.config import Config
 
 
 def _split_env_list(value):
@@ -71,7 +72,7 @@ if _faltantes:
 # Whitenoise sin manifest (mantiene nombres originales de React build)
 STORAGES = {
     "default": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "BACKEND": "ferredesk_backend.storage_backends.R2MediaStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
@@ -86,7 +87,14 @@ AWS_S3_ENDPOINT_URL = os.environ.get('R2_ENDPOINT_URL')
 AWS_S3_REGION_NAME = 'auto'
 AWS_S3_ADDRESSING_STYLE = 'path'
 AWS_QUERYSTRING_AUTH = False  # archivos públicos; cambiar a True si son privados
-AWS_S3_FILE_OVERWRITE = False  # evita colisiones de nombres
+AWS_S3_FILE_OVERWRITE = True
+AWS_S3_CLIENT_CONFIG = Config(
+    connect_timeout=int(os.environ.get("R2_CONNECT_TIMEOUT", "3")),
+    read_timeout=int(os.environ.get("R2_READ_TIMEOUT", "10")),
+    retries={"max_attempts": int(os.environ.get("R2_MAX_ATTEMPTS", "2"))},
+    signature_version="s3v4",
+    s3={"addressing_style": "path"},
+)
 
 # Base de datos desde variable de entorno
 DATABASES = {

@@ -374,7 +374,6 @@ class UploadListaPreciosProveedor(APIView):
         except Exception as e:
             return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
 
-    @transaction.atomic
     def post(self, request, proveedor_id):
         with medir_proceso(
             "endpoint_upload_lista_precios_proveedor",
@@ -394,6 +393,33 @@ class UploadListaPreciosProveedor(APIView):
 
             if not excel_file:
                 return Response({'detail': 'No se enviÃ³ archivo.'}, status=400)
+
+            try:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                medicion.registrar_metricas(
+                    importacion_id=importacion.id,
+                    archivo_bytes=getattr(excel_file, 'size', None) or 0,
+                    modo_procesamiento='diferido',
+                )
+                return Response(
+                    {
+                        'message': 'Importacion de lista iniciada.',
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
+            except Exception as e:
+                return Response({'detail': f'Error encolando el archivo: {str(e)}'}, status=400)
 
             max_bytes_sync = getattr(settings, 'IMPORTACION_LISTA_MAX_BYTES_SYNC', 0)
             archivo_bytes = getattr(excel_file, 'size', None) or 0
@@ -469,6 +495,30 @@ class UploadListaPreciosProveedor(APIView):
                 )
             except Exception as e:
                 return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
+
+
+class ImportacionListaPreciosEstadoAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, proveedor_id, importacion_id):
+        importacion = ImportacionListaPreciosProveedor.objects.filter(
+            id=importacion_id,
+            proveedor_id=proveedor_id,
+        ).first()
+        if not importacion:
+            return Response({'detail': 'Importacion no encontrada.'}, status=404)
+
+        return Response({
+            'id': importacion.id,
+            'estado': importacion.estado,
+            'registros_procesados': importacion.registros_procesados,
+            'registros_actualizados': importacion.registros_actualizados,
+            'mensaje_error': importacion.mensaje_error,
+            'creado_en': importacion.creado_en,
+            'iniciado_en': importacion.iniciado_en,
+            'finalizado_en': importacion.finalizado_en,
+        })
+
 
 class PrecioProductoProveedorAPIView(APIView):
     """

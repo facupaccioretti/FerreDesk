@@ -285,7 +285,7 @@ class Ferreteria(models.Model):
         
         # Los archivos ARCA se normalizan via señal post_save en ventas/signals.py
         if logo_nuevo:
-            self._normalizar_logo_empresa()
+            pass
     
 
     def _normalizar_logo_empresa(self):

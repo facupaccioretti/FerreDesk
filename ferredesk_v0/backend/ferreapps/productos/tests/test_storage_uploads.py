@@ -25,9 +25,9 @@ class UploadPathTest(SimpleTestCase):
             ruta_certificado = upload_certificado_arca(None, "cert.pem")
             ruta_clave = upload_clave_privada_arca(None, "clave.pem")
 
-        self.assertEqual(ruta_logo, "logos/tenant_demo/marca.jpg")
-        self.assertEqual(ruta_certificado, "arca/tenant_demo/certificados/cert.pem")
-        self.assertEqual(ruta_clave, "arca/tenant_demo/claves_privadas/clave.pem")
+        self.assertEqual(ruta_logo, "logos/tenant_demo/logo.jpg")
+        self.assertEqual(ruta_certificado, "arca/tenant_demo/certificados/certificado.pem")
+        self.assertEqual(ruta_clave, "arca/tenant_demo/claves_privadas/clave_privada.pem")
 
     def test_path_acepta_schema_explicito_en_instancia(self):
         class DummyInstance:

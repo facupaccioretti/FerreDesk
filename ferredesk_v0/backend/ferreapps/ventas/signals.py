@@ -104,21 +104,28 @@ def normalizar_archivos_arca(sender, instance, created, **kwargs):
         # Solo procesar si hay archivos ARCA
         if not instance.certificado_arca and not instance.clave_privada_arca:
             return
-            
-        logger.info("Normalizando archivos ARCA para schema %s", obtener_schema_name_para_archivos())
-        
-        # Crear directorios base
+
         schema_name = obtener_schema_name_para_archivos()
-        base_dir = obtener_directorio_arca_absoluto(settings.MEDIA_ROOT)
-        certificados_dir = os.path.join(base_dir, 'certificados')
-        claves_dir = os.path.join(base_dir, 'claves_privadas')
-        
-        os.makedirs(certificados_dir, exist_ok=True)
-        os.makedirs(claves_dir, exist_ok=True)
-        
         directorio_arca_relativo = obtener_directorio_arca_relativo()
         certificado_relativo = f"{directorio_arca_relativo}/certificados/certificado.pem"
         clave_relativa = f"{directorio_arca_relativo}/claves_privadas/clave_privada.pem"
+
+        if (
+            (not instance.certificado_arca or instance.certificado_arca.name == certificado_relativo)
+            and (not instance.clave_privada_arca or instance.clave_privada_arca.name == clave_relativa)
+        ):
+            return
+
+        logger.info("Normalizando archivos ARCA para schema %s", schema_name)
+
+        # Crear directorios base. Solo aplica a storage local legacy; con R2/S3
+        # FieldFile.path no existe y _normalizar_archivo_subido retorna sin costo alto.
+        base_dir = obtener_directorio_arca_absoluto(settings.MEDIA_ROOT)
+        certificados_dir = os.path.join(base_dir, 'certificados')
+        claves_dir = os.path.join(base_dir, 'claves_privadas')
+
+        os.makedirs(certificados_dir, exist_ok=True)
+        os.makedirs(claves_dir, exist_ok=True)
 
         if instance.certificado_arca:
             _normalizar_archivo_subido(

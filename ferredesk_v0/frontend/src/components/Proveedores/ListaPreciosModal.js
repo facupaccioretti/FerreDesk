@@ -31,8 +31,11 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const [advertenciaNombreArchivo, setAdvertenciaNombreArchivo] = useState('');
   const [nombreArchivoSeleccionado, setNombreArchivoSeleccionado] = useState('');
   const [importando, setImportando] = useState(false);
+  const [importacion, setImportacion] = useState(null);
+  const [mensajeImportacion, setMensajeImportacion] = useState('');
   // Evitar múltiples alerts por el mismo mensaje de error de vista previa
   const ultimoErrorAlertadoRef = useRef('');
+  const importacionActiva = ["pendiente", "procesando"].includes(importacion?.estado);
 
   // Normaliza cadenas: sin acentos, en minúsculas y sólo alfanumérico/espacios
   const normalizarCadena = (texto) => {
@@ -64,6 +67,65 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
   const construirMensajeConfirmacionImportacion = (archivoNombre, proveedorNombre) => {
     return `Estás importando la lista "${archivoNombre}" para el proveedor "${proveedorNombre}". ¿Está seguro de proceder?`;
   };
+
+  useEffect(() => {
+    if (!open) {
+      setImportacion(null);
+      setMensajeImportacion('');
+      setImportando(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!proveedor?.id || !importacion?.id || !importacionActiva) return undefined;
+
+    let cancelado = false;
+    const consultarEstado = async () => {
+      try {
+        const response = await fetch(
+          `/api/productos/proveedores/${proveedor.id}/importaciones-listas/${importacion.id}/`,
+          { credentials: 'include' }
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.detail || 'Error consultando estado de importacion');
+        if (cancelado) return;
+
+        setImportacion(data);
+        if (data.estado === 'completada') {
+          setImportando(false);
+          const procesados = data.registros_procesados || 0;
+          const actualizados = data.registros_actualizados || 0;
+          const message = actualizados === 0
+            ? 'La lista finalizo sin actualizar costos. Verifique que el archivo corresponda al proveedor.'
+            : `Lista importada correctamente. Registros procesados: ${procesados}. Actualizados: ${actualizados}.`;
+          setMensajeImportacion(message);
+          onImport({
+            proveedor,
+            fileName: file?.name,
+            status: 'success',
+            message,
+            registrosProcesados: procesados,
+            registrosActualizados: actualizados,
+          });
+        } else if (data.estado === 'error') {
+          setImportando(false);
+          setMensajeImportacion(data.mensaje_error || 'La importacion finalizo con error.');
+        }
+      } catch (err) {
+        if (!cancelado) {
+          setImportando(false);
+          setMensajeImportacion(err.message || 'Error consultando estado de importacion');
+        }
+      }
+    };
+
+    consultarEstado();
+    const timer = window.setInterval(consultarEstado, 3000);
+    return () => {
+      cancelado = true;
+      window.clearInterval(timer);
+    };
+  }, [proveedor, importacion?.id, importacionActiva, onImport, file]);
 
   // Helper to convert column letter to index (A=0, B=1, AA=26)
   const letterToColumnIndex = (letter) => {
@@ -252,23 +314,30 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       });
 
       setLoading(false);
-      setImportando(false);
       if (response.ok) {
         const result = await response.json();
         const importacionDiferida = result.modo_procesamiento === 'diferido';
-        // Pass relevant info from result to onImport if needed
-        onImport({
-          proveedor,
-          fileName: file.name,
-          status: importacionDiferida ? 'queued' : 'success',
-          message: result.message || 'Lista importada correctamente.',
-          registrosProcesados: result.registros_procesados || 0,
-          registrosActualizados: result.registros_actualizados || 0,
-        });
-        if (!importacionDiferida && (result.registros_actualizados || 0) === 0) {
-          alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
+        if (importacionDiferida) {
+          setImportacion({
+            id: result.importacion_id,
+            estado: result.estado,
+          });
+          setMensajeImportacion(result.message || 'Importacion de lista iniciada.');
+        } else {
+          setImportando(false);
+          onImport({
+            proveedor,
+            fileName: file.name,
+            status: 'success',
+            message: result.message || 'Lista importada correctamente.',
+            registrosProcesados: result.registros_procesados || 0,
+            registrosActualizados: result.registros_actualizados || 0,
+          });
+          if ((result.registros_actualizados || 0) === 0) {
+            alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
+          }
+          onClose();
         }
-        onClose(); // Close modal on success
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Error desconocido al importar.' }));
         alert(`Error al importar: ${errorData.detail || response.statusText}`);
@@ -396,6 +465,18 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     </div>
                   )}
 
+                  {mensajeImportacion && (
+                    <div className={`my-3 p-3 border rounded-md ${
+                      importacion?.estado === 'error'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : importacion?.estado === 'completada'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      {mensajeImportacion}
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-3">
                     <button
                       onClick={onClose}
@@ -407,9 +488,9 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     <button
                       onClick={handleImport}
                       className={`${theme.botonPrimario} disabled:opacity-50`}
-                      disabled={loading || !file || (errorVistaPrevia && vistaPrevia.length === 0)}
+                      disabled={importando || loading || !file || (errorVistaPrevia && vistaPrevia.length === 0)}
                     >
-                      {loading && !file ? 'Cargando...' : loading && file ? 'Importando...' : 'Importar'}
+                      {importando ? 'Importando...' : loading && !file ? 'Cargando...' : loading && file ? 'Preparando...' : 'Importar'}
                     </button>
                   </div>
                 </div>

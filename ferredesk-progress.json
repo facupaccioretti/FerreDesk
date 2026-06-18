@@ -276,6 +276,30 @@
             "Integracion de usePaginacionAPI e invalidacion en ProductosManager.js ante mutaciones (CRUD).",
             "Clases CSS de atenuacion en Tabla.js para evitar el salto del loader al recargar paginas."
           ]
+        },
+        "FC-R2-CONFIG-2026-06-18": {
+          "done": true,
+          "decision": "Se redujo el trabajo sincronico del guardado de configuracion y se adapto el storage productivo a R2/S3 con nombres deterministas por tenant.",
+          "evidencia": [
+            "`ferredesk_backend.storage_backends.R2MediaStorage` define `file_overwrite=True` para evitar consultas HEAD preventivas al buscar nombres disponibles.",
+            "`settings/prod.py` usa `R2MediaStorage` como storage default y configura timeouts/retries de S3 mediante `R2_CONNECT_TIMEOUT`, `R2_READ_TIMEOUT` y `R2_MAX_ATTEMPTS`.",
+            "`upload_logo_empresa`, `upload_certificado_arca` y `upload_clave_privada_arca` ahora generan rutas finales estables por schema tenant: logo.*, certificado.pem y clave_privada.pem.",
+            "La normalizacion legacy post-save de ARCA sale inmediatamente cuando los archivos ya estan en su ruta final, evitando trabajo de filesystem local en guardados posteriores.",
+            "Validacion real: `python manage.py test ferreapps.productos.tests.test_storage_uploads --settings=ferredesk_backend.settings.dev` -> `Ran 4 tests ... OK`.",
+            "Validacion real: `python manage.py check --settings=ferredesk_backend.settings.dev` -> `System check identified no issues (0 silenced)`."
+          ]
+        },
+        "FC-LISTAS-DIFERIDAS-2026-06-18": {
+          "done": true,
+          "decision": "La importacion de listas de precios de proveedores deja de procesar Excel en el request web y replica el flujo diferido que ya funciono para carga inicial.",
+          "evidencia": [
+            "`UploadListaPreciosProveedor.post` ahora valida proveedor/archivo, guarda `ImportacionListaPreciosProveedor` y responde HTTP 202 con `importacion_id`, `estado` y `modo_procesamiento=diferido` antes de cualquier parseo pesado del Excel.",
+            "Se agrego `ImportacionListaPreciosEstadoAPIView` y la ruta `/api/productos/proveedores/<proveedor_id>/importaciones-listas/<importacion_id>/` para consultar progreso y resultado.",
+            "`ListaPreciosModal.js` mantiene el modal abierto, bloquea el boton durante la importacion y consulta estado cada 3 segundos hasta `completada` o `error`.",
+            "Validacion real backend: `python manage.py test ferreapps.productos.tests.test_importacion_lista_precios --settings=ferredesk_backend.settings.dev --keepdb` -> `Ran 5 tests ... OK`.",
+            "Validacion real backend: `python manage.py check --settings=ferredesk_backend.settings.dev` -> `System check identified no issues (0 silenced)`.",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
         }
       }
     }
