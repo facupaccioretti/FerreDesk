@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista, ListaPrecio
 from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
 
 class ProveedorSerializer(serializers.ModelSerializer):
@@ -86,18 +86,27 @@ class StockSerializer(serializers.ModelSerializer):
 
     def get_precios_listas(self, obj):
         """Obtiene precios de listas 1-4. Usa override manual si existe, sino calcula desde precio_lista_0."""
-        from .models import ListaPrecio
-        
+        margenes = self.context.get('margenes_listas_precio')
+        if margenes is None:
+            margenes = {
+                lista.numero: float(lista.margen_descuento)
+                for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+            }
+            self.context['margenes_listas_precio'] = margenes
+
+        precios_prefetch = getattr(obj, 'precios_listas_prefetch', None)
+        precios_queryset = (
+            precios_prefetch
+            if precios_prefetch is not None
+            else obj.precios_listas.all()
+        )
+
         overrides = {
-            p.lista_numero: p 
-            for p in obj.precios_listas.filter(precio_manual=True).select_related('usuario_carga_manual')
+            precio.lista_numero: precio
+            for precio in precios_queryset
+            if precio.precio_manual
         }
-        
-        margenes = {
-            l.numero: float(l.margen_descuento) 
-            for l in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
-        }
-        
+
         precio_base = float(obj.precio_lista_0 or 0)
         resultado = []
         

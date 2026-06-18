@@ -563,6 +563,7 @@ class StockProve(models.Model):
         indexes = [
             models.Index(fields=['stock', 'proveedor']),
             models.Index(fields=['proveedor']),
+            models.Index(fields=['proveedor', 'codigo_producto_proveedor']),
         ]
         # NOTA: La unicidad (proveedor, codigo_producto_proveedor) solo se valida en el serializer si el código no está vacío.
 

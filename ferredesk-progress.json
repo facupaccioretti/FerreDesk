@@ -117,6 +117,72 @@
             "C:\\Users\\admin\\Desktop\\FerreDesk\\render.yaml mantiene `healthCheckPath: /api/health/`, alineado con el contrato del middleware.",
             "Prueba real contra staging/preview con entrypoint productivo Render: `https://ferredesk-staging.onrender.com/api/health/` devolvio `HTTP 200` con payload `{ \"status\": \"ok\" }` sin requerir sesion ni tenant activo."
           ]
+        },
+        "FC-OPT-PLAN": {
+          "done": true,
+          "decision": "Se amplio `PLAN-OPTIMIZACION-CARGA-INICIAL-TENANT.md` desde un plan limitado a bootstrap hacia un backlog atomico de rendimiento SaaS que cubre bootstrap, importacion Excel, bulk update, N+1, paginacion, ventas/comprobantes, cuenta corriente/caja, observabilidad, Gunicorn y estrategia cron/management commands sin Celery.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\PLAN-OPTIMIZACION-CARGA-INICIAL-TENANT.md reemplazado por un plan con 18 tareas atomicas, cada una con resumen consultable, problema, archivos a tocar, forma de implementacion, prompt sugerido y evidencia requerida.",
+            "El plan conserva como decision que el modelo conceptual de productos/listas es valido para V1: `PrecioProveedorExcel` como lista vigente, `StockProve` como relacion producto-proveedor, `ListaPrecio` como configuracion y `PrecioProductoLista` como overrides manuales.",
+            "El plan prioriza mejoras de rendimiento de alto impacto: indice compuesto y bulk_update para importacion de listas, eliminacion de N+1 en productos, paginacion obligatoria en ventas, serializer resumen para comprobantes, observabilidad y command/cron opcional para procesos pesados.",
+            "No se declaro implementacion de codigo como completa; este registro solo documenta la actualizacion del plan tecnico."
+          ]
+        },
+        "FC-OPT-T9": {
+          "done": true,
+          "decision": "Se aplico paginacion obligatoria al listado de `/api/ventas/` y se adapto el frontend de Presupuestos y Ventas para consumir respuestas DRF paginadas sin repaginar todo el historico en memoria.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\views\\views_ventas.py ahora importa `PaginacionPorPaginaConLimite`, declara `pagination_class = PaginacionPorPaginaConLimite` en `VentaViewSet` y ordena el listado con `order_by('-ven_fecha', '-ven_id')` para paginacion estable.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\utils\\useVentasAPI.js agrega estado `pagination`, envia siempre `page` y `limit` a `/api/ventas/`, interpreta `count/results/next/previous` y refresca la ultima consulta tras alta/edicion/baja.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\components\\Presupuestos y Ventas\\hooks\\useFiltrosComprobantes.js deja de cortar localmente `ventasNormalizadas` y pasa a disparar fetch remoto cada vez que cambian filtros, pagina o `itemsPorPagina`, tomando `pagination.count` como total real del backend.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\components\\Presupuestos y Ventas\\PresupuestosManager.js conecta el hook de filtros con `ventasPagination`, y `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\components\\Presupuestos y Ventas\\herramientasforms\\FacturaSelectorModal.js` pide `limit=200` para no truncar el selector de facturas al primer page-size por defecto.",
+            "Prueba real de backend: `python manage.py check` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real del viewset paginado sin depender del URLConf tenant: `python manage.py shell` ejecutando `VentaViewSet.as_view({'get': 'list'})` con `APIRequestFactory(..., HTTP_HOST='lvh.me')` y query `limit=5&page=1` -> `STATUS 200`, `KEYS ['count', 'next', 'previous', 'results']`, `COUNT 35`, `RESULTS_LEN 5`, `NEXT http://lvh.me/api/ventas/?limit=5&page=2`, `PREVIOUS None`.",
+            "Validacion real de filtro + paginacion: el mismo flujo con `comprobante_tipo=factura&limit=3&page=1` -> `STATUS 200`, `COUNT 8`, `RESULTS_LEN 3`, `TIPOS ['factura', 'factura', 'factura']`, `NEXT http://lvh.me/api/ventas/?comprobante_tipo=factura&limit=3&page=2`.",
+            "Validacion real frontend: `$env:CI='true'; npm run build` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend` -> `Compiled successfully.`",
+            "Hardening del entorno de tests 2026-06-18: `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\tests.py` dejo de usar `APITestCase` sobre apps tenant-only y paso a `TenantTestCase` + `TenantClient`, alineado con el patron ya usado en `tenants/tests` y `ferredesk_backend/test_middlewares.py`. El setup reutiliza datos seed del tenant cuando existen para no chocar con secuencias legacy de `CLIENTES`.",
+            "Prueba real automatica ya verde: `python manage.py test ferreapps.ventas.tests.TestVentaViewSetPaginacion` -> `Ran 2 tests in 6.737s` y `OK`."
+          ]
+        },
+        "FC-OPT-T4": {
+          "done": true,
+          "decision": "Se reemplazo la sincronizacion de costos por fila del upload de listas proveedor por una sincronizacion masiva con `bulk_update`, y se agrego un indice compuesto en `StockProve` para acelerar la busqueda por proveedor + codigo de proveedor.",
+          "evidencia": [
+            "Nuevo servicio `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\services\\importacion_lista_precios_service.py` centraliza la importacion: parsea el archivo, deduplica por codigo proveedor, hace `PrecioProveedorExcel.bulk_create(...)`, busca todos los `StockProve` afectados con un solo `filter(proveedor=..., codigo_producto_proveedor__in=...)`, actualiza objetos en memoria y ejecuta `StockProve.objects.bulk_update(..., ['costo', 'fecha_actualizacion'], batch_size=500)`.",
+            "La view `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\views.py` deja de ejecutar `update()` por cada fila importada y ahora delega el flujo a `importar_lista_precios_proveedor(...)`, manteniendo el payload de respuesta y el conteo real de `registros_actualizados`.",
+            "El modelo `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\models.py` agrega el indice compuesto `['proveedor', 'codigo_producto_proveedor']` en `StockProve`, y la migracion `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\migrations\\0018_stockprove_proveedor_codigo_idx.py` lo crea con nombre `STOCKPROVE_STP_IDP_429e41_idx`.",
+            "Se agrego prueba tenant-aware en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\tests\\test_importacion_lista_precios.py`: importa una lista CSV con duplicados, verifica que prevalece el ultimo precio por codigo (`COD-001` -> `150.75`), que se actualizan solo los `StockProve` asociados (`registros_actualizados=2`) y que se registra el historial de importacion.",
+            "Hardening de entorno de tests del modulo: `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\tests\\__init__.py` deja de hacer imports eager de todos los tests para que una ejecucion puntual no falle por modulos legacy ajenos.",
+            "Validacion real de migraciones: `python manage.py makemigrations --check --dry-run` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `No changes detected`.",
+            "Validacion real automatica: `python manage.py test ferreapps.productos.tests.test_importacion_lista_precios` -> `Ran 1 test in 6.029s` y `OK`."
+          ]
+        },
+        "FC-OPT-T13": {
+          "done": true,
+          "decision": "Se agregaron solo indices de alto impacto respaldados por consultas reales: compuesto en ventas por fecha/comprobante/estado, lookup por producto en detalle de ventas y filtros compuestos fecha+proveedor en compras y ordenes. `PrecioProveedorExcel` no recibio cambios porque `unique_together(proveedor, codigo_producto_excel)` ya materializa el indice compuesto requerido, y `StockProve(proveedor, codigo_producto_proveedor)` ya habia quedado cubierto en FC-OPT-T4.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\models.py agrega `models.Index(fields=['ven_fecha', 'comprobante', 'ven_estado'])` en `Venta` para acelerar listados y filtros por fecha + tipo de comprobante + estado, y `models.Index(fields=['vdi_idsto'])` en `VentaDetalleItem` para los `exists()` y validaciones por producto antes de borrar stock.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\compras\\models.py agrega `models.Index(fields=['comp_fecha', 'comp_idpro'])` en `Compra` y `models.Index(fields=['ord_fecha', 'ord_idpro'])` en `OrdenCompra`, alineados con los filtros `DateFromToRangeFilter + proveedor` y con los endpoints de estadisticas/listado del modulo.",
+            "Migraciones creadas: `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\migrations\\0014_venta_venta_ven_fec_4b8c97_idx_and_more.py` y `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\compras\\migrations\\0002_compra_compras_comp_fe_55c349_idx_and_more.py`.",
+            "Se agrego prueba focalizada en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\ventas\\tests.py` que valida las definiciones ORM de los indices nuevos en `Venta`, `VentaDetalleItem`, `Compra` y `OrdenCompra`, y confirma tambien la declaracion existente de `StockProve(proveedor, codigo_producto_proveedor)` y `PrecioProveedorExcel.unique_together(proveedor, codigo_producto_excel)`.",
+            "Aplicacion real de DDL: `python manage.py migrate_schemas --noinput` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` aplico `productos.0018_stockprove_proveedor_codigo_idx`, `compras.0002_compra_compras_comp_fe_55c349_idx_and_more` y `ventas.0014_venta_venta_ven_fec_4b8c97_idx_and_more` con `OK` en los schemas tenant recorridos por `django-tenants`.",
+            "Verificacion real por introspeccion en schema tenant (`alphax`): `VENTA_VEN_FEC_4b8c97_idx ('VEN_FECHA', 'VEN_CODCOMPROB', 'VEN_ESTADO')`, `COMPRAS_COMP_FE_55c349_idx ('COMP_FECHA', 'COMP_IDPRO')` y `ORDENES_COM_ORD_FEC_c16208_idx ('ORD_FECHA', 'ORD_IDPRO')` quedaron presentes tras la migracion.",
+            "Validacion real de migraciones: `python manage.py makemigrations --check --dry-run` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `No changes detected`.",
+            "Validacion real automatica: `python manage.py test ferreapps.ventas.tests.TestIndicesDeAltoImpacto ferreapps.ventas.tests.TestVentaViewSetPaginacion` -> `Ran 3 tests in 13.203s` y `OK`."
+          ]
+        },
+        "FC-OPT-T7": {
+          "done": true,
+          "decision": "Se elimino el N+1 principal del listado de productos moviendo el costo de relaciones y precios de listas al queryset del `StockViewSet` y reutilizando una cache de margenes de `ListaPrecio` en el serializer.",
+          "evidencia": [
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\views.py ahora centraliza `_get_queryset_base()` con `select_related('proveedor_habitual', 'idaliiva', 'idfam1', 'idfam2', 'idfam3')` y `prefetch_related(...)` para `stock_proveedores` (con `proveedor`) y `precios_listas` (con `usuario_carga_manual`, via `to_attr='precios_listas_prefetch'`). Tanto `get_queryset()` como `retrieve()` reutilizan esa base.",
+            "C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\serializers.py deja de consultar `ListaPrecio` por cada producto y deja de ejecutar `obj.precios_listas.filter(...).select_related(...)` por instancia. `StockSerializer.get_precios_listas()` ahora consume `margenes_listas_precio` desde `context` y usa `precios_listas_prefetch` cuando el queryset ya viene optimizado.",
+            "Se agrego prueba tenant-aware en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\productos\\tests\\test_stock_serializer_optimizacion.py`, que construye 3 productos con proveedor, stock y override manual de lista, evalua el queryset optimizado y verifica con `CaptureQueriesContext` que la serializacion completa no dispara queries extra por producto (`len(queries) <= 1`).",
+            "Validacion real automatica: `python manage.py test ferreapps.productos.tests.test_stock_serializer_optimizacion` -> `Ran 1 test in 6.623s` y `OK`.",
+            "Chequeo real de Django: `python manage.py check` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real de migraciones: `python manage.py makemigrations --check --dry-run` -> `No changes detected`.",
+            "Nota operativa: los tests legacy `ferreapps.productos.tests.test_stock_serializer_precios` siguen montados sobre `APITestCase` en schema publico y fallan por infraestructura previa (`usuarios_usuario` ausente); no se usaron como evidencia de esta tarea porque el patron correcto del repo para apps tenant-only es `TenantTestCase`."
+          ]
         }
       }
     }

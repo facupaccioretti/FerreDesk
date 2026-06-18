@@ -273,6 +273,7 @@ class Venta(models.Model):
             models.Index(fields=['ven_estado']),
             models.Index(fields=['ven_idcli']),
             models.Index(fields=['ven_fecha', 'ven_estado']),
+            models.Index(fields=['ven_fecha', 'comprobante', 'ven_estado']),
         ]
         constraints = [
             models.CheckConstraint(
@@ -365,6 +366,7 @@ class VentaDetalleItem(models.Model):
         db_table = 'VENTA_DETAITEM'
         indexes = [
             models.Index(fields=['vdi_idve', 'vdi_orden']),
+            models.Index(fields=['vdi_idsto']),
         ]
 
 class VentaDetalleMan(models.Model):

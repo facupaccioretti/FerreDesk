@@ -80,7 +80,7 @@ const PresupuestosManager = () => {
     document.title = "Presupuestos y Ventas FerreDesk"
   }, [])
 
-  const { ventas, error: ventasError, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
+  const { ventas, error: ventasError, pagination: ventasPagination, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
   const { obtenerMiCaja } = useCajaAPI()
 
   // Ya no necesitamos cargar productos, familias y proveedores porque ItemsGrid hace búsquedas a demanda
@@ -207,6 +207,7 @@ const PresupuestosManager = () => {
     ventas,
     productos,
     clientes,
+    pagination: ventasPagination,
     fetchVentas,
   })
 

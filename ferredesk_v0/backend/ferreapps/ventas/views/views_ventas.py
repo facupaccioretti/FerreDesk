@@ -33,6 +33,7 @@ from .utils_stock import (
 )
 from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
 from ferreapps.productos.setup import requerir_setup_completo
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     serializer_class = VentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
+    pagination_class = PaginacionPorPaginaConLimite
 
     # --- Selección dinámica de queryset / serializer / filterset --------
     def get_queryset(self):
@@ -146,7 +148,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
             # Usamos el manager personalizado con todas las anotaciones necesarias
-            return Venta.objects.con_calculos()
+            return Venta.objects.con_calculos().order_by('-ven_fecha', '-ven_id')
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()

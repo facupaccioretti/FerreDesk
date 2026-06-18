@@ -1,89 +1,13 @@
-    response = wrapped_callback(request, *callback_args, **callback_kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
-    return view_func(request, *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 104, in view
-    return self.dispatch(request, *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 509, in dispatch
-    response = self.handle_exception(exc)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 469, in handle_exception
-    self.raise_uncaught_exception(exc)
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
-    raise exc
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 497, in dispatch
-    self.initial(request, *args, **kwargs)
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 414, in initial
-    self.perform_authentication(request)
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 324, in perform_authentication
-    request.user
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/request.py", line 227, in user
-    self._authenticate()
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/request.py", line 380, in _authenticate
-    user_auth_tuple = authenticator.authenticate(self)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/rest_framework/authentication.py", line 127, in authenticate
-    if not user or not user.is_active:
-  File "/usr/local/lib/python3.11/site-packages/django/utils/functional.py", line 251, in inner
-    self._setup()
-  File "/usr/local/lib/python3.11/site-packages/django/utils/functional.py", line 404, in _setup
-    self._wrapped = self._setupfunc()
-                    ^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/middleware.py", line 33, in <lambda>
-    request.user = SimpleLazyObject(lambda: get_user(request))
-                                            ^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/middleware.py", line 13, in get_user
-    request._cached_user = auth.get_user(request)
-                           ^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/__init__.py", line 209, in get_user
-    user_id = _get_user_session_key(request)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/auth/__init__.py", line 62, in _get_user_session_key
-    return get_user_model()._meta.pk.to_python(request.session[SESSION_KEY])
-                                               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/base.py", line 53, in __getitem__
-    return self._session[key]
-           ^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/base.py", line 192, in _get_session
-    self._session_cache = self.load()
-                          ^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/db.py", line 42, in load
-    s = self._get_session_from_db()
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/contrib/sessions/backends/db.py", line 32, in _get_session_from_db
-    return self.model.objects.get(
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
-    return getattr(self.get_queryset(), name)(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 643, in get
-    num = len(clone)
-          ^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 380, in __len__
-    self._fetch_all()
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1926, in _fetch_all
-    self._result_cache = list(self._iterable_class(self))
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 91, in __iter__
-    results = compiler.execute_sql(
-              ^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1562, in execute_sql
-    cursor.execute(sql, params)
-  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 79, in execute
-    return self._execute_with_wrappers(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
-    return executor(sql, params, many, context)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
-    with self.db.wrap_database_errors:
-  File "/usr/local/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
-    raise dj_exc_value.with_traceback(traceback) from exc_value
-  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
-    return self.cursor.execute(sql, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-django.db.utils.ProgrammingError: relation "django_session" does not exist
-LINE 1: ...ession_data", "django_session"."expire_date" FROM "django_se...
-                                           
+Repasemos el plan completo armado entre las cosas que discutimos, para que tengas un único documento mental de qué falta y en qué orden.
+Lo que el plan original (el PDF de bootstrap) no cubre
+El PDF que subiste resuelve un problema real y distinto: requests duplicadas en la carga de la app (bootstrap de usuario/setup/ferretería). Eso está bien encarado, ya lo charlamos. Pero no toca para nada el problema que vinimos discutiendo después: la carga masiva de productos y la actualización de listas de precios. Son dos problemas separados, los dos producen el mismo síntoma (timeout/SIGKILL), pero la solución es distinta en cada caso. Si solo implementás el plan del PDF, vas a seguir teniendo el riesgo de timeout cuando un cliente suba un Excel grande, porque ese plan no tiene ningún mecanismo de background processing.
+Lo que falta agregar al plan, en orden de urgencia
+1. Sacar el Web Service del plan free, ya. Esto es más urgente que cualquier otra cosa que hablamos. Con clientes reales entrando (aunque sea gratis los primeros meses), el cold start de 30-60 segundos después de inactividad es una mala primera experiencia, y si el primer request después de dormir es justo el bootstrap o una carga pesada, el riesgo de timeout se multiplica. Costo: $7/mes.
+2. Sacar la Postgres del plan free, ya. Por la razón que mencioné: expira a los 90 días y podés perder datos de clientes reales. Esto no es negociable con datos de producción, aunque sean de prueba. Costo: $7/mes.
+3. El mecanismo de background job para carga de productos y listas de precios. Esto es lo que armamos como Cron Job + tabla de jobs en Postgres, sin Celery ni Redis. Falta todavía: el modelo Django (JobCarga o como le quieras llamar, con estado pendiente/procesando/completo/error), la vista que recibe el archivo y crea el job, el management command que el cron ejecuta, y el endpoint de polling que el frontend consulta para mostrar progreso. Nada de esto está en el PDF original. Costo: $1-2/mes.
+4. El plan de bootstrap del PDF original, que ya repasamos y está bien encarado — endpoint único, serializer liviano, un solo cálculo de estado_setup, sacar logo_empresa.url del bootstrap, Gunicorn parametrizado.
+5. Algo que mencioné en la primera respuesta y que el PDF deja como pregunta abierta sin resolver: el caching del bootstrap en el frontend entre navegaciones (Context global en vez de hook local), para que no se repita la request cada vez que el usuario cambia de ruta dentro de la misma sesión.
+6. Algo que no hemos hablado todavía y que vale la pena que tengas en el radar: qué pasa si el contenedor de Render se reinicia (por un deploy, por ejemplo) mientras hay un job de carga de productos a mitad de procesar. Con el patrón de cron + tabla de jobs, el job va a quedar marcado como "procesando" para siempre sin completarse nunca. Necesitás un mecanismo simple de detección (por ejemplo, si un job lleva más de X minutos en "procesando" sin actualizarse, marcarlo como error y permitir reintentar) para que el cliente no se quede esperando algo que nunca va a terminar sin avisarle.
+7. Backups de la base de datos, que ya lo tenías identificado como blocker de producción en conversaciones anteriores y sigue pendiente — con clientes reales pagando, esto deja de ser "nice to have" y pasa a ser response a la pregunta de "¿qué pasa si Render tiene un problema y perdemos la base?".
+Orden sugerido para no perder tiempo
+Dado que tenés el período gratis corriendo ahora mismo: primero los puntos 1 y 2 (sacar del free, son configuración de minutos, no código), después el punto 3 (el mecanismo de background job, porque es lo que evita que el primer cliente gratis vea un error feo justo en la función más importante del onboarding), y recién después el plan de bootstrap del PDF original, que mejora la experiencia pero no es tan crítico como evitar que se rompa la carga inicial de productos.

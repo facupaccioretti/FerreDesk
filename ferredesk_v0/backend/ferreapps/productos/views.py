@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID, PrecioProductoLista, ListaPrecio
 from .serializers import (
     StockSerializer,
     ProveedorSerializer,
@@ -20,6 +20,7 @@ from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
 from django.db.models import Q
+from django.db.models import Prefetch
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
@@ -38,6 +39,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 from ferredesk_backend.permissions import EsAdminTenant
+from .services.importacion_lista_precios_service import importar_lista_precios_proveedor
 
 # Create your views here.
 
@@ -110,11 +112,34 @@ class StockViewSet(viewsets.ModelViewSet):
     }
     pagination_class = PaginacionPorPaginaConLimite
 
+    def _get_queryset_base(self):
+        return (
+            Stock.objects.con_stock_total()
+            .select_related(
+                'proveedor_habitual',
+                'idaliiva',
+                'idfam1',
+                'idfam2',
+                'idfam3',
+            )
+            .prefetch_related(
+                Prefetch(
+                    'stock_proveedores',
+                    queryset=StockProve.objects.select_related('proveedor').order_by('id'),
+                ),
+                Prefetch(
+                    'precios_listas',
+                    queryset=PrecioProductoLista.objects.select_related('usuario_carga_manual').order_by('lista_numero'),
+                    to_attr='precios_listas_prefetch',
+                ),
+            )
+        )
+
     def get_queryset(self):
         """
         Aplicar filtro de productos activos por defecto, búsqueda general y cálculos de stock.
         """
-        queryset = Stock.objects.con_stock_total()
+        queryset = self._get_queryset_base()
 
         # Búsqueda unificada por código (para el grid): param "codigo" busca en codvta O código de barras.
         # No usamos "codvta" aquí para evitar que DjangoFilterBackend aplique filtro extra y anule el OR.
@@ -199,14 +224,18 @@ class StockViewSet(viewsets.ModelViewSet):
         """Detalle optimizado: prefetch de relaciones necesarias para un único producto.
         Incluye proveedor habitual, alícuota e items de stock_proveedores con su proveedor.
         """
-        qs = (
-            Stock.objects
-            .select_related('proveedor_habitual', 'idaliiva')
-            .prefetch_related('stock_proveedores__proveedor')
-        )
+        qs = self._get_queryset_base()
         instance = get_object_or_404(qs, pk=kwargs.get(self.lookup_field, kwargs.get('pk')))
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['margenes_listas_precio'] = {
+            lista.numero: float(lista.margen_descuento)
+            for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+        }
+        return context
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -308,93 +337,16 @@ class UploadListaPreciosProveedor(APIView):
             return Response({'detail': 'No se envió archivo.'}, status=400)
 
         try:
-            # Detectar el tipo de archivo por la extensión
-            filename = excel_file.name
-            ext = os.path.splitext(filename)[1].lower().replace('.', '')
-            # Usar pyexcel para aceptar .xls, .xlsx, .ods, etc., pasando file_type explícitamente
-            sheet = pe.get_sheet(file_type=ext, file_content=excel_file.read())
-            # Elimina precios anteriores de este proveedor (opcional)
-            PrecioProveedorExcel.objects.filter(proveedor=proveedor).delete()
-
-            to_create = []
-            col_codigo_idx = ord(col_codigo) - 65
-            col_precio_idx = ord(col_precio) - 65
-            col_denominacion_idx = ord(col_denominacion) - 65
-            # Definir largo máximo permitido para denominación según el modelo
-            max_len_denominacion = (
-                PrecioProveedorExcel._meta.get_field('denominacion').max_length or 200
-            )
-            # Normalizador de código proveedor (idéntico a carga inicial por proveedor)
-            def normalizar_codigo_proveedor(texto):
-                if texto is None:
-                    return ''
-                if isinstance(texto, int):
-                    s = str(texto)
-                elif isinstance(texto, float):
-                    s = str(int(texto)) if float(texto).is_integer() else str(texto)
-                elif isinstance(texto, Decimal):
-                    s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
-                else:
-                    s = str(texto)
-                s = s.strip()
-                if re.fullmatch(r'\d+\.0+', s):
-                    s = s.split('.', 1)[0]
-                s = re.sub(r"\s+", " ", s)
-                return s[:100]
-            for i, row in enumerate(sheet.rows()):
-                if i + 1 < fila_inicio:
-                    continue
-                try:
-                    codigo = row[col_codigo_idx]
-                    precio = row[col_precio_idx]
-                    denominacion = row[col_denominacion_idx] if col_denominacion_idx < len(row) else None
-                except IndexError:
-                    continue
-                if codigo is not None and precio is not None:
-                    try:
-                        precio_float = float(str(precio).replace(',', '.').replace('$', '').strip())
-                        denominacion_str = str(denominacion).strip() if denominacion is not None else ''
-                        if denominacion_str and max_len_denominacion:
-                            denominacion_str = denominacion_str[:max_len_denominacion]
-                        codigo_norm = normalizar_codigo_proveedor(codigo)
-                        to_create.append(PrecioProveedorExcel(
-                            proveedor=proveedor,
-                            codigo_producto_excel=codigo_norm,
-                            precio=precio_float,
-                            denominacion=denominacion_str,
-                            nombre_archivo=excel_file.name
-                        ))
-                    except Exception as e:
-                        continue
-            # Filtrar duplicados: dejar solo el último precio para cada código
-            unique_map = {}
-            for obj in to_create:
-                key = (obj.proveedor_id, obj.codigo_producto_excel)
-                unique_map[key] = obj  # Si hay duplicados, se queda con el último
-            to_create = list(unique_map.values())
-
-            with transaction.atomic():
-                PrecioProveedorExcel.objects.bulk_create(to_create, batch_size=500)
-            precios_cargados = len(to_create)
-
-            # Actualizar costo y fecha_actualizacion en StockProve para los productos/proveedor de la lista
-            # que ya tienen un codigo_producto_proveedor asociado.
-            now = timezone.now()
-            registros_actualizados = 0
-            for item_excel in to_create:
-                actualizados = StockProve.objects.filter(
-                    proveedor=proveedor,
-                    codigo_producto_proveedor=normalizar_codigo_proveedor(item_excel.codigo_producto_excel)
-                ).update(costo=item_excel.precio, fecha_actualizacion=now)
-                registros_actualizados += int(actualizados)
-
-            # Registrar historial de importación en la app proveedores
-            HistorialImportacionProveedor.objects.create(
+            resultado = importar_lista_precios_proveedor(
                 proveedor=proveedor,
-                nombre_archivo=excel_file.name,
-                registros_procesados=precios_cargados,
-                registros_actualizados=registros_actualizados,
+                excel_file=excel_file,
+                col_codigo=col_codigo,
+                col_precio=col_precio,
+                col_denominacion=col_denominacion,
+                fila_inicio=fila_inicio,
             )
+            precios_cargados = resultado['precios_cargados']
+            registros_actualizados = resultado['registros_actualizados']
 
             return Response({
                 'message': (
