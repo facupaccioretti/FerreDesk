@@ -39,6 +39,9 @@ export default function CargaInicialProveedor() {
   const [errorVistaLocal, setErrorVistaLocal] = useState("")
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(20)
+  const [solicitudImportacion, setSolicitudImportacion] = useState(null)
+
+  const importacionActiva = ["pendiente", "procesando"].includes(solicitudImportacion?.estado)
 
   useEffect(() => {
     document.title = "Carga inicial por proveedor"
@@ -58,6 +61,36 @@ export default function CargaInicialProveedor() {
       .then((d) => setAlicuotas(Array.isArray(d) ? d : d.results || []))
       .catch(() => setAlicuotas([]))
   }, [])
+
+  useEffect(() => {
+    if (!proveedorId || !solicitudImportacion?.id || !importacionActiva) return undefined
+
+    let cancelado = false
+    const consultarEstado = async () => {
+      try {
+        const res = await fetch(`/api/proveedores/${proveedorId}/carga-inicial/importaciones/${solicitudImportacion.id}/`, {
+          credentials: "include",
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.detail || "Error consultando estado de importacion")
+        if (!cancelado) {
+          setSolicitudImportacion(data)
+          if (data.estado === "error") {
+            setError(data.mensaje_error || "La importacion finalizo con error")
+          }
+        }
+      } catch (e) {
+        if (!cancelado) setError(e.message || "Error consultando estado de importacion")
+      }
+    }
+
+    consultarEstado()
+    const timer = window.setInterval(consultarEstado, 3000)
+    return () => {
+      cancelado = true
+      window.clearInterval(timer)
+    }
+  }, [proveedorId, solicitudImportacion?.id, importacionActiva])
 
   // ---------------- Vista previa local (primeras 10 filas) ----------------
   const letterToColumnIndex = (letter) => {
@@ -259,8 +292,10 @@ export default function CargaInicialProveedor() {
                           const data = await res.json()
                           if (!res.ok) throw new Error(data?.detail || "Error en previsualización")
                           setPreview(data)
+                          setSolicitudImportacion(null)
                         } catch (e) {
                           setPreview(null)
+                          setSolicitudImportacion(null)
                           setError(e.message || "Error en previsualización")
                         } finally {
                           setCargando(false)
@@ -424,9 +459,10 @@ export default function CargaInicialProveedor() {
                 </div>
                 <div className="flex justify-end">
                   <button
-                    className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2"
+                    disabled={cargando || importacionActiva}
+                    className={`px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 ${(cargando || importacionActiva) ? "opacity-60 cursor-not-allowed" : ""}`}
                     onClick={async () => {
-                      if (!preview) return
+                      if (!preview || importacionActiva) return
                       const filasValidas = (preview.preview || []).filter((f) => f.valido)
                       if (filasValidas.length === 0) {
                         setError("No hay filas válidas para importar")
@@ -446,7 +482,19 @@ export default function CargaInicialProveedor() {
                           credentials: "include",
                         })
                         const data = await res.json()
+                        const registrarSolicitudImportacion = () => {
+                          setSolicitudImportacion({
+                            id: data.solicitud_id,
+                            estado: data.estado,
+                            registros_procesados: 0,
+                            registros_creados: 0,
+                            registros_saltados: 0,
+                            mensaje_error: "",
+                          })
+                        }
                         if (!res.ok) throw new Error(data?.detail || "Error en importación")
+                        registrarSolicitudImportacion()
+                        if (!data?.resumen) return
                         // Guardar resultados para mostrar detalle
                         try {
                           window.__ultimaImportacion__ = data
@@ -465,6 +513,23 @@ export default function CargaInicialProveedor() {
                     Importar válidas
                   </button>
                 </div>
+                {solicitudImportacion && (
+                  <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                    <div className="font-semibold">
+                      Estado de importacion: {solicitudImportacion.estado}
+                    </div>
+                    {solicitudImportacion.estado === "completada" && (
+                      <div className="mt-1">
+                        Procesados: {solicitudImportacion.registros_procesados || 0} | Creados: {solicitudImportacion.registros_creados || 0} | Saltados: {solicitudImportacion.registros_saltados || 0}
+                      </div>
+                    )}
+                    {solicitudImportacion.estado === "error" && (
+                      <div className="mt-1 text-red-700">
+                        {solicitudImportacion.mensaje_error || "La importacion finalizo con error"}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">

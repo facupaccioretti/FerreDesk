@@ -5,6 +5,7 @@ from .views import (
     HistorialImportacionesProveedorAPIView, 
     CargaInicialProveedorPreviaAPIView, 
     CargaInicialProveedorImportAPIView,
+    CargaInicialProveedorEstadoAPIView,
     ValidarCUITProveedorAPIView,
     ProcesarCuitArcaProveedorAPIView
 )
@@ -20,4 +21,5 @@ urlpatterns = [
     path('<int:proveedor_id>/historial-importaciones/', HistorialImportacionesProveedorAPIView.as_view(), name='historial-importaciones-proveedor'),
     path('<int:proveedor_id>/carga-inicial/previsualizar/', CargaInicialProveedorPreviaAPIView.as_view(), name='carga-inicial-proveedor-previsualizar'),
     path('<int:proveedor_id>/carga-inicial/importar/', CargaInicialProveedorImportAPIView.as_view(), name='carga-inicial-proveedor-importar'),
+    path('<int:proveedor_id>/carga-inicial/importaciones/<int:solicitud_id>/', CargaInicialProveedorEstadoAPIView.as_view(), name='carga-inicial-proveedor-estado'),
 ] + router.urls

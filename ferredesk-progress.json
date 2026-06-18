@@ -214,6 +214,21 @@
             "Validacion real automatizada: `python manage.py test ferreapps.productos.tests.test_importacion_lista_precios --keepdb` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `Ran 5 tests in 9.886s` y `OK`. Salida real del command bajo test: `schema=testimportlista importacion_id=2 estado=completada procesados=2 actualizados=2` y `schema=testimportlista importacion_id=1 estado=error procesados=0 actualizados=0`."
           ]
         },
+        "FC-OPT-T15": {
+          "done": true,
+          "decision": "Se convirtio la carga inicial de proveedor a flujo diferido tenant-aware: el POST de importar validas ya no crea productos dentro del request web, sino que persiste una solicitud con payload validado, responde 202 y deja el procesamiento real a un management command por schema.",
+          "evidencia": [
+            "Nuevo modelo tenant `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\models.py::SolicitudCargaInicialProveedor` con estados `pendiente/procesando/completada/error`, `payload_lote`, `idempotency_key`, contadores y timestamps; migracion `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\migrations\\0002_solicitudcargainicialproveedor.py`.",
+            "Nuevo servicio `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\services\\carga_inicial_proveedor_service.py` con creacion idempotente de solicitudes, procesamiento con `select_for_update`, observabilidad `medir_proceso(...)`, precarga de colisiones y creacion en bloque de `Stock`, `StockProve` y `ProductoTempID`.",
+            "Nuevo command `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\management\\commands\\procesar_cargas_iniciales_pendientes.py` con `--schema` y `--limit`, rechazo explicito de `public` y recorrido de tenants activos por `schema_context`.",
+            "`C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\views.py` mantiene la ruta POST `/api/proveedores/<id>/carga-inicial/importar/`, pero ahora responde HTTP 202 con `solicitud_id`, `estado` y `modo_procesamiento=diferido`; `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend\\ferreapps\\proveedores\\urls.py` agrega el GET `/api/proveedores/<id>/carga-inicial/importaciones/<solicitud_id>/` para polling.",
+            "`C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\components\\Carga Inicial\\CargaInicialProveedor.js` guarda `solicitud_id`, consulta estado cada 3 segundos, deshabilita el boton durante `pendiente/procesando` y muestra resumen final o error sin ocultar la vista previa.",
+            "Validacion real de migraciones: `python manage.py makemigrations --check --dry-run` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `No changes detected`.",
+            "Chequeo real de Django: `python manage.py check` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real automatizada: `python manage.py test ferreapps.proveedores.tests --keepdb` -> `Ran 6 tests in 9.765s` y `OK`. La salida del command bajo test incluyo `schema=testcargaprov solicitud_id=2 estado=completada procesados=1 creados=1 saltados=0` y el caso de error controlado `estado=error`.",
+            "Validacion real frontend: `$env:CI='true'; npm run build` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend` -> `Compiled successfully.`"
+          ]
+        },
         "FC-OPT-T7": {
           "done": true,
           "decision": "Se elimino el N+1 principal del listado de productos moviendo el costo de relaciones y precios de listas al queryset del `StockViewSet` y reutilizando una cache de margenes de `ListaPrecio` en el serializer.",
