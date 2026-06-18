@@ -1,6 +1,7 @@
 import os
 
 from django.db import connection
+from django.utils.deconstruct import deconstructible
 
 
 SCHEMA_PUBLICO = "public"
@@ -64,16 +65,21 @@ def construir_ruta_tenant(*segmentos, instance=None, permitir_publico=False) -> 
     return "/".join(segmentos_limpios)
 
 
-def tenant_upload_path(subcarpeta: str, permitir_publico=False):
-    subcarpeta_normalizada = str(subcarpeta).strip("/\\")
+@deconstructible
+class TenantUploadPath:
+    def __init__(self, subcarpeta: str, permitir_publico=False):
+        self.subcarpeta = str(subcarpeta).strip("/\\")
+        self.permitir_publico = permitir_publico
 
-    def upload_to(instance, filename) -> str:
+    def __call__(self, instance, filename) -> str:
         nombre_archivo = normalizar_nombre_archivo(filename)
         return construir_ruta_tenant(
-            subcarpeta_normalizada,
+            self.subcarpeta,
             nombre_archivo,
             instance=instance,
-            permitir_publico=permitir_publico,
+            permitir_publico=self.permitir_publico,
         )
 
-    return upload_to
+
+def tenant_upload_path(subcarpeta: str, permitir_publico=False):
+    return TenantUploadPath(subcarpeta, permitir_publico)

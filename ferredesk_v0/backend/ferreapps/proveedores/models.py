@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from ferreapps.productos.models import Proveedor
+from ferreapps.productos.utils.file_paths import upload_carga_inicial_proveedor_temporal
 
 
 class HistorialImportacionProveedor(models.Model):
@@ -49,7 +50,11 @@ class SolicitudCargaInicialProveedor(models.Model):
         db_index=True,
     )
     nombre_archivo = models.CharField(max_length=255)
-    payload_lote = models.JSONField(default=dict)
+    archivo_temporal = models.FileField(
+        upload_to=upload_carga_inicial_proveedor_temporal,
+        null=True,
+        blank=True,
+    )
     idempotency_key = models.CharField(max_length=64, db_index=True)
     registros_procesados = models.PositiveIntegerField(default=0)
     registros_creados = models.PositiveIntegerField(default=0)

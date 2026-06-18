@@ -49,6 +49,11 @@ upload_importacion_lista_precios_temporal = tenant_upload_path(
 )
 
 
+upload_carga_inicial_proveedor_temporal = tenant_upload_path(
+    "cargas_iniciales_proveedor"
+)
+
+
 def obtener_directorio_arca_relativo() -> str:
     schema_name = obtener_schema_name_para_archivos()
     return f"arca/{schema_name}"

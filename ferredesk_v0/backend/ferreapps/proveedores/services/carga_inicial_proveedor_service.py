@@ -5,6 +5,7 @@ import re
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -120,13 +121,17 @@ def crear_solicitud_carga_inicial_pendiente(
             proveedor=proveedor,
             usuario=usuario if getattr(usuario, "is_authenticated", False) else None,
             nombre_archivo=nombre_archivo,
-            payload_lote={
-                "parametros_lote": parametros_lote,
-                "filas_validas": filas_validas,
-                "totales_preview": totales_preview or {},
-            },
             idempotency_key=idempotency_key,
         )
+
+        payload_dict = {
+            "parametros_lote": parametros_lote,
+            "filas_validas": filas_validas,
+            "totales_preview": totales_preview or {},
+        }
+        payload_bytes = json.dumps(payload_dict, ensure_ascii=False).encode("utf-8")
+        solicitud.archivo_temporal.save(f"{idempotency_key}.json", ContentFile(payload_bytes))
+
         return solicitud, True
 
 
@@ -358,7 +363,9 @@ def procesar_solicitud_carga_inicial(solicitud_id):
         )
 
     try:
-        payload = solicitud.payload_lote or {}
+        payload = {}
+        if solicitud.archivo_temporal:
+            payload = json.loads(solicitud.archivo_temporal.read().decode("utf-8"))
         parametros_lote = payload.get("parametros_lote") or {}
         filas = payload.get("filas_validas") or []
         with medir_proceso(
@@ -384,6 +391,10 @@ def procesar_solicitud_carga_inicial(solicitud_id):
         solicitud.registros_creados = resultado["creados"]
         solicitud.registros_saltados = resultado["saltados"]
         solicitud.mensaje_error = ""
+
+        # Eliminar el archivo temporal al completarse con éxito
+        if solicitud.archivo_temporal:
+            solicitud.archivo_temporal.delete(save=False)
     except Exception as exc:
         solicitud.estado = SolicitudCargaInicialProveedor.ESTADO_ERROR
         solicitud.mensaje_error = str(exc)
@@ -398,6 +409,7 @@ def procesar_solicitud_carga_inicial(solicitud_id):
                 "mensaje_error",
                 "finalizado_en",
                 "actualizado_en",
+                "archivo_temporal",
             ]
         )
 

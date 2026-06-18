@@ -99,7 +99,9 @@ class CargaInicialProveedorDiferidaTestCase(TenantTestCase):
 
         solicitud = SolicitudCargaInicialProveedor.objects.get(id=data["solicitud_id"])
         self.assertEqual(solicitud.proveedor, self.proveedor)
-        self.assertEqual(solicitud.payload_lote["filas_validas"][0]["codigo_proveedor"], "COD-001")
+        import json
+        payload = json.loads(solicitud.archivo_temporal.read().decode("utf-8"))
+        self.assertEqual(payload["filas_validas"][0]["codigo_proveedor"], "COD-001")
         self.assertEqual(Stock.objects.filter(codvta="CRG001").count(), 0)
 
     def test_post_repetido_deduplica_solicitud_pendiente(self):

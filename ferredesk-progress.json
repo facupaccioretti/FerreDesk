@@ -229,6 +229,18 @@
             "Validacion real frontend: `$env:CI='true'; npm run build` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend` -> `Compiled successfully.`"
           ]
         },
+        "FC-OPT-T15-OPT": {
+          "done": true,
+          "decision": "Se optimizó el procesamiento de la carga inicial de proveedores y se previno la asfixia del worker de fondo.",
+          "evidencia": [
+            "Se eliminó el campo payload_lote (JSONField) y se añadió archivo_temporal (FileField) a SolicitudCargaInicialProveedor, con almacenamiento aislado por tenant schema en la carpeta 'cargas_iniciales_proveedor'.",
+            "Se definió la clase de-construible TenantUploadPath para evitar fallos de serialización de funciones anidadas en las migraciones de Django.",
+            "Se creó la migración '0003_remove_solicitudcargainicialproveedor_payload_lote_and_more.py' y se aplicó a todas las bases de datos de los tenants mediante migrate_schemas.",
+            "Se modificó el servicio 'carga_inicial_proveedor_service.py' para guardar el payload JSON completo del lote (incluyendo parámetros y totales) en el archivo físico y eliminarlo de forma limpia cuando la carga se completa exitosamente (preservándolo en caso de error).",
+            "Se añadió time.sleep(1) en el comando 'worker_tareas_pendientes.py' tras el procesamiento exitoso de cada tarea para throttling de CPU fuera de transacciones de base de datos.",
+            "Se actualizaron y pasaron con éxito todas las pruebas automatizadas (Ran 6 tests -> OK)."
+          ]
+        },
         "FC-OPT-T7": {
           "done": true,
           "decision": "Se elimino el N+1 principal del listado de productos moviendo el costo de relaciones y precios de listas al queryset del `StockViewSet` y reutilizando una cache de margenes de `ListaPrecio` en el serializer.",

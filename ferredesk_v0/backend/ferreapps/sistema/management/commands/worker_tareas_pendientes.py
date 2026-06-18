@@ -73,6 +73,7 @@ class Command(BaseCommand):
                                 f"schema={tenant.schema_name} carga_inicial={solicitud.id} estado={solicitud.estado}"
                             )
                             procesadas_en_ciclo += 1
+                            time.sleep(1)
 
                         # --- Procesar Listas de Precios (Limite 5) ---
                         pendientes_listas = list(
@@ -88,6 +89,7 @@ class Command(BaseCommand):
                                 f"schema={tenant.schema_name} lista_precios={importacion.id} estado={importacion.estado}"
                             )
                             procesadas_en_ciclo += 1
+                            time.sleep(1)
 
                 # Si no hubo nada que hacer, dormimos un poco
                 if procesadas_en_ciclo == 0 and not self.shutdown_flag:
