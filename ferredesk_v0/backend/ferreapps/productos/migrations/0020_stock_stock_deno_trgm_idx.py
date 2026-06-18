@@ -12,7 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        TrigramExtension(),
         migrations.AddIndex(
             model_name='stock',
             index=django.contrib.postgres.indexes.GinIndex(fields=['deno'], name='stock_deno_trgm_idx', opclasses=['gin_trgm_ops']),
