@@ -40,7 +40,11 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from ferredesk_backend.permissions import EsAdminTenant
 from ferredesk_backend.utils.observability import medir_proceso
-from .services.importacion_lista_precios_service import importar_lista_precios_proveedor
+from .services.importacion_lista_precios_service import (
+    LimiteImportacionSincronicaExcedido,
+    crear_importacion_pendiente_lista_precios,
+    importar_lista_precios_proveedor,
+)
 
 # Create your views here.
 
@@ -381,6 +385,31 @@ class UploadListaPreciosProveedor(APIView):
             if not excel_file:
                 return Response({'detail': 'No se enviÃ³ archivo.'}, status=400)
 
+            max_bytes_sync = getattr(settings, 'IMPORTACION_LISTA_MAX_BYTES_SYNC', 0)
+            archivo_bytes = getattr(excel_file, 'size', None) or 0
+            if max_bytes_sync and archivo_bytes > max_bytes_sync:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                return Response(
+                    {
+                        'message': (
+                            'La importacion es demasiado grande para el request web y quedo en cola '
+                            'para procesamiento diferido.'
+                        ),
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
+
             try:
                 resultado = importar_lista_precios_proveedor(
                     proveedor=proveedor,
@@ -405,6 +434,29 @@ class UploadListaPreciosProveedor(APIView):
                     'registros_procesados': precios_cargados,
                     'registros_actualizados': registros_actualizados
                 }, status=201)
+            except LimiteImportacionSincronicaExcedido as e:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                return Response(
+                    {
+                        'message': (
+                            'La importacion excede el limite sincronico y quedo en cola '
+                            'para procesamiento diferido.'
+                        ),
+                        'detail': e.detail,
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
             except Exception as e:
                 return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
 

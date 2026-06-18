@@ -1,12 +1,23 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Max
+from django.test import override_settings
+from django_tenants.utils import get_public_schema_name, schema_context
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from ferreapps.productos.models import AlicuotaIVA, Proveedor, Stock, StockProve, PrecioProveedorExcel
+from ferreapps.productos.models import (
+    AlicuotaIVA,
+    ImportacionListaPreciosProveedor,
+    PrecioProveedorExcel,
+    Proveedor,
+    Stock,
+    StockProve,
+)
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from ferreapps.usuarios.models import Usuario
 from tenants.models import EmpresaTenant
@@ -94,6 +105,10 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
             codigo_producto_proveedor="COD-002",
         )
 
+    @override_settings(
+        IMPORTACION_LISTA_MAX_BYTES_SYNC=1024 * 1024,
+        IMPORTACION_LISTA_MAX_FILAS_SYNC=100,
+    )
     def test_importacion_actualiza_costos_con_bulk_update_y_usa_ultimo_duplicado(self):
         contenido_csv = (
             "codigo,precio,denominacion\n"
@@ -143,3 +158,186 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
         historial = HistorialImportacionProveedor.objects.get(proveedor=self.proveedor)
         self.assertEqual(historial.registros_procesados, 3)
         self.assertEqual(historial.registros_actualizados, 2)
+
+    @override_settings(
+        IMPORTACION_LISTA_MAX_BYTES_SYNC=20,
+        IMPORTACION_LISTA_MAX_FILAS_SYNC=100,
+    )
+    def test_importacion_rechaza_archivo_fuera_del_limite_de_bytes(self):
+        contenido_csv = (
+            "codigo,precio,denominacion\n"
+            "COD-001,100.50,Producto A nuevo\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile(
+            "lista.csv",
+            contenido_csv,
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            f"/api/productos/proveedores/{self.proveedor.id}/upload-price-list/",
+            data={
+                "excel_file": archivo,
+                "col_codigo": "A",
+                "col_precio": "B",
+                "col_denominacion": "C",
+                "fila_inicio": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["estado"], ImportacionListaPreciosProveedor.ESTADO_PENDIENTE)
+        self.assertEqual(response.json()["modo_procesamiento"], "diferido")
+        importacion = ImportacionListaPreciosProveedor.objects.get(proveedor=self.proveedor)
+        self.assertEqual(importacion.nombre_archivo, "lista.csv")
+        self.assertEqual(PrecioProveedorExcel.objects.filter(proveedor=self.proveedor).count(), 0)
+        self.assertEqual(HistorialImportacionProveedor.objects.filter(proveedor=self.proveedor).count(), 0)
+        self.stock_prove_a.refresh_from_db()
+        self.assertEqual(self.stock_prove_a.costo, Decimal("10.00"))
+
+    @override_settings(
+        IMPORTACION_LISTA_MAX_BYTES_SYNC=1024 * 1024,
+        IMPORTACION_LISTA_MAX_FILAS_SYNC=2,
+    )
+    def test_importacion_rechaza_archivo_fuera_del_limite_de_filas_sin_borrar_lista_vigente(self):
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="VIGENTE-1",
+            precio=Decimal("50.00"),
+            denominacion="Lista vigente",
+            nombre_archivo="vigente.csv",
+        )
+
+        contenido_csv = (
+            "codigo,precio,denominacion\n"
+            "COD-001,100.50,Producto A nuevo\n"
+            "COD-002,200.00,Producto B nuevo\n"
+            "COD-003,300.00,Producto C nuevo\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile(
+            "lista.csv",
+            contenido_csv,
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            f"/api/productos/proveedores/{self.proveedor.id}/upload-price-list/",
+            data={
+                "excel_file": archivo,
+                "col_codigo": "A",
+                "col_precio": "B",
+                "col_denominacion": "C",
+                "fila_inicio": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["estado"], ImportacionListaPreciosProveedor.ESTADO_PENDIENTE)
+        self.assertEqual(response.json()["modo_procesamiento"], "diferido")
+        importacion = ImportacionListaPreciosProveedor.objects.get(proveedor=self.proveedor)
+        self.assertEqual(importacion.nombre_archivo, "lista.csv")
+        self.assertEqual(PrecioProveedorExcel.objects.filter(proveedor=self.proveedor).count(), 1)
+        self.assertTrue(
+            PrecioProveedorExcel.objects.filter(
+                proveedor=self.proveedor,
+                codigo_producto_excel="VIGENTE-1",
+            ).exists()
+        )
+        self.assertEqual(HistorialImportacionProveedor.objects.filter(proveedor=self.proveedor).count(), 0)
+        self.stock_prove_a.refresh_from_db()
+        self.stock_prove_b.refresh_from_db()
+        self.assertEqual(self.stock_prove_a.costo, Decimal("10.00"))
+        self.assertEqual(self.stock_prove_b.costo, Decimal("20.00"))
+
+    @override_settings(
+        IMPORTACION_LISTA_MAX_BYTES_SYNC=20,
+        IMPORTACION_LISTA_MAX_FILAS_SYNC=2,
+    )
+    def test_command_procesa_importacion_pendiente_en_schema_tenant(self):
+        contenido_csv = (
+            "codigo,precio,denominacion\n"
+            "COD-001,111.10,Producto A nuevo\n"
+            "COD-002,222.20,Producto B nuevo\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile(
+            "lista.csv",
+            contenido_csv,
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            f"/api/productos/proveedores/{self.proveedor.id}/upload-price-list/",
+            data={
+                "excel_file": archivo,
+                "col_codigo": "A",
+                "col_precio": "B",
+                "col_denominacion": "C",
+                "fila_inicio": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        importacion = ImportacionListaPreciosProveedor.objects.get(proveedor=self.proveedor)
+        self.assertEqual(importacion.estado, ImportacionListaPreciosProveedor.ESTADO_PENDIENTE)
+
+        with schema_context(get_public_schema_name()):
+            call_command(
+                "procesar_importaciones_pendientes",
+                schema_name=self.tenant.schema_name,
+            )
+
+        importacion.refresh_from_db()
+        self.assertEqual(importacion.estado, ImportacionListaPreciosProveedor.ESTADO_COMPLETADA)
+        self.assertEqual(importacion.registros_procesados, 2)
+        self.assertEqual(importacion.registros_actualizados, 2)
+        self.assertIsNotNone(importacion.iniciado_en)
+        self.assertIsNotNone(importacion.finalizado_en)
+
+        self.stock_prove_a.refresh_from_db()
+        self.stock_prove_b.refresh_from_db()
+        self.assertEqual(self.stock_prove_a.costo, Decimal("111.10"))
+        self.assertEqual(self.stock_prove_b.costo, Decimal("222.20"))
+
+    @override_settings(
+        IMPORTACION_LISTA_MAX_BYTES_SYNC=20,
+        IMPORTACION_LISTA_MAX_FILAS_SYNC=2,
+    )
+    def test_command_deja_estado_error_si_falla_el_procesamiento(self):
+        contenido_csv = (
+            "codigo,precio,denominacion\n"
+            "COD-001,111.10,Producto A nuevo\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile(
+            "lista.csv",
+            contenido_csv,
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            f"/api/productos/proveedores/{self.proveedor.id}/upload-price-list/",
+            data={
+                "excel_file": archivo,
+                "col_codigo": "A",
+                "col_precio": "B",
+                "col_denominacion": "C",
+                "fila_inicio": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        importacion = ImportacionListaPreciosProveedor.objects.get(proveedor=self.proveedor)
+
+        with patch(
+            "ferreapps.productos.services.importacion_lista_precios_service.importar_lista_precios_proveedor",
+            side_effect=RuntimeError("fallo-controlado"),
+        ):
+            with schema_context(get_public_schema_name()):
+                call_command(
+                    "procesar_importaciones_pendientes",
+                    schema_name=self.tenant.schema_name,
+                )
+
+        importacion.refresh_from_db()
+        self.assertEqual(importacion.estado, ImportacionListaPreciosProveedor.ESTADO_ERROR)
+        self.assertEqual(importacion.mensaje_error, "fallo-controlado")
+        self.assertIsNotNone(importacion.finalizado_en)

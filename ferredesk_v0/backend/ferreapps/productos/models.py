@@ -7,6 +7,7 @@ from .utils.file_paths import (
     obtener_logo_empresa_relativo,
     upload_certificado_arca,
     upload_clave_privada_arca,
+    upload_importacion_lista_precios_temporal,
     upload_logo_empresa,
 )
 
@@ -609,6 +610,62 @@ class PrecioProveedorExcel(models.Model):
 
     def __str__(self):
         return f"{self.proveedor.razon} - {self.codigo_producto_excel}: {self.precio}"
+
+
+class ImportacionListaPreciosProveedor(models.Model):
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_PROCESANDO = "procesando"
+    ESTADO_COMPLETADA = "completada"
+    ESTADO_ERROR = "error"
+
+    ESTADOS = (
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_PROCESANDO, "Procesando"),
+        (ESTADO_COMPLETADA, "Completada"),
+        (ESTADO_ERROR, "Error"),
+    )
+
+    proveedor = models.ForeignKey(
+        "Proveedor",
+        on_delete=models.CASCADE,
+        related_name="importaciones_listas_precios",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="importaciones_listas_precios_proveedor",
+    )
+    estado = models.CharField(
+        max_length=16,
+        choices=ESTADOS,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+    )
+    nombre_archivo = models.CharField(max_length=255)
+    archivo_temporal = models.FileField(
+        upload_to=upload_importacion_lista_precios_temporal,
+    )
+    col_codigo = models.CharField(max_length=4, default="A")
+    col_precio = models.CharField(max_length=4, default="B")
+    col_denominacion = models.CharField(max_length=4, default="C")
+    fila_inicio = models.PositiveIntegerField(default=2)
+    registros_procesados = models.PositiveIntegerField(default=0)
+    registros_actualizados = models.PositiveIntegerField(default=0)
+    mensaje_error = models.TextField(blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    iniciado_en = models.DateTimeField(null=True, blank=True)
+    finalizado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Importacion de lista de precios de proveedor"
+        verbose_name_plural = "Importaciones de listas de precios de proveedor"
+        ordering = ("-creado_en",)
+
+    def __str__(self):
+        return f"{self.proveedor.razon} - {self.nombre_archivo} ({self.estado})"
 
 class ProductoTempID(models.Model):
     id = models.IntegerField(primary_key=True)

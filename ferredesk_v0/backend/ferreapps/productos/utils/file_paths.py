@@ -3,6 +3,7 @@ import os
 from ferredesk_backend.utils.storage import (
     normalizar_nombre_archivo,
     obtener_schema_tenant,
+    tenant_upload_path,
 )
 
 
@@ -41,6 +42,11 @@ def upload_clave_privada_arca(instance, filename) -> str:
     schema_name = obtener_schema_name_para_archivos()
     nombre_archivo = normalizar_nombre_archivo(filename)
     return f"arca/{schema_name}/claves_privadas/{nombre_archivo}"
+
+
+upload_importacion_lista_precios_temporal = tenant_upload_path(
+    "importaciones_listas_precios"
+)
 
 
 def obtener_directorio_arca_relativo() -> str:

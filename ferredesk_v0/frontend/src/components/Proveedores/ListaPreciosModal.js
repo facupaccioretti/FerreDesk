@@ -255,16 +255,17 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
       setImportando(false);
       if (response.ok) {
         const result = await response.json();
+        const importacionDiferida = result.modo_procesamiento === 'diferido';
         // Pass relevant info from result to onImport if needed
         onImport({
           proveedor,
           fileName: file.name,
-          status: 'success',
+          status: importacionDiferida ? 'queued' : 'success',
           message: result.message || 'Lista importada correctamente.',
           registrosProcesados: result.registros_procesados || 0,
           registrosActualizados: result.registros_actualizados || 0,
         });
-        if ((result.registros_actualizados || 0) === 0) {
+        if (!importacionDiferida && (result.registros_actualizados || 0) === 0) {
           alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
         }
         onClose(); // Close modal on success

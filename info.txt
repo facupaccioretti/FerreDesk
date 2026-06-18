@@ -1,13 +1,30 @@
-Repasemos el plan completo armado entre las cosas que discutimos, para que tengas un único documento mental de qué falta y en qué orden.
-Lo que el plan original (el PDF de bootstrap) no cubre
-El PDF que subiste resuelve un problema real y distinto: requests duplicadas en la carga de la app (bootstrap de usuario/setup/ferretería). Eso está bien encarado, ya lo charlamos. Pero no toca para nada el problema que vinimos discutiendo después: la carga masiva de productos y la actualización de listas de precios. Son dos problemas separados, los dos producen el mismo síntoma (timeout/SIGKILL), pero la solución es distinta en cada caso. Si solo implementás el plan del PDF, vas a seguir teniendo el riesgo de timeout cuando un cliente suba un Excel grande, porque ese plan no tiene ningún mecanismo de background processing.
-Lo que falta agregar al plan, en orden de urgencia
-1. Sacar el Web Service del plan free, ya. Esto es más urgente que cualquier otra cosa que hablamos. Con clientes reales entrando (aunque sea gratis los primeros meses), el cold start de 30-60 segundos después de inactividad es una mala primera experiencia, y si el primer request después de dormir es justo el bootstrap o una carga pesada, el riesgo de timeout se multiplica. Costo: $7/mes.
-2. Sacar la Postgres del plan free, ya. Por la razón que mencioné: expira a los 90 días y podés perder datos de clientes reales. Esto no es negociable con datos de producción, aunque sean de prueba. Costo: $7/mes.
-3. El mecanismo de background job para carga de productos y listas de precios. Esto es lo que armamos como Cron Job + tabla de jobs en Postgres, sin Celery ni Redis. Falta todavía: el modelo Django (JobCarga o como le quieras llamar, con estado pendiente/procesando/completo/error), la vista que recibe el archivo y crea el job, el management command que el cron ejecuta, y el endpoint de polling que el frontend consulta para mostrar progreso. Nada de esto está en el PDF original. Costo: $1-2/mes.
-4. El plan de bootstrap del PDF original, que ya repasamos y está bien encarado — endpoint único, serializer liviano, un solo cálculo de estado_setup, sacar logo_empresa.url del bootstrap, Gunicorn parametrizado.
-5. Algo que mencioné en la primera respuesta y que el PDF deja como pregunta abierta sin resolver: el caching del bootstrap en el frontend entre navegaciones (Context global en vez de hook local), para que no se repita la request cada vez que el usuario cambia de ruta dentro de la misma sesión.
-6. Algo que no hemos hablado todavía y que vale la pena que tengas en el radar: qué pasa si el contenedor de Render se reinicia (por un deploy, por ejemplo) mientras hay un job de carga de productos a mitad de procesar. Con el patrón de cron + tabla de jobs, el job va a quedar marcado como "procesando" para siempre sin completarse nunca. Necesitás un mecanismo simple de detección (por ejemplo, si un job lleva más de X minutos en "procesando" sin actualizarse, marcarlo como error y permitir reintentar) para que el cliente no se quede esperando algo que nunca va a terminar sin avisarle.
-7. Backups de la base de datos, que ya lo tenías identificado como blocker de producción en conversaciones anteriores y sigue pendiente — con clientes reales pagando, esto deja de ser "nice to have" y pasa a ser response a la pregunta de "¿qué pasa si Render tiene un problema y perdemos la base?".
-Orden sugerido para no perder tiempo
-Dado que tenés el período gratis corriendo ahora mismo: primero los puntos 1 y 2 (sacar del free, son configuración de minutos, no código), después el punto 3 (el mecanismo de background job, porque es lo que evita que el primer cliente gratis vea un error feo justo en la función más importante del onboarding), y recién después el plan de bootstrap del PDF original, que mejora la experiencia pero no es tan crítico como evitar que se rompa la carga inicial de productos.
+  warnings.warn(
+INFO 2026-06-18 03:14:55,570 observability 31 135296421491520 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 22.72, "estado": "ok", "memoria_actual_kb": 30, "memoria_peak_kb": 47, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:14:59,031 observability 31 135296421491520 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 4.4, "estado": "ok", "memoria_actual_kb": 4, "memoria_peak_kb": 19, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:14:59,138 observability 30 135296421491520 OBSERVABILIDAD {"duracion_ms": 13.63, "estado": "ok", "memoria_actual_kb": 69, "memoria_peak_kb": 74, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:14:59,980 observability 31 135296421491520 OBSERVABILIDAD {"duracion_ms": 552.87, "estado": "ok", "limit": "15", "memoria_actual_kb": 1246, "memoria_peak_kb": 2270, "page": "1", "proceso": "ventas_listado", "queries": 2, "registros_devueltos": 0, "registros_totales": 0, "schema": "123", "usuario_id": 1}
+/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
+  paginator = self.django_paginator_class(queryset, page_size)
+ERROR 2026-06-18 03:15:01,596 views 30 135296421491520 === DEBUG: get_serializer llamado ===
+ERROR 2026-06-18 03:15:01,596 views 30 135296421491520 === DEBUG: get_serializer retorna: ListSerializer ===
+INFO 2026-06-18 03:15:02,736 observability 31 135296421491520 OBSERVABILIDAD {"duracion_ms": 7.07, "estado": "ok", "memoria_actual_kb": 46, "memoria_peak_kb": 48, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:15:03,025 observability 30 135296421491520 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 101.37, "estado": "ok", "memoria_actual_kb": 3, "memoria_peak_kb": 19, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:15:04,092 observability 31 135296421491520 OBSERVABILIDAD {"duracion_ms": 551.91, "estado": "ok", "limit": "15", "memoria_actual_kb": 1101, "memoria_peak_kb": 1140, "page": "1", "proceso": "ventas_listado", "queries": 2, "registros_devueltos": 0, "registros_totales": 0, "schema": "123", "usuario_id": 1}
+INFO 2026-06-18 03:15:07,142 observability 31 135296421491520 OBSERVABILIDAD {"duracion_ms": 8.43, "estado": "ok", "memoria_actual_kb": 39, "memoria_peak_kb": 41, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 03:15:07,155 observability 31 135296421491520 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 4.18, "estado": "ok", "memoria_actual_kb": 4, "memoria_peak_kb": 20, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "123", "setup_completo": true, "usuario_id": 1}
+[2026-06-18 06:15:31 +0000] [1] [INFO] Handling signal: term
+[2026-06-18 03:15:31 -0300] [31] [INFO] Worker exiting (pid: 31)
+[2026-06-18 03:15:31 -0300] [32] [INFO] Worker exiting (pid: 32)
+DEBUG FerreteriaAPIView GET: lautarojuarez@mi.unc.edu.ar (Administrador) is_authenticated: True
+DEBUG FerreteriaAPIView GET: lautarojuarez@mi.unc.edu.ar (Administrador) is_authenticated: True
+DEBUG FerreteriaAPIView GET: lautarojuarez@mi.unc.edu.ar (Administrador) is_authenticated: True
+DEBUG FerreteriaAPIView GET: lautarojuarez@mi.unc.edu.ar (Administrador) is_authenticated: True
+[2026-06-18 06:15:32 +0000] [1] [INFO] Shutting down: Master
+[2026-06-18 06:18:42 +0000] [1] [CRITICAL] WORKER TIMEOUT (pid:30)
+[2026-06-18 03:18:42 -0300] [30] [INFO] Worker exiting (pid: 30)
+[2026-06-18 06:18:42 +0000] [1] [ERROR] Worker (pid:30) exited with code 1
+[2026-06-18 06:18:42 +0000] [1] [ERROR] Worker (pid:30) exited with code 1.
+[2026-06-18 06:18:42 +0000] [34] [INFO] Booting worker with pid: 34
+INFO 2026-06-18 03:18:43,095 apps 34 135296421491520 AXES: BEGIN version 6.4.0, blocking by ip_address
+/usr/local/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.7) doesn't match a supported version!
+  warnings.warn(
