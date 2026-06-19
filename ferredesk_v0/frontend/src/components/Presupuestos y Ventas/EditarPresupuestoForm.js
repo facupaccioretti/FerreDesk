@@ -81,7 +81,6 @@ const EditarPresupuestoForm = ({
   vendedores,
   sucursales,
   puntosVenta,
-  productos,
   proveedores,
   autoSumarDuplicados,
   setAutoSumarDuplicados,

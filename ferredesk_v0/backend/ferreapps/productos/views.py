@@ -9,6 +9,7 @@ from django.db.models import ProtectedError
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID, PrecioProductoLista, ListaPrecio
 from .serializers import (
     StockSerializer,
+    ProductoLookupRapidoSerializer,
     ProveedorSerializer,
     StockProveSerializer,
     FamiliaSerializer,
@@ -20,7 +21,7 @@ from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
 from django.db.models import Q
-from django.db.models import Prefetch
+from django.db.models import Prefetch, OuterRef, Subquery, IntegerField, Value, Case, When
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
@@ -211,6 +212,42 @@ class StockViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        codigo_unificado = request.query_params.get('codigo')
+        search_codigo_prov = request.query_params.get('search_codigo_proveedor')
+        termino_busqueda = request.query_params.get('search')
+
+        if codigo_unificado and codigo_unificado.strip():
+            tipo_busqueda = 'lookup_codigo'
+            termino = codigo_unificado.strip()
+        elif search_codigo_prov and search_codigo_prov.strip():
+            tipo_busqueda = 'search_codigo_proveedor'
+            termino = search_codigo_prov.strip()
+        elif termino_busqueda and termino_busqueda.strip():
+            tipo_busqueda = 'search_texto'
+            termino = termino_busqueda.strip()
+        else:
+            tipo_busqueda = 'listado_general'
+            termino = None
+
+        with medir_proceso(
+            'stock_listado_operativo_actual',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda=tipo_busqueda,
+            termino_busqueda=termino,
+            pagina=request.query_params.get('page'),
+            orden=request.query_params.get('orden', 'id'),
+            direccion=request.query_params.get('direccion', 'desc'),
+        ) as medicion:
+            response = super().list(request, *args, **kwargs)
+            payload = response.data
+            resultados = payload.get('results') if isinstance(payload, dict) else payload
+            cantidad_resultados = len(resultados) if isinstance(resultados, list) else 0
+            medicion.registrar_metricas(
+                cantidad_resultados=cantidad_resultados,
+                total_filtrado=payload.get('count') if isinstance(payload, dict) else cantidad_resultados,
+            )
+            return response
     def _busqueda_por_comodines(self, queryset, termino_busqueda):
         """
         Implementa búsqueda por comodines usando Django Q Objects.
@@ -282,6 +319,154 @@ class StockViewSet(viewsets.ModelViewSet):
                 },
                 status=400
             )
+
+
+class PosProductoLookupAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        codigo = (request.query_params.get('codigo') or '').strip()
+        if not codigo:
+            return Response(
+                {'detail': 'Se requiere el parámetro codigo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        costo_habitual_subquery = (
+            StockProve.objects
+            .filter(
+                stock_id=OuterRef('pk'),
+                proveedor_id=OuterRef('proveedor_habitual_id'),
+            )
+            .order_by('-id')
+            .values('costo')[:1]
+        )
+
+        prioridad_lookup = Case(
+            When(codvta__iexact=codigo, then=Value(0)),
+            When(codigo_barras__iexact=codigo, then=Value(1)),
+            default=Value(2),
+            output_field=IntegerField(),
+        )
+
+        with medir_proceso(
+            'pos_producto_lookup_rapido',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda='lookup_codigo_exacto',
+            termino_busqueda=codigo,
+        ) as medicion:
+            producto = (
+                Stock.objects
+                .con_stock_total()
+                .select_related('idaliiva', 'proveedor_habitual')
+                .annotate(
+                    costo_habitual=Subquery(costo_habitual_subquery),
+                    prioridad_lookup=prioridad_lookup,
+                )
+                .filter(acti='S')
+                .filter(Q(codvta__iexact=codigo) | Q(codigo_barras__iexact=codigo))
+                .order_by('prioridad_lookup', 'id')
+                .first()
+            )
+
+            if producto is None:
+                medicion.registrar_metricas(cantidad_resultados=0, encontrado=False)
+                return Response(
+                    {'detail': 'Producto no encontrado.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            serializer = ProductoLookupRapidoSerializer(producto)
+            medicion.registrar_metricas(
+                cantidad_resultados=1,
+                encontrado=True,
+                producto_id=producto.id,
+                prioridad_lookup=getattr(producto, 'prioridad_lookup', None),
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PosProductoSearchAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    limite_por_defecto = 20
+    limite_maximo = 50
+
+    def _normalizar_limite(self, valor):
+        try:
+            limite = int(valor)
+        except (TypeError, ValueError):
+            return self.limite_por_defecto
+        return max(1, min(limite, self.limite_maximo))
+
+    def _aplicar_busqueda(self, queryset, termino):
+        if ' ' in termino:
+            palabras = [palabra.strip() for palabra in termino.split() if palabra.strip()]
+            query = Q()
+            for palabra in palabras:
+                query &= Q(codvta__icontains=palabra) | Q(deno__icontains=palabra)
+            return queryset.filter(query).distinct()
+
+        return queryset.filter(
+            Q(codvta__icontains=termino) | Q(deno__icontains=termino)
+        ).distinct()
+
+    def get(self, request):
+        termino = (request.query_params.get('q') or '').strip()
+        if not termino:
+            return Response(
+                {'detail': 'Se requiere el parámetro q.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        limite = self._normalizar_limite(request.query_params.get('limit'))
+
+        costo_habitual_subquery = (
+            StockProve.objects
+            .filter(
+                stock_id=OuterRef('pk'),
+                proveedor_id=OuterRef('proveedor_habitual_id'),
+            )
+            .order_by('-id')
+            .values('costo')[:1]
+        )
+
+        prioridad_busqueda = Case(
+            When(codvta__istartswith=termino, then=Value(0)),
+            When(deno__istartswith=termino, then=Value(1)),
+            When(codvta__icontains=termino, then=Value(2)),
+            When(deno__icontains=termino, then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+
+        with medir_proceso(
+            'pos_producto_busqueda_ligera',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda='search_texto_ligero',
+            termino_busqueda=termino,
+            limit=limite,
+        ) as medicion:
+            productos = list(
+                self._aplicar_busqueda(
+                    Stock.objects
+                    .con_stock_total()
+                    .select_related('idaliiva', 'proveedor_habitual')
+                    .annotate(
+                        costo_habitual=Subquery(costo_habitual_subquery),
+                        prioridad_busqueda=prioridad_busqueda,
+                    )
+                    .filter(acti='S'),
+                    termino,
+                )
+                .order_by('prioridad_busqueda', 'deno', 'id')[:limite]
+            )
+
+            serializer = ProductoLookupRapidoSerializer(productos, many=True)
+            medicion.registrar_metricas(
+                cantidad_resultados=len(productos),
+                limit=limite,
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')

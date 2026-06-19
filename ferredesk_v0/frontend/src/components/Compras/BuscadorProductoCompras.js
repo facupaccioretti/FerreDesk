@@ -1,133 +1,115 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useProductoLookupCompra } from "../../hooks/useProductoLookupCompra"
 
-const UMBRAL_BUSQUEDA = 2 // Mínimo de caracteres para iniciar la búsqueda
-const DEBOUNCE_DELAY = 300 // Tiempo de espera en ms después de teclear
+const UMBRAL_BUSQUEDA = 2
+const DEBOUNCE_DELAY = 300
 
-// Función para búsqueda por comodines en productos
-const filtrarProductosConComodines = (productos, terminoBusqueda) => {
-  if (!terminoBusqueda || !terminoBusqueda.trim()) {
-    return productos
-  }
-
-  // Dividir el término en palabras individuales
-  const palabras = terminoBusqueda.toLowerCase().trim().split(/\s+/)
-  
-  if (palabras.length === 0) {
-    return productos
-  }
-
-  // Si solo hay una palabra, usar búsqueda tradicional para mantener compatibilidad
-  if (palabras.length === 1) {
-    const lower = palabras[0]
-    return productos.filter(
-      p =>
-        (p.codvta || '').toLowerCase().includes(lower) ||
-        (p.deno || p.nombre || '').toLowerCase().includes(lower) ||
-        (p.codigo_proveedor || '').toLowerCase().includes(lower)
-    )
-  }
-
-  // Búsqueda por comodines: TODAS las palabras deben estar presentes
-  return productos.filter(p => {
-    const textoCompleto = `${p.codvta || ''} ${p.deno || p.nombre || ''} ${p.codigo_proveedor || ''}`.toLowerCase()
-    return palabras.every(palabra => textoCompleto.includes(palabra))
-  })
-}
-
-function BuscadorProductoCompras({ 
-  selectedProveedor, 
-  onSelect, 
-  disabled = false, 
-  readOnly = false, 
+function BuscadorProductoCompras({
+  selectedProveedor,
+  onSelect,
+  disabled = false,
+  readOnly = false,
   className = "",
-  modoOrdenCompra = false // Nuevo prop para modo orden de compra
+  modoOrdenCompra = false,
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [sugerencias, setSugerencias] = useState([])
-  const [productosProveedor, setProductosProveedor] = useState([]) // Productos cargados del proveedor
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const observabilidadRef = useRef({
+    secuenciaId: 0,
+    ultimoTermino: '',
+    requestsEnSecuencia: 0,
+  })
+  const { buscarProductosProveedor } = useProductoLookupCompra({
+    proveedorId: selectedProveedor?.id ?? null,
+    modoOrdenCompra,
+  })
 
-  // Cargar productos del proveedor automáticamente en modo orden de compra
-  useEffect(() => {
-    if (modoOrdenCompra && selectedProveedor?.id) {
-      setLoading(true)
-      fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
-        credentials: "include"
-      })
-      .then(response => {
-        if (response.ok) {
-          return response.json()
-        } else {
-          throw new Error('Error al cargar productos')
-        }
-      })
-      .then(productos => {
-        setProductosProveedor(productos)
-        // NO mostrar productos inicialmente - solo cargar en memoria
-        setSugerencias([])
-        setShowDropdown(false)
-      })
-      .catch(error => {
-        console.error('Error al cargar productos del proveedor:', error)
-        setProductosProveedor([])
-        setSugerencias([])
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-    } else {
-      setProductosProveedor([])
-      setSugerencias([])
-      setShowDropdown(false)
+  const registrarObservabilidadBusqueda = useCallback((payload) => {
+    if (typeof window === 'undefined') return
+
+    window.__ferredesk_pos_baseline__ = window.__ferredesk_pos_baseline__ || {}
+    window.__ferredesk_pos_baseline__.busquedasCompras = window.__ferredesk_pos_baseline__.busquedasCompras || []
+
+    const registro = {
+      componente: 'BuscadorProductoCompras',
+      tenant_host: window.location.host,
+      timestamp: new Date().toISOString(),
+      modo_orden_compra: modoOrdenCompra,
+      proveedor_id: selectedProveedor?.id ?? null,
+      ...payload,
     }
-  }, [selectedProveedor?.id, modoOrdenCompra])
+
+    window.__ferredesk_pos_baseline__.busquedasCompras.push(registro)
+    window.__ferredesk_pos_baseline__.ultimaBusquedaCompras = registro
+
+    if (window.__ferredesk_pos_baseline__.busquedasCompras.length > 100) {
+      window.__ferredesk_pos_baseline__.busquedasCompras = window.__ferredesk_pos_baseline__.busquedasCompras.slice(-100)
+    }
+
+    console.info('[POS_BASELINE_SEARCH_COMPRAS]', registro)
+  }, [modoOrdenCompra, selectedProveedor?.id])
 
   const buscarProductos = useCallback(async (termino) => {
     if (termino.length < UMBRAL_BUSQUEDA) {
       setSugerencias([])
       return
     }
-    
+
+    const terminoNormalizado = termino.trim().toLowerCase()
+    if (observabilidadRef.current.ultimoTermino !== terminoNormalizado) {
+      observabilidadRef.current.secuenciaId += 1
+      observabilidadRef.current.ultimoTermino = terminoNormalizado
+      observabilidadRef.current.requestsEnSecuencia = 0
+    }
+    observabilidadRef.current.requestsEnSecuencia += 1
+
+    const secuenciaId = observabilidadRef.current.secuenciaId
+    const requestNumero = observabilidadRef.current.requestsEnSecuencia
+    const inicio = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
     setLoading(true)
     setError(null)
-    
+
     try {
-      if (modoOrdenCompra) {
-        // En modo orden de compra, filtrar localmente los productos ya cargados
-        const sugs = filtrarProductosConComodines(productosProveedor, termino)
-        setSugerencias(sugs)
-      } else {
-        // Modo normal: búsqueda por API
-        if (!selectedProveedor?.id) {
-          setSugerencias([])
-          return
-        }
-        
-        const response = await fetch(`/api/compras/proveedores/${selectedProveedor.id}/productos/`, {
-          credentials: "include"
-        })
-        
-        if (!response.ok) throw new Error('Error en la búsqueda')
-        
-        const productos = await response.json()
-        const sugs = filtrarProductosConComodines(productos, termino)
-        
-        setSugerencias(sugs)
+      if (!selectedProveedor?.id) {
+        setSugerencias([])
+        return
       }
+
+      const sugs = await buscarProductosProveedor(termino, { limit: 20 })
+      setSugerencias(sugs)
+      registrarObservabilidadBusqueda({
+        termino,
+        secuencia_id: secuenciaId,
+        request_en_secuencia: requestNumero,
+        origen_datos: modoOrdenCompra ? 'hook_busqueda_orden_compra' : 'hook_busqueda_compra',
+        cantidad_resultados: sugs.length,
+        resultado: 'ok',
+        duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+      })
     } catch (err) {
       setError(err.message)
       setSugerencias([])
+      registrarObservabilidadBusqueda({
+        termino,
+        secuencia_id: secuenciaId,
+        request_en_secuencia: requestNumero,
+        cantidad_resultados: 0,
+        resultado: 'error',
+        error: err.message,
+        duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+      })
     } finally {
       setLoading(false)
     }
-  }, [modoOrdenCompra, productosProveedor, selectedProveedor?.id])
+  }, [buscarProductosProveedor, modoOrdenCompra, registrarObservabilidadBusqueda, selectedProveedor?.id])
 
-  // Debounce para evitar muchas llamadas a la API
   useEffect(() => {
     const timer = setTimeout(() => {
       if (busqueda.length >= UMBRAL_BUSQUEDA) {
@@ -140,16 +122,22 @@ function BuscadorProductoCompras({
     return () => clearTimeout(timer)
   }, [busqueda, buscarProductos])
 
-  // Mostrar dropdown cuando se cargan sugerencias y el input tiene focus
   useEffect(() => {
     if (sugerencias.length > 0 && !disabled && !readOnly) {
       setShowDropdown(true)
     }
   }, [sugerencias, disabled, readOnly])
 
+  useEffect(() => {
+    setBusqueda('')
+    setSugerencias([])
+    setShowDropdown(false)
+    setHighlighted(0)
+    setError(null)
+  }, [selectedProveedor?.id, modoOrdenCompra])
+
   const handleChange = (e) => {
-    const value = e.target.value
-    setBusqueda(value)
+    setBusqueda(e.target.value)
     setHighlighted(0)
   }
 
@@ -162,23 +150,20 @@ function BuscadorProductoCompras({
   }, [onSelect])
 
   const handleKeyDown = useCallback((e) => {
-    if (disabled || readOnly) return;
-    
+    if (disabled || readOnly) return
+
     if (e.key === 'Enter') {
       if (sugerencias.length > 0 && busqueda) {
         handleSelect(sugerencias[highlighted])
-        e.preventDefault()
-        e.stopPropagation()
-      } else {
-        e.preventDefault()
-        e.stopPropagation()
       }
+      e.preventDefault()
+      e.stopPropagation()
     } else if (e.key === 'ArrowDown') {
-      setHighlighted(h => Math.min(h + 1, sugerencias.length - 1))
+      setHighlighted((h) => Math.min(h + 1, sugerencias.length - 1))
     } else if (e.key === 'ArrowUp') {
-      setHighlighted(h => Math.max(h - 1, 0))
+      setHighlighted((h) => Math.max(h - 1, 0))
     }
-  }, [disabled, readOnly, sugerencias, busqueda, highlighted, handleSelect])
+  }, [busqueda, disabled, handleSelect, highlighted, readOnly, sugerencias])
 
   const handleFocus = useCallback(() => {
     if (sugerencias.length > 0 && !disabled && !readOnly) {
@@ -198,17 +183,6 @@ function BuscadorProductoCompras({
     handleSelect(producto)
   }, [handleSelect])
 
-  useEffect(() => {
-    setBusqueda('')
-    setSugerencias([])
-    setShowDropdown(false)
-    setHighlighted(0)
-    // En modo orden de compra, no limpiar productosProveedor aquí porque se maneja en el otro useEffect
-    if (!modoOrdenCompra) {
-      setProductosProveedor([])
-    }
-  }, [selectedProveedor?.id, modoOrdenCompra])
-
   const isDisabled = disabled || readOnly || !selectedProveedor?.id
 
   return (
@@ -221,17 +195,15 @@ function BuscadorProductoCompras({
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={
-            isDisabled 
-              ? selectedProveedor?.id 
-                ? "Seleccione un proveedor primero" 
-                : "Buscar productos..." 
+            isDisabled
+              ? selectedProveedor?.id
+                ? "Seleccione un proveedor primero"
+                : "Buscar productos..."
               : modoOrdenCompra
                 ? "Escriba al menos 2 caracteres para buscar productos..."
                 : "Buscar productos del proveedor..."
           }
-          className={`w-full px-2 py-1 border border-slate-300 rounded-sm bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 text-xs h-8 ${
-            isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""
-          }`}
+          className={`w-full px-2 py-1 border border-slate-300 rounded-sm bg-white text-slate-800 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-slate-400 text-xs h-8 ${isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : ""}`}
           autoComplete="off"
           disabled={isDisabled}
           onKeyDown={handleKeyDown}
@@ -242,7 +214,7 @@ function BuscadorProductoCompras({
           </div>
         )}
       </div>
-      
+
       {showDropdown && sugerencias.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-sm shadow-lg max-h-60 overflow-y-auto">
           {sugerencias.map((p, idx) => {

@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { obtenerPrecioParaLista, calcularPrecioLista } from '../../../utils/calcularPrecioLista'
+import { useProductoLookupRapido } from '../../../hooks/useProductoLookupRapido'
 import {
     crearItemVacio,
     crearItemDesdeProducto,
@@ -37,6 +38,10 @@ export function useItemsGridState({
 
     // Combinar alícuotas del backend con un fallback seguro
     const aliMap = Object.keys(alicuotas || {}).length ? alicuotas : ALICUOTAS_POR_DEFECTO
+    const { lookupProducto, obtenerDesdeCache } = useProductoLookupRapido({
+        listaPrecioId,
+        modo,
+    })
 
     // ──────────────────────────────────────────────────────────────
     // Refs
@@ -46,6 +51,16 @@ export function useItemsGridState({
     const bonificacionRefs = useRef([])
     const didAutoFocusRef = useRef(false)
     const procesandoCodigoRef = useRef(false)
+    const ultimoEventoCodigoRef = useRef({
+        rowId: null,
+        codigo: null,
+        origen: null,
+        timestamp: 0,
+    })
+    const observabilidadLookupRef = useRef({
+        secuencias: {},
+        ultimoId: 0,
+    })
 
     // ──────────────────────────────────────────────────────────────
     // Estado de foco
@@ -99,30 +114,222 @@ export function useItemsGridState({
     // Búsqueda remota por código
     // ──────────────────────────────────────────────────────────────
 
+    const registrarObservabilidadLookup = useCallback((payload) => {
+        if (typeof window === 'undefined') return
+
+        window.__ferredesk_pos_baseline__ = window.__ferredesk_pos_baseline__ || {}
+        window.__ferredesk_pos_baseline__.lookups = window.__ferredesk_pos_baseline__.lookups || []
+
+        const registro = {
+            componente: 'useItemsGridState',
+            tenant_host: window.location.host,
+            timestamp: new Date().toISOString(),
+            ...payload,
+        }
+
+        window.__ferredesk_pos_baseline__.lookups.push(registro)
+        window.__ferredesk_pos_baseline__.ultimoLookup = registro
+
+        if (window.__ferredesk_pos_baseline__.lookups.length > 100) {
+            window.__ferredesk_pos_baseline__.lookups = window.__ferredesk_pos_baseline__.lookups.slice(-100)
+        }
+
+        console.info('[POS_BASELINE_LOOKUP]', registro)
+    }, [])
+
+    const registrarEventoCodigo = useCallback((payload) => {
+        ultimoEventoCodigoRef.current = {
+            rowId: payload.rowId ?? null,
+            codigo: String(payload.codigo || '').trim().toLowerCase(),
+            origen: payload.origen ?? null,
+            timestamp: Date.now(),
+        }
+    }, [])
+
+    const debeSuprimirBlurCodigo = useCallback((rowId, codigo) => {
+        const ultimoEvento = ultimoEventoCodigoRef.current
+        if (ultimoEvento.origen !== 'keydown') {
+            return false
+        }
+
+        const codigoNormalizado = String(codigo || '').trim().toLowerCase()
+        return (
+            ultimoEvento.rowId === rowId &&
+            ultimoEvento.codigo === codigoNormalizado &&
+            (Date.now() - ultimoEvento.timestamp) <= 700
+        )
+    }, [])
+
     // Búsqueda unificada: param "codigo" hace que el backend busque por codvta O código de barras.
-    const buscarProductoPorCodigo = useCallback(async (codigo) => {
+    const buscarProductoPorCodigo = useCallback(async (codigo, contexto = {}) => {
         if (readOnly) return null
 
         const codigoTrim = (codigo || '').toString().trim()
         if (!codigoTrim) return null
+
+        const rowId = contexto.rowId ?? `idx-${contexto.idx ?? 'na'}`
+        const ahora = Date.now()
+        const claveSecuencia = `${rowId}:${codigoTrim.toLowerCase()}`
+        const secuenciaPrevia = observabilidadLookupRef.current.secuencias[claveSecuencia]
+        const mismaSecuencia = secuenciaPrevia && (ahora - secuenciaPrevia.ultimoIntentoMs) <= 2500
+        const secuencia = mismaSecuencia
+            ? {
+                ...secuenciaPrevia,
+                requestCount: secuenciaPrevia.requestCount + 1,
+                ultimoIntentoMs: ahora,
+                origenes: Array.from(new Set([...(secuenciaPrevia.origenes || []), contexto.origen].filter(Boolean))),
+            }
+            : {
+                id: ++observabilidadLookupRef.current.ultimoId,
+                requestCount: 1,
+                ultimoIntentoMs: ahora,
+                origenes: contexto.origen ? [contexto.origen] : [],
+            }
+        observabilidadLookupRef.current.secuencias[claveSecuencia] = secuencia
+        const inicio = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
         try {
-            const url = `/api/productos/stock/?codigo=${encodeURIComponent(codigoTrim)}`
-            const resp = await fetch(url, { credentials: 'include' })
-            if (!resp.ok) return null
-            const data = await resp.json()
-            const lista = Array.isArray(data) ? data : (data.results || [])
-            if (!Array.isArray(lista) || lista.length === 0) return null
-            // Preferir coincidencia exacta por codvta o código de barras, sino el primero
-            const exacta = lista.find(
-                p =>
-                    (p.codvta || p.codigo || '').toString().toLowerCase() === codigoTrim.toLowerCase() ||
-                    (p.codigo_barras || '').toString().toLowerCase() === codigoTrim.toLowerCase()
-            )
-            return exacta || lista[0]
-        } catch (_) {
+            const productoCacheado = obtenerDesdeCache(codigoTrim)
+            const producto = await lookupProducto(codigoTrim)
+            if (!producto) {
+                registrarObservabilidadLookup({
+                    codigo: codigoTrim,
+                    origen: contexto.origen || 'desconocido',
+                    row_id: rowId,
+                    secuencia_id: secuencia.id,
+                    request_en_secuencia: secuencia.requestCount,
+                    repeticion: secuencia.requestCount > 1,
+                    origenes_detectados: secuencia.origenes,
+                    cantidad_resultados: 0,
+                    cache_hit: !!productoCacheado,
+                    resultado: 'sin_resultados',
+                    duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+                })
+                return null
+            }
+            const esExacta =
+                (producto?.codvta || producto?.codigo || '').toString().toLowerCase() === codigoTrim.toLowerCase() ||
+                (producto?.codigo_barras || '').toString().toLowerCase() === codigoTrim.toLowerCase()
+            registrarObservabilidadLookup({
+                codigo: codigoTrim,
+                origen: contexto.origen || 'desconocido',
+                row_id: rowId,
+                secuencia_id: secuencia.id,
+                request_en_secuencia: secuencia.requestCount,
+                repeticion: secuencia.requestCount > 1,
+                origenes_detectados: secuencia.origenes,
+                cantidad_resultados: 1,
+                cache_hit: !!productoCacheado,
+                producto_id: producto?.id ?? null,
+                resultado: esExacta ? 'coincidencia_exacta' : 'coincidencia_no_exacta',
+                duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+            })
+            return producto
+        } catch (error) {
+            registrarObservabilidadLookup({
+                codigo: codigoTrim,
+                origen: contexto.origen || 'desconocido',
+                row_id: rowId,
+                secuencia_id: secuencia.id,
+                request_en_secuencia: secuencia.requestCount,
+                repeticion: secuencia.requestCount > 1,
+                origenes_detectados: secuencia.origenes,
+                resultado: 'error_lookup',
+                error: error?.message || 'error_desconocido',
+                duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+            })
             return null
         }
-    }, [readOnly])
+    }, [lookupProducto, obtenerDesdeCache, readOnly, registrarObservabilidadLookup])
+
+    const restaurarCodigoSiLaFilaTieneProducto = useCallback((idx) => {
+        setRows((prev) => {
+            const nuevos = [...prev]
+            const actual = nuevos[idx]
+            if (actual && actual.producto) {
+                const codigoOriginal = actual.producto.codvta || actual.producto.codigo || String(actual.producto.id || '')
+                nuevos[idx] = { ...actual, codigo: codigoOriginal }
+            }
+            return nuevos
+        })
+    }, [])
+
+    const aplicarProductoResueltoEnFila = (idx, row, prod, opciones = {}) => {
+        const moverFoco = opciones.moverFoco !== false
+
+        const idxExistente = rows.findIndex(
+            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
+        )
+
+        if (idxExistente !== -1) {
+            if (autoSumarDuplicados === 'sumar') {
+                setRows((rowsActuales) => {
+                    const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1
+                    const newRows = rowsActuales.map((r, i) =>
+                        i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r,
+                    )
+                    newRows[idx] = crearItemVacio()
+                    return ensureSoloUnEditable(newRows)
+                })
+                if (moverFoco) {
+                    if (modoLector) {
+                        setIdxCodigoSiguienteFoco(idxExistente)
+                    } else {
+                        setIdxCantidadFoco(idxExistente)
+                    }
+                }
+                return true
+            }
+
+            if (autoSumarDuplicados === 'duplicar') {
+                setRows((prevRows) => {
+                    const newRows = [...prevRows]
+                    const itemCargado = {
+                        ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
+                        id: newRows[idx].id,
+                    }
+                    newRows[idx] = itemCargado
+                    if (newRows.every(isRowLleno) && !readOnly) {
+                        newRows.push(crearItemVacio())
+                    }
+                    return ensureSoloUnEditable(newRows)
+                })
+                if (moverFoco) {
+                    if (modoLector) {
+                        setIdxCodigoSiguienteFoco(idx)
+                    } else {
+                        setIdxCantidadFoco(idx)
+                    }
+                }
+                return true
+            }
+
+            return true
+        }
+
+        setRows((prevRows) => {
+            const newRows = [...prevRows]
+            const itemCargado = {
+                ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
+                id: newRows[idx].id,
+            }
+            newRows[idx] = itemCargado
+            if (newRows.every(isRowLleno) && !readOnly) {
+                newRows.push(crearItemVacio())
+            }
+            return ensureSoloUnEditable(newRows)
+        })
+
+        if (moverFoco) {
+            if (modoLector) {
+                setIdxCodigoSiguienteFoco(idx)
+            } else {
+                setIdxCantidadFoco(idx)
+            }
+        }
+
+        return true
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Helpers de fila
@@ -548,9 +755,18 @@ export function useItemsGridState({
             const row = rows[idx]
             if (field === 'codigo' && row.codigo) {
                 if (procesandoCodigoRef.current) return
+                registrarEventoCodigo({
+                    rowId: row.id,
+                    codigo: row.codigo,
+                    origen: 'keydown',
+                })
                 procesandoCodigoRef.current = true
                 try {
-                    const prod = await buscarProductoPorCodigo(row.codigo)
+                    const prod = await buscarProductoPorCodigo(row.codigo, {
+                        origen: 'keydown',
+                        idx,
+                        rowId: row.id,
+                    })
                     if (!prod) {
                         const inputCodigo = codigoRefs.current[idx]
                         if (inputCodigo && inputCodigo.setCustomValidity) {
@@ -561,75 +777,7 @@ export function useItemsGridState({
                         e.stopPropagation()
                         return
                     }
-
-                    // MEJORA: Excluir items originales de detección de duplicados
-                    const idxExistente = rows.findIndex(
-                        (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
-                    )
-                    if (idxExistente !== -1) {
-                        if (autoSumarDuplicados === 'sumar') {
-                            setRows((rows) => {
-                                const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1
-                                const newRows = rows.map((r, i) =>
-                                    i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r,
-                                )
-                                newRows[idx] = crearItemVacio()
-                                return ensureSoloUnEditable(newRows)
-                            })
-                            if (modoLector) {
-                                setIdxCodigoSiguienteFoco(idxExistente)
-                            } else {
-                                setIdxCantidadFoco(idxExistente)
-                            }
-                            e.preventDefault()
-                            e.stopPropagation()
-                            return
-                        }
-                        if (autoSumarDuplicados === 'duplicar') {
-                            setRows((prevRows) => {
-                                const newRows = [...prevRows]
-                                // Usar crearItemDesdeProducto para construir el ítem (elimina duplicación x5)
-                                const itemCargado = {
-                                    ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
-                                    id: newRows[idx].id, // Preservar el ID de la fila actual
-                                }
-                                newRows[idx] = itemCargado
-                                if (newRows.every(isRowLleno) && !readOnly) {
-                                    newRows.push(crearItemVacio())
-                                }
-                                return ensureSoloUnEditable(newRows)
-                            })
-                            if (modoLector) {
-                                setIdxCodigoSiguienteFoco(idx)
-                            } else {
-                                setIdxCantidadFoco(idx)
-                            }
-                            e.preventDefault()
-                            e.stopPropagation()
-                            return
-                        }
-                        e.preventDefault()
-                        e.stopPropagation()
-                        return
-                    }
-                    // NO duplicado: cargar producto usando la fábrica centralizada
-                    setRows((prevRows) => {
-                        const newRows = [...prevRows]
-                        const itemCargado = {
-                            ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
-                            id: newRows[idx].id,
-                        }
-                        newRows[idx] = itemCargado
-                        if (newRows.every(isRowLleno) && !readOnly) {
-                            newRows.push(crearItemVacio())
-                        }
-                        return ensureSoloUnEditable(newRows)
-                    })
-                    if (modoLector) {
-                        setIdxCodigoSiguienteFoco(idx)
-                    } else {
-                        setIdxCantidadFoco(idx)
-                    }
+                    aplicarProductoResueltoEnFila(idx, row, prod, { moverFoco: true })
                 } finally {
                     procesandoCodigoRef.current = false
                 }
@@ -680,71 +828,22 @@ export function useItemsGridState({
         const row = rows[idx]
         const codigo = (row.codigo || '').toString().trim()
         if (!codigo) return
+        if (debeSuprimirBlurCodigo(row.id, codigo)) return
 
-        const prod = await buscarProductoPorCodigo(codigo)
+        const prod = await buscarProductoPorCodigo(codigo, {
+            origen: 'blur',
+            idx,
+            rowId: row.id,
+        })
         if (!prod) {
             if (input && input.setCustomValidity && input.reportValidity) {
                 input.setCustomValidity('No se encontró el código de producto')
                 input.reportValidity()
             }
-            // Restaurar el código original si ya hay producto en la fila
-            setRows((prev) => {
-                const nuevos = [...prev]
-                const actual = nuevos[idx]
-                if (actual && actual.producto) {
-                    const codigoOriginal = actual.producto.codvta || actual.producto.codigo || String(actual.producto.id || '')
-                    nuevos[idx] = { ...actual, codigo: codigoOriginal }
-                }
-                return nuevos
-            })
+            restaurarCodigoSiLaFilaTieneProducto(idx)
             return
         }
-
-        // Duplicados
-        const idxExistente = rows.findIndex(
-            (r, i) => i !== idx && r.producto && r.producto.id === prod.id && !r.esBloqueado && !r.idOriginal,
-        )
-        if (idxExistente !== -1) {
-            if (autoSumarDuplicados === 'sumar') {
-                setRows((rs) => {
-                    const cantidadASumar = Number(row.cantidad) > 0 ? Number(row.cantidad) : 1
-                    const newRows = rs.map((r, i) => (i === idxExistente ? { ...r, cantidad: Number(r.cantidad) + cantidadASumar } : r))
-                    newRows[idx] = crearItemVacio()
-                    return ensureSoloUnEditable(newRows)
-                })
-                return
-            }
-            if (autoSumarDuplicados === 'duplicar') {
-                setRows((prevRows) => {
-                    const newRows = [...prevRows]
-                    const itemCargado = {
-                        ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
-                        id: newRows[idx].id,
-                    }
-                    newRows[idx] = itemCargado
-                    if (newRows.every(isRowLleno) && !readOnly) {
-                        newRows.push(crearItemVacio())
-                    }
-                    return ensureSoloUnEditable(newRows)
-                })
-                return
-            }
-            return
-        }
-
-        // No duplicado: cargar producto
-        setRows((prevRows) => {
-            const newRows = [...prevRows]
-            const itemCargado = {
-                ...crearItemDesdeProducto(prod, { aliMap, listaPrecioId, listasPrecio, cantidad: row.cantidad || 1 }),
-                id: newRows[idx].id,
-            }
-            newRows[idx] = itemCargado
-            if (newRows.every(isRowLleno) && !readOnly) {
-                newRows.push(crearItemVacio())
-            }
-            return ensureSoloUnEditable(newRows)
-        })
+        aplicarProductoResueltoEnFila(idx, row, prod, { moverFoco: false })
     }
 
     // ──────────────────────────────────────────────────────────────

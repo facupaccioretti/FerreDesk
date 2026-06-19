@@ -15,6 +15,7 @@ from .serializers import (
     ProveedorSerializer,
     StockProveedorSerializer,
     BuscadorProductoProveedorSerializer,
+    ProductoLookupCompraSerializer,
     OrdenCompraSerializer,
     OrdenCompraCreateSerializer,
     OrdenCompraUpdateSerializer,
@@ -27,10 +28,12 @@ from decimal import Decimal
 from django.db import IntegrityError
 from django.utils import timezone
 import logging
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
-from django.db.models import Subquery, OuterRef, Q
+from django.db.models import Subquery, OuterRef, Q, IntegerField, Value, Case, When
+from ferredesk_backend.utils.observability import medir_proceso
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -300,101 +303,197 @@ def proveedores_activos(request):
 @permission_classes([IsAuthenticated])
 def productos_por_proveedor(request, proveedor_id):
     """Obtener productos disponibles para un proveedor específico"""
-    try:
-        # Verificar que el proveedor existe (sin restricción de activo para consistencia con el resto de la app)
-        proveedor = get_object_or_404(Proveedor, id=proveedor_id)
-        
-        # Obtener productos que tienen stock para este proveedor
-        from ferreapps.productos.models import StockProve
-        
-        # Buscar productos que tienen relación con este proveedor Y tienen código asignado
-        stock_prove_list = StockProve.objects.filter(
-            proveedor_id=proveedor_id,
-            codigo_producto_proveedor__isnull=False,
-            codigo_producto_proveedor__gt=''  # Excluir códigos vacíos
-        ).select_related('stock', 'stock__idaliiva').filter(
-            stock__acti='S'
-        )
-        
-        # Filtrar por código de venta si se proporciona
-        codigo_venta = request.query_params.get('codigo_venta')
-        if codigo_venta:
-            codigo_venta_limpio = codigo_venta.strip()
-            # Para órdenes de compra, buscar por código de venta (codvta)
-            stock_prove_list = stock_prove_list.filter(
-                stock__codvta__iexact=codigo_venta_limpio
+    termino_busqueda = request.query_params.get('search', None)
+    codigo_venta = request.query_params.get('codigo_venta')
+    tipo_busqueda = 'search_texto_proveedor' if termino_busqueda else 'lookup_codigo_venta' if codigo_venta else 'listado_proveedor'
+
+    with medir_proceso(
+        'compras_productos_por_proveedor_actual',
+        usuario_id=getattr(request.user, 'id', None),
+        proveedor_id=proveedor_id,
+        tipo_busqueda=tipo_busqueda,
+        termino_busqueda=(termino_busqueda or codigo_venta or '').strip() or None,
+    ) as medicion:
+        try:
+            # Verificar que el proveedor existe (sin restricción de activo para consistencia con el resto de la app)
+            proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+            # Obtener productos que tienen stock para este proveedor
+            from ferreapps.productos.models import StockProve
+
+            # Buscar productos que tienen relación con este proveedor Y tienen código asignado
+            stock_prove_list = StockProve.objects.filter(
+                proveedor_id=proveedor_id,
+                codigo_producto_proveedor__isnull=False,
+                codigo_producto_proveedor__gt=''  # Excluir códigos vacíos
+            ).select_related('stock', 'stock__idaliiva').filter(
+                stock__acti='S'
             )
-        
-        # NUEVA FUNCIONALIDAD: Búsqueda por comodines en productos por proveedor
-        termino_busqueda = request.query_params.get('search', None)
-        if termino_busqueda:
-            stock_prove_list = _busqueda_por_comodines_proveedor(stock_prove_list, termino_busqueda)
-        
-        # Ordenar por denominación del stock
-        stock_prove_list = stock_prove_list.order_by('stock__deno')
-        
-        # Usar el serializer para convertir los datos correctamente
-        serializer = BuscadorProductoProveedorSerializer(stock_prove_list, many=True)
-        return Response(serializer.data)
-    except Http404:
-        return Response(
-            {'detail': 'Proveedor no encontrado'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    except Exception as e:
-        logger.error(f"Error al obtener productos por proveedor: {e}")
-        return Response(
-            {'detail': 'Error interno del servidor'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+
+            # Filtrar por código de venta si se proporciona
+            if codigo_venta:
+                codigo_venta_limpio = codigo_venta.strip()
+                # Para órdenes de compra, buscar por código de venta (codvta)
+                stock_prove_list = stock_prove_list.filter(
+                    stock__codvta__iexact=codigo_venta_limpio
+                )
+
+            # NUEVA FUNCIONALIDAD: Búsqueda por comodines en productos por proveedor
+            if termino_busqueda:
+                stock_prove_list = _busqueda_por_comodines_proveedor(stock_prove_list, termino_busqueda)
+
+            # Ordenar por denominación del stock
+            stock_prove_list = stock_prove_list.order_by('stock__deno')
+
+            # Usar el serializer para convertir los datos correctamente
+            serializer = BuscadorProductoProveedorSerializer(stock_prove_list, many=True)
+            medicion.registrar_metricas(cantidad_resultados=len(serializer.data))
+            return Response(serializer.data)
+        except Http404:
+            return Response(
+                {'detail': 'Proveedor no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error al obtener productos por proveedor: {e}")
+            return Response(
+                {'detail': 'Error interno del servidor'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def buscar_producto_por_codigo_proveedor(request):
     """Buscar producto por código de proveedor de forma exacta."""
-    try:
-        codigo = request.query_params.get('codigo')
-        proveedor_id = request.query_params.get('proveedor_id')
-        
-        if not codigo or not proveedor_id:
-            return Response(
-                {'detail': 'Se requiere código y proveedor_id'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Limpiar el código para una búsqueda exacta
-        codigo_limpio = codigo.strip()
-        
-        # Buscar en STOCKPROVE por código de proveedor exacto (insensible a mayúsculas)
-        from ferreapps.productos.models import StockProve
-        
-        stock_prove = StockProve.objects.filter(
-            proveedor_id=proveedor_id,
-            codigo_producto_proveedor__iexact=codigo_limpio
-        ).select_related('stock', 'stock__idaliiva').first()
-        
-        if stock_prove:
-            # Asegurarse de que el producto asociado (stock) está activo
-            if stock_prove.stock and stock_prove.stock.acti == 'S':
-                serializer = StockProveedorSerializer(stock_prove.stock)
-                return Response(serializer.data)
-            else:
+    codigo = request.query_params.get('codigo')
+    proveedor_id = request.query_params.get('proveedor_id')
+
+    with medir_proceso(
+        'compras_lookup_codigo_proveedor_actual',
+        usuario_id=getattr(request.user, 'id', None),
+        proveedor_id=proveedor_id,
+        tipo_busqueda='lookup_codigo_proveedor',
+        termino_busqueda=(codigo or '').strip() or None,
+    ) as medicion:
+        try:
+            if not codigo or not proveedor_id:
                 return Response(
-                    {'detail': 'Producto encontrado pero no está activo'},
-                    status=status.HTTP_404_NOT_FOUND
+                    {'detail': 'Se requiere código y proveedor_id'},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-        else:
+
+            # Limpiar el código para una búsqueda exacta
+            codigo_limpio = codigo.strip()
+
+            # Buscar en STOCKPROVE por código de proveedor exacto (insensible a mayúsculas)
+            from ferreapps.productos.models import StockProve
+
+            stock_prove = StockProve.objects.filter(
+                proveedor_id=proveedor_id,
+                codigo_producto_proveedor__iexact=codigo_limpio
+            ).select_related('stock', 'stock__idaliiva').first()
+
+            if stock_prove:
+                # Asegurarse de que el producto asociado (stock) está activo
+                if stock_prove.stock and stock_prove.stock.acti == 'S':
+                    serializer = StockProveedorSerializer(stock_prove.stock)
+                    medicion.registrar_metricas(cantidad_resultados=1, encontrado=True)
+                    return Response(serializer.data)
+                else:
+                    medicion.registrar_metricas(cantidad_resultados=0, encontrado=False, motivo='producto_inactivo')
+                    return Response(
+                        {'detail': 'Producto encontrado pero no está activo'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+            medicion.registrar_metricas(cantidad_resultados=0, encontrado=False)
             return Response(
                 {'detail': 'Producto no encontrado con ese código para el proveedor seleccionado'},
                 status=status.HTTP_404_NOT_FOUND
             )
-    except Exception as e:
-        logger.error(f"Error al buscar producto por código: {e}")
-        return Response(
-            {'detail': 'Error interno del servidor'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        except Exception as e:
+            logger.error(f"Error al buscar producto por código: {e}")
+            return Response(
+                {'detail': 'Error interno del servidor'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ProductoLookupCompraAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        codigo = (request.query_params.get('codigo') or '').strip()
+        proveedor_id = request.query_params.get('proveedor_id')
+
+        with medir_proceso(
+            'compras_lookup_producto_rapido',
+            usuario_id=getattr(request.user, 'id', None),
+            proveedor_id=proveedor_id,
+            tipo_busqueda='lookup_compra_unificado',
+            termino_busqueda=codigo or None,
+        ) as medicion:
+            try:
+                if not codigo or not proveedor_id:
+                    return Response(
+                        {'detail': 'Se requiere código y proveedor_id'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+                from ferreapps.productos.models import StockProve
+
+                prioridad_lookup = Case(
+                    When(codigo_producto_proveedor__iexact=codigo, then=Value(0)),
+                    When(stock__codvta__iexact=codigo, then=Value(1)),
+                    When(stock__codigo_barras__iexact=codigo, then=Value(2)),
+                    default=Value(3),
+                    output_field=IntegerField(),
+                )
+
+                stock_prove = (
+                    StockProve.objects
+                    .filter(proveedor=proveedor, stock__acti='S')
+                    .select_related('stock', 'stock__idaliiva', 'proveedor')
+                    .annotate(prioridad_lookup=prioridad_lookup)
+                    .filter(
+                        Q(codigo_producto_proveedor__iexact=codigo)
+                        | Q(stock__codvta__iexact=codigo)
+                        | Q(stock__codigo_barras__iexact=codigo)
+                    )
+                    .order_by('prioridad_lookup', 'id')
+                    .first()
+                )
+
+                if stock_prove is None:
+                    medicion.registrar_metricas(cantidad_resultados=0, encontrado=False)
+                    return Response(
+                        {'detail': 'Producto no encontrado para el proveedor seleccionado'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                serializer = ProductoLookupCompraSerializer(stock_prove)
+                medicion.registrar_metricas(
+                    cantidad_resultados=1,
+                    encontrado=True,
+                    stock_id=stock_prove.stock_id,
+                    stockprove_id=stock_prove.id,
+                    prioridad_lookup=getattr(stock_prove, 'prioridad_lookup', None),
+                )
+                return Response(serializer.data)
+            except Http404:
+                return Response(
+                    {'detail': 'Proveedor no encontrado'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            except Exception as e:
+                logger.error(f"Error en lookup rápido de compras: {e}")
+                return Response(
+                    {'detail': 'Error interno del servidor'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
 
 @api_view(['GET'])

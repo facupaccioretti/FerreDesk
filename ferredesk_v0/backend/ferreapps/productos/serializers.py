@@ -177,6 +177,52 @@ class StockSerializer(serializers.ModelSerializer):
         
         return value
 
+
+class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
+    idaliiva = serializers.IntegerField(source='idaliiva_id', read_only=True)
+    proveedor_habitual_id = serializers.IntegerField(read_only=True)
+    stock_total = serializers.SerializerMethodField()
+    costo_habitual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Stock
+        fields = [
+            'id',
+            'codvta',
+            'codigo_barras',
+            'deno',
+            'unidad',
+            'idaliiva',
+            'margen',
+            'precio_lista_0',
+            'stock_total',
+            'proveedor_habitual_id',
+            'costo_habitual',
+            'acti',
+        ]
+
+    def get_stock_total(self, obj):
+        if hasattr(obj, 'stock_total'):
+            return obj.stock_total
+        res = obj.__class__.objects.con_stock_total().filter(pk=obj.pk).values_list('stock_total', flat=True).first()
+        return res if res is not None else 0
+
+    def get_costo_habitual(self, obj):
+        if hasattr(obj, 'costo_habitual'):
+            return obj.costo_habitual if obj.costo_habitual is not None else 0
+
+        proveedor_habitual_id = getattr(obj, 'proveedor_habitual_id', None)
+        if not proveedor_habitual_id:
+            return 0
+
+        costo = (
+            StockProve.objects
+            .filter(stock_id=obj.pk, proveedor_id=proveedor_habitual_id)
+            .values_list('costo', flat=True)
+            .first()
+        )
+        return costo if costo is not None else 0
+
 class FerreteriaSerializer(serializers.ModelSerializer):
     # Campos obligatorios para identificación fiscal
     nombre = serializers.CharField(required=True, allow_blank=False)

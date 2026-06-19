@@ -1,21 +1,4 @@
-/usr/local/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.7) doesn't match a supported version!
-  warnings.warn(
-INFO 2026-06-18 08:45:19,766 observability 33 135032911192896 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 8.53, "estado": "ok", "memoria_actual_kb": 20, "memoria_peak_kb": 36, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
-/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
-  paginator = self.django_paginator_class(queryset, page_size)
-[2026-06-18 11:45:57 +0000] [1] [INFO] Handling signal: term
-[2026-06-18 08:45:57 -0300] [32] [INFO] Worker exiting (pid: 32)
-[2026-06-18 08:45:57 -0300] [31] [INFO] Worker exiting (pid: 31)
-[2026-06-18 11:45:59 +0000] [1] [INFO] Shutting down: Master
-/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
-  paginator = self.django_paginator_class(queryset, page_size)
-INFO 2026-06-18 08:48:39,647 observability 31 134181598479168 OBSERVABILIDAD {"cantidad_filas": 0, "duracion_ms": 0.09, "error": "Falta idaliiva_id.", "estado": "error", "memoria_actual_kb": 2, "memoria_peak_kb": 2, "proceso": "procesar_carga_inicial_proveedor", "proveedor_id": 1, "queries": 0, "schema": "lautaro", "solicitud_id": 2, "tipo_error": "ValueError"}
-INFO 2026-06-18 08:48:40,254 observability 32 135032911192896 OBSERVABILIDAD {"cantidad_filas": 6965, "duracion_ms": 2635.36, "estado": "ok", "memoria_actual_kb": 17750, "memoria_peak_kb": 19386, "proceso": "crear_solicitud_carga_inicial_proveedor", "proveedor_id": 1, "queries": 6, "schema": "lautaro", "usuario_id": 1}
-INFO 2026-06-18 08:49:04,043 observability 31 134181598479168 OBSERVABILIDAD {"cantidad_filas": 6965, "creados": 6965, "duracion_ms": 22407.02, "estado": "ok", "filas_procesadas": 6965, "memoria_actual_kb": 561, "memoria_peak_kb": 13420, "proceso": "procesar_carga_inicial_proveedor", "proveedor_id": 1, "queries": 94, "saltados": 0, "schema": "lautaro", "solicitud_id": 2}
-INFO 2026-06-18 08:49:11,985 observability 33 135032911192896 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 8.13, "estado": "ok", "memoria_actual_kb": 7, "memoria_peak_kb": 22, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
-==> Detected service running on port 10000
-==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
-INFO 2026-06-18 08:54:54,932 observability 33 135032911192896 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 3.56, "estado": "ok", "memoria_actual_kb": 3, "memoria_peak_kb": 18, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+NFO 2026-06-18 08:54:54,932 observability 33 135032911192896 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 3.56, "estado": "ok", "memoria_actual_kb": 3, "memoria_peak_kb": 18, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
 INFO 2026-06-18 08:54:54,955 observability 32 135032911192896 OBSERVABILIDAD {"duracion_ms": 16.61, "estado": "ok", "memoria_actual_kb": 69, "memoria_peak_kb": 71, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
 INFO 2026-06-18 08:54:55,138 observability 33 135032911192896 OBSERVABILIDAD {"duracion_ms": 196.65, "estado": "ok", "limit": "15", "memoria_actual_kb": 188, "memoria_peak_kb": 1313, "page": "1", "proceso": "ventas_listado", "queries": 2, "registros_devueltos": 0, "registros_totales": 0, "schema": "lautaro", "usuario_id": 1}
 /usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
@@ -48,3 +31,55 @@ INFO 2026-06-18 08:56:35,468 apps 11 125490203296576 AXES: BEGIN version 6.4.0, 
 INFO 2026-06-18 08:57:16,740 observability 11 125490203296576 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 9.41, "estado": "ok", "memoria_actual_kb": 29, "memoria_peak_kb": 45, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
 /usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
   paginator = self.django_paginator_class(queryset, page_size)
+INFO 2026-06-18 09:09:30,969 observability 11 125490203296576 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 4.0, "estado": "ok", "memoria_actual_kb": 5, "memoria_peak_kb": 20, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
+  paginator = self.django_paginator_class(queryset, page_size)
+INFO 2026-06-18 09:10:56,558 observability 10 125490203296576 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 8.55, "estado": "ok", "memoria_actual_kb": 24, "memoria_peak_kb": 40, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+==> Deploying...
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+Iniciando FerreDesk en modo productivo.
+El arranque productivo no ejecuta migraciones ni bootstrap local.
+Ejecutando collectstatic para publicar assets del build React.
+INFO 2026-06-18 09:12:44,416 apps 7 130658376647488 AXES: BEGIN version 6.4.0, blocking by ip_address
+173 static files copied to '/app/staticfiles', 163 post-processed.
+Iniciando Worker Centralizado en segundo plano...
+[2026-06-18 12:12:48 +0000] [1] [INFO] Starting gunicorn 21.2.0
+[2026-06-18 12:12:48 +0000] [1] [INFO] Listening at: http://0.0.0.0:10000 (1)
+[2026-06-18 12:12:48 +0000] [1] [INFO] Using worker: sync
+[2026-06-18 12:12:48 +0000] [32] [INFO] Booting worker with pid: 32
+[2026-06-18 12:12:48 +0000] [33] [INFO] Booting worker with pid: 33
+INFO 2026-06-18 09:12:50,392 apps 31 127972756001600 AXES: BEGIN version 6.4.0, blocking by ip_address
+INFO 2026-06-18 09:12:50,398 apps 32 139932079403840 AXES: BEGIN version 6.4.0, blocking by ip_address
+INFO 2026-06-18 09:12:50,596 apps 33 139932079403840 AXES: BEGIN version 6.4.0, blocking by ip_address
+/usr/local/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.7) doesn't match a supported version!
+  warnings.warn(
+/usr/local/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.7) doesn't match a supported version!
+  warnings.warn(
+==> Your service is live 🎉
+==> 
+==> ///////////////////////////////////////////////////////////
+==> 
+==> Available at your primary URL https://*.staging.ferredesk.xyz + 2 more domains
+==> 
+==> ///////////////////////////////////////////////////////////
+[2026-06-18 12:13:56 +0000] [1] [INFO] Handling signal: term
+[2026-06-18 09:13:56 -0300] [10] [INFO] Worker exiting (pid: 10)
+[2026-06-18 09:13:56 -0300] [11] [INFO] Worker exiting (pid: 11)
+[2026-06-18 12:13:57 +0000] [1] [INFO] Shutting down: Master
+/usr/local/lib/python3.11/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (7.4.3)/charset_normalizer (3.4.7) doesn't match a supported version!
+  warnings.warn(
+INFO 2026-06-18 09:15:48,186 observability 32 139932079403840 OBSERVABILIDAD {"duracion_ms": 77.31, "estado": "ok", "memoria_actual_kb": 70, "memoria_peak_kb": 72, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 09:15:48,498 observability 32 139932079403840 OBSERVABILIDAD {"duracion_ms": 290.77, "estado": "ok", "limit": "15", "memoria_actual_kb": 250, "memoria_peak_kb": 1326, "page": "1", "proceso": "ventas_listado", "queries": 2, "registros_devueltos": 0, "registros_totales": 0, "schema": "lautaro", "usuario_id": 1}
+INFO 2026-06-18 09:15:48,585 observability 32 139932079403840 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 76.5, "estado": "ok", "memoria_actual_kb": 3, "memoria_peak_kb": 18, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
+  paginator = self.django_paginator_class(queryset, page_size)
+INFO 2026-06-18 09:15:49,654 observability 32 139932079403840 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 3.8, "estado": "ok", "memoria_actual_kb": 4, "memoria_peak_kb": 19, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+INFO 2026-06-18 09:15:49,666 observability 33 139932079403840 OBSERVABILIDAD {"duracion_ms": 18.23, "estado": "ok", "memoria_actual_kb": 80, "memoria_peak_kb": 85, "no_configurada": false, "proceso": "ferreteria_detalle_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+/usr/local/lib/python3.11/site-packages/rest_framework/pagination.py:200: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'ferreapps.productos.models.Proveedor'> QuerySet.
+  paginator = self.django_paginator_class(queryset, page_size)
+INFO 2026-06-18 09:16:38,404 observability 33 139932079403840 OBSERVABILIDAD {"archivo_bytes": 7810560, "duracion_ms": 2084.02, "estado": "ok", "importacion_id": 2, "memoria_actual_kb": 14685, "memoria_peak_kb": 16703, "metodo": "POST", "modo_procesamiento": "diferido", "proceso": "endpoint_upload_lista_precios_proveedor", "proveedor_id": 1, "queries": 4, "schema": "lautaro", "usuario_id": 1}
+INFO 2026-06-18 09:17:39,527 observability 31 127972756001600 OBSERVABILIDAD {"archivo": "lautaro/importaciones_listas_precios/LEKONS_INTERACTIVA_14-11-2025.xls", "archivo_bytes": 7810560, "duracion_ms": 59337.28, "estado": "ok", "fila_inicio": 8, "filas_procesadas": 6965, "memoria_actual_kb": 18215, "memoria_peak_kb": 35340, "proceso": "importacion_lista_precios_proveedor", "proveedor_id": 1, "queries": 62, "registros_actualizados": 6965, "schema": "lautaro"}
+INFO 2026-06-18 09:17:49,662 observability 33 139932079403840 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 3.78, "estado": "ok", "memoria_actual_kb": 4, "memoria_peak_kb": 20, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}
+==> Detected service running on port 10000
+==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+INFO 2026-06-18 09:18:09,987 observability 32 139932079403840 OBSERVABILIDAD {"campos_faltantes": 0, "duracion_ms": 3.75, "estado": "ok", "memoria_actual_kb": 3, "memoria_peak_kb": 19, "no_configurada": false, "proceso": "ferreteria_estado_setup_get", "queries": 2, "schema": "lautaro", "setup_completo": true, "usuario_id": 1}

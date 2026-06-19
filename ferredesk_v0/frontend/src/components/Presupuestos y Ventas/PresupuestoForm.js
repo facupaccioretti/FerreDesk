@@ -74,7 +74,6 @@ const PresupuestoForm = ({
   puntosVenta,
   loadingComprobantes,
   errorComprobantes,
-  productos,
   loadingProductos,
   familias,
   loadingFamilias,
@@ -588,7 +587,6 @@ const PresupuestoForm = ({
               <div>
                 <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
                 <BuscadorProducto
-                  productos={productos}
                   onSelect={handleAddItemToGrid}
                   disabled={isReadOnly}
                   readOnly={isReadOnly}

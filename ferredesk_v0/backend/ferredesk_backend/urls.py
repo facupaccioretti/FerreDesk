@@ -17,6 +17,8 @@ from ferreapps.productos.views import (
     EstadoSetupAPIView,
     FamiliaViewSet,
     FerreteriaAPIView,
+    PosProductoLookupAPIView,
+    PosProductoSearchAPIView,
     ProveedorViewSet,
     StockProveViewSet,
     StockViewSet,
@@ -46,6 +48,8 @@ urlpatterns = [
     path("api/sistema/", include("ferreapps.sistema.urls")),
     path("api/ferreteria/", FerreteriaAPIView.as_view(), name="ferreteria-api"),
     path("api/ferreteria/estado-setup/", EstadoSetupAPIView.as_view(), name="ferreteria-estado-setup"),
+    path("api/pos/productos/lookup/", PosProductoLookupAPIView.as_view(), name="pos-producto-lookup"),
+    path("api/pos/productos/search/", PosProductoSearchAPIView.as_view(), name="pos-producto-search"),
     path("api/", include("ferreapps.login.urls")),
 ]
 

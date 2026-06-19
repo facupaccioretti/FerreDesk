@@ -656,7 +656,6 @@ const PresupuestosManager = () => {
                       puntosVenta={puntosVenta}
                       loadingComprobantes={loadingComprobantes}
                       errorComprobantes={errorComprobantes}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}
@@ -700,7 +699,6 @@ const PresupuestosManager = () => {
                       vendedores={vendedores}
                       sucursales={sucursales}
                       puntosVenta={puntosVenta}
-                      productos={productos}
                       proveedores={proveedores}
                       alicuotas={alicuotas}
                       autoSumarDuplicados={autoSumarDuplicados}
@@ -755,7 +753,6 @@ const PresupuestosManager = () => {
                       vendedores={vendedores}
                       sucursales={[{ id: 1, nombre: "Casa Central" }]}
                       puntosVenta={[{ id: 1, nombre: "PV 1" }]}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}
@@ -826,7 +823,6 @@ const PresupuestosManager = () => {
                       puntosVenta={puntosVenta}
                       loadingComprobantes={loadingComprobantes}
                       errorComprobantes={errorComprobantes}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}

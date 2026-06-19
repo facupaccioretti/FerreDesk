@@ -1,4 +1,4 @@
-{
+﻿{
   "meta": {
     "proyecto": "FerreDesk V1 SaaS Multi-Tenant",
     "estado": "vacio_por_reseteo_controlado",
@@ -298,6 +298,147 @@
             "`ListaPreciosModal.js` mantiene el modal abierto, bloquea el boton durante la importacion y consulta estado cada 3 segundos hasta `completada` o `error`.",
             "Validacion real backend: `python manage.py test ferreapps.productos.tests.test_importacion_lista_precios --settings=ferredesk_backend.settings.dev --keepdb` -> `Ran 5 tests ... OK`.",
             "Validacion real backend: `python manage.py check --settings=ferredesk_backend.settings.dev` -> `System check identified no issues (0 silenced)`.",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        }
+      }
+    },
+    "optimizacion_pos_itemsgrid": {
+      "estado": "en_progreso",
+      "tareas": {
+        "POS-ITEMSGRID-T1": {
+          "done": true,
+          "decision": "Se ejecuto la primera tarea del plan de optimizacion POS/ItemsGrid sobre el baseline actual: medir lookup exacto, busqueda textual y flujos de compras antes de introducir endpoints o hooks nuevos.",
+          "evidencia": [
+            "`ferredesk_v0/backend/ferreapps/productos/views.py` ahora instrumenta el listado actual de `StockViewSet` con `medir_proceso('stock_listado_operativo_actual', ...)`, distinguiendo `lookup_codigo`, `search_texto`, `search_codigo_proveedor` y `listado_general`, y registrando `cantidad_resultados` + `total_filtrado`.",
+            "`ferredesk_v0/backend/ferreapps/compras/views.py` ahora instrumenta `productos_por_proveedor` y `buscar_producto_por_codigo_proveedor` con `medir_proceso(...)`, incluyendo `proveedor_id`, `tipo_busqueda`, `termino_busqueda`, `cantidad_resultados` y si hubo coincidencia exacta.",
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/hooks/useItemsGridState.js` registra baseline de lookups actuales a `/api/productos/stock/?codigo=...`, diferenciando origen `keydown` vs `blur`, `request_en_secuencia`, `repeticion`, `origenes_detectados`, `duracion_ms`, `cantidad_resultados` y `producto_id`. Los eventos quedan visibles en `window.__ferredesk_pos_baseline__.lookups` y en `console.info('[POS_BASELINE_LOOKUP]', ...)`.",
+            "`ferredesk_v0/frontend/src/components/BuscadorProducto.js` registra secuencias de tipeo sobre `/api/productos/stock/?search=...`, midiendo `request_en_secuencia`, `cantidad_resultados`, `duracion_ms` y errores en `window.__ferredesk_pos_baseline__.busquedas`.",
+            "`ferredesk_v0/frontend/src/components/Compras/BuscadorProductoCompras.js` registra baseline del buscador de compras, diferenciando `cache_proveedor_local` vs `api_productos_por_proveedor`, con proveedor, modo orden de compra, cantidad de resultados y duración en `window.__ferredesk_pos_baseline__.busquedasCompras`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T2": {
+          "done": true,
+          "decision": "Se fijo el contrato de UI y la capa compartida frontend para lookup/busqueda de productos, manteniendo por ahora adaptadores sobre los endpoints actuales para desacoplar formularios del `fetch` directo.",
+          "evidencia": [
+            "Nuevo servicio `ferredesk_v0/frontend/src/services/productoLookupApi.js` con normalizadores de DTO para venta y compra (`normalizarProductoVentaDTO`, `normalizarProductoCompraDTO`), claves de cache tenant-aware (`construirClaveTenantProducto`) y adaptadores sobre los endpoints actuales de ventas y compras.",
+            "Nuevo hook `ferredesk_v0/frontend/src/hooks/useProductoLookupRapido.js` para lookup exacto imperativo, con cache semantico por `tenant + codigo + listaPrecioId + modo`, reutilizando `queryClient.getQueryData`, `fetchQuery` y `prefetchQuery`.",
+            "Nuevo hook `ferredesk_v0/frontend/src/hooks/useProductoBusquedaLigera.js` para busqueda textual compartida, con debounce interno, `useQuery`, cache tenant-aware e invalidacion por prefijo de clave.",
+            "Nuevo hook `ferredesk_v0/frontend/src/hooks/useProductoLookupCompra.js` para lookup exacto de compras y acceso compartido a la busqueda por proveedor, con scope por `tenant + proveedorId + modoOrdenCompra + codigo`.",
+            "Las interfaces nuevas dejan preparados los consumidores para migrar `useItemsGridState`, `BuscadorProducto` e `ItemsGridCompras` sin seguir dependiendo de `fetch('/api/...')` directo dentro de cada componente.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`",
+            "Verificacion real de presencia de la capa compartida: `rg -n \"useProductoLookupRapido|useProductoBusquedaLigera|useProductoLookupCompra|productoLookupApi|construirClaveTenantProducto\" ferredesk_v0/frontend/src` -> coincidencias en los 4 archivos nuevos."
+          ]
+        },
+        "POS-ITEMSGRID-T3": {
+          "done": true,
+          "decision": "Se migro el scanner actual de `useItemsGridState` a la capa compartida `useProductoLookupRapido` y se fijo una politica unica para evitar el doble disparo `Enter` + `blur`: `keydown` consume la accion y `blur` se suprime si es el rebote inmediato de la misma fila/codigo.",
+          "evidencia": [
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/hooks/useItemsGridState.js` ya no hace `fetch('/api/productos/stock/?codigo=...')` directo; ahora usa `useProductoLookupRapido({ listaPrecioId, modo })` y resuelve via `lookupProducto(...)` con cache tenant-aware.",
+            "Se agrego `ultimoEventoCodigoRef` + `registrarEventoCodigo(...)` + `debeSuprimirBlurCodigo(...)` para cortar el `blur` inmediato posterior al `Enter` sobre el mismo `rowId + codigo` dentro de una ventana corta, evitando el doble request efectivo del scanner.",
+            "Se centralizo la aplicacion del producto resuelto en `aplicarProductoResueltoEnFila(...)`, preservando el comportamiento existente de duplicados: sumar cantidad si corresponde, duplicar si corresponde y crear fila nueva si no existe el producto en la grilla.",
+            "El `blur` mantiene solo el rol de respaldo cuando no hubo consumo inmediato por `keydown`, y sigue restaurando el codigo original si la fila ya tenia producto y el nuevo codigo no existe.",
+            "La observabilidad previa se mantiene activa y ahora tambien refleja `cache_hit` y resultados provenientes del hook compartido.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`",
+            "Verificacion real de integracion: `rg -n \"useProductoLookupRapido|debeSuprimirBlurCodigo|aplicarProductoResueltoEnFila|lookupProducto\\(|registrarEventoCodigo\" ferredesk_v0/frontend/src/components/Presupuestos y Ventas/hooks/useItemsGridState.js` -> coincidencias confirmadas."
+          ]
+        },
+        "POS-ITEMSGRID-T4": {
+          "done": true,
+          "decision": "Se implemento el endpoint liviano de lookup rapido de venta y se conecto la capa compartida frontend a esa ruta operativa, separando el scanner POS del endpoint pesado `/api/productos/stock/`.",
+          "evidencia": [
+            "Nuevo serializer liviano `ProductoLookupRapidoSerializer` en `ferredesk_v0/backend/ferreapps/productos/serializers.py`, con contrato minimo orientado a POS: `id`, `codvta`, `codigo_barras`, `deno`, `unidad`, `idaliiva`, `margen`, `precio_lista_0`, `stock_total`, `proveedor_habitual_id`, `costo_habitual` y `acti`.",
+            "Nueva vista `PosProductoLookupAPIView` en `ferredesk_v0/backend/ferreapps/productos/views.py`, con busqueda exacta por `codvta` o `codigo_barras`, prioridad explicita para `codvta`, `annotate` de `costo_habitual` por `Subquery`, `select_related` minimo y observabilidad `medir_proceso('pos_producto_lookup_rapido', ...)`.",
+            "Nueva ruta operativa explicita `GET /api/pos/productos/lookup/?codigo=...` expuesta en `ferredesk_v0/backend/ferredesk_backend/urls.py`, sin mezclar el contrato POS con el router de ABM de catalogo.",
+            "La capa compartida frontend ya consume el endpoint nuevo: `ferredesk_v0/frontend/src/services/productoLookupApi.js::buscarProductoLookupRapidoActual(...)` ahora llama `/api/pos/productos/lookup/` y trata `404` como `null` para mantener la semantica esperada por `useItemsGridState`.",
+            "Cobertura nueva tenant-aware en `ferredesk_v0/backend/ferreapps/productos/tests/test_pos_lookup_api.py`, validando contrato minimo por `codvta` y lookup exacto por `codigo_barras` dentro de un schema tenant.",
+            "Validacion real tests backend: `python manage.py test ferreapps.productos.tests.test_pos_lookup_api --keepdb` -> `Ran 2 tests in 10.661s` y `OK`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T5": {
+          "done": true,
+          "decision": "Se separo la busqueda textual del POS hacia un endpoint liviano propio y la capa compartida frontend dejo de depender del listado pesado de stock para autocompletar productos en ventas.",
+          "evidencia": [
+            "Nueva vista `PosProductoSearchAPIView` en `ferredesk_v0/backend/ferreapps/productos/views.py`, con contrato liviano para ventas, filtro exclusivo de activos, limite acotado, semantica de comodines por palabras y observabilidad `medir_proceso('pos_producto_busqueda_ligera', ...)`.",
+            "Nueva ruta `GET /api/pos/productos/search/?q=...&limit=...` expuesta en `ferredesk_v0/backend/ferredesk_backend/urls.py`, desacoplada del router general `/api/productos/stock/`.",
+            "`ferredesk_v0/frontend/src/services/productoLookupApi.js::buscarProductosLigeroActual(...)` ahora consume `/api/pos/productos/search/` y devuelve directamente el contrato minimo normalizado para POS.",
+            "Cobertura tenant-aware ampliada en `ferredesk_v0/backend/ferreapps/productos/tests/test_pos_lookup_api.py`, validando busqueda textual, exclusión de inactivos, respeto de `limit` y busqueda por multiples palabras.",
+            "Validacion real tests backend: `python manage.py test ferreapps.productos.tests.test_pos_lookup_api --keepdb` -> `Ran 4 tests in 10.685s` y `OK`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T6": {
+          "done": true,
+          "decision": "Se migro `BuscadorProducto` a la capa compartida `useProductoBusquedaLigera`, eliminando su dependencia directa de `/api/productos/stock/?search=...` y preservando seleccion, dropdown y observabilidad basica de secuencia.",
+          "evidencia": [
+            "`ferredesk_v0/frontend/src/components/BuscadorProducto.js` ya no usa `fetch` directo ni maneja debounce manual; ahora consume `useProductoBusquedaLigera({ termino, debounceMs, enabled })`, reutiliza resultados normalizados del endpoint POS liviano y sigue mostrando `codvta`, `deno` y stock.",
+            "El componente mantiene observabilidad en `window.__ferredesk_pos_baseline__.busquedas`, registrando `termino`, `secuencia_id`, `request_en_secuencia`, `cantidad_resultados`, `duracion_ms` y `resultado` al resolverse cada termino debounced.",
+            "Se agrego cobertura focalizada en `ferredesk_v0/frontend/src/components/BuscadorProducto.test.js`, validando render de resultados provenientes del hook y seleccion correcta de la opcion elegida, ademas de la visualizacion del estado de error.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/components/BuscadorProducto.test.js` -> `2 passed, 2 total`.",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T7": {
+          "done": true,
+          "decision": "Se cerro el wiring transversal en comprobantes de venta que ya usan `BuscadorProducto`, eliminando props legacy de `productos` donde el buscador ya no depende de datasets precargados y dejando acotado el uso residual a formularios de conversion que aun reutilizan `productos` para otra logica interna.",
+          "evidencia": [
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/PresupuestoForm.js` ya no recibe ni pasa `productos` a `BuscadorProducto`; el alta de items sigue entrando por `handleAddItemToGrid -> itemsGridRef.current.handleAddItem(producto)` sobre la capa compartida.",
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/EditarPresupuestoForm.js` y `.../NotaCreditoForm.js` dejaron de declarar el prop `productos` porque no lo usaban para el buscador ni para el armado del item.",
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/PresupuestosManager.js` ya no pasa `productos={productos}` a `PresupuestoForm`, `EditarPresupuestoForm` ni `NotaCreditoForm`. Verificacion real con `rg -n \"productos=\\{productos\\}\" ...\\PresupuestosManager.js` -> solo quedan lineas 870 y 917, ambas en `ConVentaForm`, donde `productos` sigue usandose para una renormalizacion tardia ajena al buscador.",
+            "Verificacion funcional de wiring real: `rg -n \"handleAddItemToGrid|itemsGridRef\\.current\\.handleAddItem\\(|<BuscadorProducto\" ...\\VentaForm.js ...\\PresupuestoForm.js ...\\ConVentaForm.js ...\\NotaCreditoForm.js ...\\EditarPresupuestoForm.js` confirma que los formularios de venta siguen agregando items via `BuscadorProducto -> handleAddItemToGrid -> ItemsGrid` sin fetch directo por formulario.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/components/BuscadorProducto.test.js` -> `2 passed, 2 total`.",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T8": {
+          "done": true,
+          "decision": "Se implemento un lookup rapido de compras unificado por proveedor, separado del buscador textual y del endpoint legacy por codigo de proveedor, con prioridad explicita `codigo_proveedor -> codvta -> codigo_barras` y contrato liviano propio de compras.",
+          "evidencia": [
+            "Nuevo serializer `ProductoLookupCompraSerializer` en `ferredesk_v0/backend/ferreapps/compras/serializers.py`, con contrato minimo orientado a compras: `id`, `codvta`, `codigo_barras`, `deno`, `nombre`, `unidad`, `unidadmedida`, `idaliiva`, `acti`, `codigo_proveedor`, `stockprove_id` y `costo_proveedor`.",
+            "Nueva vista `ProductoLookupCompraAPIView` en `ferredesk_v0/backend/ferreapps/compras/views.py`, basada en `StockProve` del proveedor seleccionado, filtrando solo `stock__acti='S'`, con `Case/When` de prioridad y observabilidad `medir_proceso('compras_lookup_producto_rapido', ...)`.",
+            "Nueva ruta operativa `GET /api/compras/productos/lookup/?codigo=...&proveedor_id=...` expuesta en `ferredesk_v0/backend/ferreapps/compras/urls.py`.",
+            "La capa compartida frontend ya consume el endpoint nuevo: `ferredesk_v0/frontend/src/services/productoLookupApi.js::buscarProductoLookupCompraActual(...)` deja de bifurcar por modo y usa siempre `/api/compras/productos/lookup/` para el lookup exacto de compras.",
+            "Cobertura tenant-aware nueva en `ferredesk_v0/backend/ferreapps/compras/tests/test_producto_lookup_compra_api.py`, validando prioridad por `codigo_proveedor`, fallback por `codvta`, fallback por `codigo_barras` y aislamiento por proveedor dentro del tenant.",
+            "Validacion real tests backend: `python manage.py test ferreapps.compras.tests.test_producto_lookup_compra_api --keepdb` -> `Ran 4 tests in 9.941s` y `OK`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T9": {
+          "done": true,
+          "decision": "Se integraron el buscador y la grilla de compras a la capa compartida `useProductoLookupCompra`, eliminando los `fetch` directos a endpoints legacy dentro del flujo operativo de compras y ordenes de compra.",
+          "evidencia": [
+            "`ferredesk_v0/frontend/src/components/Compras/BuscadorProductoCompras.js` ya no precarga datasets del proveedor ni usa `fetch` directo; ahora resuelve la busqueda textual via `useProductoLookupCompra({ proveedorId, modoOrdenCompra }).buscarProductosProveedor(...)`, preservando debounce, dropdown y observabilidad por secuencia.",
+            "`ferredesk_v0/frontend/src/components/Compras/ItemsGridCompras.js` ahora usa `useProductoLookupCompra({ proveedorId, modoOrdenCompra }).lookupProducto(...)` cuando se confirma el codigo con `Enter`, en lugar de llamar directo a `/api/compras/productos/buscar-codigo/` o `/api/compras/proveedores/<id>/productos/?codigo_venta=...`.",
+            "La logica existente de duplicados, suma de cantidades, foco posterior y agregado de nueva fila vacia se mantuvo; en compra normal, al resolver producto se completa tambien `cdi_costo` desde `costo_proveedor` del lookup nuevo.",
+            "Verificacion real de corte de acople: `rg -n \"/api/compras/productos/buscar-codigo|/api/compras/proveedores/.*/productos/|fetch\\(\" ...\\ItemsGridCompras.js ...\\BuscadorProductoCompras.js` -> exit code 1 (sin coincidencias).",
+            "Validacion real tests backend del endpoint compartido: `python manage.py test ferreapps.compras.tests.test_producto_lookup_compra_api --keepdb` -> `Ran 4 tests in 10.426s` y `OK`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-T10": {
+          "done": true,
+          "decision": "Se cerro la fase final endureciendo observabilidad y cobertura automatizada sobre los hooks y flujos refactorizados, con evidencia explicita de dedupe, cache tenant-aware, debounce, abort y supresion del doble disparo `Enter` + `blur` en la grilla.",
+          "evidencia": [
+            "`ferredesk_v0/frontend/src/hooks/useProductoLookupRapido.test.js` valida dedupe de lookups concurrentes, reutilizacion de cache para el mismo codigo y separacion de clave semantica por tenant.",
+            "`ferredesk_v0/frontend/src/hooks/useProductoBusquedaLigera.test.js` valida debounce del ultimo termino tipeado, aborto del request anterior al cambiar el termino e invalidacion basica de cache.",
+            "`ferredesk_v0/frontend/src/components/BuscadorProducto.test.js` cubre render de resultados provenientes del hook compartido, seleccion de producto y visualizacion del estado de error.",
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/hooks/useItemsGridState.test.js` valida que `Enter` seguido de `blur` no duplique el lookup efectivo y que repetir el escaneo del mismo codigo sume cantidad sobre la fila existente.",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/hooks/useProductoLookupRapido.test.js` -> `2 passed, 2 total`.",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/hooks/useProductoBusquedaLigera.test.js` -> `2 passed, 2 total`.",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/components/BuscadorProducto.test.js` -> `2 passed, 2 total`.",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand useItemsGridState.test.js` -> `1 passed, 1 total`.",
+            "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
             "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
           ]
         }

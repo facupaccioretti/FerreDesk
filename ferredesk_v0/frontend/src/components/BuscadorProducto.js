@@ -1,91 +1,157 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useProductoBusquedaLigera } from "../hooks/useProductoBusquedaLigera"
 
-const UMBRAL_BUSQUEDA = 2 // Mínimo de caracteres para iniciar la búsqueda
-const DEBOUNCE_DELAY = 300 // Tiempo de espera en ms después de teclear
+const UMBRAL_BUSQUEDA = 2
+const DEBOUNCE_DELAY = 300
 
 function BuscadorProducto({ onSelect, disabled = false, readOnly = false, className = "" }) {
   const [busqueda, setBusqueda] = useState('')
-  const [sugerencias, setSugerencias] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const observabilidadRef = useRef({
+    secuenciaId: 0,
+    ultimoTermino: '',
+    requestsEnSecuencia: 0,
+    terminoDebouncedActivo: '',
+    requestNumeroActivo: 0,
+    inicioRequestMs: null,
+    resultadoRegistradoPara: '',
+  })
 
-  const buscarProductos = useCallback(async (termino) => {
-    if (termino.length < UMBRAL_BUSQUEDA) {
-      setSugerencias([])
-      return
+  const {
+    resultados: sugerencias,
+    cargando,
+    actualizando,
+    error,
+    terminoDebounced,
+  } = useProductoBusquedaLigera({
+    termino: busqueda,
+    debounceMs: DEBOUNCE_DELAY,
+    enabled: !disabled && !readOnly,
+  })
+
+  const loading = cargando || actualizando
+
+  const registrarObservabilidadBusqueda = useCallback((payload) => {
+    if (typeof window === 'undefined') return
+
+    window.__ferredesk_pos_baseline__ = window.__ferredesk_pos_baseline__ || {}
+    window.__ferredesk_pos_baseline__.busquedas = window.__ferredesk_pos_baseline__.busquedas || []
+
+    const registro = {
+      componente: 'BuscadorProducto',
+      tenant_host: window.location.host,
+      timestamp: new Date().toISOString(),
+      ...payload,
     }
-    setLoading(true)
-    setError(null)
-    try {
-      const url = `/api/productos/stock/?search=${encodeURIComponent(termino)}`
-      const res = await fetch(url, { credentials: 'include' })
-      if (!res.ok) throw new Error('Error en la búsqueda')
-      const data = await res.json()
-      setSugerencias(data.results || [])
-    } catch (err) {
-      setError(err.message)
-      setSugerencias([])
-    } finally {
-      setLoading(false)
+
+    window.__ferredesk_pos_baseline__.busquedas.push(registro)
+    window.__ferredesk_pos_baseline__.ultimaBusqueda = registro
+
+    if (window.__ferredesk_pos_baseline__.busquedas.length > 100) {
+      window.__ferredesk_pos_baseline__.busquedas = window.__ferredesk_pos_baseline__.busquedas.slice(-100)
     }
+
+    console.info('[POS_BASELINE_SEARCH]', registro)
   }, [])
 
-  // Debounce para evitar muchas llamadas a la API
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (busqueda.length >= UMBRAL_BUSQUEDA) {
-        buscarProductos(busqueda)
-      } else {
-        setSugerencias([])
-      }
-    }, DEBOUNCE_DELAY)
-
-    return () => clearTimeout(timer)
-  }, [busqueda, buscarProductos])
-
-  // Mostrar dropdown cuando se cargan sugerencias y el input tiene focus
   useEffect(() => {
     if (sugerencias.length > 0 && !disabled && !readOnly) {
       setShowDropdown(true)
     }
   }, [sugerencias, disabled, readOnly])
 
+  useEffect(() => {
+    const terminoNormalizado = String(terminoDebounced || '').trim().toLowerCase()
+
+    if (terminoNormalizado.length < UMBRAL_BUSQUEDA) {
+      observabilidadRef.current.terminoDebouncedActivo = ''
+      observabilidadRef.current.requestNumeroActivo = 0
+      observabilidadRef.current.inicioRequestMs = null
+      observabilidadRef.current.resultadoRegistradoPara = ''
+      return
+    }
+
+    if (observabilidadRef.current.ultimoTermino !== terminoNormalizado) {
+      observabilidadRef.current.secuenciaId += 1
+      observabilidadRef.current.ultimoTermino = terminoNormalizado
+      observabilidadRef.current.requestsEnSecuencia = 0
+    }
+
+    if (observabilidadRef.current.terminoDebouncedActivo !== terminoNormalizado) {
+      observabilidadRef.current.requestsEnSecuencia += 1
+      observabilidadRef.current.terminoDebouncedActivo = terminoNormalizado
+      observabilidadRef.current.requestNumeroActivo = observabilidadRef.current.requestsEnSecuencia
+      observabilidadRef.current.inicioRequestMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      observabilidadRef.current.resultadoRegistradoPara = ''
+    }
+  }, [terminoDebounced])
+
+  useEffect(() => {
+    const terminoNormalizado = String(terminoDebounced || '').trim()
+    if (!terminoNormalizado || terminoNormalizado.length < UMBRAL_BUSQUEDA || loading) {
+      return
+    }
+
+    const claveRegistro = terminoNormalizado.toLowerCase()
+    if (observabilidadRef.current.resultadoRegistradoPara === claveRegistro) {
+      return
+    }
+
+    const inicio = observabilidadRef.current.inicioRequestMs ?? (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    const payloadBase = {
+      termino: terminoNormalizado,
+      secuencia_id: observabilidadRef.current.secuenciaId,
+      request_en_secuencia: observabilidadRef.current.requestNumeroActivo || observabilidadRef.current.requestsEnSecuencia,
+      cantidad_resultados: sugerencias.length,
+      duracion_ms: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - inicio),
+    }
+
+    if (error) {
+      registrarObservabilidadBusqueda({
+        ...payloadBase,
+        resultado: 'error',
+        error: error.message,
+      })
+    } else {
+      registrarObservabilidadBusqueda({
+        ...payloadBase,
+        resultado: 'ok',
+      })
+    }
+
+    observabilidadRef.current.resultadoRegistradoPara = claveRegistro
+  }, [error, loading, registrarObservabilidadBusqueda, sugerencias.length, terminoDebounced])
+
   const handleChange = (e) => {
-    const value = e.target.value
-    setBusqueda(value)
+    setBusqueda(e.target.value)
     setHighlighted(0)
   }
 
   const handleSelect = useCallback((producto) => {
     onSelect(producto)
     setBusqueda('')
-    setSugerencias([])
     setShowDropdown(false)
     setHighlighted(0)
   }, [onSelect])
 
   const handleKeyDown = useCallback((e) => {
-    if (disabled || readOnly) return;
-    
+    if (disabled || readOnly) return
+
     if (e.key === 'Enter') {
       if (sugerencias.length > 0 && busqueda) {
         handleSelect(sugerencias[highlighted])
-        e.preventDefault()
-        e.stopPropagation()
-      } else {
-        e.preventDefault()
-        e.stopPropagation()
       }
+      e.preventDefault()
+      e.stopPropagation()
     } else if (e.key === 'ArrowDown') {
-      setHighlighted(h => Math.min(h + 1, sugerencias.length - 1))
+      setHighlighted((h) => Math.min(h + 1, sugerencias.length - 1))
     } else if (e.key === 'ArrowUp') {
-      setHighlighted(h => Math.max(h - 1, 0))
+      setHighlighted((h) => Math.max(h - 1, 0))
     }
-  }, [disabled, readOnly, sugerencias, busqueda, highlighted, handleSelect])
+  }, [busqueda, disabled, handleSelect, highlighted, readOnly, sugerencias])
 
   const handleFocus = useCallback(() => {
     if (sugerencias.length > 0 && !disabled && !readOnly) {
@@ -143,7 +209,7 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
                 <div className="flex items-center gap-1">
                   <span className="font-mono text-slate-600 min-w-[60px]">{p.codvta}</span>
                   <span className="text-slate-800 flex-1">{p.deno}</span>
-                  <span className="text-slate-500 text-xs">Stock: {p.stock || 0}</span>
+                  <span className="text-slate-500 text-xs">Stock: {p.stock_total ?? p.stock ?? 0}</span>
                 </div>
               </div>
             )
@@ -151,9 +217,9 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
         </div>
       )}
 
-      {error && (
+      {error && !loading && (
         <div className="absolute z-50 w-full mt-1 bg-red-50 border border-red-200 rounded-sm p-2 text-xs text-red-600">
-          Error: {error}
+          Error: {error.message}
         </div>
       )}
     </div>

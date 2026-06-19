@@ -75,7 +75,6 @@ const NotaCreditoForm = ({
   vendedores,
   sucursales,
   puntosVenta,
-  productos,
   loadingProductos,
   familias,
   loadingFamilias,
