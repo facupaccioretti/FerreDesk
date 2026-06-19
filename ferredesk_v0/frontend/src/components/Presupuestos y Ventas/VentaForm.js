@@ -7,8 +7,8 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
-import { mapearCamposItem, normalizarItemsStock } from "./herramientasforms/mapeoItems"
-// import { normalizarItems } from "./herramientasforms/normalizadorItems" // Ya no se usa
+import { mapearCamposItem } from "./herramientasforms/mapeoItems"
+import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import { useClientesConDefecto } from "./herramientasforms/useClientesConDefecto"
 import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
@@ -52,7 +52,7 @@ const getInitialFormState = (sucursales = [], puntosVenta = []) => ({
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = []) => ({
   ...getInitialFormState(sucursales, puntosVenta),
   ...data,
-  items: Array.isArray(data?.items) ? normalizarItemsStock(data.items) : [],
+  items: Array.isArray(data?.items) ? normalizarItems(data.items, { modo: 'venta' }) : [],
 })
 
 const getStockProveedoresMap = (productos) => {
@@ -72,6 +72,7 @@ const VentaForm = ({
   readOnlyOverride,
   comprobantes,
   ferreteria,
+  arcaListoParaEmitir: arcaListoParaEmitirProp,
   clientes,
   plazos,
   vendedores,
@@ -121,7 +122,7 @@ const VentaForm = ({
   const { listas: listasPrecio, loading: loadingListas } = useListasPrecioAPI()
 
   // Estado para la lista de precios activa (0 = Minorista por defecto)
-  const [listaPrecioId, setListaPrecioId] = useState(0)
+  // Ahora manejado por useFormularioDraft a través del formulario
 
   // Estados sincronizados para comprobante y tipo
   const [inicializado, setInicializado] = useState(false)
@@ -163,23 +164,29 @@ const VentaForm = ({
     () => errorArca
   )
 
-  // Función para normalizar items
-  // const normalizarItemsVenta = (items) => {
-  //   return normalizarItems(items, { 
-  //     productos, 
-  //     modo: 'venta', 
-  //     alicuotasMap 
-  //   })
-  // }
+
 
   // Usar el hook useFormularioDraft
-  const { formulario, setFormulario, limpiarBorrador, actualizarItems } = useFormularioDraft({
+  const { formulario, setFormulario, limpiarBorrador, actualizarItems, actualizarFormulario } = useFormularioDraft({
     claveAlmacenamiento: `ventaFormDraft_${tabKey}`,
     datosIniciales: initialData,
     combinarConValoresPorDefecto: mergeWithDefaults,
     parametrosPorDefecto: [sucursales, puntosVenta],
     normalizarItems: (items) => items, // ItemsGrid se encarga de la normalización
   })
+
+  // Funciones y variables para mantener compatibilidad de API interna
+  const listaPrecioId = formulario.listaPrecioId || 0;
+  const setListaPrecioId = (val) => actualizarFormulario({ listaPrecioId: val });
+  const productosDisponibles = useMemo(
+    () => (Array.isArray(productos) ? productos : []),
+    [productos],
+  )
+  const comprobantesDisponibles = Array.isArray(comprobantes) ? comprobantes : []
+  const clientesDisponibles = Array.isArray(clientes) ? clientes : []
+  const plazosDisponibles = Array.isArray(plazos) ? plazos : []
+  const vendedoresDisponibles = Array.isArray(vendedores) ? vendedores : []
+  const listasPrecioDisponibles = Array.isArray(listasPrecio) ? listasPrecio : []
 
   const alicuotasMap = useMemo(
     () =>
@@ -203,7 +210,12 @@ const VentaForm = ({
   const itemsGridRef = useRef()
   // Temporizador para mostrar overlay ARCA solo si la espera es real (evita condiciones de carrera)
   const temporizadorArcaRef = useRef(null)
-  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+  const stockProveedores = useMemo(() => getStockProveedoresMap(productosDisponibles), [productosDisponibles])
+  const arcaListoParaEmitir = arcaListoParaEmitirProp ?? Boolean(
+    ferreteria?.tiene_certificado_arca &&
+    ferreteria?.tiene_clave_privada_arca &&
+    ferreteria?.punto_venta_arca
+  )
 
   // ------------------------------------------------------------
   // LOG DE DIAGNÓSTICO: ¿Cuándo se arma stockProveedores y qué trae?
@@ -213,7 +225,7 @@ const VentaForm = ({
   }, [loadingProductos, loadingProveedores, stockProveedores])
 
   // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
-  const comprobantesVenta = comprobantes.filter((c) => (c.tipo || "").toLowerCase() !== "presupuesto")
+  const comprobantesVenta = comprobantesDisponibles.filter((c) => (c.tipo || "").toLowerCase() !== "presupuesto")
 
   // Efecto de inicialización sincronizada
   useEffect(() => {
@@ -235,6 +247,12 @@ const VentaForm = ({
       setComprobanteId(comprobantesVenta[0].id)
     }
   }, [comprobantesVenta, comprobanteId])
+
+  useEffect(() => {
+    if (!arcaListoParaEmitir && tipoComprobante === "factura") {
+      setTipoComprobante("factura_interna")
+    }
+  }, [arcaListoParaEmitir, tipoComprobante])
 
   useEffect(() => {
     if (!autoSumarDuplicados) {
@@ -272,7 +290,7 @@ const VentaForm = ({
 
   // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
   const clienteSeleccionado =
-    clientes.find((c) => String(c.id) === String(formulario.clienteId)) ||
+    clientesDisponibles.find((c) => String(c.id) === String(formulario.clienteId)) ||
     clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
 
   // Construir objeto para validación fiscal con datos actuales del formulario
@@ -802,6 +820,10 @@ const VentaForm = ({
     { value: "factura", label: "Factura", tipo: "factura" },
   ]
 
+  const opcionesComprobanteDisponibles = arcaListoParaEmitir
+    ? opcionesComprobante
+    : opcionesComprobante.filter((opcion) => opcion.tipo === "factura_interna")
+
   // Renderizado condicional al final
   if (isLoading) {
     return (
@@ -1021,8 +1043,8 @@ const VentaForm = ({
                     >
                       <option value="">Seleccionar...</option>
                       {(() => {
-                        const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
-                        const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                        const activos = plazosDisponibles.filter(p => p && p.activo === 'S')
+                        const seleccionado = plazosDisponibles.find(p => String(p.id) === String(formulario.plazoId)) || null
                         const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
                         return visibles.map((p) => (
                           <option key={p.id} value={p.id}>{p.nombre}</option>
@@ -1043,7 +1065,7 @@ const VentaForm = ({
                       disabled={isReadOnly}
                     >
                       <option value="">Seleccionar...</option>
-                      {vendedores.map((v) => (
+                      {vendedoresDisponibles.map((v) => (
                         <option key={v.id} value={v.id}>{v.nombre}</option>
                       ))}
                     </select>
@@ -1066,8 +1088,13 @@ const VentaForm = ({
                   {/* Tipo de Comprobante */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
+                    {!arcaListoParaEmitir && (
+                      <p className="mb-2 text-[11px] text-amber-700">
+                        ARCA no esta configurado. Solo se permiten comprobantes internos.
+                      </p>
+                    )}
                     <ComprobanteDropdown
-                      opciones={opcionesComprobante}
+                      opciones={opcionesComprobanteDisponibles}
                       value={tipoComprobante}
                       onChange={setTipoComprobante}
                       disabled={isReadOnly}
@@ -1095,7 +1122,7 @@ const VentaForm = ({
                       disabled={isReadOnly || loadingListas}
                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     >
-                      {listasPrecio.map((lista) => (
+                      {listasPrecioDisponibles.map((lista) => (
                         <option key={lista.numero} value={lista.numero}>
                           {lista.nombre}
                         </option>
@@ -1128,7 +1155,7 @@ const VentaForm = ({
                 onRowsChange={handleRowsChange}
                 initialItems={formulario.items}
                 listaPrecioId={listaPrecioId}
-                listasPrecio={listasPrecio}
+                listasPrecio={listasPrecioDisponibles}
               />
             </div>
 

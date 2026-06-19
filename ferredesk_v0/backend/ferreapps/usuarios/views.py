@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+
 from django.contrib.auth.hashers import make_password
 from .models import CliUsuario
 import json
@@ -10,7 +10,6 @@ import json
 
 User = get_user_model()
 
-@csrf_exempt
 def register(request):
     if request.method == 'POST':
         try:

@@ -32,6 +32,9 @@ from .utils_stock import (
     _descontar_distribuyendo,
 )
 from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+from ferreapps.productos.setup import requerir_setup_completo
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
+from ferredesk_backend.utils.observability import medir_proceso
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +141,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     serializer_class = VentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
+    pagination_class = PaginacionPorPaginaConLimite
 
     # --- Selección dinámica de queryset / serializer / filterset --------
     def get_queryset(self):
@@ -145,7 +149,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
             # Usamos el manager personalizado con todas las anotaciones necesarias
-            return Venta.objects.con_calculos()
+            return Venta.objects.con_calculos().order_by('-ven_fecha', '-ven_id')
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()
@@ -155,12 +159,46 @@ class VentaViewSet(viewsets.ModelViewSet):
             return VentaCalculadaSerializer
         return super().get_serializer_class()
 
+    def get_serializer_context(self):
+        """
+        Inyecta 'is_list' en el contexto del serializer.
+        VentaCalculadaSerializer lo usa para evitar la query N+1 de
+        iva_desglose en listados masivos (solo se calcula en retrieve/detalle).
+        """
+        context = super().get_serializer_context()
+        context['is_list'] = getattr(self, 'action', None) == 'list'
+        return context
+
     def get_filterset_class(self):
         if getattr(self, 'action', None) == 'list':
             return VentaCalculadaFilter
         return super().get_filterset_class()
 
+    def list(self, request, *args, **kwargs):
+        with medir_proceso(
+            "ventas_listado",
+            usuario_id=getattr(request.user, "id", None),
+            page=request.query_params.get("page"),
+            limit=request.query_params.get("limit"),
+            comprobante_tipo=request.query_params.get("comprobante_tipo"),
+        ) as medicion:
+            queryset = self.filter_queryset(self.get_queryset())
+            page = self.paginate_queryset(queryset)
+
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                medicion.registrar_metricas(
+                    registros_devueltos=len(serializer.data),
+                    registros_totales=self.paginator.page.paginator.count,
+                )
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            medicion.registrar_metricas(registros_devueltos=len(serializer.data))
+            return Response(serializer.data)
+
     @transaction.atomic
+    @requerir_setup_completo
     def create(self, request, *args, **kwargs):
         data = request.data
         items = data.get('items', [])
@@ -645,6 +683,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     @transaction.atomic
+    @requerir_setup_completo
     def convertir_a_venta(self, request, pk=None):
         venta = get_object_or_404(Venta, pk=pk)
         try:

@@ -441,6 +441,22 @@ class BuscadorProductoProveedorSerializer(serializers.Serializer):
     stockprove_id = serializers.IntegerField(source='id')  # ID del StockProve para odi_stock_proveedor
 
 
+class ProductoLookupCompraSerializer(serializers.Serializer):
+    """Contrato liviano para lookup exacto de compras por proveedor."""
+    id = serializers.IntegerField(source='stock.id')
+    codvta = serializers.CharField(source='stock.codvta')
+    codigo_barras = serializers.CharField(source='stock.codigo_barras')
+    deno = serializers.CharField(source='stock.deno')
+    nombre = serializers.CharField(source='stock.deno')
+    unidad = serializers.CharField(source='stock.unidad')
+    unidadmedida = serializers.CharField(source='stock.unidad')
+    idaliiva = serializers.IntegerField(source='stock.idaliiva_id')
+    acti = serializers.CharField(source='stock.acti')
+    codigo_proveedor = serializers.CharField(source='codigo_producto_proveedor')
+    stockprove_id = serializers.IntegerField(source='id')
+    costo_proveedor = serializers.DecimalField(source='costo', max_digits=15, decimal_places=2)
+
+
 # ============================================================================
 # SERIALIZERS PARA ÓRDENES DE COMPRA
 # ============================================================================

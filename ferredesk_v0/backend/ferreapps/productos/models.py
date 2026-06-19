@@ -1,14 +1,32 @@
 from django.db import models, transaction
 from django.conf import settings
 import logging
+from django.contrib.postgres.indexes import GinIndex
 from .managers_productos_stock import ProductosStockQuerySet
+from .utils.file_paths import (
+    obtener_directorio_logo_empresa_absoluto,
+    obtener_logo_empresa_relativo,
+    upload_certificado_arca,
+    upload_clave_privada_arca,
+    upload_importacion_lista_precios_temporal,
+    upload_logo_empresa,
+)
 
 logger = logging.getLogger(__name__)
 
 class Ferreteria(models.Model):
+    CAMPOS_SETUP_OBLIGATORIOS = (
+        ("nombre", "nombre"),
+        ("razon_social", "razon_social"),
+        ("cuit_cuil", "cuit_cuil"),
+        ("situacion_iva", "situacion_iva"),
+        ("direccion", "direccion"),
+        ("telefono", "telefono"),
+    )
+
     nombre = models.CharField(max_length=100)
-    direccion = models.CharField(max_length=200)
-    telefono = models.CharField(max_length=20)
+    direccion = models.CharField(max_length=200, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True, null=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     
@@ -66,7 +84,7 @@ class Ferreteria(models.Model):
     
     # Logo de la Empresa
     logo_empresa = models.ImageField(
-        upload_to='logos/',
+        upload_to=upload_logo_empresa,
         blank=True,
         null=True,
         help_text='Logo de la empresa para comprobantes'
@@ -75,14 +93,14 @@ class Ferreteria(models.Model):
     
     # Configuración ARCA - Integración con servicios web de AFIP
     certificado_arca = models.FileField(
-        upload_to='arca/ferreteria_1/certificados/',
+        upload_to=upload_certificado_arca,
         blank=True,
         null=True,
         help_text='Certificado ARCA (.pem) para autenticación con servicios web de AFIP'
     )
     
     clave_privada_arca = models.FileField(
-        upload_to='arca/ferreteria_1/claves_privadas/',
+        upload_to=upload_clave_privada_arca,
         blank=True,
         null=True,
         help_text='Clave privada ARCA (.pem) para firma digital de comprobantes'
@@ -142,7 +160,62 @@ class Ferreteria(models.Model):
     
     def __str__(self):
         return self.nombre
+
+    @staticmethod
+    def permitir_homologacion_ui():
+        return bool(getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False))
+
+    def obtener_modo_arca_operativo(self):
+        if self.permitir_homologacion_ui():
+            return self.modo_arca or "HOM"
+        return "PROD"
+
+    @classmethod
+    def es_cuit_cuil_valido(cls, valor):
+        if valor is None:
+            return False
+        valor_normalizado = str(valor).strip()
+        return valor_normalizado.isdigit() and len(valor_normalizado) == 11
+
+    @classmethod
+    def es_situacion_iva_valida(cls, valor):
+        return valor in {codigo for codigo, _ in cls.SITUACION_IVA_CHOICES}
     
+    def obtener_campos_setup_faltantes(self):
+        """Retorna los campos mínimos faltantes para considerar completo el setup."""
+        faltantes = []
+
+        for nombre_campo, clave_salida in self.CAMPOS_SETUP_OBLIGATORIOS:
+            valor = getattr(self, nombre_campo, None)
+            if valor is None:
+                faltantes.append(clave_salida)
+                continue
+
+            if isinstance(valor, str) and not valor.strip():
+                faltantes.append(clave_salida)
+
+        if "cuit_cuil" not in faltantes and not self.es_cuit_cuil_valido(self.cuit_cuil):
+            faltantes.append("cuit_cuil")
+
+        if "situacion_iva" not in faltantes and not self.es_situacion_iva_valida(self.situacion_iva):
+            faltantes.append("situacion_iva")
+
+        return faltantes
+
+    def setup_completo(self):
+        """Indica si la configuración mínima del negocio está completa."""
+        return len(self.obtener_campos_setup_faltantes()) == 0
+
+    def obtener_estado_setup(self):
+        """Retorna el estado de setup mínimo del tenant en formato serializable."""
+        campos_faltantes = self.obtener_campos_setup_faltantes()
+        setup_completo = len(campos_faltantes) == 0
+        return {
+            "setup_completo": setup_completo,
+            "campos_setup_faltantes": campos_faltantes,
+            "no_configurada": not setup_completo,
+        }
+
     
     
     def validar_configuracion_arca(self):
@@ -221,13 +294,13 @@ class Ferreteria(models.Model):
         
         # Los archivos ARCA se normalizan via señal post_save en ventas/signals.py
         if logo_nuevo:
-            self._normalizar_logo_empresa()
+            pass
     
 
     def _normalizar_logo_empresa(self):
         """
-        Mueve el logo de empresa a un nombre estándar 'logos/logo.jpg' (o mantiene la extensión original 
-        si no es .jpg) y elimina archivos anteriores en esa carpeta, preservando 'logo-arca.jpg'.
+        Mueve el logo de empresa a un nombre estándar aislado por schema y
+        elimina archivos anteriores solo dentro del directorio del tenant.
         """
         import os
         import shutil
@@ -237,7 +310,7 @@ class Ferreteria(models.Model):
         if not self.logo_empresa:
             return
 
-        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
+        logos_dir = obtener_directorio_logo_empresa_absoluto(settings.MEDIA_ROOT)
         os.makedirs(logos_dir, exist_ok=True)
 
         # Determinar extensión del archivo subido
@@ -269,13 +342,13 @@ class Ferreteria(models.Model):
             # Si falló el move, no continuar
             return
 
-        # Actualizar referencia en el modelo a 'logos/logo.ext'
-        self.logo_empresa.name = f'logos/{destino_nombre}'
+        # Actualizar referencia en el modelo al path tenant-aware.
+        self.logo_empresa.name = obtener_logo_empresa_relativo(ext)
 
-        # Limpiar otros archivos en la carpeta 'logos', excepto el logo estándar y 'logo-arca.jpg'
+        # Limpiar otros archivos solo dentro de la carpeta del tenant.
         try:
             for archivo in os.listdir(logos_dir):
-                if archivo in {destino_nombre, 'logo-arca.jpg'}:
+                if archivo == destino_nombre:
                     continue
                 archivo_path = os.path.join(logos_dir, archivo)
                 # Solo eliminar archivos (no directorios)
@@ -483,6 +556,9 @@ class Stock(models.Model):
             models.Index(fields=['acti']),
             models.Index(fields=['proveedor_habitual']),
             models.Index(fields=['codigo_barras']),
+            # GinIndex trigram: acelera búsquedas icontains en 'deno' ~1000x.
+            # Requiere pg_trgm habilitado en PostgreSQL.
+            GinIndex(fields=['deno'], name='stock_deno_trgm_idx', opclasses=['gin_trgm_ops']),
         ]
 
 class StockProve(models.Model):
@@ -501,6 +577,7 @@ class StockProve(models.Model):
         indexes = [
             models.Index(fields=['stock', 'proveedor']),
             models.Index(fields=['proveedor']),
+            models.Index(fields=['proveedor', 'codigo_producto_proveedor']),
         ]
         # NOTA: La unicidad (proveedor, codigo_producto_proveedor) solo se valida en el serializer si el código no está vacío.
 
@@ -547,6 +624,62 @@ class PrecioProveedorExcel(models.Model):
     def __str__(self):
         return f"{self.proveedor.razon} - {self.codigo_producto_excel}: {self.precio}"
 
+
+class ImportacionListaPreciosProveedor(models.Model):
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_PROCESANDO = "procesando"
+    ESTADO_COMPLETADA = "completada"
+    ESTADO_ERROR = "error"
+
+    ESTADOS = (
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_PROCESANDO, "Procesando"),
+        (ESTADO_COMPLETADA, "Completada"),
+        (ESTADO_ERROR, "Error"),
+    )
+
+    proveedor = models.ForeignKey(
+        "Proveedor",
+        on_delete=models.CASCADE,
+        related_name="importaciones_listas_precios",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="importaciones_listas_precios_proveedor",
+    )
+    estado = models.CharField(
+        max_length=16,
+        choices=ESTADOS,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+    )
+    nombre_archivo = models.CharField(max_length=255)
+    archivo_temporal = models.FileField(
+        upload_to=upload_importacion_lista_precios_temporal,
+    )
+    col_codigo = models.CharField(max_length=4, default="A")
+    col_precio = models.CharField(max_length=4, default="B")
+    col_denominacion = models.CharField(max_length=4, default="C")
+    fila_inicio = models.PositiveIntegerField(default=2)
+    registros_procesados = models.PositiveIntegerField(default=0)
+    registros_actualizados = models.PositiveIntegerField(default=0)
+    mensaje_error = models.TextField(blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    iniciado_en = models.DateTimeField(null=True, blank=True)
+    finalizado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Importacion de lista de precios de proveedor"
+        verbose_name_plural = "Importaciones de listas de precios de proveedor"
+        ordering = ("-creado_en",)
+
+    def __str__(self):
+        return f"{self.proveedor.razon} - {self.nombre_archivo} ({self.estado})"
+
 class ProductoTempID(models.Model):
     id = models.IntegerField(primary_key=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -579,6 +712,27 @@ class VistaStockProducto(models.Model):
         db_table = 'VISTA_STOCK_PRODUCTO'
         verbose_name = 'Vista de Stock de Producto'
         verbose_name_plural = 'Vistas de Stock de Productos'
+
+
+class Sucursal(models.Model):
+    ferreteria = models.ForeignKey(
+        Ferreteria,
+        on_delete=models.CASCADE,
+        related_name='sucursales',
+    )
+    nombre = models.CharField(max_length=100)
+    direccion = models.CharField(max_length=200, blank=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    es_principal = models.BooleanField(default=True)
+    activa = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Sucursal'
+        verbose_name_plural = 'Sucursales'
+
+    def __str__(self):
+        return self.nombre
 
 
 # =============================================================================

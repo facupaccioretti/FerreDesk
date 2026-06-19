@@ -5,6 +5,10 @@ import Navbar from "./Navbar"
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme"
 import Tabla from "./Tabla"
 import { BotonEditar } from "./Botones"
+import ModernFileInput from "./ModernFileInput"
+import ConfirmacionPeligroModal from "./ConfirmacionPeligroModal"
+import { toast } from "react-toastify"
+import { Building2, Receipt, Settings2, FileKey2, Save, Loader2 } from "lucide-react"
 
 // Hooks de catálogos de Clientes (reutilizamos exactamente los mismos)
 import { useBarriosAPI } from "../utils/useBarriosAPI"
@@ -14,231 +18,229 @@ import { useTransportesAPI } from "../utils/useTransportesAPI"
 import { usePlazosAPI } from "../utils/usePlazosAPI"
 import { useCategoriasAPI } from "../utils/useCategoriasAPI"
 import MaestroModal from "./Clientes/MaestrosModales"
+import { clienteAPI } from "../utils/clienteAPI"
+import { useLogoutMutation } from "../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../domains/session/useSessionUserQuery"
 
-// Función para obtener el valor de una cookie por nombre
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== "") {
-    const cookies = document.cookie.split(";")
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
-
-
-
-
+// Estilos de campos claros consistentes con FerreDesk (ClientesManager)
+const CLASES_INPUT = "w-full text-sm font-medium text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2.5 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-200 disabled:bg-slate-50 disabled:text-slate-400"
+const CLASES_SELECT = "w-full text-sm font-medium text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-200 disabled:bg-slate-50 disabled:text-slate-400"
 
 // Pestaña: Información del Negocio
-const InformacionNegocio = ({ config, onConfigChange, loading }) => {
+const InformacionNegocio = ({ config, onConfigChange, loading, onSave, saving }) => {
+  const theme = useFerreDeskTheme()
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z" />
-        </svg>
+        <Building2 className="text-orange-600" size={24} />
         Información del Negocio
       </h3>
 
       <div className="space-y-4">
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             Nombre del Negocio <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            value={config.nombre || ""}
-            onChange={(e) => onConfigChange("nombre", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: Ferretería Central"
-            disabled={loading}
-          />
+          <div className="w-2/3">
+            <input
+              type="text"
+              value={config.nombre || ""}
+              onChange={(e) => onConfigChange("nombre", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: Ferretería Central"
+              disabled={loading}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             Dirección <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            value={config.direccion || ""}
-            onChange={(e) => onConfigChange("direccion", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: Av. San Martín 123"
-            disabled={loading}
-          />
+          <div className="w-2/3">
+            <input
+              type="text"
+              value={config.direccion || ""}
+              onChange={(e) => onConfigChange("direccion", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: Av. San Martín 123"
+              disabled={loading}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             Teléfono <span className="text-red-500">*</span>
           </label>
-          <input
-            type="tel"
-            value={config.telefono || ""}
-            onChange={(e) => onConfigChange("telefono", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: 011-1234-5678"
-            disabled={loading}
-          />
+          <div className="w-2/3">
+            <input
+              type="tel"
+              value={config.telefono || ""}
+              onChange={(e) => onConfigChange("telefono", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: 011-1234-5678"
+              disabled={loading}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             Email
           </label>
-          <input
-            type="email"
-            value={config.email || ""}
-            onChange={(e) => onConfigChange("email", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: info@ferreteria.com"
-            disabled={loading}
-          />
+          <div className="w-2/3">
+            <input
+              type="email"
+              value={config.email || ""}
+              onChange={(e) => onConfigChange("email", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: info@ferreteria.com"
+              disabled={loading}
+            />
+          </div>
         </div>
+      </div>
+
+      <div className="flex justify-end pt-6 mt-2">
+        <button onClick={() => onSave("negocio")} disabled={saving} className={`flex items-center gap-2 ${theme.botonPrimario}`}>
+          {saving ? <><Loader2 className="animate-spin" size={18}/> Guardando...</> : <><Save size={18}/> Guardar Sección</>}
+        </button>
       </div>
     </div>
   )
 }
 
 // Pestaña: Configuración Fiscal
-const ConfiguracionFiscal = ({ config, onConfigChange, loading }) => {
+const ConfiguracionFiscal = ({ config, onConfigChange, loading, onSave, saving }) => {
+  const theme = useFerreDeskTheme()
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-600">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-        </svg>
+        <Receipt className="text-orange-600" size={24} />
         Configuración Fiscal
       </h3>
 
       <div className="space-y-4">
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             Situación Fiscal <span className="text-red-500">*</span>
           </label>
-          <select
-            value={config.situacion_iva || "RI"}
-            onChange={(e) => onConfigChange("situacion_iva", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            disabled={loading}
-          >
-            <option value="RI">Responsable Inscripto</option>
-            <option value="MO">Monotributista</option>
-          </select>
+          <div className="w-2/3">
+            <select
+              value={config.situacion_iva || "RI"}
+              onChange={(e) => onConfigChange("situacion_iva", e.target.value)}
+              className={CLASES_SELECT}
+              disabled={loading}
+            >
+              <option value="RI">Responsable Inscripto</option>
+              <option value="MO">Monotributista</option>
+            </select>
+          </div>
         </div>
 
-
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
             CUIT/CUIL
           </label>
-          <input
-            type="text"
-            value={config.cuit_cuil || ""}
-            onChange={(e) => onConfigChange("cuit_cuil", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: 20-12345678-9"
-            disabled={loading}
-          />
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Razón Social
-          </label>
-          <input
-            type="text"
-            value={config.razon_social || ""}
-            onChange={(e) => onConfigChange("razon_social", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: FERRETERÍA CENTRAL S.A."
-            disabled={loading}
-          />
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Ingresos Brutos
-          </label>
-          <input
-            type="text"
-            value={config.ingresos_brutos || ""}
-            onChange={(e) => onConfigChange("ingresos_brutos", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: 901-123456-7"
-            disabled={loading}
-          />
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Logo de la Empresa
-          </label>
           <div className="w-2/3">
-            {config.logo_empresa && (
-              <div className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                <img
-                  src={config.logo_empresa}
-                  alt="Logo actual"
-                  className="w-8 h-8 object-contain rounded"
-                />
-                <span className="text-xs text-slate-600">Logo actual cargado</span>
-              </div>
-            )}
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  onConfigChange("logo_empresa_file", file);
-                  onConfigChange("logo_empresa", URL.createObjectURL(file));
-                }
-              }}
-              className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+              type="text"
+              value={config.cuit_cuil || ""}
+              onChange={(e) => onConfigChange("cuit_cuil", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: 20-12345678-9"
               disabled={loading}
             />
           </div>
         </div>
+
+        <div className="flex items-center border-b border-slate-200 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
+            Razón Social
+          </label>
+          <div className="w-2/3">
+            <input
+              type="text"
+              value={config.razon_social || ""}
+              onChange={(e) => onConfigChange("razon_social", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: FERRETERÍA CENTRAL S.A."
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center border-b border-slate-200 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
+            Ingresos Brutos
+          </label>
+          <div className="w-2/3">
+            <input
+              type="text"
+              value={config.ingresos_brutos || ""}
+              onChange={(e) => onConfigChange("ingresos_brutos", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: 901-123456-7"
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center border-b border-slate-200 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
+            Logo de la Empresa
+          </label>
+          <div className="w-2/3">
+            <ModernFileInput 
+              label="Seleccionar imagen"
+              helperText="PNG o JPG, max. 2 MB"
+              accept="image/*"
+              currentFile={config.logo_empresa_file || (config.logo_empresa ? { name: "Logo actual cargado" } : null)}
+              onChange={(file) => {
+                onConfigChange("logo_empresa_file", file);
+                onConfigChange("logo_empresa", URL.createObjectURL(file));
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-6 mt-2">
+        <button onClick={() => onSave("fiscal")} disabled={saving} className={`flex items-center gap-2 ${theme.botonPrimario}`}>
+          {saving ? <><Loader2 className="animate-spin" size={18}/> Guardando...</> : <><Save size={18}/> Guardar Sección</>}
+        </button>
       </div>
     </div>
   )
 }
 
-// Pestaña: Notificaciones
-const Notificaciones = ({ config, onConfigChange, loading }) => {
+const Notificaciones = ({ config, onConfigChange, loading, onSave, saving }) => {
+  const theme = useFerreDeskTheme()
   const handleToggle = (field) => {
     onConfigChange(field, !config[field])
   }
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-purple-600">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-orange-600">
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
         </svg>
         Notificaciones
       </h3>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div className="w-1/3">
-            <h5 className="font-medium text-slate-800">Stock Bajo</h5>
-            <p className="text-sm text-slate-600">Notificar cuando los productos tengan stock bajo</p>
+            <h5 className="font-semibold text-slate-700">Stock Bajo</h5>
+            <p className="text-sm text-slate-500">Notificar cuando los productos tengan stock bajo</p>
           </div>
           <div className="w-2/3 flex justify-end">
             <button
               onClick={() => handleToggle("notificaciones_stock_bajo")}
               disabled={loading}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.notificaciones_stock_bajo ? "bg-orange-600" : "bg-slate-200"
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.notificaciones_stock_bajo ? "bg-orange-600" : "bg-slate-300"
                 }`}
             >
               <span
@@ -249,36 +251,41 @@ const Notificaciones = ({ config, onConfigChange, loading }) => {
           </div>
         </div>
       </div>
+
+      <div className="flex justify-end pt-6 mt-2">
+        <button onClick={() => onSave("notificaciones")} disabled={saving} className={`flex items-center gap-2 ${theme.botonPrimario}`}>
+          {saving ? <><Loader2 className="animate-spin" size={18}/> Guardando...</> : <><Save size={18}/> Guardar Sección</>}
+        </button>
+      </div>
     </div>
   )
 }
 
 // Pestaña: Configuración de Sistema
-const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
+const ConfiguracionSistema = ({ config, onConfigChange, loading, onSave, saving }) => {
+  const theme = useFerreDeskTheme()
   const handleToggle = (field) => {
     onConfigChange(field, !config[field])
   }
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-indigo-600">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
-        </svg>
+        <Settings2 className="text-orange-600" size={24} />
         Configuración de Sistema
       </h3>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div className="w-1/3">
-            <h5 className="font-medium text-slate-800">Permitir Stock Negativo</h5>
-            <p className="text-sm text-slate-600">Permitir que los productos tengan stock negativo</p>
+            <h5 className="font-semibold text-slate-700">Permitir Stock Negativo</h5>
+            <p className="text-sm text-slate-500">Permitir que los productos tengan stock negativo</p>
           </div>
           <div className="w-2/3 flex justify-end">
             <button
               onClick={() => handleToggle("permitir_stock_negativo")}
               disabled={loading}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.permitir_stock_negativo ? "bg-orange-600" : "bg-slate-200"
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${config.permitir_stock_negativo ? "bg-orange-600" : "bg-slate-300"
                 }`}
             >
               <span
@@ -290,17 +297,17 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
         </div>
 
         {/* Códigos de Barras */}
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <div className="w-1/3">
-            <h5 className="font-medium text-slate-800">Prefijo Códigos de Barras</h5>
-            <p className="text-sm text-slate-600">Siglas para códigos Code 128 internos (ej: ABC, MIF)</p>
+            <h5 className="font-semibold text-slate-700">Prefijo Códigos de Barras</h5>
+            <p className="text-sm text-slate-500">Siglas para códigos (ej: ABC)</p>
           </div>
           <div className="w-2/3">
             <input
               type="text"
               value={config.prefijo_codigo_barras || ""}
               onChange={(e) => onConfigChange("prefijo_codigo_barras", e.target.value.toUpperCase())}
-              className="w-full max-w-[200px] border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 uppercase"
+              className={`${CLASES_INPUT} max-w-[200px] uppercase`}
               placeholder="Ej: ABC"
               maxLength={10}
               disabled={loading}
@@ -312,174 +319,114 @@ const ConfiguracionSistema = ({ config, onConfigChange, loading }) => {
             </p>
           </div>
         </div>
+      </div>
 
+      <div className="flex justify-end pt-6 mt-2">
+        <button onClick={() => onSave("sistema")} disabled={saving} className={`flex items-center gap-2 ${theme.botonPrimario}`}>
+          {saving ? <><Loader2 className="animate-spin" size={18}/> Guardando...</> : <><Save size={18}/> Guardar Sección</>}
+        </button>
       </div>
     </div>
   )
 }
 
 // Pestaña: Configuración ARCA
-const ConfiguracionARCA = ({ config, onConfigChange, loading }) => {
+const ConfiguracionARCA = ({ config, onConfigChange, loading, onSave, saving }) => {
+  const theme = useFerreDeskTheme()
   const handleFileChange = (field, file) => {
     onConfigChange(field, file)
   }
+  const permiteHomologacionUI = config.arca_permitir_homologacion_ui === true
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-purple-600">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-        </svg>
+        <FileKey2 className="text-orange-600" size={24} />
         Configuración ARCA
       </h3>
 
       <div className="space-y-4">
         {/* Estado de configuración */}
         {config.arca_configurado && (
-          <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-600">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            <span className="text-sm text-emerald-700">Configuración ARCA válida</span>
+          <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800">
+            <FileKey2 size={20} className="text-emerald-600" />
+            <span className="text-sm font-semibold">Configuración ARCA válida</span>
           </div>
         )}
 
         {config.arca_error_configuracion && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-600">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-            </svg>
-            <span className="text-sm text-red-700">{config.arca_error_configuracion}</span>
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800">
+            <span className="text-sm font-semibold">{config.arca_error_configuracion}</span>
           </div>
         )}
-
-        {/* Logo ARCA */}
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
-            Logo ARCA
+            Punto de Venta
           </label>
           <div className="w-2/3">
-            {config.logo_arca && (
-              <div className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                <img
-                  src={config.logo_arca}
-                  alt="Logo ARCA actual"
-                  className="w-8 h-8 object-contain rounded"
-                />
-                <span className="text-xs text-slate-600">Logo ARCA cargado</span>
-              </div>
-            )}
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files && e.target.files[0]
-                if (file) {
-                  onConfigChange('logo_arca_file', file)
-                  onConfigChange('logo_arca', URL.createObjectURL(file))
-                }
-              }}
-              className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
-              disabled={loading}
-            />
-            <p className="mt-1 text-[11px] text-slate-500">Se guardará como media/logos/logo-arca.jpg</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-          </svg>
-          <span className="text-sm text-blue-700">
-            Configuración interna: {config.arca_habilitado ? 'Habilitado' : 'Deshabilitado'} |
-            Modo: {config.modo_arca === 'PROD' ? 'Producción' : 'Homologación'}
-          </span>
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Punto de Venta (ARCA)
-          </label>
-          <input
-            type="text"
-            value={config.punto_venta_arca || ""}
-            onChange={(e) => onConfigChange("punto_venta_arca", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="Ej: 0001"
-            disabled={loading}
-          />
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Modo ARCA
-          </label>
-          <select
-            value={config.modo_arca || "HOM"}
-            onChange={(e) => onConfigChange("modo_arca", e.target.value)}
-            className="w-2/3 border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            disabled={loading}
-          >
-            <option value="HOM">Homologación (Pruebas)</option>
-            <option value="PROD">Producción</option>
-          </select>
-        </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
-          <label className="w-1/3 text-sm font-medium text-slate-700">
-            Certificado ARCA (.pem) <span className="text-red-500">*</span>
-          </label>
-          <div className="w-2/3">
-            {config.certificado_arca && (
-              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                </svg>
-                <span className="text-xs text-slate-600">Certificado actual cargado</span>
-              </div>
-            )}
-            <input
-              type="file"
-              accept="*"
-              onChange={(e) => handleFileChange("certificado_arca_file", e.target.files[0])}
-              className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+              type="text"
+              value={config.punto_venta_arca || ""}
+              onChange={(e) => onConfigChange("punto_venta_arca", e.target.value)}
+              className={CLASES_INPUT}
+              placeholder="Ej: 0001"
               disabled={loading}
             />
           </div>
         </div>
-
-        <div className="flex items-center border-b border-slate-100 pb-3">
+        {permiteHomologacionUI && (
+          <div className="flex items-center border-b border-slate-200 pb-3">
+            <label className="w-1/3 text-sm font-medium text-slate-700">
+              Modo ARCA
+            </label>
+            <div className="w-2/3">
+              <select
+                value={config.modo_arca || "HOM"}
+                onChange={(e) => onConfigChange("modo_arca", e.target.value)}
+                className={CLASES_SELECT}
+                disabled={loading}
+              >
+                <option value="HOM">Homologación (Pruebas)</option>
+                <option value="PROD">Producción</option>
+              </select>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center border-b border-slate-200 pb-3">
           <label className="w-1/3 text-sm font-medium text-slate-700">
-            Clave Privada ARCA (.pem) <span className="text-red-500">*</span>
+            Certificado (.pem) <span className="text-red-500">*</span>
           </label>
           <div className="w-2/3">
-            {config.clave_privada_arca && (
-              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-600">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-                </svg>
-                <span className="text-xs text-slate-600">Clave privada actual cargada</span>
-              </div>
-            )}
-            <input
-              type="file"
-              accept="*"
-              onChange={(e) => handleFileChange("clave_privada_arca_file", e.target.files[0])}
-              className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
-              disabled={loading}
+            <ModernFileInput 
+              label="Seleccionar certificado"
+              helperText="Solo archivos .pem"
+              accept=".pem"
+              currentFile={config.certificado_arca_file || (config.certificado_arca ? { name: "Certificado actual cargado" } : null)}
+              onChange={(file) => handleFileChange("certificado_arca_file", file)}
             />
           </div>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-blue-800 mb-2">Información Importante</h4>
-          <ul className="text-xs text-blue-700 space-y-1">
-            <li>• Configuración sensible, solo administradores pueden modificarla</li>
-            <li>• En modo Homologación se usan servicios de prueba</li>
-            <li>• En modo Producción se usan servicios reales</li>
-            <li>• Los certificados deben ser archivos .pem válidos proporcionados por ARCA</li>
-          </ul>
+        <div className="flex items-center border-b border-slate-200 pb-3">
+          <label className="w-1/3 text-sm font-medium text-slate-700">
+            Clave Privada (.pem) <span className="text-red-500">*</span>
+          </label>
+          <div className="w-2/3">
+            <ModernFileInput 
+              label="Seleccionar clave"
+              helperText="Solo archivos .pem"
+              accept=".pem"
+              currentFile={config.clave_privada_arca_file || (config.clave_privada_arca ? { name: "Clave privada actual cargada" } : null)}
+              onChange={(file) => handleFileChange("clave_privada_arca_file", file)}
+            />
+          </div>
         </div>
+      </div>
+
+      <div className="flex justify-end pt-6 mt-2">
+        <button onClick={() => onSave("arca")} disabled={saving} className={`flex items-center gap-2 ${theme.botonPrimario}`}>
+          {saving ? <><Loader2 className="animate-spin" size={18}/> Guardando...</> : <><Save size={18}/> Guardar Sección</>}
+        </button>
       </div>
     </div>
   )
@@ -489,13 +436,14 @@ const ConfiguracionManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
 
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   const [config, setConfig] = useState({})
   const [loading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("negocio")
-  const [feedback, setFeedback] = useState("")
-  const [esNueva, setEsNueva] = useState(false)
+  const [originalConfig, setOriginalConfig] = useState({})
+  const [modalSeguridad, setModalSeguridad] = useState({ open: false, mensaje: "", onConfirm: null })
 
   // --------- Estado y lógica de Maestros (Clientes) movido desde ClientesManager ---------
   const { barrios, setBarrios, fetchBarrios } = useBarriosAPI()
@@ -512,6 +460,7 @@ const ConfiguracionManager = () => {
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState("")
+  const esAdminTenant = user?.es_admin_tenant === true || user?.tipo_usuario === "admin"
 
   const obtenerColeccionActual = () => {
     switch (catalogoSeleccionado) {
@@ -594,13 +543,10 @@ const ConfiguracionManager = () => {
           break
       }
 
-      const res = await window.fetch(endpoint, {
+      await clienteAPI(endpoint, {
         method: esEdicion ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        credentials: "include",
-        body: JSON.stringify(body),
+        body,
       })
-      if (!res.ok) throw new Error("Error al guardar")
       await refetchColeccion()
       cerrarModal()
     } catch (e) {
@@ -615,26 +561,18 @@ const ConfiguracionManager = () => {
   }, [])
 
   useEffect(() => {
-    // Cargar datos del usuario y configuración
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-
+    // Cargar configuración
     fetch("/api/ferreteria/", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data) {
-          if (data.no_configurada === true) {
-            setEsNueva(true)
-          }
           setConfig(data)
+          setOriginalConfig(data)
         }
       })
       .catch((error) => {
         console.error("Error cargando configuración:", error)
-        setFeedback("Error al cargar la configuración")
+        toast.error("Error al cargar la configuración")
       })
   }, [])
 
@@ -647,19 +585,16 @@ const ConfiguracionManager = () => {
 
   const handleSave = async () => {
     setSaving(true)
-    setFeedback("")
 
     try {
-      const csrftoken = getCookie("csrftoken")
-
       // Validar que los archivos no estén vacíos
       if (config.certificado_arca_file && config.certificado_arca_file.size === 0) {
-        setFeedback("Error: El archivo de certificado seleccionado está vacío.");
+        toast.error("Error: El archivo de certificado seleccionado está vacío.");
         setSaving(false);
         return;
       }
       if (config.clave_privada_arca_file && config.clave_privada_arca_file.size === 0) {
-        setFeedback("Error: El archivo de clave privada seleccionado está vacío.");
+        toast.error("Error: El archivo de clave privada seleccionado está vacío.");
         setSaving(false);
         return;
       }
@@ -672,7 +607,12 @@ const ConfiguracionManager = () => {
         if (key !== 'logo_empresa_file' && key !== 'logo_empresa' &&
           key !== 'certificado_arca_file' && key !== 'certificado_arca' &&
           key !== 'clave_privada_arca_file' && key !== 'clave_privada_arca' &&
-          key !== 'no_configurada') {
+          key !== 'no_configurada' &&
+          key !== 'setup_completo' &&
+          key !== 'campos_setup_faltantes' &&
+          key !== 'tiene_certificado_arca' &&
+          key !== 'tiene_clave_privada_arca' &&
+          key !== 'arca_permitir_homologacion_ui') {
           if (config[key] !== null && config[key] !== undefined) {
             formData.append(key, config[key])
           }
@@ -693,96 +633,98 @@ const ConfiguracionManager = () => {
         formData.append('clave_privada_arca', config.clave_privada_arca_file)
       }
 
-      const esCreacion = esNueva || config?.no_configurada === true
-      const res = await fetch("/api/ferreteria/", {
-        method: esCreacion ? "POST" : "PATCH",
-        headers: {
-          "X-CSRFToken": csrftoken,
-          // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
-        },
-        credentials: "include",
+      const data = await clienteAPI("/api/ferreteria/", {
+        method: "PATCH",
+        // NO incluir Content-Type, dejar que el navegador lo establezca automáticamente para FormData
         body: formData,
       })
 
-      if (!res.ok) throw new Error("Error al guardar configuración")
-
-      const data = await res.json()
       setConfig(data)
-      setEsNueva(false)
-      // Subir logo ARCA si fue seleccionado (va por endpoint dedicado)
-      if (config.logo_arca_file) {
-        const fd = new FormData()
-        fd.append('logo_arca', config.logo_arca_file)
-        const r2 = await fetch('/api/productos/subir-logo-arca/', {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrftoken },
-          credentials: 'include',
-          body: fd,
-        })
-        if (!r2.ok) {
-          const errText = await r2.text().catch(() => '')
-          throw new Error('Error al subir logo ARCA: ' + errText)
-        }
-      }
+      setOriginalConfig(data) // Actualizar copia original
 
-      setFeedback("Configuración guardada correctamente")
-
-      // Limpiar feedback después de 3 segundos
-      setTimeout(() => setFeedback(""), 3000)
+      toast.success("Configuración guardada correctamente")
     } catch (error) {
       console.error("Error guardando configuración:", error)
-      setFeedback("Error al guardar la configuración")
+      toast.error("Error al guardar la configuración")
     } finally {
       setSaving(false)
+      setModalSeguridad({ open: false, mensaje: "", onConfirm: null })
     }
   }
 
+  const handleGuardarClick = (seccion) => {
+    if (seccion === 'fiscal') {
+      if (config.cuit_cuil !== originalConfig.cuit_cuil) {
+        setModalSeguridad({
+          open: true,
+          mensaje: "Estás a punto de modificar el CUIT de la empresa. Esto afecta la facturación electrónica.",
+          onConfirm: () => handleSave()
+        });
+        return;
+      }
+    }
+    
+    if (seccion === 'arca') {
+      if (config.certificado_arca_file || config.clave_privada_arca_file) {
+        setModalSeguridad({
+          open: true,
+          mensaje: "Estás a punto de modificar los certificados de facturación de ARCA. Asegurate de que correspondan a tu CUIT y Punto de Venta.",
+          onConfirm: () => handleSave()
+        });
+        return;
+      }
+    }
+    
+    handleSave();
+  }
+
   const handleLogout = useCallback(() => {
-    setUser(null)
-    window.location.href = "/login/"
-  }, [])
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
+  }, [logout])
 
   const tabs = [
     {
       key: "negocio",
-      label: "Información del Negocio"
+      label: "Negocio"
     },
     {
       key: "fiscal",
-      label: "Configuración Fiscal"
+      label: "Fiscal"
     },
     {
       key: "sistema",
-      label: "Configuración de Sistema"
+      label: "Operación"
     },
     {
       key: "arca",
-      label: "Configuración ARCA"
+      label: "ARCA"
     },
     {
       key: "maestros_clientes",
-      label: "Maestros"
+      label: "Datos Maestros"
     }
   ]
 
   const renderActiveTab = () => {
     // Si el usuario no es admin y está en la pestaña ARCA, redirigir a negocio
-    if (activeTab === "arca" && !user?.is_staff) {
+    if (activeTab === "arca" && !esAdminTenant) {
       setActiveTab("negocio")
-      return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+      return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
     }
 
     switch (activeTab) {
       case "negocio":
-        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
       case "fiscal":
-        return <ConfiguracionFiscal config={config} onConfigChange={handleConfigChange} loading={loading} />
+        return <ConfiguracionFiscal config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
       case "notificaciones":
         return <Notificaciones config={config} onConfigChange={handleConfigChange} loading={loading} />
       case "sistema":
-        return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} />
+        return <ConfiguracionSistema config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
       case "arca":
-        return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} />
+        return <ConfiguracionARCA config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
       case "maestros_clientes": {
         const { datos } = obtenerColeccionActual()
         const datosVisibles = ocultarInactivos ? datos.filter((d) => d.activo === "S") : datos
@@ -822,8 +764,8 @@ const ConfiguracionManager = () => {
                     key={cat}
                     onClick={() => setCatalogoSeleccionado(cat)}
                     className={`${catalogoSeleccionado === cat
-                      ? "bg-slate-600 text-white shadow-lg ring-1 ring-slate-400 font-bold"
-                      : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+                      ? "bg-slate-700 text-white shadow-md font-semibold"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 border border-slate-200"
                       } px-4 py-2 rounded-lg transition-all text-sm`}
                   >
                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -832,7 +774,7 @@ const ConfiguracionManager = () => {
               </div>
 
               <div className="ml-auto flex items-center gap-2">
-                <label className="flex items-center gap-1 text-sm text-slate-700">
+                <label className="flex items-center gap-1 text-sm text-slate-600 font-medium">
                   <input type="checkbox" checked={ocultarInactivos} onChange={(e) => setOcultarInactivos(e.target.checked)} />
                   Ocultar inactivos
                 </label>
@@ -850,27 +792,27 @@ const ConfiguracionManager = () => {
         )
       }
       default:
-        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} />
+        return <InformacionNegocio config={config} onConfigChange={handleConfigChange} loading={loading} onSave={handleGuardarClick} saving={saving} />
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className={theme.fondo}>
       <Navbar user={user} onLogout={handleLogout} />
 
-      <div className="py-8 px-4">
+      <div className="py-8 px-4 relative z-10">
         <div className="max-w-[1400px] w-full mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-slate-800">Configuración del Sistema</h2>
           </div>
 
-          {/* Contenedor principal blanco */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
-            {/* Tabs tipo browser - Encabezado azul oscuro */}
-            <div className="flex items-center border-b border-slate-700 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
+          {/* Contenedor principal estilo browser - Blanco con bordes slate */}
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
+            {/* Tabs tipo browser - Encabezado oscuro azul/gris */}
+            <div className="flex items-center border-b border-slate-200 px-6 pt-3 bg-gradient-to-r from-slate-800 to-slate-700">
               {tabs.map((tab) => {
                 // Solo mostrar pestaña ARCA a usuarios admin
-                if (tab.key === "arca" && !user?.is_staff) {
+                if (tab.key === "arca" && !esAdminTenant) {
                   return null
                 }
 
@@ -895,28 +837,17 @@ const ConfiguracionManager = () => {
               {renderActiveTab()}
             </div>
 
-            {/* Botones de acción (ocultos en pestaña Maestros para mantener la UX) */}
-            {activeTab !== "maestros_clientes" && (
-              <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 px-6 pb-6">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className={`px-6 py-3 ${theme.botonPrimario} rounded-xl`}
-                >
-                  {saving ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Guardando...
-                    </>
-                  ) : (
-                    "Guardar Configuración"
-                  )}
-                </button>
-              </div>
-            )}
+            {/* Modal de Peligro (Confirmación Estricta) */}
+            <ConfirmacionPeligroModal
+              isOpen={modalSeguridad.open}
+              mensaje={modalSeguridad.mensaje}
+              onClose={() => setModalSeguridad({ open: false, mensaje: "", onConfirm: null })}
+              onConfirm={() => {
+                if (modalSeguridad.onConfirm) {
+                  modalSeguridad.onConfirm();
+                }
+              }}
+            />
 
             {/* Modal de Maestros */}
             {modalMaestro.open && (
@@ -932,16 +863,6 @@ const ConfiguracionManager = () => {
                 onSubmit={(values) => guardarModal(values)}
               />
             )}
-
-            {/* Feedback */}
-            {feedback && (
-              <div className={`mx-6 mb-6 text-center p-4 rounded-xl ${feedback.includes("Error")
-                ? "bg-red-50 border border-red-200 text-red-700"
-                : "bg-emerald-50 border border-emerald-200 text-emerald-700"
-                }`}>
-                {feedback}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -950,3 +871,7 @@ const ConfiguracionManager = () => {
 }
 
 export default ConfiguracionManager 
+
+
+
+

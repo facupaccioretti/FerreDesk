@@ -928,7 +928,7 @@ const ClienteForm = ({
                       )}
                     </select>
                   </FilaEditable>
-                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, disabled: esModoProduccion && (camposAutocompletados.razon || String(form.cuit || '').length === LONGITUD_CUIT_COMPLETO), className: `${CLASES_INPUT}` }} value={form.razon} onChange={handleChange} />
+                  <FilaEditable etiqueta="Razón Social *" inputProps={{ name: "razon", required: true, className: `${CLASES_INPUT}` }} value={form.razon} onChange={handleChange} />
                   <FilaEditable etiqueta="Nombre Comercial" inputProps={{ name: "fantasia" }} value={form.fantasia} onChange={handleChange} />
                   <FilaEditable etiqueta="IB" inputProps={{ name: "ib", maxLength: 10 }} value={form.ib} onChange={handleChange} />
                   <FilaEditable etiqueta="Estado">

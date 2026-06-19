@@ -1,59 +1,100 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useSessionUserQuery } from "../domains/session/useSessionUserQuery";
+import { useSetupStatusQuery } from "../domains/setup/useSetupStatusQuery";
+import AppShell from "../layouts/AppShell";
+
+const HOSTS_PUBLICOS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
+    "www",
+    "staging",
+    "dev",
+    "test",
+    "demo",
+    "sandbox",
+    "beta",
+    "alpha",
+    "prod",
+    "production",
+    "qa",
+    "uat",
+    "preview",
+]);
+
+export function esHostTenantValido(hostname) {
+    if (!hostname) {
+        return false;
+    }
+
+    const hostnameNormalizado = hostname.toLowerCase();
+    if (HOSTS_PUBLICOS.has(hostnameNormalizado)) {
+        return false;
+    }
+
+    if (
+        hostnameNormalizado.endsWith(".localhost") ||
+        hostnameNormalizado.endsWith(".lvh.me")
+    ) {
+        return true;
+    }
+
+    const partes = hostnameNormalizado.split(".");
+    if (partes.length < 3) {
+        return false;
+    }
+
+    return !SUBDOMINIOS_PUBLICOS_RESERVADOS.has(partes[0]);
+}
 
 /**
- * Componente que protege las rutas de la aplicación.
- * Verifica la autenticación del usuario y si la ferretería está configurada.
+ * Protege rutas tenant distinguiendo autenticacion y setup minimo.
  */
-export default function RutaPrivada({ children }) {
-    const [cargando, setCargando] = useState(true);
-    const [estaAutenticado, setEstaAutenticado] = useState(false);
-    const [estaConfigurado, setEstaConfigurado] = useState(true);
-    const navegar = useNavigate();
+export default function RutaPrivada({
+    children,
+    hostnameActual = window.location.hostname,
+    permitirSetupIncompleto = false,
+}) {
+    const {
+        isLoading: cargandoSesion,
+        isAuthenticated,
+    } = useSessionUserQuery();
+    const {
+        isLoading: cargandoSetup,
+        setupCompleto,
+    } = useSetupStatusQuery({
+        enabled: esHostTenantValido(hostnameActual) && isAuthenticated,
+    });
+    const location = useLocation();
+    const hostTenantValido = esHostTenantValido(hostnameActual)
+    const cargando = hostTenantValido && (cargandoSesion || (isAuthenticated && cargandoSetup))
 
-    useEffect(() => {
-        const verificarEstado = async () => {
-            try {
-                // 1. Verificar Autenticación del Usuario
-                const respuestaUsuario = await fetch("/api/user/", { credentials: "include" });
-                if (respuestaUsuario.status !== 200) throw new Error("No autenticado");
-                setEstaAutenticado(true);
+    if (cargando) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+            </div>
+        );
+    }
 
-                // 2. Verificar Configuración del Negocio
-                const respuestaFerreteria = await fetch("/api/ferreteria/", { credentials: "include" });
-                if (respuestaFerreteria.ok) {
-                    const datosFerreteria = await respuestaFerreteria.json();
-                    if (datosFerreteria.no_configurada === true) {
-                        setEstaConfigurado(false);
-                        // Si el sistema no está configurado, forzar redirección al asistente
-                        if (window.location.pathname !== '/setup') {
-                            navegar("/setup");
-                        }
-                    } else {
-                        setEstaConfigurado(true);
-                    }
-                }
-            } catch (error) {
-                setEstaAutenticado(false);
-                navegar("/login/");
-            } finally {
-                setCargando(false);
-            }
-        };
+    if (!hostTenantValido) {
+        return <Navigate to="/" replace />;
+    }
 
-        verificarEstado();
-    }, [navegar]);
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    }
 
-    if (cargando) return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-        </div>
-    );
+    if (
+        !setupCompleto &&
+        !permitirSetupIncompleto &&
+        location.pathname !== "/setup"
+    ) {
+        return <Navigate to="/setup" replace />;
+    }
 
-    if (!estaAutenticado) return null;
+    if (setupCompleto && location.pathname === "/setup") {
+        return <Navigate to="/home" replace />;
+    }
 
-    // Bloquear acceso a rutas protegidas si falta configuración inicial
-    if (!estaConfigurado && window.location.pathname !== '/setup') return null;
-
-    return children;
+    return <AppShell>{children}</AppShell>;
 }

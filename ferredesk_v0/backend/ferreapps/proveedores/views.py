@@ -1,11 +1,14 @@
 from django.shortcuts import render
-from rest_framework import viewsets, permissions, status, serializers as drf_serializers
+from rest_framework import viewsets, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import ProtectedError
 from ferreapps.productos.models import Proveedor
 from .serializers import ProveedorSerializer, HistorialImportacionProveedorSerializer
-from .models import HistorialImportacionProveedor
+from .models import HistorialImportacionProveedor, SolicitudCargaInicialProveedor
+from .services.carga_inicial_proveedor_service import (
+    crear_solicitud_carga_inicial_pendiente,
+)
 # Importaciones para transacciones atómicas
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -26,8 +29,7 @@ from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
 logger = logging.getLogger('ferredesk_arca.procesar_cuit_arca_proveedores')
 
 # Modelos y serializers de productos reutilizados
-from ferreapps.productos.models import Stock, StockProve, ProductoTempID
-from ferreapps.productos.serializers import StockSerializer, StockProveSerializer
+from ferreapps.productos.models import Stock, StockProve
 
 # Create your views here.
 
@@ -325,7 +327,7 @@ class CargaInicialProveedorPreviaAPIView(APIView):
         return Response(respuesta)
 
 
-class CargaInicialProveedorImportAPIView(APIView):
+class CargaInicialProveedorImportSincronicaLegacyAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
@@ -545,6 +547,72 @@ class CargaInicialProveedorImportAPIView(APIView):
         }, status=201 if creados > 0 else 200)
 
 
+# Nueva definicion activa: reemplaza el flujo sincronico anterior sin borrar el bloque
+# legacy, evitando ejecutar altas pesadas dentro del request web.
+class CargaInicialProveedorImportAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, proveedor_id):
+        proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+        if not proveedor:
+            return Response({'detail': 'Proveedor no encontrado.'}, status=404)
+
+        data = request.data if isinstance(request.data, dict) else {}
+        filas = data.get('filas') or data.get('rows') or []
+        params = data.get('parametros_lote') or {}
+        idaliiva_id = params.get('idaliiva_id')
+        margen = params.get('margen')
+
+        if not isinstance(filas, list) or not filas:
+            return Response({'detail': 'No hay filas validas para importar.'}, status=400)
+        if not idaliiva_id:
+            return Response({'detail': 'Falta idaliiva_id.'}, status=400)
+        try:
+            Decimal(str(margen))
+        except Exception:
+            return Response({'detail': 'Margen invalido.'}, status=400)
+
+        solicitud, _creada = crear_solicitud_carga_inicial_pendiente(
+            proveedor=proveedor,
+            usuario=request.user,
+            nombre_archivo=data.get('nombre_archivo') or 'carga_inicial',
+            parametros_lote=params,
+            filas_validas=filas,
+            totales_preview=data.get('totales_preview') or data.get('totales') or {},
+        )
+        return Response({
+            'message': 'Importacion iniciada.',
+            'solicitud_id': solicitud.id,
+            'estado': solicitud.estado,
+            'modo_procesamiento': 'diferido',
+        }, status=status.HTTP_202_ACCEPTED)
+
+
+class CargaInicialProveedorEstadoAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, proveedor_id, solicitud_id):
+        solicitud = SolicitudCargaInicialProveedor.objects.filter(
+            id=solicitud_id,
+            proveedor_id=proveedor_id,
+        ).first()
+        if not solicitud:
+            return Response({'detail': 'Solicitud no encontrada.'}, status=404)
+
+        return Response({
+            'id': solicitud.id,
+            'estado': solicitud.estado,
+            'registros_procesados': solicitud.registros_procesados,
+            'registros_creados': solicitud.registros_creados,
+            'registros_saltados': solicitud.registros_saltados,
+            'mensaje_error': solicitud.mensaje_error,
+            'creado_en': solicitud.creado_en,
+            'actualizado_en': solicitud.actualizado_en,
+            'iniciado_en': solicitud.iniciado_en,
+            'finalizado_en': solicitud.finalizado_en,
+        })
+
+
 # ============================================================================
 # ENDPOINTS PARA VALIDACIÓN DE CUIT Y CONSULTA AL PADRÓN ARCA
 # ============================================================================
@@ -579,7 +647,7 @@ class ValidarCUITProveedorAPIView(APIView):
         from ferreapps.clientes.algoritmo_cuit_utils import validar_formato_cuit, formatear_cuit, obtener_tipo_contribuyente, limpiar_cuit
         
         ferreteria = Ferreteria.objects.first()
-        es_homologacion = ferreteria and ferreteria.modo_arca == 'HOM'
+        es_homologacion = ferreteria and ferreteria.obtener_modo_arca_operativo() == 'HOM'
         
         # En homologación, solo validar el formato (11 dígitos), no el dígito verificador
         if es_homologacion:

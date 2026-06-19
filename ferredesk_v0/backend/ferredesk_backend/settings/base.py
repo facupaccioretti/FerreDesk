@@ -1,19 +1,40 @@
 from pathlib import Path
 import os
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
 
-INSTALLED_APPS = [
+
+def env_bool(nombre, default=False):
+    valor = os.environ.get(nombre)
+    if valor is None:
+        return default
+    return valor.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+SHARED_APPS = (
+    'django_tenants',
+    'django.contrib.contenttypes',
+    'django.contrib.staticfiles',
+    'django.contrib.postgres',  # Habilita GinIndex y búsquedas trigram en PostgreSQL
+    'tenants',
+    'acceso_publico',
+    'rest_framework',
+    'django_filters',
+    'django_extensions',
+    'corsheaders',
+    'axes',
+)
+
+TENANT_APPS = (
+    # Auth y sesiones viven en tenant porque el usuario custom depende de Ferreteria,
+    # que es un modelo de negocio tenant-only.
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
-
-    # Apps propias
     'ferreapps.usuarios',
     'ferreapps.productos',
     'ferreapps.proveedores',
@@ -28,26 +49,32 @@ INSTALLED_APPS = [
     'ferreapps.cuenta_corriente',
     'ferreapps.caja',
     'ferreapps.sistema',
+)
 
-    'rest_framework',
-    'django_filters',
-    'django_extensions',
-    'corsheaders',
-]
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'ferredesk_backend.utils.middlewares.HealthCheckBypassMiddleware',
+    'django_tenants.middleware.main.TenantMainMiddleware',
+    'ferredesk_backend.utils.middlewares.SuscripcionMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'ferreapps.clientes.middleware.CsrfExemptMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'ferredesk_backend.urls'
+PUBLIC_SCHEMA_URLCONF = 'ferredesk_backend.urls_public'
+TENANT_MODEL = 'tenants.EmpresaTenant'
+TENANT_DOMAIN_MODEL = 'tenants.Dominio'
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 
 # TEMPLATES — AHORA EN BASE.PY
 TEMPLATES = [
@@ -78,11 +105,18 @@ TIME_ZONE = 'America/Argentina/Buenos_Aires'
 USE_I18N = True
 USE_TZ = True
 
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "usuarios.Usuario"
+# En desarrollo mantenemos backend de consola para no depender de SMTP externo.
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@ferredesk.local")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -101,3 +135,14 @@ REST_FRAMEWORK = {
 PRODUCTO_DENOMINACION_MAX_CARACTERES = 50
 TAM_PAGINA_POR_DEFECTO = 10
 TAM_PAGINA_MAXIMA = 200
+IMPORTACION_LISTA_MAX_FILAS_SYNC = int(os.environ.get("IMPORTACION_LISTA_MAX_FILAS_SYNC", "5000"))
+IMPORTACION_LISTA_MAX_BYTES_SYNC = int(os.environ.get("IMPORTACION_LISTA_MAX_BYTES_SYNC", str(5 * 1024 * 1024)))
+
+# Django Axes
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(hours=1)
+AXES_LOCKOUT_CALLABLE = None

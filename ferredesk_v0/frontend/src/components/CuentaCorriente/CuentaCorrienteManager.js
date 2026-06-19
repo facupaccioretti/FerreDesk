@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import CuentaCorrienteList from "./CuentaCorrienteList"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 const CuentaCorrienteManager = () => {
   const theme = useFerreDeskTheme()
@@ -21,20 +23,15 @@ const CuentaCorrienteManager = () => {
   })
   const [completo, setCompleto] = useState(false)
 
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
 
   useEffect(() => {
     document.title = "Cuentas Corrientes - FerreDesk"
-    // Info usuario (para Navbar)
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
   }, [])
 
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   }

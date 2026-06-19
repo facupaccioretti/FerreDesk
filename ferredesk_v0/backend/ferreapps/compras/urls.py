@@ -18,6 +18,7 @@ urlpatterns = [
     # Endpoints adicionales
     path('compras/proveedores/activos/', views.proveedores_activos, name='proveedores-activos'),
     path('compras/proveedores/<int:proveedor_id>/productos/', views.productos_por_proveedor, name='productos-por-proveedor'),
+    path('compras/productos/lookup/', views.ProductoLookupCompraAPIView.as_view(), name='compras-producto-lookup'),
     path('compras/productos/buscar-codigo/', views.buscar_producto_por_codigo_proveedor, name='buscar-producto-codigo'),
     path('compras/alicuotas-iva/', views.alicuotas_iva, name='alicuotas-iva'),
     

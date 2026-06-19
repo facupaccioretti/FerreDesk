@@ -3,21 +3,16 @@ import Navbar from './Navbar';
 import ProductosMasVendidos from './Dashboards/ProductosMasVendidos';
 import VentasPorDia from './Dashboards/VentasPorDia';
 import ClientesMasVentas from './Dashboards/ClientesMasVentas';
+import { useLogoutMutation } from '../domains/session/useLogoutMutation';
+import { useSessionUserQuery } from '../domains/session/useSessionUserQuery';
 
 const DashboardsManager = () => {
   const [selectedDashboard, setSelectedDashboard] = useState(null);
-  const [user, setUser] = useState(null);
+  const { user } = useSessionUserQuery();
+  const { logout } = useLogoutMutation();
 
   useEffect(() => {
     document.title = "Dashboards FerreDesk"
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
   }, []);
 
   // Tipos de dashboards disponibles (memoizado para no recrear en cada render)
@@ -116,9 +111,10 @@ const DashboardsManager = () => {
   }, []);
 
   const handleLogout = useCallback(() => {
-    setUser(null)
-    window.location.href = "/login/"
-  }, []);
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
+  }, [logout]);
 
   // Componente de tarjeta individual
   const TarjetaDashboard = React.memo(function TarjetaDashboard({ card, onClick }) {

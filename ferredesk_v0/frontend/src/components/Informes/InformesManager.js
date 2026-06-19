@@ -4,24 +4,21 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../Navbar';
 import StockBajoList from './StockBajoList';
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation";
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery";
 
 const InformesManager = () => {
   const theme = useFerreDeskTheme();
-  const [user, setUser] = useState(null);
+  const { user } = useSessionUserQuery();
+  const { logout } = useLogoutMutation();
   const [activeTab, setActiveTab] = useState("stock-bajo");
 
   useEffect(() => {
     document.title = "Informes - FerreDesk";
-    // Info usuario (para Navbar)
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
   }, []);
 
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   };

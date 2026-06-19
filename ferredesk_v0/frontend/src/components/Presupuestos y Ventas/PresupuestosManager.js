@@ -35,6 +35,10 @@ import VendedoresTab from "./VendedoresTab"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import EliminadorResiduoModal from "./EliminadorResiduoModal"
 import ModalTicketVenta from "./ModalTicketVenta"
+import useCajaAPI from "../../utils/useCajaAPI"
+import { toast } from "react-toastify"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 
 
@@ -46,33 +50,34 @@ const PresupuestosManager = () => {
   const theme = useFerreDeskTheme()
 
   // Estado y fetch para el usuario
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   const navigate = useNavigate()
 
   // Hook para generación de PDFs
   const { descargarPDF } = useGeneradorPDF();
 
   // Hook para obtener la configuración de la ferretería
-  const { ferreteria, loading: loadingFerreteria } = useFerreteriaAPI();
-
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
+  const {
+    ferreteria,
+    loading: loadingFerreteria,
+    bloqueoTotalSetup,
+    camposSetupFaltantes,
+    arcaListoParaEmitir,
+  } = useFerreteriaAPI();
 
   const handleLogout = () => {
-    setUser(null)
-    window.location.href = "/login/"
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
   }
 
   useEffect(() => {
     document.title = "Presupuestos y Ventas FerreDesk"
   }, [])
 
-  const { ventas, error: ventasError, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
+  const { ventas, error: ventasError, pagination: ventasPagination, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
+  const { obtenerMiCaja } = useCajaAPI()
 
   // Ya no necesitamos cargar productos, familias y proveedores porque ItemsGrid hace búsquedas a demanda
   const productos = []
@@ -198,6 +203,7 @@ const PresupuestosManager = () => {
     ventas,
     productos,
     clientes,
+    pagination: ventasPagination,
     fetchVentas,
   })
 
@@ -249,6 +255,20 @@ const PresupuestosManager = () => {
 
 
   // Acciones
+  const validarCajaAntesDeOperar = async (mensaje) => {
+    try {
+      const miCaja = await obtenerMiCaja()
+      if (miCaja?.tiene_caja_abierta) {
+        return true
+      }
+      toast.error(mensaje)
+      return false
+    } catch (err) {
+      toast.error(err.message || "No se pudo validar el estado de caja.")
+      return false
+    }
+  }
+
   const handleNuevo = () => {
     const newKey = `nuevo-${Date.now()}`
     openTab(newKey, "Nuevo Presupuesto")
@@ -256,12 +276,17 @@ const PresupuestosManager = () => {
     localStorage.removeItem("presupuestoFormDraft")
   }
 
-  const handleNuevaVenta = () => {
+  const handleNuevaVenta = async () => {
+    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una venta.")
+    if (!puedeOperar) return
+
     const newKey = `nueva-venta-${Date.now()}`
     openTab(newKey, "Nueva Venta")
     setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
     localStorage.removeItem("ventaFormDraft")
   }
+
+  const mostrarBloqueoSetup = !loadingFerreteria && bloqueoTotalSetup
 
   const handleNuevaNotaCredito = () => {
     // Agregar validación de comprobantes NC disponibles
@@ -279,7 +304,10 @@ const PresupuestosManager = () => {
     setModalClienteNCAbierto(true)
   }
 
-  const handleNuevaNotaDebito = () => {
+  const handleNuevaNotaDebito = async () => {
+    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una nota de debito.")
+    if (!puedeOperar) return
+
     const tiposND = ['nota_debito', 'nota_debito_interna']
     const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
     if (comprobantesND.length === 0) {
@@ -290,7 +318,10 @@ const PresupuestosManager = () => {
     setModalClienteNDAbierto(true)
   }
 
-  const handleNuevaExtensionContenido = () => {
+  const handleNuevaExtensionContenido = async () => {
+    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una extension de contenido.")
+    if (!puedeOperar) return
+
     const tiposND = ['nota_debito_interna']
     const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
     if (comprobantesND.length === 0) {
@@ -427,6 +458,37 @@ const PresupuestosManager = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-800">Gestión de Presupuestos y Ventas</h2>
             </div>
+            {mostrarBloqueoSetup ? (
+              <div className="bg-white rounded-xl shadow-lg border border-amber-200 overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500"></div>
+                <div className="p-8">
+                  <div className="max-w-3xl">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 mb-4">
+                      Setup básico pendiente
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-800 mb-3">
+                      Completa la configuración fiscal básica antes de operar
+                    </h3>
+                    <p className="text-slate-700 mb-4">
+                      Por favor, completa los datos fiscales básicos de tu negocio en Configuración para poder operar.
+                    </p>
+                    {camposSetupFaltantes.length > 0 && (
+                      <p className="text-sm text-slate-600 mb-6">
+                        Campos faltantes: {camposSetupFaltantes.join(", ")}.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigate("/setup")}
+                      className="px-5 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+                    >
+                      Ir a completar setup
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <>
             {/* Errores no se muestran en página; se alertan vía useEffect(ventasError) */}
             <div className="flex-1 flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 max-w-full">
               {/* Tabs tipo browser - Encabezado azul oscuro */}
@@ -578,6 +640,8 @@ const PresupuestosManager = () => {
                       initialData={null}
                       readOnlyOverride={false}
                       comprobantes={comprobantes}
+                      ferreteria={ferreteria}
+                      arcaListoParaEmitir={arcaListoParaEmitir}
                       tiposComprobante={tiposComprobante}
                       tipoComprobante={tipoComprobante}
                       setTipoComprobante={setTipoComprobante}
@@ -588,7 +652,6 @@ const PresupuestosManager = () => {
                       puntosVenta={puntosVenta}
                       loadingComprobantes={loadingComprobantes}
                       errorComprobantes={errorComprobantes}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}
@@ -632,7 +695,6 @@ const PresupuestosManager = () => {
                       vendedores={vendedores}
                       sucursales={sucursales}
                       puntosVenta={puntosVenta}
-                      productos={productos}
                       proveedores={proveedores}
                       alicuotas={alicuotas}
                       autoSumarDuplicados={autoSumarDuplicados}
@@ -687,7 +749,6 @@ const PresupuestosManager = () => {
                       vendedores={vendedores}
                       sucursales={[{ id: 1, nombre: "Casa Central" }]}
                       puntosVenta={[{ id: 1, nombre: "PV 1" }]}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}
@@ -758,7 +819,6 @@ const PresupuestosManager = () => {
                       puntosVenta={puntosVenta}
                       loadingComprobantes={loadingComprobantes}
                       errorComprobantes={errorComprobantes}
-                      productos={productos}
                       loadingProductos={loadingProductos}
                       familias={familias}
                       loadingFamilias={loadingFamilias}
@@ -784,7 +844,7 @@ const PresupuestosManager = () => {
                         key={tab.key}
                         presupuestoOrigen={tab.data.presupuestoOrigen}
                         itemsSeleccionados={tab.data.itemsSeleccionados}
-                        onSave={async (payload, tk) => {
+                      onSave={async (payload, tk) => {
                           const resultado = await handleConVentaFormSave(payload, tk)
                           // Solo cerrar la pestaña si no hay emisión ARCA o si ya se procesó
                           if (!resultado?.arca_emitido) {
@@ -794,7 +854,8 @@ const PresupuestosManager = () => {
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        ferreteria={ferreteria}
+                        arcaListoParaEmitir={arcaListoParaEmitir}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -840,7 +901,8 @@ const PresupuestosManager = () => {
                         }}
                         onCancel={() => handleConVentaFormCancel(tab.key)}
                         comprobantes={comprobantes}
-                        ferreteria={null}
+                        ferreteria={ferreteria}
+                        arcaListoParaEmitir={arcaListoParaEmitir}
                         clientes={clientes}
                         plazos={plazos}
                         vendedores={vendedores}
@@ -868,6 +930,8 @@ const PresupuestosManager = () => {
                 )}
               </div>
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

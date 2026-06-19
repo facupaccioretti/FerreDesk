@@ -15,6 +15,8 @@ import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 const MAIN_TAB_KEY = "compras"
 const ORDENES_TAB_KEY = "ordenes-compra"
@@ -22,7 +24,8 @@ const ORDENES_TAB_KEY = "ordenes-compra"
 const ComprasManager = () => {
   const theme = useFerreDeskTheme()
   
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -136,17 +139,10 @@ const ComprasManager = () => {
 
   const sucursales = [{ id: 1, nombre: "Casa Central" }]
 
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
-
   const handleLogout = () => {
-    setUser(null)
-    window.location.href = "/login/"
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
   }
 
   useEffect(() => {

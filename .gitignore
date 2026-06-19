@@ -99,6 +99,8 @@ venv/
 env/
 ENV/
 .env
+ferredesk_v0/ferredesk-staging.env
+ferredesk_v0/local.env
 
 # Migraciones (opcional)
 # **/migrations/*.py
@@ -205,3 +207,7 @@ htmlcov/
 
 # Librería externa ARCA
 arca_arg/
+
+# Curso / Codebase to Course
+codebase_to_course/
+.documentos/

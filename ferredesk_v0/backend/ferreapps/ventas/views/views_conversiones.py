@@ -26,6 +26,7 @@ from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
 from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+from ferreapps.productos.setup import requerir_setup_completo
 from .utils_stock import (
     _obtener_proveedor_habitual_stock,
     _obtener_codigo_venta,
@@ -476,6 +477,7 @@ def _gestionar_emision_arca(nueva_factura, tipo_comprobante, factura_interna_id,
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@requerir_setup_completo
 def convertir_presupuesto_a_venta(request):
     try:
         with transaction.atomic():
@@ -1001,6 +1003,7 @@ def convertir_presupuesto_a_venta(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
+@requerir_setup_completo
 def convertir_factura_interna_a_fiscal(request):
     """
     Convierte una factura interna a factura fiscal.

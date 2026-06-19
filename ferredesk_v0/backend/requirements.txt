@@ -1,5 +1,6 @@
 #Se cambió Pillow a 11.2.1 para evitar errores de instalación en Windows
 Django==5.0.1
+django-tenants==3.7.0
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 python-dotenv==1.0.0
@@ -20,3 +21,7 @@ qrcode==8.2
 pyexcel-xls==0.7.1
 pyexcel-xlsx==0.6.1
 whitenoise==6.6.0
+django-axes==6.4.0
+gunicorn==21.2.0
+django-storages==1.14.4
+boto3==1.34.144

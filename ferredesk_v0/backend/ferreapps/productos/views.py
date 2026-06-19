@@ -6,9 +6,10 @@ from rest_framework.response import Response
 from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID, PrecioProductoLista, ListaPrecio
 from .serializers import (
     StockSerializer,
+    ProductoLookupRapidoSerializer,
     ProveedorSerializer,
     StockProveSerializer,
     FamiliaSerializer,
@@ -20,6 +21,11 @@ from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
 from django.db.models import Q
+from django.db.models import Prefetch, OuterRef, Subquery, IntegerField, Value, Case, When
+import logging
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
+from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 import logging
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
@@ -28,16 +34,25 @@ from django.db.models.functions import Lower
 import os
 import pyexcel as pe
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from django.views.decorators.cache import cache_page
+
 from django.conf import settings
 import mimetypes
 import base64
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
+from ferredesk_backend.permissions import EsAdminTenant
+from ferredesk_backend.utils.observability import medir_proceso
+from ferredesk_backend.views import serve_react_root_file
+from .services.importacion_lista_precios_service import (
+    LimiteImportacionSincronicaExcedido,
+    crear_importacion_pendiente_lista_precios,
+    importar_lista_precios_proveedor,
+)
 
 # Create your views here.
 
@@ -110,11 +125,34 @@ class StockViewSet(viewsets.ModelViewSet):
     }
     pagination_class = PaginacionPorPaginaConLimite
 
+    def _get_queryset_base(self):
+        return (
+            Stock.objects.con_stock_total()
+            .select_related(
+                'proveedor_habitual',
+                'idaliiva',
+                'idfam1',
+                'idfam2',
+                'idfam3',
+            )
+            .prefetch_related(
+                Prefetch(
+                    'stock_proveedores',
+                    queryset=StockProve.objects.select_related('proveedor').order_by('id'),
+                ),
+                Prefetch(
+                    'precios_listas',
+                    queryset=PrecioProductoLista.objects.select_related('usuario_carga_manual').order_by('lista_numero'),
+                    to_attr='precios_listas_prefetch',
+                ),
+            )
+        )
+
     def get_queryset(self):
         """
         Aplicar filtro de productos activos por defecto, búsqueda general y cálculos de stock.
         """
-        queryset = Stock.objects.con_stock_total()
+        queryset = self._get_queryset_base()
 
         # Búsqueda unificada por código (para el grid): param "codigo" busca en codvta O código de barras.
         # No usamos "codvta" aquí para evitar que DjangoFilterBackend aplique filtro extra y anule el OR.
@@ -175,6 +213,42 @@ class StockViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        codigo_unificado = request.query_params.get('codigo')
+        search_codigo_prov = request.query_params.get('search_codigo_proveedor')
+        termino_busqueda = request.query_params.get('search')
+
+        if codigo_unificado and codigo_unificado.strip():
+            tipo_busqueda = 'lookup_codigo'
+            termino = codigo_unificado.strip()
+        elif search_codigo_prov and search_codigo_prov.strip():
+            tipo_busqueda = 'search_codigo_proveedor'
+            termino = search_codigo_prov.strip()
+        elif termino_busqueda and termino_busqueda.strip():
+            tipo_busqueda = 'search_texto'
+            termino = termino_busqueda.strip()
+        else:
+            tipo_busqueda = 'listado_general'
+            termino = None
+
+        with medir_proceso(
+            'stock_listado_operativo_actual',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda=tipo_busqueda,
+            termino_busqueda=termino,
+            pagina=request.query_params.get('page'),
+            orden=request.query_params.get('orden', 'id'),
+            direccion=request.query_params.get('direccion', 'desc'),
+        ) as medicion:
+            response = super().list(request, *args, **kwargs)
+            payload = response.data
+            resultados = payload.get('results') if isinstance(payload, dict) else payload
+            cantidad_resultados = len(resultados) if isinstance(resultados, list) else 0
+            medicion.registrar_metricas(
+                cantidad_resultados=cantidad_resultados,
+                total_filtrado=payload.get('count') if isinstance(payload, dict) else cantidad_resultados,
+            )
+            return response
     def _busqueda_por_comodines(self, queryset, termino_busqueda):
         """
         Implementa búsqueda por comodines usando Django Q Objects.
@@ -199,14 +273,18 @@ class StockViewSet(viewsets.ModelViewSet):
         """Detalle optimizado: prefetch de relaciones necesarias para un único producto.
         Incluye proveedor habitual, alícuota e items de stock_proveedores con su proveedor.
         """
-        qs = (
-            Stock.objects
-            .select_related('proveedor_habitual', 'idaliiva')
-            .prefetch_related('stock_proveedores__proveedor')
-        )
+        qs = self._get_queryset_base()
         instance = get_object_or_404(qs, pk=kwargs.get(self.lookup_field, kwargs.get('pk')))
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['margenes_listas_precio'] = {
+            lista.numero: float(lista.margen_descuento)
+            for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+        }
+        return context
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -242,6 +320,154 @@ class StockViewSet(viewsets.ModelViewSet):
                 },
                 status=400
             )
+
+
+class PosProductoLookupAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        codigo = (request.query_params.get('codigo') or '').strip()
+        if not codigo:
+            return Response(
+                {'detail': 'Se requiere el parámetro codigo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        costo_habitual_subquery = (
+            StockProve.objects
+            .filter(
+                stock_id=OuterRef('pk'),
+                proveedor_id=OuterRef('proveedor_habitual_id'),
+            )
+            .order_by('-id')
+            .values('costo')[:1]
+        )
+
+        prioridad_lookup = Case(
+            When(codvta__iexact=codigo, then=Value(0)),
+            When(codigo_barras__iexact=codigo, then=Value(1)),
+            default=Value(2),
+            output_field=IntegerField(),
+        )
+
+        with medir_proceso(
+            'pos_producto_lookup_rapido',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda='lookup_codigo_exacto',
+            termino_busqueda=codigo,
+        ) as medicion:
+            producto = (
+                Stock.objects
+                .con_stock_total()
+                .select_related('idaliiva', 'proveedor_habitual')
+                .annotate(
+                    costo_habitual=Subquery(costo_habitual_subquery),
+                    prioridad_lookup=prioridad_lookup,
+                )
+                .filter(acti='S')
+                .filter(Q(codvta__iexact=codigo) | Q(codigo_barras__iexact=codigo))
+                .order_by('prioridad_lookup', 'id')
+                .first()
+            )
+
+            if producto is None:
+                medicion.registrar_metricas(cantidad_resultados=0, encontrado=False)
+                return Response(
+                    {'detail': 'Producto no encontrado.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            serializer = ProductoLookupRapidoSerializer(producto)
+            medicion.registrar_metricas(
+                cantidad_resultados=1,
+                encontrado=True,
+                producto_id=producto.id,
+                prioridad_lookup=getattr(producto, 'prioridad_lookup', None),
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PosProductoSearchAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    limite_por_defecto = 20
+    limite_maximo = 50
+
+    def _normalizar_limite(self, valor):
+        try:
+            limite = int(valor)
+        except (TypeError, ValueError):
+            return self.limite_por_defecto
+        return max(1, min(limite, self.limite_maximo))
+
+    def _aplicar_busqueda(self, queryset, termino):
+        if ' ' in termino:
+            palabras = [palabra.strip() for palabra in termino.split() if palabra.strip()]
+            query = Q()
+            for palabra in palabras:
+                query &= Q(codvta__icontains=palabra) | Q(deno__icontains=palabra)
+            return queryset.filter(query).distinct()
+
+        return queryset.filter(
+            Q(codvta__icontains=termino) | Q(deno__icontains=termino)
+        ).distinct()
+
+    def get(self, request):
+        termino = (request.query_params.get('q') or '').strip()
+        if not termino:
+            return Response(
+                {'detail': 'Se requiere el parámetro q.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        limite = self._normalizar_limite(request.query_params.get('limit'))
+
+        costo_habitual_subquery = (
+            StockProve.objects
+            .filter(
+                stock_id=OuterRef('pk'),
+                proveedor_id=OuterRef('proveedor_habitual_id'),
+            )
+            .order_by('-id')
+            .values('costo')[:1]
+        )
+
+        prioridad_busqueda = Case(
+            When(codvta__istartswith=termino, then=Value(0)),
+            When(deno__istartswith=termino, then=Value(1)),
+            When(codvta__icontains=termino, then=Value(2)),
+            When(deno__icontains=termino, then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+
+        with medir_proceso(
+            'pos_producto_busqueda_ligera',
+            usuario_id=getattr(request.user, 'id', None),
+            tipo_busqueda='search_texto_ligero',
+            termino_busqueda=termino,
+            limit=limite,
+        ) as medicion:
+            productos = list(
+                self._aplicar_busqueda(
+                    Stock.objects
+                    .con_stock_total()
+                    .select_related('idaliiva', 'proveedor_habitual')
+                    .annotate(
+                        costo_habitual=Subquery(costo_habitual_subquery),
+                        prioridad_busqueda=prioridad_busqueda,
+                    )
+                    .filter(acti='S'),
+                    termino,
+                )
+                .order_by('prioridad_busqueda', 'deno', 'id')[:limite]
+            )
+
+            serializer = ProductoLookupRapidoSerializer(productos, many=True)
+            medicion.registrar_metricas(
+                cantidad_resultados=len(productos),
+                limit=limite,
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')
@@ -279,12 +505,16 @@ class FamiliaFilter(FilterSet):
         model = Familia
         fields = ['deno', 'comentario', 'nivel', 'acti', 'search']
 
+# cache_page de 12hs: Familias y Alícuotas son datos maestros que rara vez cambian.
+# Se aplica solo a 'list' para no interferir con create/update/delete.
+@method_decorator(cache_page(60 * 60 * 12), name='list')
 class FamiliaViewSet(viewsets.ModelViewSet):
     queryset = Familia.objects.all()
     serializer_class = FamiliaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = FamiliaFilter
 
+@method_decorator(cache_page(60 * 60 * 12), name='list')
 class AlicuotaIVAViewSet(viewsets.ModelViewSet):
     queryset = AlicuotaIVA.objects.all()
     serializer_class = AlicuotaIVASerializer
@@ -293,7 +523,7 @@ class UploadListaPreciosProveedor(APIView):
     permission_classes = [permissions.IsAuthenticated]  # O ajusta según tu seguridad
 
     @transaction.atomic
-    def post(self, request, proveedor_id):
+    def post_legado(self, request, proveedor_id):
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
             return Response({'detail': 'Proveedor no encontrado.'}, status=404)
@@ -308,93 +538,16 @@ class UploadListaPreciosProveedor(APIView):
             return Response({'detail': 'No se envió archivo.'}, status=400)
 
         try:
-            # Detectar el tipo de archivo por la extensión
-            filename = excel_file.name
-            ext = os.path.splitext(filename)[1].lower().replace('.', '')
-            # Usar pyexcel para aceptar .xls, .xlsx, .ods, etc., pasando file_type explícitamente
-            sheet = pe.get_sheet(file_type=ext, file_content=excel_file.read())
-            # Elimina precios anteriores de este proveedor (opcional)
-            PrecioProveedorExcel.objects.filter(proveedor=proveedor).delete()
-
-            to_create = []
-            col_codigo_idx = ord(col_codigo) - 65
-            col_precio_idx = ord(col_precio) - 65
-            col_denominacion_idx = ord(col_denominacion) - 65
-            # Definir largo máximo permitido para denominación según el modelo
-            max_len_denominacion = (
-                PrecioProveedorExcel._meta.get_field('denominacion').max_length or 200
-            )
-            # Normalizador de código proveedor (idéntico a carga inicial por proveedor)
-            def normalizar_codigo_proveedor(texto):
-                if texto is None:
-                    return ''
-                if isinstance(texto, int):
-                    s = str(texto)
-                elif isinstance(texto, float):
-                    s = str(int(texto)) if float(texto).is_integer() else str(texto)
-                elif isinstance(texto, Decimal):
-                    s = str(int(texto)) if texto == texto.to_integral_value() else str(texto)
-                else:
-                    s = str(texto)
-                s = s.strip()
-                if re.fullmatch(r'\d+\.0+', s):
-                    s = s.split('.', 1)[0]
-                s = re.sub(r"\s+", " ", s)
-                return s[:100]
-            for i, row in enumerate(sheet.rows()):
-                if i + 1 < fila_inicio:
-                    continue
-                try:
-                    codigo = row[col_codigo_idx]
-                    precio = row[col_precio_idx]
-                    denominacion = row[col_denominacion_idx] if col_denominacion_idx < len(row) else None
-                except IndexError:
-                    continue
-                if codigo is not None and precio is not None:
-                    try:
-                        precio_float = float(str(precio).replace(',', '.').replace('$', '').strip())
-                        denominacion_str = str(denominacion).strip() if denominacion is not None else ''
-                        if denominacion_str and max_len_denominacion:
-                            denominacion_str = denominacion_str[:max_len_denominacion]
-                        codigo_norm = normalizar_codigo_proveedor(codigo)
-                        to_create.append(PrecioProveedorExcel(
-                            proveedor=proveedor,
-                            codigo_producto_excel=codigo_norm,
-                            precio=precio_float,
-                            denominacion=denominacion_str,
-                            nombre_archivo=excel_file.name
-                        ))
-                    except Exception as e:
-                        continue
-            # Filtrar duplicados: dejar solo el último precio para cada código
-            unique_map = {}
-            for obj in to_create:
-                key = (obj.proveedor_id, obj.codigo_producto_excel)
-                unique_map[key] = obj  # Si hay duplicados, se queda con el último
-            to_create = list(unique_map.values())
-
-            with transaction.atomic():
-                PrecioProveedorExcel.objects.bulk_create(to_create, batch_size=500)
-            precios_cargados = len(to_create)
-
-            # Actualizar costo y fecha_actualizacion en StockProve para los productos/proveedor de la lista
-            # que ya tienen un codigo_producto_proveedor asociado.
-            now = timezone.now()
-            registros_actualizados = 0
-            for item_excel in to_create:
-                actualizados = StockProve.objects.filter(
-                    proveedor=proveedor,
-                    codigo_producto_proveedor=normalizar_codigo_proveedor(item_excel.codigo_producto_excel)
-                ).update(costo=item_excel.precio, fecha_actualizacion=now)
-                registros_actualizados += int(actualizados)
-
-            # Registrar historial de importación en la app proveedores
-            HistorialImportacionProveedor.objects.create(
+            resultado = importar_lista_precios_proveedor(
                 proveedor=proveedor,
-                nombre_archivo=excel_file.name,
-                registros_procesados=precios_cargados,
-                registros_actualizados=registros_actualizados,
+                excel_file=excel_file,
+                col_codigo=col_codigo,
+                col_precio=col_precio,
+                col_denominacion=col_denominacion,
+                fila_inicio=fila_inicio,
             )
+            precios_cargados = resultado['precios_cargados']
+            registros_actualizados = resultado['registros_actualizados']
 
             return Response({
                 'message': (
@@ -406,6 +559,153 @@ class UploadListaPreciosProveedor(APIView):
             }, status=201)
         except Exception as e:
             return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
+
+    def post(self, request, proveedor_id):
+        with medir_proceso(
+            "endpoint_upload_lista_precios_proveedor",
+            proveedor_id=proveedor_id,
+            usuario_id=getattr(request.user, 'id', None),
+            metodo=request.method,
+        ) as medicion:
+            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+            if not proveedor:
+                return Response({'detail': 'Proveedor no encontrado.'}, status=404)
+
+            excel_file = request.FILES.get('excel_file')
+            col_codigo = request.POST.get('col_codigo', 'A').upper()
+            col_precio = request.POST.get('col_precio', 'B').upper()
+            col_denominacion = request.POST.get('col_denominacion', 'C').upper()
+            fila_inicio = int(request.POST.get('fila_inicio', 2))
+
+            if not excel_file:
+                return Response({'detail': 'No se enviÃ³ archivo.'}, status=400)
+
+            try:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                medicion.registrar_metricas(
+                    importacion_id=importacion.id,
+                    archivo_bytes=getattr(excel_file, 'size', None) or 0,
+                    modo_procesamiento='diferido',
+                )
+                return Response(
+                    {
+                        'message': 'Importacion de lista iniciada.',
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
+            except Exception as e:
+                return Response({'detail': f'Error encolando el archivo: {str(e)}'}, status=400)
+
+            max_bytes_sync = getattr(settings, 'IMPORTACION_LISTA_MAX_BYTES_SYNC', 0)
+            archivo_bytes = getattr(excel_file, 'size', None) or 0
+            if max_bytes_sync and archivo_bytes > max_bytes_sync:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                return Response(
+                    {
+                        'message': (
+                            'La importacion es demasiado grande para el request web y quedo en cola '
+                            'para procesamiento diferido.'
+                        ),
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
+
+            try:
+                resultado = importar_lista_precios_proveedor(
+                    proveedor=proveedor,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                precios_cargados = resultado['precios_cargados']
+                registros_actualizados = resultado['registros_actualizados']
+                medicion.registrar_metricas(
+                    filas_procesadas=precios_cargados,
+                    registros_actualizados=registros_actualizados,
+                )
+
+                return Response({
+                    'message': (
+                        f'Lista importada correctamente. {precios_cargados} precios cargados.' +
+                        (" Advertencia: no se actualizÃ³ ningÃºn costo para este proveedor. Verifique que el archivo corresponda." if registros_actualizados == 0 else "")
+                    ),
+                    'registros_procesados': precios_cargados,
+                    'registros_actualizados': registros_actualizados
+                }, status=201)
+            except LimiteImportacionSincronicaExcedido as e:
+                importacion = crear_importacion_pendiente_lista_precios(
+                    proveedor=proveedor,
+                    usuario=request.user if request.user.is_authenticated else None,
+                    excel_file=excel_file,
+                    col_codigo=col_codigo,
+                    col_precio=col_precio,
+                    col_denominacion=col_denominacion,
+                    fila_inicio=fila_inicio,
+                )
+                return Response(
+                    {
+                        'message': (
+                            'La importacion excede el limite sincronico y quedo en cola '
+                            'para procesamiento diferido.'
+                        ),
+                        'detail': e.detail,
+                        'estado': importacion.estado,
+                        'importacion_id': importacion.id,
+                        'modo_procesamiento': 'diferido',
+                    },
+                    status=202,
+                )
+            except Exception as e:
+                return Response({'detail': f'Error procesando el archivo: {str(e)}'}, status=400)
+
+
+class ImportacionListaPreciosEstadoAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, proveedor_id, importacion_id):
+        importacion = ImportacionListaPreciosProveedor.objects.filter(
+            id=importacion_id,
+            proveedor_id=proveedor_id,
+        ).first()
+        if not importacion:
+            return Response({'detail': 'Importacion no encontrada.'}, status=404)
+
+        return Response({
+            'id': importacion.id,
+            'estado': importacion.estado,
+            'registros_procesados': importacion.registros_procesados,
+            'registros_actualizados': importacion.registros_actualizados,
+            'mensaje_error': importacion.mensaje_error,
+            'creado_en': importacion.creado_en,
+            'actualizado_en': importacion.actualizado_en,
+            'iniciado_en': importacion.iniciado_en,
+            'finalizado_en': importacion.finalizado_en,
+        })
+
 
 class PrecioProductoProveedorAPIView(APIView):
     """
@@ -765,9 +1065,244 @@ def editar_producto_con_relaciones(request):
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
 
+    productos = list(
+        PrecioProveedorExcel.objects.filter(
+            proveedor_id=proveedor_id,
+            nombre_archivo=ultimo_nombre_archivo
+        ).values('codigo_producto_excel', 'denominacion')
+    )
+    
+    # Formatear la respuesta para mantener compatibilidad
+    codigos = [item['codigo_producto_excel'] for item in productos]
+    productos_con_denominacion = [
+        {
+            'codigo': item['codigo_producto_excel'],
+            'denominacion': item['denominacion'] if item['denominacion'] else None
+        }
+        for item in productos
+    ]
+    
+    return Response({
+        'codigos': codigos,  # Mantener compatibilidad con código existente
+        'productos': productos_con_denominacion  # Nueva estructura con denominación
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
+def obtener_nuevo_id_temporal(request):
+    ultimo = ProductoTempID.objects.order_by('-id').first()
+    nuevo_id = 1 if not ultimo else ultimo.id + 5
+    ProductoTempID.objects.create(id=nuevo_id)
+    return Response({'id': nuevo_id})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def crear_producto_con_relaciones(request):
+    from django.db import transaction
+    try:
+        data = request.data
+        producto_data = data.get('producto')
+        stock_proveedores_data = data.get('stock_proveedores', [])
+        if not producto_data:
+            raise Exception('Faltan datos de producto.')
+
+        # Validar unicidad de codvta
+        codvta = producto_data.get('codvta')
+        if Stock.objects.filter(codvta=codvta).exists():
+            raise Exception('Ya existe un producto con ese código de venta (codvta).')
+
+        # PREVALIDAR todas las relaciones antes de crear el producto
+        for rel in stock_proveedores_data:
+            proveedor_id = rel.get('proveedor_id')
+            codigo_prov = rel.get('codigo_producto_proveedor')
+            # Solo validar duplicidad si el código está presente y no vacío
+            if proveedor_id and codigo_prov:
+                existe = StockProve.objects.filter(
+                    proveedor_id=proveedor_id,
+                    codigo_producto_proveedor=codigo_prov
+                ).exists()
+                if existe:
+                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+            # NO lanzar error si falta el código, es opcional
+            # Validación manual de campos relevantes antes de crear el producto
+            # No usamos el serializer aquí porque requiere el campo 'stock', que aún no existe
+            # Solo validamos que los campos necesarios estén presentes y sean válidos
+            if not proveedor_id:
+                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
+            if rel.get('cantidad') is None:
+                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
+            if rel.get('costo') is None:
+                raise Exception('Falta el costo en una relación de stock_proveedores.')
+
+        # Si todo es válido, crear producto y relaciones en bloque atómico
+        with transaction.atomic():
+            stock_serializer = StockSerializer(data=producto_data)
+            if not stock_serializer.is_valid():
+                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
+            stock = stock_serializer.save()
+
+            for rel in stock_proveedores_data:
+                rel_data = rel.copy()
+                rel_data['stock'] = stock.id
+                sp_serializer = StockProveSerializer(data=rel_data)
+                sp_serializer.is_valid(raise_exception=True)
+                sp_serializer.save()
+
+        return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
+    except serializers.ValidationError as ve:
+        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
+    except Exception as e:
+        return Response({'detail': str(e)}, status=400)
+
+@api_view(['PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def editar_producto_con_relaciones(request):
+    from django.db import transaction
+    try:
+        data = request.data
+        producto_data = data.get('producto')
+        stock_proveedores_data = data.get('stock_proveedores', [])
+        if not producto_data or not producto_data.get('id'):
+            raise Exception('Faltan datos de producto o ID.')
+        producto_id = producto_data['id']
+        # Validar unicidad de codvta (excluyendo el propio producto)
+        codvta = producto_data.get('codvta')
+        if Stock.objects.filter(codvta=codvta).exclude(id=producto_id).exists():
+            raise Exception('Ya existe un producto con ese código de venta (codvta).')
+        # PREVALIDAR todas las relaciones antes de editar el producto
+        for rel in stock_proveedores_data:
+            proveedor_id = rel.get('proveedor_id')
+            codigo_prov = rel.get('codigo_producto_proveedor')
+            if proveedor_id and codigo_prov:
+                existe = StockProve.objects.filter(
+                    proveedor_id=proveedor_id,
+                    codigo_producto_proveedor=codigo_prov
+                ).exclude(stock_id=producto_id).exists()
+                if existe:
+                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+            if not proveedor_id:
+                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
+            if rel.get('cantidad') is None:
+                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
+            if rel.get('costo') is None:
+                raise Exception('Falta el costo en una relación de stock_proveedores.')
+        # Si todo es válido, editar producto y relaciones en bloque atómico
+        with transaction.atomic():
+            stock = Stock.objects.filter(id=producto_id).first()
+            if not stock:
+                raise Exception('Producto no encontrado.')
+            stock_serializer = StockSerializer(stock, data=producto_data, partial=True)
+            if not stock_serializer.is_valid():
+                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
+            stock = stock_serializer.save()
+            # Actualización incremental de relaciones (preservar códigos si no se envían)
+            existentes = {sp.proveedor_id: sp for sp in StockProve.objects.filter(stock=stock)}
+            proveedores_enviados = set()
+            for rel in stock_proveedores_data:
+                proveedor_id = rel.get('proveedor_id')
+                if not proveedor_id:
+                    continue
+                proveedores_enviados.add(int(proveedor_id))
+                cantidad = rel.get('cantidad')
+                costo = rel.get('costo')
+                codigo_rel = rel.get('codigo_producto_proveedor')
+
+                sp_existente = existentes.get(int(proveedor_id))
+                if sp_existente:
+                    # Actualizar cantidad y costo
+                    if cantidad is not None:
+                        sp_existente.cantidad = cantidad
+                    if costo is not None:
+                        sp_existente.costo = costo
+                    # Actualizar código solo si viene presente y no vacío
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad del código dentro del proveedor, excluyendo este producto
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        sp_existente.codigo_producto_proveedor = codigo_rel
+                    sp_existente.save()
+                else:
+                    # Crear nueva relación. Solo setear código si viene y no es vacío
+                    create_kwargs = {
+                        'stock': stock,
+                        'proveedor_id': proveedor_id,
+                        'cantidad': cantidad if cantidad is not None else 0,
+                        'costo': costo if costo is not None else 0,
+                    }
+                    if codigo_rel is not None and str(codigo_rel).strip() != "":
+                        # Validar unicidad antes de crear
+                        existe = StockProve.objects.filter(
+                            proveedor_id=proveedor_id,
+                            codigo_producto_proveedor=codigo_rel
+                        ).exclude(stock_id=producto_id).exists()
+                        if existe:
+                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
+                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
+                        create_kwargs['codigo_producto_proveedor'] = codigo_rel
+                    StockProve.objects.create(**create_kwargs)
+
+            # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
+        return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
+    except serializers.ValidationError as ve:
+        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
+    except Exception as e:
+        return Response({'detail': str(e)}, status=400)
+
 class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return [EsAdminTenant()]
+        return [IsAuthenticated()]
+
+    def _build_configuracion_inicial(self):
+        arca_permitir_homologacion_ui = getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False)
+        return {
+            "no_configurada": True,
+            "setup_completo": False,
+            "campos_setup_faltantes": [
+                "nombre",
+                "razon_social",
+                "cuit_cuil",
+                "situacion_iva",
+                "direccion",
+                "telefono",
+            ],
+            "nombre": "",
+            "direccion": "",
+            "telefono": "",
+            "email": None,
+            "situacion_iva": "RI",
+            "punto_venta_arca": "",
+            "cuit_cuil": "",
+            "razon_social": "",
+            "ingresos_brutos": "",
+            "inicio_actividad": None,
+            "logo_empresa": None,
+            "certificado_arca": None,
+            "clave_privada_arca": None,
+            "modo_arca": "HOM" if arca_permitir_homologacion_ui else "PROD",
+            "arca_habilitado": False,
+            "arca_configurado": False,
+            "arca_ultima_validacion": None,
+            "arca_error_configuracion": None,
+            "permitir_stock_negativo": False,
+            "arca_permitir_homologacion_ui": arca_permitir_homologacion_ui,
+        }
 
     def get(self, request):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
@@ -776,6 +1311,15 @@ class FerreteriaAPIView(APIView):
             # Devolver esqueleto para configuración inicial sin romper la UI
             configuracion_inicial = {
                 'no_configurada': True,
+                'setup_completo': False,
+                'campos_setup_faltantes': [
+                    'nombre',
+                    'razon_social',
+                    'cuit_cuil',
+                    'situacion_iva',
+                    'direccion',
+                    'telefono',
+                ],
                 'nombre': '',
                 'direccion': '',
                 'telefono': '',
@@ -799,32 +1343,6 @@ class FerreteriaAPIView(APIView):
             return Response(configuracion_inicial, status=200)
         return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
 
-    def post(self, request):
-        """Crea la primera ferretería si aún no existe."""
-        if not request.user.is_authenticated:
-            return Response({'detail': 'No autenticado.'}, status=401)
-        
-        # Si ya existe una ferretería, prohibir creación (unicidad)
-        if Ferreteria.objects.exists():
-            return Response({'detail': 'Ya existe una ferretería configurada.'}, status=400)
-
-        # Manejar archivos subidos y normalizar datos
-        data = request.data.copy()
-
-        # Remover claves no soportadas por el modelo (compatibilidad UI legacy)
-        for legacy_key in [
-            'margen_ganancia_por_defecto', 'comprobante_por_defecto',
-            'notificaciones_email', 'notificaciones_stock_bajo',
-            'notificaciones_vencimientos', 'notificaciones_pagos_pendientes'
-        ]:
-            data.pop(legacy_key, None)
-
-        serializer = FerreteriaSerializer(data=data, context={'request': request})
-        if serializer.is_valid():
-            instancia = serializer.save()
-            return Response(FerreteriaSerializer(instancia, context={'request': request}).data, status=201)
-        return Response(serializer.errors, status=400)
-
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
@@ -847,6 +1365,86 @@ class FerreteriaAPIView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
+    def put(self, request):
+        return self.patch(request)
+
+    def get(self, request):
+        with medir_proceso(
+            "ferreteria_detalle_get",
+            usuario_id=getattr(request.user, "id", None),
+        ) as medicion:
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                configuracion_inicial = self._build_configuracion_inicial()
+                medicion.registrar_metricas(no_configurada=True, setup_completo=False)
+                return Response(configuracion_inicial, status=200)
+
+            estado_setup = ferreteria.obtener_estado_setup()
+            medicion.registrar_metricas(
+                no_configurada=False,
+                setup_completo=estado_setup.get("setup_completo"),
+            )
+            return Response(FerreteriaSerializer(ferreteria, context={"request": request}).data)
+
+
+class EstadoSetupAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ferreteria = Ferreteria.objects.first()
+        if not ferreteria:
+            return Response(
+                {
+                    'setup_completo': False,
+                    'campos_setup_faltantes': [
+                        'nombre',
+                        'razon_social',
+                        'cuit_cuil',
+                        'situacion_iva',
+                        'direccion',
+                        'telefono',
+                    ],
+                    'no_configurada': True,
+                },
+                status=200,
+            )
+
+        return Response(ferreteria.obtener_estado_setup(), status=200)
+
+    def get(self, request):
+        with medir_proceso(
+            "ferreteria_estado_setup_get",
+            usuario_id=getattr(request.user, "id", None),
+        ) as medicion:
+            ferreteria = Ferreteria.objects.first()
+            if not ferreteria:
+                payload = {
+                    "setup_completo": False,
+                    "campos_setup_faltantes": [
+                        "nombre",
+                        "razon_social",
+                        "cuit_cuil",
+                        "situacion_iva",
+                        "direccion",
+                        "telefono",
+                    ],
+                    "no_configurada": True,
+                }
+                medicion.registrar_metricas(
+                    no_configurada=True,
+                    setup_completo=False,
+                    campos_faltantes=len(payload["campos_setup_faltantes"]),
+                )
+                return Response(payload, status=200)
+
+            estado_setup = ferreteria.obtener_estado_setup()
+            medicion.registrar_metricas(
+                no_configurada=False,
+                setup_completo=estado_setup.get("setup_completo"),
+                campos_faltantes=len(estado_setup.get("campos_setup_faltantes", [])),
+            )
+            return Response(estado_setup, status=200)
+
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""
     queryset = Stock.objects.con_stock_total()
@@ -859,68 +1457,21 @@ class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([permissions.AllowAny])
 def servir_logo_arca(request):
     """
-    Endpoint para servir el logo ARCA desde la carpeta media.
+    Endpoint estable para servir el logo oficial ARCA versionado con la app.
     URL: /api/productos/servir-logo-arca/
     """
     try:
-        ruta_logo = os.path.join(settings.MEDIA_ROOT, 'logos', 'logo-arca.jpg')
-        print(f'DEBUG: Intentando servir logo desde: {ruta_logo}')
-        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
-        
-        if not os.path.exists(ruta_logo):
-            print(f'ERROR: Logo ARCA no encontrado en {ruta_logo}')
-            return Response({'detail': 'Logo ARCA no encontrado'}, status=404)
-        
-        print(f'Sirviendo logo desde {ruta_logo}')
-        response = FileResponse(
-            open(ruta_logo, 'rb'),
-            content_type='image/jpeg',
-            headers={
-                'Content-Disposition': 'inline; filename="logo-arca.jpg"',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                # Desactivar caché para evitar logos viejos en PDFs
-                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        )
+        response = serve_react_root_file(request, "logo-arca.jpg")
+        response["Content-Disposition"] = 'inline; filename="logo-arca.jpg"'
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type"
+        response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
         return response
     except Exception as e:
-        print(f'ERROR: Error al servir logo: {str(e)}')
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-@transaction.atomic
-def subir_logo_arca(request):
-    """
-    Sube el logo de ARCA a media/logos/logo-arca.jpg (sobrescribe si existe).
-    Requiere usuario autenticado con permisos (staff recomendado a nivel URL/permiso).
-    """
-    try:
-        if not request.user.is_staff:
-            return Response({'detail': 'No tiene permisos para modificar.'}, status=403)
-
-        archivo = request.FILES.get('logo_arca')
-        if not archivo:
-            return Response({'detail': 'No se envió archivo logo_arca.'}, status=400)
-
-        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
-        os.makedirs(logos_dir, exist_ok=True)
-        destino_path = os.path.join(logos_dir, 'logo-arca.jpg')
-
-        # Guardar siempre como .jpg (el contenido puede venir en png/webp, pero se guarda como binario tal cual)
-        # Si quisieras convertir a JPG real, habría que usar PIL, pero aquí solo escribimos bytes.
-        with open(destino_path, 'wb') as f:
-            for chunk in archivo.chunks():
-                f.write(chunk)
-
-        return Response({'detail': 'Logo ARCA subido correctamente.', 'path': destino_path}, status=200)
-    except Exception as e:
-        return Response({'detail': f'Error al subir logo ARCA: {str(e)}'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -937,31 +1488,35 @@ def servir_logo_empresa(request):
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
         # Obtener la ruta del archivo
-        ruta_logo = ferreteria.logo_empresa.path
+        storage = ferreteria.logo_empresa.storage
+        nombre_logo = ferreteria.logo_empresa.name
+        ruta_logo = storage.path(nombre_logo) if hasattr(storage, 'path') else nombre_logo
         
-        print(f'DEBUG: Intentando servir logo empresa desde: {ruta_logo}')
+        print(f'DEBUG: Intentando servir logo empresa desde: {nombre_logo}')
         print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
         
-        if not os.path.exists(ruta_logo):
+        if not storage.exists(nombre_logo):
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
         # Determinar el tipo de contenido basado en la extensión
-        extension = os.path.splitext(ruta_logo)[1].lower()
-        content_type_map = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp'
-        }
-        content_type = content_type_map.get(extension, 'image/jpeg')
+        content_type, _ = mimetypes.guess_type(nombre_logo)
+        if not content_type:
+            extension = os.path.splitext(nombre_logo)[1].lower()
+            content_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+            }
+            content_type = content_type_map.get(extension, 'image/jpeg')
         
-        print(f'Sirviendo logo empresa desde {ruta_logo}')
+        print(f'Sirviendo logo empresa desde {nombre_logo}')
         response = FileResponse(
-            open(ruta_logo, 'rb'),
+            storage.open(nombre_logo, 'rb'),
             content_type=content_type,
             headers={
-                'Content-Disposition': f'inline; filename="{os.path.basename(ruta_logo)}"',
+                'Content-Disposition': f'inline; filename="{os.path.basename(nombre_logo)}"',
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',
@@ -1145,3 +1700,5 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
             return "Se encontraron productos similares. Te sugerimos revisar si alguno corresponde al producto que estás creando."
         
         return "Se encontraron productos con cierta similitud. Te sugerimos revisar antes de continuar."
+
+

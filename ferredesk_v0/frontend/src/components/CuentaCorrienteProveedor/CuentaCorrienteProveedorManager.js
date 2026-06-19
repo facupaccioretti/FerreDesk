@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import CuentaCorrienteProveedorList from "./CuentaCorrienteProveedorList"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 const CuentaCorrienteProveedorManager = () => {
     const theme = useFerreDeskTheme()
@@ -21,20 +23,15 @@ const CuentaCorrienteProveedorManager = () => {
     })
     const [completo, setCompleto] = useState(false)
 
-    const [user, setUser] = useState(null)
+    const { user } = useSessionUserQuery()
+    const { logout } = useLogoutMutation()
 
     useEffect(() => {
         document.title = "Cuenta Corriente Proveedores - FerreDesk"
-        // Info usuario (para Navbar)
-        fetch("/api/user/", { credentials: "include" })
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.status === "success") setUser(data.user)
-            })
     }, [])
 
     const handleLogout = () => {
-        fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+        logout().finally(() => {
             window.location.href = "/login/"
         })
     }

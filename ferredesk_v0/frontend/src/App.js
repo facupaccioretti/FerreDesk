@@ -9,10 +9,14 @@ import './styles/utilities.css';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import Landing from './components/Landing';
+import Landing from './modules/onboarding/components/Landing';
 import Home from './components/Home';
 import Login from './components/Login';
-import Register from './components/Register';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
+import Register from './modules/onboarding/components/Register';
+import ActivarEmail from './modules/onboarding/components/ActivarEmail';
+import PendienteVerificacion from './modules/onboarding/components/PendienteVerificacion';
 import ClientesManager from './components/Clientes/ClientesManager';
 import RutaPrivada from './components/RutaPrivada';
 import ProductosManager from './components/Productos/ProductosManager';
@@ -30,13 +34,33 @@ import CuentaCorrienteManager from './components/CuentaCorriente/CuentaCorriente
 import CuentaCorrienteProveedorManager from './components/CuentaCorrienteProveedor/CuentaCorrienteProveedorManager';
 import CajaManager from './components/Caja/CajaManager';
 import AsistenteConfiguracion from './components/AsistenteConfiguracion/AsistenteConfiguracion';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Componente principal con rutas
 export default function App() {
   return (
     <Router>
-      <Routes>
+      {/* Protege las rutas principales ante errores de render inesperados. */}
+      <ErrorBoundary>
+        <Routes>
+          {/* ========================================== */}
+        {/* RUTAS PÚBLICAS (Plataforma SaaS Onboarding) */}
+        {/* ========================================== */}
         <Route path="/" element={<Landing />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/activar-email" element={<ActivarEmail />} />
+        <Route path="/pendiente-verificacion" element={<PendienteVerificacion />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        {/* ========================================== */}
+        {/* RUTAS TENANT (Acceso a Negocio)            */}
+        {/* ========================================== */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* ========================================== */}
+        {/* RUTAS TENANT PROTEGIDAS (ERP Interno)      */}
+        {/* ========================================== */}
         <Route
           path="/setup"
           element={
@@ -104,7 +128,7 @@ export default function App() {
         <Route
           path="/home/presupuestos"
           element={
-            <RutaPrivada>
+            <RutaPrivada permitirSetupIncompleto={true}>
               <PresupuestosManager />
             </RutaPrivada>
           }
@@ -173,14 +197,15 @@ export default function App() {
             </RutaPrivada>
           }
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        
+        {/* ========================================== */}
+        {/* RUTAS CATCH-ALL                            */}
+        {/* ========================================== */}
         {/* Ruta catch-all para URLs erróneas - debe ir AL FINAL */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
       <ToastContainer position="bottom-right" theme="light" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover icon={false} />
     </Router >
   );
 }
-
-

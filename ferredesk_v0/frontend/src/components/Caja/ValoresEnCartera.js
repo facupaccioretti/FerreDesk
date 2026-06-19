@@ -13,6 +13,7 @@ import ModalRegistrarChequeCaja from "./ModalRegistrarChequeCaja"
 import HistorialCheques from "./HistorialCheques"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonDepositar } from "../Botones"
+import { toast } from "react-toastify"
 
 const ESTADO_EN_CARTERA = "EN_CARTERA"
 
@@ -22,7 +23,7 @@ const ESTADO_EN_CARTERA = "EN_CARTERA"
  */
 const ValoresEnCartera = () => {
   const theme = useFerreDeskTheme()
-  const { obtenerCheques, obtenerCuentasBanco, depositarCheque, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja } = useCajaAPI()
+  const { obtenerCheques, obtenerCuentasBanco, depositarCheque, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja, obtenerMiCaja } = useCajaAPI()
 
   // Estado de vista: false = Operativo (En Cartera), true = Historial
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
@@ -174,6 +175,21 @@ const ValoresEnCartera = () => {
     }
   }
 
+  const handleAbrirRegistrarCheque = async () => {
+    try {
+      const miCaja = await obtenerMiCaja()
+      if (!miCaja?.tiene_caja_abierta) {
+        toast.error("Debe abrir una caja antes de registrar un cheque.")
+        return
+      }
+    } catch (err) {
+      toast.error(err.message || "No se pudo validar el estado de caja.")
+      return
+    }
+
+    setModalRegistrarCheque(true)
+  }
+
 
   // Función para generar botones del menú de acciones para cada cheque
   const generarBotonesCheque = (cheque) => {
@@ -254,7 +270,7 @@ const ValoresEnCartera = () => {
           {/* Botón Registrar cheque */}
           <button
             type="button"
-            onClick={() => setModalRegistrarCheque(true)}
+            onClick={handleAbrirRegistrarCheque}
             className="text-sm px-3 py-1.5 rounded border border-orange-500 text-orange-600 hover:bg-orange-50 font-medium flex items-center gap-1 mr-2"
           >
             Registrar cheque
@@ -391,4 +407,3 @@ const ValoresEnCartera = () => {
 }
 
 export default ValoresEnCartera
-

@@ -1,27 +1,19 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { fechaHoyLocal } from "../../../utils/fechas"
 
 /**
- * Hook personalizado para gestionar filtros, normalización y paginación de comprobantes
- * Extraído de PresupuestosManager.js
- * 
- * @param {Object} dependencies - Dependencias requeridas
- * @param {Array} dependencies.ventas - Lista de ventas desde la API
- * @param {Array} dependencies.productos - Lista de productos
- * @param {Array} dependencies.clientes - Lista de clientes
- * @param {Function} dependencies.fetchVentas - Función para actualizar lista de ventas
+ * Hook personalizado para gestionar filtros, normalizacion y paginacion de comprobantes.
  */
 const useFiltrosComprobantes = ({
   ventas,
   productos,
   clientes,
+  pagination,
   fetchVentas,
 }) => {
-  // Estados de filtros
   const [comprobanteTipo, setComprobanteTipo] = useState("")
   const [comprobanteLetra, setComprobanteLetra] = useState("")
 
-  // Inicializar rango de fechas: hoy y 30 días atrás
   const hoyISO = (() => {
     const d = new Date()
     const mes = String(d.getMonth() + 1).padStart(2, "0")
@@ -41,12 +33,9 @@ const useFiltrosComprobantes = ({
   const [fechaHasta, setFechaHasta] = useState(hoyISO)
   const [clienteId, setClienteId] = useState("")
   const [vendedorId, setVendedorId] = useState("")
-
-  // Estados de paginación
   const [paginaActual, setPaginaActual] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(15)
 
-  // Mapas para accesos O(1)
   const productosPorId = useMemo(() => {
     const m = new Map()
     productos.forEach((p) => m.set(p.id, p))
@@ -59,11 +48,6 @@ const useFiltrosComprobantes = ({
     return m
   }, [clientes])
 
-  /**
-   * Función normalizadora memorizada para transformar datos de ventas
-   * @param {Object} venta - Datos de venta sin normalizar
-   * @returns {Object|null} - Datos normalizados o null si no es válido
-   */
   const normalizarVenta = useCallback(
     (venta) => {
       const comprobanteObj = typeof venta.comprobante === "object" ? venta.comprobante : null
@@ -130,26 +114,34 @@ const useFiltrosComprobantes = ({
     [productosPorId, clientesPorId]
   )
 
-  /**
-   * Datos normalizados de ventas
-   */
   const ventasNormalizadas = useMemo(() => {
     return ventas
-      .filter(v => v.comprobante?.tipo !== 'recibo')
+      .filter((v) => v.comprobante?.tipo !== "recibo")
       .map(normalizarVenta)
       .filter(Boolean)
   }, [ventas, normalizarVenta])
 
-  /**
-   * Cálculos de paginación
-   */
-  const totalItems = ventasNormalizadas.length
-  const datosPagina = ventasNormalizadas.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina)
+  const totalItems = pagination?.count ?? ventasNormalizadas.length
+  const datosPagina = ventasNormalizadas
 
-  /**
-   * Maneja los cambios en los filtros y actualiza la lista de ventas
-   * @param {Object} filtros - Objeto con los nuevos valores de filtros
-   */
+  const construirParametros = useCallback(() => {
+    const params = {}
+    if (comprobanteTipo) params["comprobante_tipo"] = comprobanteTipo
+    if (comprobanteLetra) params["comprobante_letra"] = comprobanteLetra
+    if (fechaDesde) params["ven_fecha_after"] = fechaDesde
+    if (fechaHasta) params["ven_fecha_before"] = fechaHasta
+    if (clienteId) params["ven_idcli"] = clienteId
+    if (vendedorId) params["ven_idvdo"] = vendedorId
+    return params
+  }, [comprobanteTipo, comprobanteLetra, fechaDesde, fechaHasta, clienteId, vendedorId])
+
+  useEffect(() => {
+    fetchVentas(construirParametros(), {
+      page: paginaActual,
+      limit: itemsPorPagina,
+    }).catch(() => {})
+  }, [construirParametros, fetchVentas, paginaActual, itemsPorPagina])
+
   const handleFiltroChange = (filtros) => {
     setComprobanteTipo(filtros.comprobanteTipo)
     setComprobanteLetra(filtros.comprobanteLetra)
@@ -157,21 +149,9 @@ const useFiltrosComprobantes = ({
     setFechaHasta(filtros.fechaHasta)
     setClienteId(filtros.clienteId)
     setVendedorId(filtros.vendedorId)
-
-    const params = {}
-    if (filtros.comprobanteTipo) params["comprobante_tipo"] = filtros.comprobanteTipo
-    if (filtros.comprobanteLetra) params["comprobante_letra"] = filtros.comprobanteLetra
-    if (filtros.fechaDesde) params["ven_fecha_after"] = filtros.fechaDesde
-    if (filtros.fechaHasta) params["ven_fecha_before"] = filtros.fechaHasta
-    if (filtros.clienteId) params["ven_idcli"] = filtros.clienteId
-    if (filtros.vendedorId) params["ven_idvdo"] = filtros.vendedorId
-
-    fetchVentas(params)
+    setPaginaActual(1)
   }
 
-  /**
-   * Resetea todos los filtros a sus valores por defecto
-   */
   const resetearFiltros = () => {
     setComprobanteTipo("")
     setComprobanteLetra("")
@@ -180,13 +160,8 @@ const useFiltrosComprobantes = ({
     setClienteId("")
     setVendedorId("")
     setPaginaActual(1)
-    fetchVentas({})
   }
 
-  /**
-   * Obtiene el estado actual de todos los filtros
-   * @returns {Object} - Objeto con todos los valores de filtros actuales
-   */
   const obtenerFiltrosActuales = () => ({
     comprobanteTipo,
     comprobanteLetra,
@@ -197,7 +172,6 @@ const useFiltrosComprobantes = ({
   })
 
   return {
-    // Estados de filtros
     comprobanteTipo,
     setComprobanteTipo,
     comprobanteLetra,
@@ -210,30 +184,20 @@ const useFiltrosComprobantes = ({
     setClienteId,
     vendedorId,
     setVendedorId,
-
-    // Estados de paginación
     paginaActual,
     setPaginaActual,
     itemsPorPagina,
     setItemsPorPagina,
-
-    // Datos normalizados y paginados
     ventasNormalizadas,
     totalItems,
     datosPagina,
-
-    // Funciones
     handleFiltroChange,
     resetearFiltros,
     obtenerFiltrosActuales,
-
-    // Mapas para acceso rápido
     productosPorId,
     clientesPorId,
-
-    // Función de normalización
     normalizarVenta,
   }
 }
 
-export default useFiltrosComprobantes 
+export default useFiltrosComprobantes

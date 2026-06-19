@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from "react"
+import { useProductoLookupCompra } from "../../hooks/useProductoLookupCompra"
 
 function getEmptyRow(modoOrdenCompra = false) {
   if (modoOrdenCompra) {
@@ -49,7 +50,10 @@ const ItemsGridCompras = forwardRef(
     },
     ref,
   ) => {
-    
+    const { lookupProducto } = useProductoLookupCompra({
+      proveedorId: selectedProveedor?.id ?? null,
+      modoOrdenCompra,
+    })
 
     // No precargamos productos - haremos búsqueda directa como en ItemsGrid original
 
@@ -310,7 +314,7 @@ const ItemsGridCompras = forwardRef(
       })
     }
 
-    const handleRowKeyDown = (e, idx, field) => {
+    const handleRowKeyDown = async (e, idx, field) => {
       if (e.key === "Enter") {
         e.preventDefault()
         e.stopPropagation()
@@ -322,144 +326,109 @@ const ItemsGridCompras = forwardRef(
           
           const codigo = modoOrdenCompra ? row.codigo_venta : row.codigo_proveedor
           
-          // Buscar producto por código de venta o proveedor según el modo
-          const endpoint = modoOrdenCompra 
-            ? `/api/compras/proveedores/${provId}/productos/?codigo_venta=${encodeURIComponent(codigo)}`
-            : `/api/compras/productos/buscar-codigo/?codigo=${encodeURIComponent(codigo)}&proveedor_id=${provId}`
-          
-          fetch(endpoint, { credentials: "include" })
-            .then(resp => {
-              if (resp.ok) {
-                return resp.json()
-              } else {
-                throw new Error('Producto no encontrado')
-              }
-            })
-                        .then(data => {
-              // El endpoint puede devolver un array o un objeto único
-              const productos = Array.isArray(data) ? data : [data]
-              const prod = productos.length > 0 ? productos[0] : null
-              
-              // Verificar que el producto tenga los campos necesarios
-              if (prod && prod.id && (prod.deno || prod.nombre)) {
-                // PRODUCTO ENCONTRADO - replicar lógica exacta del ItemsGrid
-                const targetProdId = prod.id
-                const targetProvId = provId
-                
-                // Buscar duplicado (como en ItemsGrid original)
-                const idxExistente = rows.findIndex(
-                  (r, i) => {
-                    if (i === idx) return false // No comparar con la fila actual
-                    
-                    // Verificar si el producto ya existe en otra fila
-                    const productoExistente = r.producto?.id || (modoOrdenCompra ? r.odi_idsto : r.cdi_idsto)
-                    const proveedorExistente = (modoOrdenCompra ? r.odi_idpro : r.cdi_idpro) || selectedProveedor?.id || null
-                    
-                    return productoExistente === targetProdId && proveedorExistente === targetProvId
-                  }
-                )
-                
-                if (idxExistente !== -1) {
-                  // DUPLICADO ENCONTRADO - SUMAR CANTIDADES según el modo
-                  const cantidadASumar = modoOrdenCompra 
-                    ? (Number(row.odi_cantidad) > 0 ? Number(row.odi_cantidad) : 1)
-                    : (Number(row.cdi_cantidad) > 0 ? Number(row.cdi_cantidad) : 1)
-                  
-                  setRows((prevRows) => {
-                    const newRows = prevRows.map((r, i) => {
-                      if (i === idxExistente) {
-                        if (modoOrdenCompra) {
-                          return { ...r, odi_cantidad: Number(r.odi_cantidad) + cantidadASumar }
-                        } else {
-                          return { ...r, cdi_cantidad: Number(r.cdi_cantidad) + cantidadASumar }
-                        }
-                      }
-                      return r
-                    })
-                    newRows[idx] = getEmptyRow(modoOrdenCompra)
-                    const ensured = ensureSoloUnEditable(newRows)
-                    emitirCambio(ensured)
-                    return ensured
-                  })
-                  if (modoLector) {
-                    setIdxCodigoSiguienteFoco(idxExistente)
-                  } else {
-                    setIdxCantidadFoco(idxExistente)
-                  }
-                  return
+          try {
+            const prod = await lookupProducto(codigo)
+
+            if (prod && prod.id && (prod.deno || prod.nombre)) {
+              const targetProdId = prod.id
+              const targetProvId = provId
+
+              const idxExistente = rows.findIndex(
+                (r, i) => {
+                  if (i === idx) return false
+
+                  const productoExistente = r.producto?.id || (modoOrdenCompra ? r.odi_idsto : r.cdi_idsto)
+                  const proveedorExistente = (modoOrdenCompra ? r.odi_idpro : r.cdi_idpro) || selectedProveedor?.id || null
+
+                  return productoExistente === targetProdId && proveedorExistente === targetProvId
                 }
-                
-                // NO ES DUPLICADO - cargar producto en fila actual según el modo
+              )
+
+              if (idxExistente !== -1) {
+                const cantidadASumar = modoOrdenCompra
+                  ? (Number(row.odi_cantidad) > 0 ? Number(row.odi_cantidad) : 1)
+                  : (Number(row.cdi_cantidad) > 0 ? Number(row.cdi_cantidad) : 1)
+
                 setRows((prevRows) => {
-                  const newRows = [...prevRows]
-                  
-                  if (modoOrdenCompra) {
-                    // Campos para Orden de Compra
-                    const itemCargado = {
-                      ...newRows[idx],
-                      codigo_venta: row.codigo_venta,
-                      producto: prod,
-                      odi_idsto: prod.id,
-                      odi_idpro: targetProvId,
-                      odi_detalle1: prod.deno || prod.nombre || "",
-                      odi_detalle2: prod.unidad || prod.unidadmedida || "-",
-                      odi_cantidad: row.odi_cantidad || 1,
-                      odi_stock_proveedor: prod.stockprove_id || null,
+                  const newRows = prevRows.map((r, i) => {
+                    if (i === idxExistente) {
+                      if (modoOrdenCompra) {
+                        return { ...r, odi_cantidad: Number(r.odi_cantidad) + cantidadASumar }
+                      }
+                      return { ...r, cdi_cantidad: Number(r.cdi_cantidad) + cantidadASumar }
                     }
-                    newRows[idx] = itemCargado
-                  } else {
-                    // Campos para Compra normal
-                    const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
-                    const itemCargado = {
-                      ...newRows[idx],
-                      codigo_proveedor: row.codigo_proveedor,
-                      producto: prod,
-                      cdi_idsto: prod.id,
-                      cdi_idpro: targetProvId,
-                      cdi_detalle1: prod.deno || prod.nombre || "",
-                      cdi_detalle2: prod.unidad || prod.unidadmedida || "-",
-                      cdi_idaliiva: aliId,
-                      cdi_cantidad: row.cdi_cantidad || 1,
-                    }
-                    newRows[idx] = itemCargado
-                  }
-                  
-                  if (newRows.every(isRowLleno)) {
-                    newRows.push(getEmptyRow(modoOrdenCompra))
-                  }
+                    return r
+                  })
+                  newRows[idx] = getEmptyRow(modoOrdenCompra)
                   const ensured = ensureSoloUnEditable(newRows)
                   emitirCambio(ensured)
                   return ensured
                 })
                 if (modoLector) {
-                  setIdxCodigoSiguienteFoco(idx)
+                  setIdxCodigoSiguienteFoco(idxExistente)
                 } else {
-                  setIdxCantidadFoco(idx)
+                  setIdxCantidadFoco(idxExistente)
                 }
                 return
-              } else {
-                // PRODUCTO NO ENCONTRADO - limpiar fila (como en ItemsGrid original)
-                setRows((prevRows) => {
-                  const newRows = [...prevRows]
-                  newRows[idx] = { ...getEmptyRow(modoOrdenCompra), id: newRows[idx].id }
-                  const ensured = ensureSoloUnEditable(newRows)
-                  emitirCambio(ensured)
-                  return ensured
-                })
-                return
               }
-            })
-            .catch(() => {
-              // Error en la petición - limpiar fila
+
               setRows((prevRows) => {
                 const newRows = [...prevRows]
-                newRows[idx] = { ...getEmptyRow(modoOrdenCompra), id: newRows[idx].id }
+
+                if (modoOrdenCompra) {
+                  newRows[idx] = {
+                    ...newRows[idx],
+                    codigo_venta: row.codigo_venta,
+                    producto: prod,
+                    odi_idsto: prod.id,
+                    odi_idpro: targetProvId,
+                    odi_detalle1: prod.deno || prod.nombre || "",
+                    odi_detalle2: prod.unidad || prod.unidadmedida || "-",
+                    odi_cantidad: row.odi_cantidad || 1,
+                    odi_stock_proveedor: prod.stockprove_id || null,
+                  }
+                } else {
+                  const aliId = typeof prod.idaliiva === 'object' ? prod.idaliiva.id : (prod.idaliiva ?? 3)
+                  newRows[idx] = {
+                    ...newRows[idx],
+                    codigo_proveedor: row.codigo_proveedor,
+                    producto: prod,
+                    cdi_idsto: prod.id,
+                    cdi_idpro: targetProvId,
+                    cdi_detalle1: prod.deno || prod.nombre || "",
+                    cdi_detalle2: prod.unidad || prod.unidadmedida || "-",
+                    cdi_idaliiva: aliId,
+                    cdi_cantidad: row.cdi_cantidad || 1,
+                    cdi_costo: prod.costo_proveedor ?? row.cdi_costo ?? 0,
+                  }
+                }
+
+                if (newRows.every(isRowLleno)) {
+                  newRows.push(getEmptyRow(modoOrdenCompra))
+                }
                 const ensured = ensureSoloUnEditable(newRows)
                 emitirCambio(ensured)
                 return ensured
               })
+              if (modoLector) {
+                setIdxCodigoSiguienteFoco(idx)
+              } else {
+                setIdxCantidadFoco(idx)
+              }
               return
-            })
+            }
+          } catch (error) {
+            // Si falla el lookup, limpiar fila igual que antes.
+          }
+
+          setRows((prevRows) => {
+            const newRows = [...prevRows]
+            newRows[idx] = { ...getEmptyRow(modoOrdenCompra), id: newRows[idx].id }
+            const ensured = ensureSoloUnEditable(newRows)
+            emitirCambio(ensured)
+            return ensured
+          })
+          return
         }
         
         if (field === "cdi_cantidad" || field === "odi_cantidad") {

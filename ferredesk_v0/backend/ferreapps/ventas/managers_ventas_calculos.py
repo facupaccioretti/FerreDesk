@@ -130,28 +130,10 @@ class VentaQuerySet(models.QuerySet):
     def con_calculos(self):
         """
         Replica la lógica de la vista SQL VENTA_CALCULADO usando Django ORM.
-        Se apoya en VentaDetalleItemQuerySet para los agregados.
+        Utiliza los campos denormalizados cargados por signals para evitar subqueries costosas.
         Define un ordenamiento cronológico descendente estable.
         """
-        from .models import VentaDetalleItem
-        
-        # --- 1. Subqueries para Totales de Ítems ---
-        items_calculados_qs = VentaDetalleItem.objects.filter(vdi_idve=OuterRef('pk')).con_calculos().order_by()
-        
-        total_neto_subquery = items_calculados_qs.values('vdi_idve').annotate(total=Sum('subtotal_neto')).values('total')
-        total_iva_subquery = items_calculados_qs.values('vdi_idve').annotate(total=Sum('iva_monto')).values('total')
-        total_final_subquery = items_calculados_qs.values('vdi_idve').annotate(total=Sum('total_item')).values('total')
-        
-        subtotal_bruto_subquery = items_calculados_qs.values('vdi_idve').annotate(
-            total=Sum(
-                ExpressionWrapper(
-                    F('precio_unitario_bonificado') * F('vdi_cantidad'),
-                    output_field=DecimalField(max_digits=15, decimal_places=2)
-                )
-            )
-        ).order_by().values('total')
-
-        # --- 2. Formateo de Número de Comprobante ---
+        # --- 1. Formateo de Número de Comprobante ---
         punto_venta_formateado = LPad(Cast(Coalesce(F('ven_punto'), Value(0)), CharField(max_length=20)), 4, fill_text=Value('0'))
         numero_factura_formateado = LPad(Cast(Coalesce(F('ven_numero'), Value(0)), CharField(max_length=20)), 8, fill_text=Value('0'))
         
@@ -166,7 +148,7 @@ class VentaQuerySet(models.QuerySet):
             output_field=CharField()
         )
 
-        # --- 3. Determinación de Operación Efectiva ---
+        # --- 2. Determinación de Operación Efectiva ---
         es_operacion_efectiva_logica = Case(
             When(convertida_a_fiscal=True, then=Value(False)),
             When(Q(comprobante__tipo='presupuesto') & Q(ven_estado='AB'), then=Value(False)),
@@ -184,10 +166,10 @@ class VentaQuerySet(models.QuerySet):
             comprobante_activo=F('comprobante__activo'),
             _numero_formateado=numero_formateado_completo,
             ven_descuento_cierre_monto=Coalesce(F('ven_descuento_cierre'), Value(0.0, output_field=DecimalField())),
-            _ven_impneto=Coalesce(Subquery(total_neto_subquery), Value(0.0, output_field=DecimalField())),
-            _iva_global=Coalesce(Subquery(total_iva_subquery), Value(0.0, output_field=DecimalField())),
-            _ven_total=Round(Coalesce(Subquery(total_final_subquery), Value(0.0, output_field=DecimalField())), 2),
-            subtotal_bruto=Round(Coalesce(Subquery(subtotal_bruto_subquery), Value(0.0, output_field=DecimalField())), 2),
+            _ven_impneto=Coalesce(F('neto_guardado'), Value(0.0, output_field=DecimalField())),
+            _iva_global=Coalesce(F('iva_guardado'), Value(0.0, output_field=DecimalField())),
+            _ven_total=Round(Coalesce(F('total_guardado'), Value(0.0, output_field=DecimalField())), 2),
+            subtotal_bruto=Round(Coalesce(F('subtotal_bruto_guardado'), Value(0.0, output_field=DecimalField())), 2),
             # Datos del Cliente (Left Outer Join implícito por null=True en Venta.ven_idcli)
             cliente_razon=F('ven_idcli__razon'),
             cliente_fantasia=F('ven_idcli__fantasia'),

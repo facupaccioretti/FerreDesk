@@ -189,7 +189,14 @@ const Tabla = ({
           </thead>
 
           {/* Cuerpo */}
-          <tbody className={`${filasCompactas ? "divide-y divide-slate-300" : "divide-y-2 divide-slate-300"} ${claseTbody}`}>
+          {/*
+            Patrón stale-while-revalidate:
+            - Si hay datos previos y se está cargando la página siguiente, se atenúan
+              las filas existentes (opacity-40) sin destruirlas. El usuario sabe que se
+              está actualizando sin perder el contexto visual.
+            - Si no hay datos (primera carga o tabla vacía), se muestra el spinner centrado.
+          */}
+          <tbody className={`${filasCompactas ? "divide-y divide-slate-300" : "divide-y-2 divide-slate-300"} ${claseTbody} ${cargando && datosVisibles.length > 0 ? "opacity-40 pointer-events-none select-none" : ""} transition-opacity duration-200`}>
             {datosVisibles.map((fila, idxVisible) => {
               const indiceGlobal = indiceInicio + idxVisible
 
@@ -219,14 +226,14 @@ const Tabla = ({
               )
             })}
 
-            {/* Estado vacío o cargando */}
-            {(cargando || datosVisibles.length === 0) && (
+            {/* Estado: sin datos o primera carga sin datos previos */}
+            {(cargando || datosVisibles.length === 0) && datosVisibles.length === 0 && (
               <tr>
                 <td
                   colSpan={columnas.length}
                   className="text-center py-12 text-slate-500 bg-gradient-to-b from-slate-50/50 to-white/80"
                 >
-                  {!cargando && datosVisibles.length === 0 ? (
+                  {!cargando ? (
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
                         <Search className="w-5 h-5 text-slate-400" />

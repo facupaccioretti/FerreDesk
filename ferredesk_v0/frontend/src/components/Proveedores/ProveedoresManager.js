@@ -10,6 +10,9 @@ import { BotonEditar, BotonEliminar, BotonHistorial, BotonCargarLista } from "..
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 import Tabla from "../Tabla"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
+import { toast } from "react-toastify"
 
 const ProveedoresManager = () => {
   const theme = useFerreDeskTheme()
@@ -32,7 +35,8 @@ const ProveedoresManager = () => {
   const [proveedorHistorial, setProveedorHistorial] = React.useState(null)
 
   // --------------------------- Estado de usuario ---------------------------
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
 
   // ------------------------------ Paginación ------------------------------
   const [pagina, setPagina] = useState(1)
@@ -56,16 +60,8 @@ const ProveedoresManager = () => {
     return () => clearTimeout(t)
   }, [pagina, itemsPorPagina, searchProveedores, ordenamiento, fetchProveedores])
 
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
-
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   }
@@ -134,9 +130,11 @@ const ProveedoresManager = () => {
     setShowListaModal(true)
   }
   const handleImportLista = (info) => {
-    alert(
-      `Lista importada para ${info.proveedor.razon}\n${info.message || ""}\nRegistros procesados: ${info.registrosProcesados ?? "N/D"}\nRegistros actualizados: ${info.registrosActualizados ?? "N/D"}`,
-    )
+    if (info?.status === "success") {
+      toast.success(
+        `Lista finalizada para ${info.proveedor.razon}. Procesados: ${info.registrosProcesados ?? "N/D"}. Actualizados: ${info.registrosActualizados ?? "N/D"}.`
+      )
+    }
   }
   const handleOpenHistorialModal = (proveedor) => {
     setProveedorHistorial(proveedor)

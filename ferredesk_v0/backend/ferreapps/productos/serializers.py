@@ -1,5 +1,7 @@
+from django.conf import settings
 from rest_framework import serializers
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista, ListaPrecio
+from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -85,18 +87,27 @@ class StockSerializer(serializers.ModelSerializer):
 
     def get_precios_listas(self, obj):
         """Obtiene precios de listas 1-4. Usa override manual si existe, sino calcula desde precio_lista_0."""
-        from .models import ListaPrecio
-        
+        margenes = self.context.get('margenes_listas_precio')
+        if margenes is None:
+            margenes = {
+                lista.numero: float(lista.margen_descuento)
+                for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+            }
+            self.context['margenes_listas_precio'] = margenes
+
+        precios_prefetch = getattr(obj, 'precios_listas_prefetch', None)
+        precios_queryset = (
+            precios_prefetch
+            if precios_prefetch is not None
+            else obj.precios_listas.all()
+        )
+
         overrides = {
-            p.lista_numero: p 
-            for p in obj.precios_listas.filter(precio_manual=True).select_related('usuario_carga_manual')
+            precio.lista_numero: precio
+            for precio in precios_queryset
+            if precio.precio_manual
         }
-        
-        margenes = {
-            l.numero: float(l.margen_descuento) 
-            for l in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
-        }
-        
+
         precio_base = float(obj.precio_lista_0 or 0)
         resultado = []
         
@@ -167,6 +178,98 @@ class StockSerializer(serializers.ModelSerializer):
         
         return value
 
+
+class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
+    idaliiva = serializers.IntegerField(source='idaliiva_id', read_only=True)
+    proveedor_habitual_id = serializers.IntegerField(read_only=True)
+    stock_total = serializers.SerializerMethodField()
+    costo_habitual = serializers.SerializerMethodField()
+    precios_listas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Stock
+        fields = [
+            'id',
+            'codvta',
+            'codigo_barras',
+            'deno',
+            'unidad',
+            'idaliiva',
+            'margen',
+            'precio_lista_0',
+            'precios_listas',
+            'stock_total',
+            'proveedor_habitual_id',
+            'costo_habitual',
+            'acti',
+        ]
+
+    def get_stock_total(self, obj):
+        if hasattr(obj, 'stock_total'):
+            return obj.stock_total
+        res = obj.__class__.objects.con_stock_total().filter(pk=obj.pk).values_list('stock_total', flat=True).first()
+        return res if res is not None else 0
+
+    def get_costo_habitual(self, obj):
+        if hasattr(obj, 'costo_habitual'):
+            return obj.costo_habitual if obj.costo_habitual is not None else 0
+
+        proveedor_habitual_id = getattr(obj, 'proveedor_habitual_id', None)
+        if not proveedor_habitual_id:
+            return 0
+
+        costo = (
+            StockProve.objects
+            .filter(stock_id=obj.pk, proveedor_id=proveedor_habitual_id)
+            .values_list('costo', flat=True)
+            .first()
+        )
+        return costo if costo is not None else 0
+
+    def get_precios_listas(self, obj):
+        margenes = self.context.get('margenes_listas_precio')
+        if margenes is None:
+            margenes = {
+                lista.numero: float(lista.margen_descuento)
+                for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+            }
+            self.context['margenes_listas_precio'] = margenes
+
+        precios_prefetch = getattr(obj, 'precios_listas_prefetch', None)
+        precios_queryset = (
+            precios_prefetch
+            if precios_prefetch is not None
+            else obj.precios_listas.all()
+        )
+
+        overrides = {
+            precio.lista_numero: precio
+            for precio in precios_queryset
+            if precio.precio_manual
+        }
+
+        precio_base = float(obj.precio_lista_0 or 0)
+        resultado = []
+
+        for numero in [1, 2, 3, 4]:
+            if numero in overrides:
+                override = overrides[numero]
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': float(override.precio),
+                    'precio_manual': True,
+                })
+            else:
+                margen = margenes.get(numero, 0)
+                precio_calculado = round(precio_base * (1 + margen / 100), 2)
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': precio_calculado,
+                    'precio_manual': False,
+                })
+
+        return resultado
+
 class FerreteriaSerializer(serializers.ModelSerializer):
     # Campos obligatorios para identificación fiscal
     nombre = serializers.CharField(required=True, allow_blank=False)
@@ -193,10 +296,46 @@ class FerreteriaSerializer(serializers.ModelSerializer):
     # Exponer flags booleanos de presencia
     tiene_certificado_arca = serializers.SerializerMethodField()
     tiene_clave_privada_arca = serializers.SerializerMethodField()
+    setup_completo = serializers.SerializerMethodField()
+    campos_setup_faltantes = serializers.SerializerMethodField()
+    arca_permitir_homologacion_ui = serializers.SerializerMethodField()
     
     class Meta:
         model = Ferreteria
         fields = '__all__'
+
+    def validate_cuit_cuil(self, value):
+        valor = str(value).strip()
+        if not Ferreteria.es_cuit_cuil_valido(valor):
+            raise serializers.ValidationError(
+                "CUIT/CUIL debe contener exactamente 11 dígitos numéricos, sin guiones ni letras."
+            )
+        return valor
+
+    def validate_certificado_arca(self, value):
+        try:
+            validar_certificado_pem(value)
+        except Exception as exc:
+            raise serializers.ValidationError(
+                "El archivo cargado como certificado ARCA no es un certificado PEM válido."
+            ) from exc
+        return value
+
+    def validate_clave_privada_arca(self, value):
+        try:
+            validar_clave_privada_pem(value)
+        except Exception as exc:
+            raise serializers.ValidationError(
+                "El archivo cargado como clave privada ARCA no es una clave privada PEM válida."
+            ) from exc
+        return value
+
+    def validate_modo_arca(self, value):
+        if value == "HOM" and not getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False):
+            raise serializers.ValidationError(
+                "El modo homologacion no esta habilitado en este entorno."
+            )
+        return value
 
     def get_tiene_certificado_arca(self, instance):
         try:
@@ -209,6 +348,21 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             return bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
         except Exception:
             return False
+
+    def get_setup_completo(self, instance):
+        try:
+            return instance.obtener_estado_setup()["setup_completo"]
+        except Exception:
+            return False
+
+    def get_campos_setup_faltantes(self, instance):
+        try:
+            return instance.obtener_estado_setup()["campos_setup_faltantes"]
+        except Exception:
+            return []
+
+    def get_arca_permitir_homologacion_ui(self, instance):
+        return instance.permitir_homologacion_ui()
 
     def to_representation(self, instance):
         """Mantener compatibilidad y robustez con archivos faltantes.
@@ -233,6 +387,15 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             rep['tiene_clave_privada_arca'] = bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
         except Exception:
             rep['tiene_clave_privada_arca'] = False
+        rep['arca_permitir_homologacion_ui'] = instance.permitir_homologacion_ui()
+        rep['modo_arca'] = instance.obtener_modo_arca_operativo()
+
+        # Compatibilidad con el frontend actual: si falta setup mínimo, sigue
+        # tratándose como "no configurada" a efectos de redirección a /setup.
+        estado_setup = instance.obtener_estado_setup()
+        rep['setup_completo'] = estado_setup['setup_completo']
+        rep['campos_setup_faltantes'] = estado_setup['campos_setup_faltantes']
+        rep['no_configurada'] = estado_setup['no_configurada']
 
         # Compatibilidad hacia atrás con claves usadas por el frontend actual
         rep['certificado_arca'] = rep.get('tiene_certificado_arca', False)
@@ -251,3 +414,4 @@ class VistaStockProductoSerializer(serializers.ModelSerializer):
             'stock_total',        # Anotación por subquery Sum
             'necesita_reposicion', # Anotación calculada
         ]
+

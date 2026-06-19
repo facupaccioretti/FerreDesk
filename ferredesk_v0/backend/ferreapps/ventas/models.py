@@ -87,6 +87,13 @@ class Venta(models.Model):
     ven_observacion = models.TextField(db_column='VEN_OBSERVACION', null=True, blank=True)
     ven_bonificacion_general = models.FloatField(default=0.0, db_column='VEN_BONIFICACION_GENERAL')
 
+    # Número de lista de precios usada al crear el documento.
+    # 0 = Lista 0 (Minorista). Se almacena para restaurar la lista al editar/convertir.
+    ven_idlpa = models.SmallIntegerField(
+        db_column='VEN_IDLPA', default=0,
+        help_text='Número de lista de precios activa al momento de crear la venta/presupuesto'
+    )
+
     # Fecha hasta la cual el presupuesto/venta es válido.  En presupuestos se
     # usa para determinar su caducidad automática.
     ven_vence = models.DateField(db_column='VEN_VENCE', null=True, blank=True)
@@ -183,6 +190,34 @@ class Venta(models.Model):
         related_name='notas_de_credito_que_la_afectan'
     )
 
+    # === CAMPOS DENORMALIZADOS DE TOTALES ===
+    # Se guardan físicamente para evitar recalcular via Subqueries en cada listado.
+    # Se actualizan automáticamente via signals cuando cambia un VentaDetalleItem.
+    total_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_TOTAL_GUARDADO',
+        help_text='Total final. Se actualiza via signals al cambiar ítems.'
+    )
+    neto_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_NETO_GUARDADO',
+        help_text='Importe neto gravado. Se actualiza via signals al cambiar ítems.'
+    )
+    iva_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_IVA_GUARDADO',
+        help_text='IVA total. Se actualiza via signals al cambiar ítems.'
+    )
+    subtotal_bruto_guardado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        default=0,
+        db_column='VEN_SUBTOTAL_BRUTO_GUARDADO',
+        help_text='Subtotal bruto antes de descuentos. Se actualiza via signals al cambiar ítems.'
+    )
+
     @property
     def ven_total(self):
         """Total venta (annotated o calculado en vivo)"""
@@ -266,6 +301,7 @@ class Venta(models.Model):
             models.Index(fields=['ven_estado']),
             models.Index(fields=['ven_idcli']),
             models.Index(fields=['ven_fecha', 'ven_estado']),
+            models.Index(fields=['ven_fecha', 'comprobante', 'ven_estado']),
         ]
         constraints = [
             models.CheckConstraint(
@@ -358,6 +394,7 @@ class VentaDetalleItem(models.Model):
         db_table = 'VENTA_DETAITEM'
         indexes = [
             models.Index(fields=['vdi_idve', 'vdi_orden']),
+            models.Index(fields=['vdi_idsto']),
         ]
 
 class VentaDetalleMan(models.Model):

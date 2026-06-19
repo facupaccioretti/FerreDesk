@@ -16,6 +16,7 @@ const crearFirmaItems = (items) => {
         precio: item?.precio ?? '',
         precioFinal: item?.precioFinal ?? '',
         bonificacion: item?.bonificacion ?? 0,
+        precioEditadoManualmente: item?.precioEditadoManualmente ?? false,
         idaliiva: item?.idaliiva ?? null,
         productoId: item?.producto?.id ?? null,
         proveedorId: item?.proveedorId ?? null,
@@ -52,6 +53,8 @@ const sonFormulariosIguales = (formA, formB) => {
     'descu2',
     'descu3',
     'copia',
+    'tipoComprobante',
+    'listaPrecioId',
   ];
 
   for (const clave of clavesEscalares) {
@@ -143,7 +146,7 @@ export const useFormularioDraft = ({
       if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
         try {
           combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!sonFormulariosIguales(formulario, combinado)) {
         setFormulario(combinado);
@@ -166,7 +169,7 @@ export const useFormularioDraft = ({
     if (esFuncion(normalizarItems) && Array.isArray(combinado.items)) {
       try {
         combinado = { ...combinado, items: normalizarItems(combinado.items, {}) };
-      } catch (_) {}
+      } catch (_) { }
     }
     if (!sonFormulariosIguales(formulario, combinado)) {
       setFormulario(combinado);

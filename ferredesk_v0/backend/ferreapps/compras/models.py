@@ -168,6 +168,7 @@ class Compra(models.Model):
             models.Index(fields=['comp_numero_factura']),
             models.Index(fields=['comp_tipo']),
             models.Index(fields=['comp_estado']),
+            models.Index(fields=['comp_fecha', 'comp_idpro']),
         ]
         # Restricción única: número de factura único por proveedor
         unique_together = [['comp_numero_factura', 'comp_idpro']]
@@ -370,6 +371,7 @@ class OrdenCompra(models.Model):
             models.Index(fields=['ord_fecha']),
             models.Index(fields=['ord_idpro']),
             models.Index(fields=['ord_numero']),
+            models.Index(fields=['ord_fecha', 'ord_idpro']),
         ]
         # Restricción única: número de orden único por proveedor
         unique_together = [['ord_numero', 'ord_idpro']]

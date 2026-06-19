@@ -12,6 +12,8 @@ import CajaActualTab from "./CajaActualTab"
 import ModalAbrirCaja from "./ModalAbrirCaja"
 import MaestroBancos from "./MaestroBancos"
 import ValoresEnCartera from "./ValoresEnCartera"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
@@ -121,7 +123,8 @@ const CajaManager = () => {
   const [resumenCaja, setResumenCaja] = useState(null)
   const [movimientos, setMovimientos] = useState([])
 
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
 
   // Estados de modales
   const [modalAbrirVisible, setModalAbrirVisible] = useState(false)
@@ -160,17 +163,10 @@ const CajaManager = () => {
   useEffect(() => {
     document.title = "Caja, Banco y Cheques - FerreDesk"
     cargarEstadoCaja()
-
-    // Info usuario (para Navbar)
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
   }, [cargarEstadoCaja])
 
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   }

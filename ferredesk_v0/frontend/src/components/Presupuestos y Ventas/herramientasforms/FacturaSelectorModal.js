@@ -6,36 +6,25 @@ import Buscador from "../../Buscador"
 import Tabla from "../../Tabla"
 import { useFerreDeskTheme } from "../../../hooks/useFerreDeskTheme"
 
-// --- Configuración ---
-export const ALTURA_MAX_TABLA = "60vh" // Altura máxima de tabla dentro del modal
-export const MIN_CARACTERES_BUSQUEDA = 1 // Mínimo de caracteres para que se active filtrado
-// Array de posibles nombres para el tipo de comprobante "Factura" que la API podría esperar.
-// Se utiliza el primer valor para la petición directa, los demás son para un posible filtrado local de respaldo.
-export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna", "Cotización", "cotizacion"]
-export const LETRA_FACTURA_INTERNA = 'I';
+// --- Configuracion ---
+export const ALTURA_MAX_TABLA = "60vh"
+export const MIN_CARACTERES_BUSQUEDA = 1
+export const TIPOS_COMPROBANTE_FACTURA = ["Factura", "factura", "factura_interna", "Factura Interna", "Cotizacion", "cotizacion"]
+export const LETRA_FACTURA_INTERNA = "I"
 
 /**
  * FacturaSelectorModal
  * Modal reutilizable para seleccionar una o varias facturas de un cliente.
- *
- * Props:
- *  - abierto: boolean              -> controla visibilidad
- *  - cliente: object|null          -> cliente del cual buscar facturas
- *  - onCerrar: function()          -> callback para cerrar sin seleccionar
- *  - onSeleccionar: function(arr)  -> callback con array de facturas elegidas
  */
 export default function FacturaSelectorModal({ abierto = false, cliente = null, soloFacturasInternas = false, onCerrar = () => {}, onSeleccionar = () => {} }) {
-  // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
-  
-  // --- Estado interno ---
+
   const [termino, setTermino] = useState("")
   const [facturas, setFacturas] = useState([])
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
-  const [seleccionadas, setSeleccionadas] = useState([]) // array de IDs seleccionados (string|number)
+  const [seleccionadas, setSeleccionadas] = useState([])
 
-  // Reiniciar estado cada vez que abre o cambia cliente
   useEffect(() => {
     if (abierto) {
       setTermino("")
@@ -45,47 +34,34 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cliente?.id])
 
-  // Fetch de facturas del cliente
   const obtenerFacturas = async () => {
     if (!cliente?.id) return
     setCargando(true)
     setError(null)
     try {
-      // NUEVO: Usar filtro backend para obtener solo facturas válidas
       const params = new URLSearchParams({
         ven_idcli: cliente.id,
-        para_nota_credito: 'true'  // ← NUEVO: Filtro backend
+        para_nota_credito: "true",
+        limit: "200",
       })
       const url = `/api/ventas/?${params.toString()}`
-      
+
       const resp = await fetch(url, { credentials: "include" })
       if (!resp.ok) throw new Error("No se pudieron obtener las facturas")
       const data = await resp.json()
-      
-      // Normalizar para asegurar estructura mínima y soportar paginación
       const lista = Array.isArray(data) ? data : data.results || []
-      
-      // NUEVO: Backend ya filtró, solo validación adicional en frontend
-      const facturasValidas = lista.filter(f => {
-        const letra = f.comprobante?.letra;
-        const tipo = f.comprobante?.tipo;
-        
-        // Validación según el contexto: NC normal vs Modif. Contenido
-        let esValida = false;
-        
+
+      const facturasValidas = lista.filter((f) => {
+        const letra = f.comprobante?.letra
+        const tipo = f.comprobante?.tipo
+
         if (soloFacturasInternas) {
-          // Para Modif. Contenido: SOLO facturas internas (letra I)
-          esValida = letra === LETRA_FACTURA_INTERNA && tipo === 'factura_interna';
-        } else {
-          // Para Nueva Nota de Crédito: SOLO facturas A, B, C (NO internas)
-          esValida = ['A', 'B', 'C'].includes(letra) && 
-                    ['factura', 'venta'].includes(tipo);
+          return letra === LETRA_FACTURA_INTERNA && tipo === "factura_interna"
         }
-        
-        return esValida;
-      });
-      
-      
+
+        return ["A", "B", "C"].includes(letra) && ["factura", "venta"].includes(tipo)
+      })
+
       setFacturas(facturasValidas)
     } catch (err) {
       console.error("[FacturaSelectorModal] Error al obtener facturas:", err)
@@ -95,11 +71,9 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     }
   }
 
-  // Filtrado por término de búsqueda (ya NO filtramos por tipo aquí, se hizo en obtenerFacturas)
   const facturasFiltradas = useMemo(() => {
     let resultado = facturas
-    
-    // Filtrar por término de búsqueda
+
     if (termino.length >= MIN_CARACTERES_BUSQUEDA) {
       const lower = termino.toLowerCase()
       resultado = resultado.filter((f) => {
@@ -107,62 +81,53 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
         return campos.some((c) => String(c || "").toLowerCase().includes(lower))
       })
     }
-    
+
     return resultado
   }, [facturas, termino])
 
-  // Helpers de selección
   const getId = (fac) => fac.id ?? fac.ven_id ?? fac.idventa ?? fac.vdi_idve ?? fac.vdi_id ?? null
 
-  // Validación en tiempo real de letras
   const validarSeleccionLetras = (nuevasFacturas) => {
-    if (nuevasFacturas.length <= 1) return { valido: true };
-    
-    const letras = [...new Set(nuevasFacturas.map(f => f.comprobante?.letra))];
-    
+    if (nuevasFacturas.length <= 1) return { valido: true }
+
+    const letras = [...new Set(nuevasFacturas.map((f) => f.comprobante?.letra))]
+
     if (letras.length > 1) {
       return {
         valido: false,
-        mensaje: `No se pueden seleccionar facturas de distinto tipo.\n` +
-                 `Facturas encontradas: ${letras.join(', ')}\n\n` +
-                 `Una Nota de Crédito solo puede anular facturas del mismo tipo.`
-      };
+        mensaje: `No se pueden seleccionar facturas de distinto tipo.\nFacturas encontradas: ${letras.join(", ")}\n\nUna Nota de Credito solo puede anular facturas del mismo tipo.`,
+      }
     }
-    
-    return { valido: true };
-  };
 
-  // Modificar toggleSeleccion para incluir validación
+    return { valido: true }
+  }
+
   const toggleSeleccion = (fac) => {
     const id = getId(fac)
     if (id === null) return
-    
+
     const nuevasSeleccionadas = seleccionadas.includes(id)
-      ? seleccionadas.filter(s => s !== id)
-      : [...seleccionadas, id];
-    
-    // Obtener facturas correspondientes a las nuevas selecciones
-    const facturasNuevas = facturas.filter(f => nuevasSeleccionadas.includes(getId(f)));
-    
-    // Validar consistencia de letras
-    const validacion = validarSeleccionLetras(facturasNuevas);
-    
+      ? seleccionadas.filter((s) => s !== id)
+      : [...seleccionadas, id]
+
+    const facturasNuevas = facturas.filter((f) => nuevasSeleccionadas.includes(getId(f)))
+    const validacion = validarSeleccionLetras(facturasNuevas)
+
     if (!validacion.valido) {
-      alert(validacion.mensaje);
-      return; // No actualizar selección si es inválida
+      alert(validacion.mensaje)
+      return
     }
-    
-    setSeleccionadas(nuevasSeleccionadas);
+
+    setSeleccionadas(nuevasSeleccionadas)
   }
+
   const estaSeleccionada = (fac) => seleccionadas.includes(getId(fac))
 
-  // Confirmar selección
   const handleConfirmar = () => {
     const elegidas = facturas.filter((f) => seleccionadas.includes(getId(f)))
     onSeleccionar(elegidas)
   }
 
-  // Configuración de columnas para Tabla.js
   const columnas = [
     {
       id: "seleccion",
@@ -183,7 +148,7 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     },
     {
       id: "numero",
-      titulo: "Número",
+      titulo: "Numero",
       align: "left",
       render: (fila) => (
         <span className="font-mono">{fila.numero_formateado || fila.numero}</span>
@@ -203,10 +168,9 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
     }
   ]
 
-  // Renderizado personalizado de fila para manejar el click en toda la fila
   const renderFila = (fila, idxVisible, indiceInicio) => (
-    <tr 
-      key={getId(fila)} 
+    <tr
+      key={getId(fila)}
       className={`hover:bg-orange-50 cursor-pointer transition-colors duration-150 ${estaSeleccionada(fila) ? "bg-orange-100/60" : ""}`}
       onClick={() => toggleSeleccion(fila)}
     >
@@ -227,7 +191,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
   return (
     <Transition show={abierto} as={Fragment} appear>
       <Dialog as="div" className="relative z-40" onClose={onCerrar}>
-        {/* Fondo oscuro */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200"
@@ -240,7 +203,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
           <div className="fixed inset-0 bg-black/60" />
         </Transition.Child>
 
-        {/* Panel */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200"
@@ -252,7 +214,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
         >
           <div className="fixed inset-0 flex items-center justify-center p-4">
             <Dialog.Panel className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-              {/* Encabezado */}
               <div className={`flex items-center justify-between px-6 py-4 bg-gradient-to-r ${theme.primario} text-white`}>
                 <Dialog.Title className="text-lg font-bold">
                   Seleccionar Facturas de {cliente?.razon || cliente?.nombre || "cliente"}
@@ -275,7 +236,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                 </button>
               </div>
 
-              {/* Buscador */}
               <div className="px-6 py-4">
                 <Buscador
                   items={facturas}
@@ -287,7 +247,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                 />
               </div>
 
-              {/* Contenido */}
               {error ? (
                 <div className="p-8 text-center text-red-600">{error}</div>
               ) : (
@@ -307,7 +266,6 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
                 </div>
               )}
 
-              {/* Footer */}
               <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50">
                 <span className="text-sm text-slate-600">
                   {seleccionadas.length} seleccionada{seleccionadas.length === 1 ? "" : "s"}
@@ -334,4 +292,4 @@ export default function FacturaSelectorModal({ abierto = false, cliente = null, 
       </Dialog>
     </Transition>
   )
-} 
+}

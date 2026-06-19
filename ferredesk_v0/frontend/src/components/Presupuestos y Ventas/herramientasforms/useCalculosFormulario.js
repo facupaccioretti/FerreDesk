@@ -25,22 +25,30 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
 
   // Derivar SIEMPRE precio base SIN IVA a partir del precio final si existe
   const obtenerPrecioBaseSinIVA = useCallback((item) => {
-    // 1) Si viene precio final explícito, derivar base dividiendo por (1 + IVA)
-    const precioFinal = Number.parseFloat(
-      item.vdi_precio_unitario_final ?? item.precioFinal
-    );
-    if (Number.isFinite(precioFinal) && precioFinal > 0) {
-      const aliId = obtenerAliId(item);
-      const aliPorc = (alicuotas?.[aliId] ?? 0);
-      const divisor = 1 + (aliPorc / 100);
-      return divisor > 0 ? precioFinal / divisor : 0;
+    const rawPrecioFinal = item.vdi_precio_unitario_final ?? item.precioFinal;
+    const rawPrecioBase = item.precio;
+
+    // 1) Si viene precio final explícito (aunque sea 0 o "0"), derivar base dividiendo por (1 + IVA)
+    if (rawPrecioFinal !== undefined && rawPrecioFinal !== null && rawPrecioFinal !== "") {
+      const precioFinal = Number.parseFloat(rawPrecioFinal);
+      if (Number.isFinite(precioFinal)) {
+        const aliId = obtenerAliId(item);
+        const aliPorc = (alicuotas?.[aliId] ?? 0);
+        const divisor = 1 + (aliPorc / 100);
+        return divisor > 0 ? precioFinal / divisor : 0;
+      }
     }
-    // 2) Si no hay final, asumir que item.precio ya es base; si no, usar costo/importes
-    const precioPosibleBase = Number.parseFloat(item.precio);
-    if (Number.isFinite(precioPosibleBase) && precioPosibleBase > 0) {
-      return precioPosibleBase;
+
+    // 2) Si no hay final pero hay precio base explícito (aunque sea 0)
+    if (rawPrecioBase !== undefined && rawPrecioBase !== null && rawPrecioBase !== "") {
+      const precioPosibleBase = Number.parseFloat(rawPrecioBase);
+      if (Number.isFinite(precioPosibleBase)) {
+        return precioPosibleBase;
+      }
     }
-    const costo = Number.parseFloat(item.costo ?? item.vdi_costo ?? item.vdi_importe);
+
+    // 3) Último recurso: usar costo si los campos de precio están realmente ausentes (nulos/indefinidos)
+    const costo = Number.parseFloat(item.costo ?? item.vdi_costo);
     return Number.isFinite(costo) ? costo : 0;
   }, [alicuotas, obtenerAliId]);
 
@@ -55,8 +63,8 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
   const obtenerBonifParticular = (item) => {
     const bonif =
       item.bonificacion !== undefined ? parseFloat(item.bonificacion) :
-      item.vdi_bonifica !== undefined ? parseFloat(item.vdi_bonifica) :
-      0;
+        item.vdi_bonifica !== undefined ? parseFloat(item.vdi_bonifica) :
+          0;
     return (!isNaN(bonif) && bonif > 0) ? bonif : null;
   };
 
@@ -166,7 +174,7 @@ export function calcularTotalLinea(item, alicuotas) {
   const precioUnitarioConIVA = calcularPrecioUnitarioConIVA(item, alicuotas);
   const cantidad = parseFloat(item.cantidad ?? item.vdi_cantidad) || 0;
   return precioUnitarioConIVA * cantidad;
-} 
+}
 
 /**
  * Componente visual para mostrar los totales y descuentos de la venta/presupuesto.

@@ -82,7 +82,7 @@ class ChequeSerializer(serializers.ModelSerializer):
         ]
 
     def get_nota_debito_venta_id(self, obj):
-        """ID de la venta ND vinculada (usa la FK directa para no depender de la relación cargada)."""
+        """ID de la venta ND vinculada (usa la FK directa para no depender de la relacion cargada)."""
         return getattr(obj, 'nota_debito_venta_id', None)
 
     def get_nota_debito_numero_formateado(self, obj):

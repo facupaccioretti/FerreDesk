@@ -4,6 +4,8 @@ import Navbar from "./Navbar"
 import ProductosMasVendidosSimple from "./Dashboards/ProductosMasVendidosSimple"
 import VentasPorDiaSimple from "./Dashboards/VentasPorDiaSimple"
 import ClientesMasVentasSimple from "./Dashboards/ClientesMasVentasSimple"
+import { useLogoutMutation } from "../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../domains/session/useSessionUserQuery"
 
 const MetricCard = ({ title, value, icon, color }) => (
   <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-md border border-slate-800 ring-1 ring-orange-500/20 p-2 flex items-center space-x-2">
@@ -82,7 +84,8 @@ const useMetricData = (periodoVentas, metricaClientes, metricaProductos) => {
 };
 
 const Home = () => {
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   // Estado para los filtros de los gráficos
   const [periodoVentas, setPeriodoVentas] = useState('7d');
   const [metricaClientes, setMetricaClientes] = useState('total');
@@ -116,8 +119,11 @@ const Home = () => {
   };
 
   useEffect(() => { document.title = "Panel Principal FerreDesk" }, [])
-  useEffect(() => { fetch("/api/user/", { credentials: "include" }).then((res) => res.json()).then((data) => { if (data.status === "success") setUser(data.user) }) }, [])
-  const handleLogout = useCallback(() => { setUser(null); window.location.href = "/login/" }, [])
+  const handleLogout = useCallback(() => {
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
+  }, [logout])
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">
       <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, rgba(71, 85, 105, 0.15) 1px, transparent 0)`, backgroundSize: "20px 20px" }}></div>
