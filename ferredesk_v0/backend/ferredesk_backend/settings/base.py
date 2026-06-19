@@ -6,6 +6,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
 
+
+def env_bool(nombre, default=False):
+    valor = os.environ.get(nombre)
+    if valor is None:
+        return default
+    return valor.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
 SHARED_APPS = (
     'django_tenants',
     'django.contrib.contenttypes',
@@ -109,6 +116,7 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@ferredesk.local")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

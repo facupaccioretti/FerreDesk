@@ -607,6 +607,7 @@ class CargaInicialProveedorEstadoAPIView(APIView):
             'registros_saltados': solicitud.registros_saltados,
             'mensaje_error': solicitud.mensaje_error,
             'creado_en': solicitud.creado_en,
+            'actualizado_en': solicitud.actualizado_en,
             'iniciado_en': solicitud.iniciado_en,
             'finalizado_en': solicitud.finalizado_en,
         })
@@ -646,7 +647,7 @@ class ValidarCUITProveedorAPIView(APIView):
         from ferreapps.clientes.algoritmo_cuit_utils import validar_formato_cuit, formatear_cuit, obtener_tipo_contribuyente, limpiar_cuit
         
         ferreteria = Ferreteria.objects.first()
-        es_homologacion = ferreteria and ferreteria.modo_arca == 'HOM'
+        es_homologacion = ferreteria and ferreteria.obtener_modo_arca_operativo() == 'HOM'
         
         # En homologación, solo validar el formato (11 dígitos), no el dígito verificador
         if es_homologacion:

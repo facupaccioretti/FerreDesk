@@ -47,6 +47,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from ferredesk_backend.permissions import EsAdminTenant
 from ferredesk_backend.utils.observability import medir_proceso
+from ferredesk_backend.views import serve_react_root_file
 from .services.importacion_lista_precios_service import (
     LimiteImportacionSincronicaExcedido,
     crear_importacion_pendiente_lista_precios,
@@ -700,6 +701,7 @@ class ImportacionListaPreciosEstadoAPIView(APIView):
             'registros_actualizados': importacion.registros_actualizados,
             'mensaje_error': importacion.mensaje_error,
             'creado_en': importacion.creado_en,
+            'actualizado_en': importacion.actualizado_en,
             'iniciado_en': importacion.iniciado_en,
             'finalizado_en': importacion.finalizado_en,
         })
@@ -1267,6 +1269,41 @@ class FerreteriaAPIView(APIView):
             return [EsAdminTenant()]
         return [IsAuthenticated()]
 
+    def _build_configuracion_inicial(self):
+        arca_permitir_homologacion_ui = getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False)
+        return {
+            "no_configurada": True,
+            "setup_completo": False,
+            "campos_setup_faltantes": [
+                "nombre",
+                "razon_social",
+                "cuit_cuil",
+                "situacion_iva",
+                "direccion",
+                "telefono",
+            ],
+            "nombre": "",
+            "direccion": "",
+            "telefono": "",
+            "email": None,
+            "situacion_iva": "RI",
+            "punto_venta_arca": "",
+            "cuit_cuil": "",
+            "razon_social": "",
+            "ingresos_brutos": "",
+            "inicio_actividad": None,
+            "logo_empresa": None,
+            "certificado_arca": None,
+            "clave_privada_arca": None,
+            "modo_arca": "HOM" if arca_permitir_homologacion_ui else "PROD",
+            "arca_habilitado": False,
+            "arca_configurado": False,
+            "arca_ultima_validacion": None,
+            "arca_error_configuracion": None,
+            "permitir_stock_negativo": False,
+            "arca_permitir_homologacion_ui": arca_permitir_homologacion_ui,
+        }
+
     def get(self, request):
         print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
         ferreteria = Ferreteria.objects.first()
@@ -1338,37 +1375,7 @@ class FerreteriaAPIView(APIView):
         ) as medicion:
             ferreteria = Ferreteria.objects.first()
             if not ferreteria:
-                configuracion_inicial = {
-                    "no_configurada": True,
-                    "setup_completo": False,
-                    "campos_setup_faltantes": [
-                        "nombre",
-                        "razon_social",
-                        "cuit_cuil",
-                        "situacion_iva",
-                        "direccion",
-                        "telefono",
-                    ],
-                    "nombre": "",
-                    "direccion": "",
-                    "telefono": "",
-                    "email": None,
-                    "situacion_iva": "RI",
-                    "punto_venta_arca": "",
-                    "cuit_cuil": "",
-                    "razon_social": "",
-                    "ingresos_brutos": "",
-                    "inicio_actividad": None,
-                    "logo_empresa": None,
-                    "certificado_arca": None,
-                    "clave_privada_arca": None,
-                    "modo_arca": "HOM",
-                    "arca_habilitado": False,
-                    "arca_configurado": False,
-                    "arca_ultima_validacion": None,
-                    "arca_error_configuracion": None,
-                    "permitir_stock_negativo": False,
-                }
+                configuracion_inicial = self._build_configuracion_inicial()
                 medicion.registrar_metricas(no_configurada=True, setup_completo=False)
                 return Response(configuracion_inicial, status=200)
 
@@ -1454,6 +1461,15 @@ def servir_logo_arca(request):
     URL: /api/productos/servir-logo-arca/
     """
     try:
+        response = serve_react_root_file(request, "logo-arca.jpg")
+        response["Content-Disposition"] = 'inline; filename="logo-arca.jpg"'
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type"
+        response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
         ruta_logo = os.path.join(settings.MEDIA_ROOT, 'logos', 'logo-arca.jpg')
         print(f'DEBUG: Intentando servir logo desde: {ruta_logo}')
         print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
@@ -1737,3 +1753,4 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
             return "Se encontraron productos similares. Te sugerimos revisar si alguno corresponde al producto que estás creando."
         
         return "Se encontraron productos con cierta similitud. Te sugerimos revisar antes de continuar."
+

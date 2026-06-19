@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista, ListaPrecio
 from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
@@ -297,6 +298,7 @@ class FerreteriaSerializer(serializers.ModelSerializer):
     tiene_clave_privada_arca = serializers.SerializerMethodField()
     setup_completo = serializers.SerializerMethodField()
     campos_setup_faltantes = serializers.SerializerMethodField()
+    arca_permitir_homologacion_ui = serializers.SerializerMethodField()
     
     class Meta:
         model = Ferreteria
@@ -328,6 +330,13 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             ) from exc
         return value
 
+    def validate_modo_arca(self, value):
+        if value == "HOM" and not getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False):
+            raise serializers.ValidationError(
+                "El modo homologacion no esta habilitado en este entorno."
+            )
+        return value
+
     def get_tiene_certificado_arca(self, instance):
         try:
             return bool(getattr(instance, 'certificado_arca', None) and getattr(instance.certificado_arca, 'name', None))
@@ -352,6 +361,9 @@ class FerreteriaSerializer(serializers.ModelSerializer):
         except Exception:
             return []
 
+    def get_arca_permitir_homologacion_ui(self, instance):
+        return instance.permitir_homologacion_ui()
+
     def to_representation(self, instance):
         """Mantener compatibilidad y robustez con archivos faltantes.
         - 'logo_empresa': URL absoluta si existe
@@ -375,6 +387,8 @@ class FerreteriaSerializer(serializers.ModelSerializer):
             rep['tiene_clave_privada_arca'] = bool(getattr(instance, 'clave_privada_arca', None) and getattr(instance.clave_privada_arca, 'name', None))
         except Exception:
             rep['tiene_clave_privada_arca'] = False
+        rep['arca_permitir_homologacion_ui'] = instance.permitir_homologacion_ui()
+        rep['modo_arca'] = instance.obtener_modo_arca_operativo()
 
         # Compatibilidad con el frontend actual: si falta setup mínimo, sigue
         # tratándose como "no configurada" a efectos de redirección a /setup.
@@ -400,3 +414,4 @@ class VistaStockProductoSerializer(serializers.ModelSerializer):
             'stock_total',        # Anotación por subquery Sum
             'necesita_reposicion', # Anotación calculada
         ]
+

@@ -161,6 +161,15 @@ class Ferreteria(models.Model):
     def __str__(self):
         return self.nombre
 
+    @staticmethod
+    def permitir_homologacion_ui():
+        return bool(getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False))
+
+    def obtener_modo_arca_operativo(self):
+        if self.permitir_homologacion_ui():
+            return self.modo_arca or "HOM"
+        return "PROD"
+
     @classmethod
     def es_cuit_cuil_valido(cls, valor):
         if valor is None:

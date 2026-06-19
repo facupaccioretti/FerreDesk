@@ -1,11 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
-import { useFerreDeskTheme } from "../../../hooks/useFerreDeskTheme";
 import { useRegistroTenantAPI } from "../../../utils/useRegistroTenantAPI";
 
 const Register = () => {
-  const theme = useFerreDeskTheme();
   const navigate = useNavigate();
 
   const {
@@ -39,113 +38,142 @@ const Register = () => {
   }, [registroResult, navigate, formData.email_admin]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative flex flex-col font-sans">
       <div
-        className="absolute inset-0 opacity-30"
+        className="absolute inset-0 opacity-30 pointer-events-none"
         style={{
           backgroundImage:
             "radial-gradient(circle at 1px 1px, rgba(71, 85, 105, 0.15) 1px, transparent 0)",
           backgroundSize: "20px 20px",
         }}
       ></div>
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-300/20 via-transparent to-slate-100/30"></div>
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-300/20 via-transparent to-slate-100/30 pointer-events-none"></div>
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className={`max-w-md w-full space-y-8 ${theme.tarjetaClara} p-8 rounded-2xl shadow-xl`}>
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-orange-600">
-              Registrar Negocio
-            </h2>
-            <p className="mt-2 text-center text-sm text-slate-600">
-              Crea tu propio espacio de trabajo SaaS
-            </p>
+      <nav className="relative z-10 px-6 md:px-12 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center text-white font-bold text-sm tracking-tight shadow-md">
+            FD
           </div>
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <span className="text-lg font-bold text-slate-800">
+            <span className="text-orange-600">Ferre</span>Desk
+          </span>
+        </div>
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Volver al inicio
+        </button>
+      </nav>
+
+      <main className="relative z-10 flex-1 flex items-start justify-center px-4 py-8 md:py-12">
+        <div className="w-full max-w-[460px] bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xl">
+
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tight mb-1.5">Registrá tu negocio</h2>
+            <p className="text-xs text-slate-500 leading-normal">En unos minutos tenés tu sistema listo para usar.</p>
+          </div>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {(localError || registroError) && (
               <div
-                className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm"
+                className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative text-xs font-medium"
                 role="alert"
               >
-                <span className="block sm:inline">{localError || registroError}</span>
+                <span>{localError || registroError}</span>
               </div>
             )}
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="nombre" className="block text-sm font-medium text-slate-700 mb-1">
-                  Nombre del Negocio
-                </label>
+
+            <div>
+              <label htmlFor="nombre" className="block text-xs font-semibold text-slate-700 mb-1">
+                Nombre del negocio
+              </label>
+              <input
+                id="nombre"
+                name="nombre"
+                type="text"
+                required
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors bg-white"
+                placeholder="Ferretería Don Carlos"
+                value={formData.nombre}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="slug" className="block text-xs font-semibold text-slate-700 mb-1">
+                Dirección web de tu negocio
+              </label>
+              <div className="flex">
                 <input
-                  id="nombre"
-                  name="nombre"
+                  id="slug"
+                  name="slug"
                   type="text"
                   required
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Ferreteria Don Carlos"
-                  value={formData.nombre}
+                  className="flex-1 px-3 py-2 rounded-l-lg border border-slate-300 border-r-0 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors bg-white"
+                  placeholder="don-carlos"
+                  value={formData.slug}
                   onChange={handleChange}
+                  onBlur={handleValidateSlug}
                 />
-              </div>
-
-              <div>
-                <label htmlFor="slug" className="block text-sm font-medium text-slate-700 mb-1">
-                  Subdominio
-                </label>
-                <div className="flex rounded-lg shadow-sm">
-                  <input
-                    id="slug"
-                    name="slug"
-                    type="text"
-                    required
-                    className="flex-1 px-4 py-2 rounded-l-lg border border-r-0 border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                    placeholder="don-carlos"
-                    value={formData.slug}
-                    onChange={handleChange}
-                    onBlur={handleValidateSlug}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleValidateSlug}
-                    className="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 text-sm font-medium"
-                  >
-                    Validar
-                  </button>
-                </div>
-                <div className="mt-1 text-xs min-h-[16px]">
-                  {loadingSlug && (
-                    <span className="text-blue-500 font-medium">Comprobando disponibilidad...</span>
-                  )}
-                  {!loadingSlug && slugError && (
-                    <span className="text-red-500 font-medium">{slugError}</span>
-                  )}
-                  {!loadingSlug && slugResult?.disponible && formData.slug === slugResult.slug && (
-                    <span className="text-green-600 font-medium">
-                      Subdominio disponible. ({slugResult.dominio_sugerido})
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="email_admin"
-                  className="block text-sm font-medium text-slate-700 mb-1"
+                <button
+                  type="button"
+                  onClick={handleValidateSlug}
+                  disabled={loadingSlug}
+                  className="px-4 py-2 bg-slate-50 border border-slate-300 rounded-r-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
                 >
-                  Correo Administrador
-                </label>
-                <input
-                  id="email_admin"
-                  name="email_admin"
-                  type="email"
-                  required
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="admin@ejemplo.com"
-                  value={formData.email_admin}
-                  onChange={handleChange}
-                />
+                  {loadingSlug ? "Validando..." : "Verificar"}
+                </button>
               </div>
+              <div className="mt-1 text-xs min-h-[16px]">
+                {loadingSlug && (
+                  <span className="text-blue-500 font-medium">Comprobando disponibilidad...</span>
+                )}
+                {!loadingSlug && slugError && (
+                  <span className="text-red-500 font-medium">{slugError}</span>
+                )}
+                {!loadingSlug && slugResult?.disponible && formData.slug === slugResult.slug && (
+                  <span className="text-green-600 font-medium">
+                    Subdominio disponible. ({slugResult.dominio_sugerido})
+                  </span>
+                )}
+                {!loadingSlug && !slugError && (!slugResult || formData.slug !== slugResult.slug) && (
+                  <span className="text-slate-400">
+                    Tu sistema quedará en <strong>{formData.slug || "tu-negocio"}.ferredesk.com</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-[1px] bg-slate-100"></div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tu cuenta de administrador</span>
+              <div className="flex-1 h-[1px] bg-slate-100"></div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="email_admin"
+                className="block text-xs font-semibold text-slate-700 mb-1"
+              >
+                Correo electrónico
+              </label>
+              <input
+                id="email_admin"
+                name="email_admin"
+                type="email"
+                required
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors bg-white"
+                placeholder="admin@ejemplo.com"
+                value={formData.email_admin}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                  Contrasena
+                <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Contraseña
                 </label>
                 <input
                   id="password"
@@ -153,8 +181,8 @@ const Register = () => {
                   type="password"
                   required
                   autoComplete="new-password"
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Contrasena"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors bg-white"
+                  placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
                 />
@@ -162,9 +190,9 @@ const Register = () => {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
                 >
-                  Confirmar contrasena
+                  Confirmar
                 </label>
                 <input
                   id="confirmPassword"
@@ -172,37 +200,34 @@ const Register = () => {
                   type="password"
                   required
                   autoComplete="new-password"
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Confirmar contrasena"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors bg-white"
+                  placeholder="••••••••"
                   value={formData.confirmPassword}
                   onChange={handleChange}
                 />
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={loadingRegistro || loadingSlug}
-                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white ${theme.botonManager} disabled:opacity-50`}
-              >
-                {loadingRegistro ? "Creando negocio..." : "Registrar Negocio"}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loadingRegistro || loadingSlug}
+              className="w-full py-3 px-4 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl shadow-lg hover:shadow-xl active:scale-[0.99] text-sm font-semibold transition-all duration-150 disabled:opacity-50"
+            >
+              {loadingRegistro ? "Creando negocio..." : "Crear mi negocio →"}
+            </button>
           </form>
-          <div className="text-center mt-4">
-            <p className="text-sm text-slate-600">
-              Ya tienes una cuenta?{" "}
-              <button
-                onClick={() => navigate("/login")}
-                className={`font-medium ${theme.azulSecundario} hover:text-blue-500`}
-              >
-                Iniciar sesion
-              </button>
-            </p>
+
+          <div className="text-center mt-5 text-xs text-slate-500">
+            ¿Ya tenés cuenta?{" "}
+            <button
+              onClick={() => navigate("/login")}
+              className="font-semibold text-orange-600 hover:underline"
+            >
+              Ingresar
+            </button>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

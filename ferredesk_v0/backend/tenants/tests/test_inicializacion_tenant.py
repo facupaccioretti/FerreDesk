@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.test import Client, override_settings
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -152,53 +152,42 @@ class InicializacionTenantTestCase(TenantTestCase):
 
         self.assertEqual(patch_response.status_code, 403)
 
-    def test_admin_tenant_sin_staff_puede_subir_logo_arca(self):
+    def test_logo_arca_fijo_responde_en_tenant(self):
         inicializar_datos_tenant(
             tenant=self.tenant,
             email="admin@tenant.test",
             password="testpass123",
         )
-        usuario = Usuario.objects.get(username="admin@tenant.test")
-        self.assertFalse(usuario.is_staff)
 
         client = TenantClient(self.tenant)
-        self.assertTrue(
-            client.login(username="admin@tenant.test", password="testpass123")
-        )
 
-        with tempfile.TemporaryDirectory() as media_root:
-            with override_settings(MEDIA_ROOT=media_root):
-                archivo = SimpleUploadedFile(
-                    "logo.jpg",
-                    b"contenido-logo",
-                    content_type="image/jpeg",
-                )
-                response = client.post(
-                    "/api/productos/subir-logo-arca/",
-                    data={"logo_arca": archivo},
-                )
+        with tempfile.TemporaryDirectory() as react_root:
+            with open(f"{react_root}/logo-arca.jpg", "wb") as archivo:
+                archivo.write(b"logo-tenant")
+            with override_settings(REACT_APP_DIR=react_root):
+                response = client.get("/api/productos/servir-logo-arca/")
+                contenido = b"".join(response.streaming_content)
+                response.close()
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(contenido, b"logo-tenant")
 
-    def test_usuario_no_admin_no_puede_subir_logo_arca(self):
-        inicializar_datos_tenant(
-            tenant=self.tenant,
-            email="admin@tenant.test",
-            password="testpass123",
-        )
-        ferreteria = Ferreteria.objects.get()
-        Usuario.objects.create_user(
-            username="operador@tenant.test",
-            email="operador@tenant.test",
-            password="testpass123",
-            tipo_usuario="cli_user",
-            ferreteria=ferreteria,
-        )
+    def test_logo_arca_fijo_responde_en_public(self):
+        client = Client(HTTP_HOST="localhost")
 
+        with tempfile.TemporaryDirectory() as react_root:
+            with open(f"{react_root}/logo-arca.jpg", "wb") as archivo:
+                archivo.write(b"logo-public")
+            with override_settings(REACT_APP_DIR=react_root):
+                response = client.get("/api/productos/servir-logo-arca/")
+                contenido = b"".join(response.streaming_content)
+                response.close()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(contenido, b"logo-public")
+
+    def test_endpoint_subir_logo_arca_deja_de_existir(self):
         client = TenantClient(self.tenant)
-        self.assertTrue(
-            client.login(username="operador@tenant.test", password="testpass123")
-        )
 
         archivo = SimpleUploadedFile(
             "logo.jpg",
@@ -210,7 +199,45 @@ class InicializacionTenantTestCase(TenantTestCase):
             data={"logo_arca": archivo},
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertIn(response.status_code, {404, 405})
+
+    @override_settings(ARCA_PERMITIR_HOMOLOGACION_UI=False)
+    def test_patch_no_permite_homologacion_si_ui_esta_desactivada(self):
+        datos = inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        client = TenantClient(self.tenant)
+        client.force_login(datos["usuario"])
+
+        response = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"modo_arca": "HOM"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("modo_arca", response.json())
+
+    @override_settings(ARCA_PERMITIR_HOMOLOGACION_UI=True)
+    def test_patch_permite_homologacion_si_ui_esta_activada(self):
+        datos = inicializar_datos_tenant(
+            tenant=self.tenant,
+            email="admin@tenant.test",
+            password="testpass123",
+        )
+        client = TenantClient(self.tenant)
+        client.force_login(datos["usuario"])
+
+        response = client.patch(
+            "/api/ferreteria/",
+            data=json.dumps({"modo_arca": "HOM"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["modo_arca"], "HOM")
 
     def test_estado_setup_endpoint_refleja_tenant_incompleto_y_completo(self):
         inicializar_datos_tenant(

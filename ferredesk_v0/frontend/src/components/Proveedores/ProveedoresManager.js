@@ -12,6 +12,7 @@ import Tabla from "../Tabla"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
+import { toast } from "react-toastify"
 
 const ProveedoresManager = () => {
   const theme = useFerreDeskTheme()
@@ -129,9 +130,11 @@ const ProveedoresManager = () => {
     setShowListaModal(true)
   }
   const handleImportLista = (info) => {
-    alert(
-      `Lista importada para ${info.proveedor.razon}\n${info.message || ""}\nRegistros procesados: ${info.registrosProcesados ?? "N/D"}\nRegistros actualizados: ${info.registrosActualizados ?? "N/D"}`,
-    )
+    if (info?.status === "success") {
+      toast.success(
+        `Lista finalizada para ${info.proveedor.razon}. Procesados: ${info.registrosProcesados ?? "N/D"}. Actualizados: ${info.registrosActualizados ?? "N/D"}.`
+      )
+    }
   }
   const handleOpenHistorialModal = (proveedor) => {
     setProveedorHistorial(proveedor)

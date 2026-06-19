@@ -51,7 +51,7 @@ class FerreDeskARCA:
         """
         self.ferreteria = ferreteria
         self.ferreteria_id = ferreteria.id
-        self.modo = ferreteria.modo_arca or 'HOM'
+        self.modo = ferreteria.obtener_modo_arca_operativo()
         
         # Inicializar componentes
         self.wsfev1_service = WSFEv1Service(self.ferreteria_id, self.modo)

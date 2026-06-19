@@ -1,359 +1,431 @@
-import React, { Fragment, useRef, useState, useEffect } from 'react';
-import * as XLSX from 'xlsx'; // Import the xlsx library
-import { getCookie } from '../../utils/csrf'; // Ajusta el path si es necesario
-import { Dialog, Transition } from "@headlessui/react";
-import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
+import React, { Fragment, useEffect, useRef, useState } from "react"
+import * as XLSX from "xlsx"
+import { Dialog, Transition } from "@headlessui/react"
+import { toast } from "react-toastify"
+import { useProcessContext } from "../../context/ProcessContext"
+import { getCookie } from "../../utils/csrf"
+import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import ModernFileInput from "../ModernFileInput"
 
-const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
-  const fileInputRef = useRef();
-  const [file, setFile] = useState(null);
-  const [colCodigo, setColCodigo] = useState('A');
-  const [colPrecio, setColPrecio] = useState('B');
-  const [colDenominacion, setColDenominacion] = useState('C');
-  const [filaInicio, setFilaInicio] = useState(2);
-  const [vistaPrevia, setVistaPrevia] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [errorVistaPrevia, setErrorVistaPrevia] = useState('');
+const CANTIDAD_MAX_VISTA_PREVIA = 10
+const LONGITUD_MINIMA_TOKEN = 3
+const CANTIDAD_MINIMA_TOKENS_COINCIDEN = 1
+const MENSAJE_ADVERTENCIA_NO_COINCIDENCIA =
+  "No se encontro coincidencia entre el archivo y el proveedor. Verifique que la lista subida sea la correcta."
 
-  const csrftoken = getCookie('csrftoken');
-  const theme = useFerreDeskTheme();
+function normalizarCadena(texto) {
+  if (!texto) return ""
 
-  // Cantidad máxima de filas a mostrar en la vista previa
-  const CANTIDAD_MAX_VISTA_PREVIA = 10;
-  // Longitud mínima de token para considerar coincidencia en nombre de archivo
-  const LONGITUD_MINIMA_TOKEN = 3;
-  // Cantidad mínima de tokens de fantasía que deben coincidir en el nombre del archivo
-  const CANTIDAD_MINIMA_TOKENS_COINCIDEN = 1;
-  // Mensaje de advertencia si no se encuentra coincidencia entre archivo y proveedor
-  const MENSAJE_ADVERTENCIA_NO_COINCIDENCIA = 'No se encontró coincidencia entre el archivo y el proveedor. Verifique que la lista subida sea la correcta.';
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+}
 
-  // Estado para advertencia de coincidencia de nombre de archivo
-  const [advertenciaNombreArchivo, setAdvertenciaNombreArchivo] = useState('');
-  const [nombreArchivoSeleccionado, setNombreArchivoSeleccionado] = useState('');
-  const [importando, setImportando] = useState(false);
-  const [importacion, setImportacion] = useState(null);
-  const [mensajeImportacion, setMensajeImportacion] = useState('');
-  // Evitar múltiples alerts por el mismo mensaje de error de vista previa
-  const ultimoErrorAlertadoRef = useRef('');
-  const importacionActiva = ["pendiente", "procesando"].includes(importacion?.estado);
+function existeCoincidenciaArchivoProveedor(archivoNombre, fantasiaProveedor) {
+  const nombreNormalizado = normalizarCadena(archivoNombre)
+  const fantasiaNormalizada = normalizarCadena(fantasiaProveedor)
 
-  // Normaliza cadenas: sin acentos, en minúsculas y sólo alfanumérico/espacios
-  const normalizarCadena = (texto) => {
-    if (!texto) return '';
-    return texto
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim()
-      .replace(/\s+/g, ' ');
-  };
+  if (!nombreNormalizado || !fantasiaNormalizada) {
+    return false
+  }
 
-  // Evalúa coincidencia entre nombre de archivo y fantasía del proveedor
-  const existeCoincidenciaArchivoProveedor = (archivoNombre, fantasiaProveedor) => {
-    const nombreNorm = normalizarCadena(archivoNombre);
-    const fantasiaNorm = normalizarCadena(fantasiaProveedor);
-    if (!nombreNorm || !fantasiaNorm) return false;
-    const tokens = fantasiaNorm.split(' ').filter(t => t.length >= LONGITUD_MINIMA_TOKEN);
-    if (tokens.length === 0) return false;
-    let tokensCoinciden = 0;
-    for (const tk of tokens) {
-      if (nombreNorm.includes(tk)) tokensCoinciden += 1;
+  const tokens = fantasiaNormalizada
+    .split(" ")
+    .filter((token) => token.length >= LONGITUD_MINIMA_TOKEN)
+
+  if (tokens.length === 0) {
+    return false
+  }
+
+  let tokensCoinciden = 0
+  for (const token of tokens) {
+    if (nombreNormalizado.includes(token)) {
+      tokensCoinciden += 1
     }
-    return tokensCoinciden >= CANTIDAD_MINIMA_TOKENS_COINCIDEN;
-  };
+  }
 
-  // Genera el mensaje de confirmación para la importación
-  const construirMensajeConfirmacionImportacion = (archivoNombre, proveedorNombre) => {
-    return `Estás importando la lista "${archivoNombre}" para el proveedor "${proveedorNombre}". ¿Está seguro de proceder?`;
-  };
+  return tokensCoinciden >= CANTIDAD_MINIMA_TOKENS_COINCIDEN
+}
+
+function construirMensajeConfirmacionImportacion(archivoNombre, proveedorNombre) {
+  return `Estas por iniciar la actualizacion de la lista "${archivoNombre}" para el proveedor "${proveedorNombre}".`
+}
+
+function letterToColumnIndex(letter) {
+  let column = 0
+  const length = letter.length
+
+  for (let i = 0; i < length; i += 1) {
+    column += (letter.charCodeAt(i) - 64) * Math.pow(26, length - i - 1)
+  }
+
+  return column - 1
+}
+
+export default function ListaPreciosModal({ open, onClose, proveedor, onImport }) {
+  const csrftoken = getCookie("csrftoken")
+  const theme = useFerreDeskTheme()
+  const { registrarProceso, obtenerProceso } = useProcessContext()
+
+  const [file, setFile] = useState(null)
+  const [colCodigo, setColCodigo] = useState("A")
+  const [colPrecio, setColPrecio] = useState("B")
+  const [colDenominacion, setColDenominacion] = useState("C")
+  const [filaInicio, setFilaInicio] = useState(2)
+  const [vistaPrevia, setVistaPrevia] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [errorVistaPrevia, setErrorVistaPrevia] = useState("")
+  const [advertenciaNombreArchivo, setAdvertenciaNombreArchivo] = useState("")
+  const [nombreArchivoSeleccionado, setNombreArchivoSeleccionado] = useState("")
+  const [importando, setImportando] = useState(false)
+  const [errorFormulario, setErrorFormulario] = useState("")
+  const [importacionIniciada, setImportacionIniciada] = useState(null)
+  const [mensajeImportacion, setMensajeImportacion] = useState("")
+
+  const procesoGlobal = importacionIniciada
+    ? obtenerProceso("actualizacion_lista_precios", importacionIniciada.id)
+    : null
 
   useEffect(() => {
     if (!open) {
-      setImportacion(null);
-      setMensajeImportacion('');
-      setImportando(false);
+      setImportando(false)
+      return
     }
-  }, [open]);
+
+    fetch("/api/productos/proveedores/", { credentials: "include" })
+  }, [open])
 
   useEffect(() => {
-    if (!proveedor?.id || !importacion?.id || !importacionActiva) return undefined;
-
-    let cancelado = false;
-    const consultarEstado = async () => {
-      try {
-        const response = await fetch(
-          `/api/productos/proveedores/${proveedor.id}/importaciones-listas/${importacion.id}/`,
-          { credentials: 'include' }
-        );
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.detail || 'Error consultando estado de importacion');
-        if (cancelado) return;
-
-        setImportacion(data);
-        if (data.estado === 'completada') {
-          setImportando(false);
-          const procesados = data.registros_procesados || 0;
-          const actualizados = data.registros_actualizados || 0;
-          const message = actualizados === 0
-            ? 'La lista finalizo sin actualizar costos. Verifique que el archivo corresponda al proveedor.'
-            : `Lista importada correctamente. Registros procesados: ${procesados}. Actualizados: ${actualizados}.`;
-          setMensajeImportacion(message);
-          onImport({
-            proveedor,
-            fileName: file?.name,
-            status: 'success',
-            message,
-            registrosProcesados: procesados,
-            registrosActualizados: actualizados,
-          });
-        } else if (data.estado === 'error') {
-          setImportando(false);
-          setMensajeImportacion(data.mensaje_error || 'La importacion finalizo con error.');
-        }
-      } catch (err) {
-        if (!cancelado) {
-          setImportando(false);
-          setMensajeImportacion(err.message || 'Error consultando estado de importacion');
-        }
-      }
-    };
-
-    consultarEstado();
-    const timer = window.setInterval(consultarEstado, 3000);
-    return () => {
-      cancelado = true;
-      window.clearInterval(timer);
-    };
-  }, [proveedor, importacion?.id, importacionActiva, onImport, file]);
-
-  // Helper to convert column letter to index (A=0, B=1, AA=26)
-  const letterToColumnIndex = (letter) => {
-    let column = 0, length = letter.length;
-    for (let i = 0; i < length; i++) {
-      column += (letter.charCodeAt(i) - 64) * Math.pow(26, length - i - 1);
+    if (!open) {
+      return
     }
-    return column - 1;
-  };
 
-  const handleFileChange = (e) => {
-    const f = e.target.files[0];
-    if (!f) {
-      setFile(null);
-      setVistaPrevia([]);
-      setErrorVistaPrevia('');
-      setAdvertenciaNombreArchivo('');
-      setNombreArchivoSeleccionado('');
-      return;
+    setFile(null)
+    setColCodigo("A")
+    setColPrecio("B")
+    setColDenominacion("C")
+    setFilaInicio(2)
+    setVistaPrevia([])
+    setLoading(false)
+    setErrorVistaPrevia("")
+    setAdvertenciaNombreArchivo("")
+    setNombreArchivoSeleccionado("")
+    setImportando(false)
+    setErrorFormulario("")
+    setImportacionIniciada(null)
+    setMensajeImportacion("")
+  }, [open])
+
+  useEffect(() => {
+    if (!procesoGlobal) {
+      return
     }
-    setFile(f);
-    setNombreArchivoSeleccionado(f.name || '');
-    setErrorVistaPrevia('');
-    setLoading(true);
 
-    // Verificar coincidencia de nombre con fantasía del proveedor (o razón como fallback)
+    if (procesoGlobal.estado === "completada") {
+      const procesados = procesoGlobal.registros_procesados || 0
+      const actualizados = procesoGlobal.registros_actualizados || 0
+      const message =
+        actualizados === 0
+          ? "La lista finalizo sin actualizar costos. Verifique que el archivo corresponda al proveedor."
+          : `Lista importada correctamente. Registros procesados: ${procesados}. Actualizados: ${actualizados}.`
+
+      setMensajeImportacion(message)
+      onImport?.({
+        proveedor,
+        fileName: file?.name,
+        status: "success",
+        message,
+        registrosProcesados: procesados,
+        registrosActualizados: actualizados,
+      })
+    } else if (procesoGlobal.estado === "error") {
+      setMensajeImportacion(
+        procesoGlobal.mensaje_error || "La importacion finalizo con error."
+      )
+    }
+  }, [file?.name, onImport, procesoGlobal, proveedor])
+
+  useEffect(() => {
+    if (!file) {
+      return
+    }
+
+    const reprocesar = async () => {
+      await handleFilePreview(file)
+    }
+
+    reprocesar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colCodigo, colPrecio, colDenominacion, filaInicio])
+
+  const resetEstadoDependiente = () => {
+    setVistaPrevia([])
+    setErrorVistaPrevia("")
+    setErrorFormulario("")
+    setImportacionIniciada(null)
+    setMensajeImportacion("")
+  }
+
+  const handleFilePreview = async (selectedFile) => {
+    if (!selectedFile) {
+      resetEstadoDependiente()
+      return
+    }
+
+    setLoading(true)
+    setErrorVistaPrevia("")
+
     try {
-      const fantasiaReferencia = proveedor?.fantasia || proveedor?.razon || '';
-      const hayCoincidencia = existeCoincidenciaArchivoProveedor(f.name || '', fantasiaReferencia);
-      setAdvertenciaNombreArchivo(hayCoincidencia ? '' : MENSAJE_ADVERTENCIA_NO_COINCIDENCIA);
+      const fantasiaReferencia = proveedor?.fantasia || proveedor?.razon || ""
+      const hayCoincidencia = existeCoincidenciaArchivoProveedor(
+        selectedFile.name || "",
+        fantasiaReferencia
+      )
+      setAdvertenciaNombreArchivo(
+        hayCoincidencia ? "" : MENSAJE_ADVERTENCIA_NO_COINCIDENCIA
+      )
     } catch (_) {
-      // En caso de error, no bloquear
-      setAdvertenciaNombreArchivo('');
+      setAdvertenciaNombreArchivo("")
     }
 
-    const reader = new FileReader();
+    const reader = new FileReader()
     reader.onload = (event) => {
       try {
-        const workbook = XLSX.read(event.target.result, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0]; // Use the first sheet
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // Convert sheet to an array of arrays (rows)
-        const dataRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
+        const workbook = XLSX.read(event.target.result, { type: "binary" })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const dataRows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          blankrows: false,
+        })
 
         if (dataRows.length < filaInicio) {
-          setErrorVistaPrevia(`La fila de inicio (${filaInicio}) es mayor que el número de filas en el archivo (${dataRows.length}).`);
-          setVistaPrevia([]);
-          setLoading(false);
-          return;
+          setErrorVistaPrevia(
+            `La fila de inicio (${filaInicio}) es mayor que el numero de filas en el archivo (${dataRows.length}).`
+          )
+          setVistaPrevia([])
+          setLoading(false)
+          return
         }
 
-        const codigoIdx = letterToColumnIndex(colCodigo.toUpperCase());
-        const precioIdx = letterToColumnIndex(colPrecio.toUpperCase());
-        const denominacionIdx = letterToColumnIndex(colDenominacion.toUpperCase());
-        
-        const previewData = [];
-        // Comenzar desde filaInicio - 1 (dataRows es 0-indexado) y tomar hasta CANTIDAD_MAX_VISTA_PREVIA filas
-        for (let i = filaInicio - 1; i < dataRows.length && previewData.length < CANTIDAD_MAX_VISTA_PREVIA; i++) {
-          const row = dataRows[i];
-          const codigo = row[codigoIdx];
-          const precio = row[precioIdx];
-          const denominacion = row[denominacionIdx];
+        const codigoIdx = letterToColumnIndex(colCodigo.toUpperCase())
+        const precioIdx = letterToColumnIndex(colPrecio.toUpperCase())
+        const denominacionIdx = letterToColumnIndex(colDenominacion.toUpperCase())
+        const previewData = []
 
-          if (codigo !== undefined && precio !== undefined) { // Only add if both values exist
-            previewData.push({ 
-              codigo: String(codigo).trim(), 
-              // Attempt to convert precio to number, handle potential errors
-              precio: !isNaN(parseFloat(precio)) ? parseFloat(precio) : String(precio).trim(),
-              denominacion: denominacion !== undefined ? String(denominacion).trim() : ''
-            });
-          } else if (previewData.length === 0 && i >= filaInicio -1 + 5) {
-            // If after 5 data rows we still haven't found valid data, likely wrong columns/start row
-            setErrorVistaPrevia('No se encontraron datos válidos con las columnas y fila de inicio especificadas. Verifique la configuración.');
-            break;
+        for (
+          let i = filaInicio - 1;
+          i < dataRows.length && previewData.length < CANTIDAD_MAX_VISTA_PREVIA;
+          i += 1
+        ) {
+          const row = dataRows[i]
+          const codigo = row[codigoIdx]
+          const precio = row[precioIdx]
+          const denominacion = row[denominacionIdx]
+
+          if (codigo !== undefined && precio !== undefined) {
+            previewData.push({
+              codigo: String(codigo).trim(),
+              precio: !Number.isNaN(parseFloat(precio))
+                ? parseFloat(precio)
+                : String(precio).trim(),
+              denominacion:
+                denominacion !== undefined ? String(denominacion).trim() : "",
+            })
+          } else if (previewData.length === 0 && i >= filaInicio - 1 + 5) {
+            setErrorVistaPrevia(
+              "No se encontraron datos validos con las columnas y fila de inicio especificadas. Verifique la configuracion."
+            )
+            break
           }
         }
-        
-        if(previewData.length === 0 && !errorVistaPrevia) {
-           setErrorVistaPrevia('No se pudo extraer una vista previa. Verifique las columnas y la fila de inicio.');
+
+        if (previewData.length === 0 && !errorVistaPrevia) {
+          setErrorVistaPrevia(
+            "No se pudo extraer una vista previa. Verifique las columnas y la fila de inicio."
+          )
         }
-        setVistaPrevia(previewData);
 
-      } catch (err) {
-        console.error("Error parsing Excel file:", err);
-        setErrorVistaPrevia('Error al procesar el archivo Excel. Asegúrese de que sea un formato válido y la configuración de columnas sea correcta.');
-        setVistaPrevia([]);
+        setVistaPrevia(previewData)
+      } catch (error) {
+        console.error("Error parsing Excel file:", error)
+        setErrorVistaPrevia(
+          "Error al procesar el archivo Excel. Asegurese de que sea un formato valido y que la configuracion de columnas sea correcta."
+        )
+        setVistaPrevia([])
       } finally {
-        setLoading(false);
-      }
-    };
-    reader.onerror = (err) => {
-      console.error("FileReader error:", err);
-      setErrorVistaPrevia('Error al leer el archivo.');
-      setLoading(false);
-    };
-    reader.readAsBinaryString(f); // Read as binary string for XLSX library
-  };
-
-  // Trigger re-parsing if columns or start row change and a file is selected
-  useEffect(() => {
-    if (file) {
-      // This will re-trigger the parsing logic by calling handleFileChange
-      // We simulate a file change event to reuse the existing logic
-      handleFileChange({ target: { files: [file] } });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colCodigo, colPrecio, colDenominacion, filaInicio]); // Removed 'file' from deps to avoid loop if handleFileChange sets file
-
-  // --- CSRF: Forzar obtención de cookie al abrir el modal ---
-  useEffect(() => {
-    if (open) {
-      fetch('/api/productos/proveedores/', { credentials: 'include' });
-    }
-  }, [open]);
-
-  // Mostrar alert solo una vez por mensaje y suprimir el error específico solicitado
-  useEffect(() => {
-    const MENSAJE_SUPRIMIR = 'No se pudo extraer una vista previa. Verifique las columnas y la fila de inicio.';
-    if (
-      errorVistaPrevia &&
-      errorVistaPrevia !== MENSAJE_SUPRIMIR &&
-      ultimoErrorAlertadoRef.current !== errorVistaPrevia
-    ) {
-      window.alert(`Error: ${errorVistaPrevia}`);
-      ultimoErrorAlertadoRef.current = errorVistaPrevia;
-    }
-  }, [errorVistaPrevia]);
-
-  // Al abrir el modal, limpiar archivo y vista previa para evitar datos residuales
-  useEffect(() => {
-    if (open) {
-      setFile(null);
-      setVistaPrevia([]);
-      setErrorVistaPrevia('');
-      setLoading(false);
-      setAdvertenciaNombreArchivo('');
-      setNombreArchivoSeleccionado('');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        setLoading(false)
       }
     }
-  }, [open]);
 
-  const handleImport = async () => {
+    reader.onerror = (error) => {
+      console.error("FileReader error:", error)
+      setErrorVistaPrevia("Error al leer el archivo.")
+      setLoading(false)
+    }
+
+    reader.readAsBinaryString(selectedFile)
+  }
+
+  const handleFileChange = async (selectedFile) => {
+    if (!selectedFile) {
+      setFile(null)
+      setAdvertenciaNombreArchivo("")
+      setNombreArchivoSeleccionado("")
+      resetEstadoDependiente()
+      return
+    }
+
+    setFile(selectedFile)
+    setNombreArchivoSeleccionado(selectedFile.name || "")
+    resetEstadoDependiente()
+    await handleFilePreview(selectedFile)
+  }
+
+  const validarAntesDeImportar = () => {
     if (!file) {
-      alert("Por favor, seleccione un archivo primero.");
-      return;
+      setErrorFormulario("Por favor, seleccione un archivo primero.")
+      return false
     }
+
     if (errorVistaPrevia && vistaPrevia.length === 0) {
-      alert("Hay errores en la configuración de la vista previa. Por favor, corríjalos antes de importar.");
-      return;
+      setErrorFormulario(
+        "Hay errores en la configuracion de la vista previa. Corrijalos antes de iniciar la actualizacion."
+      )
+      return false
     }
+
     if (vistaPrevia.length === 0) {
-      alert("No hay datos en la vista previa para importar. Verifique el archivo y la configuración.");
-      return;
+      setErrorFormulario(
+        "No hay datos en la vista previa para importar. Verifique el archivo y la configuracion."
+      )
+      return false
     }
 
-    // Confirmación antes de proceder con la importación
-    const nombreProveedor = proveedor?.razon || proveedor?.nombre || 'Proveedor';
-    const mensajeConfirmacion = construirMensajeConfirmacionImportacion(file.name, nombreProveedor);
-    if (!window.confirm(mensajeConfirmacion)) {
-      return;
+    setErrorFormulario("")
+    return true
+  }
+
+  const handleImport = () => {
+    if (!validarAntesDeImportar()) {
+      return
     }
 
-    setImportando(true);
-    setLoading(true);
-    
-    // The actual data to send will be the file itself,
-    // the backend will do the full parsing using the column/row info.
-    const formData = new FormData();
-    formData.append('excel_file', file);
-    formData.append('col_codigo', colCodigo.toUpperCase());
-    formData.append('col_precio', colPrecio.toUpperCase());
-    formData.append('col_denominacion', colDenominacion.toUpperCase());
-    formData.append('fila_inicio', String(filaInicio));
-    // also pass proveedor.id so backend knows which provider this file belongs to.
-    // The endpoint will be specific to the provider, e.g., /api/productos/proveedores/${proveedor.id}/upload-price-list/
+    const mensaje = construirMensajeConfirmacionImportacion(
+      file?.name || "archivo seleccionado",
+      proveedor?.razon || proveedor?.nombre || "Proveedor"
+    )
+
+    if (window.confirm(`${mensaje}\n\nAl confirmar, el proceso seguira visible globalmente aunque cierre este modal.`)) {
+      confirmarImportacion()
+    }
+  }
+
+  const confirmarImportacion = async () => {
+    if (!validarAntesDeImportar() || importando || importacionIniciada) {
+      return
+    }
+
+    setImportando(true)
+    setLoading(true)
+
+    const formData = new FormData()
+    formData.append("excel_file", file)
+    formData.append("col_codigo", colCodigo.toUpperCase())
+    formData.append("col_precio", colPrecio.toUpperCase())
+    formData.append("col_denominacion", colDenominacion.toUpperCase())
+    formData.append("fila_inicio", String(filaInicio))
 
     try {
-      const response = await fetch(`/api/productos/proveedores/${proveedor.id}/upload-price-list/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrftoken },
-        body: formData,
-        credentials: 'include',
-      });
-
-      setLoading(false);
-      if (response.ok) {
-        const result = await response.json();
-        const importacionDiferida = result.modo_procesamiento === 'diferido';
-        if (importacionDiferida) {
-          setImportacion({
-            id: result.importacion_id,
-            estado: result.estado,
-          });
-          setMensajeImportacion(result.message || 'Importacion de lista iniciada.');
-        } else {
-          setImportando(false);
-          onImport({
-            proveedor,
-            fileName: file.name,
-            status: 'success',
-            message: result.message || 'Lista importada correctamente.',
-            registrosProcesados: result.registros_procesados || 0,
-            registrosActualizados: result.registros_actualizados || 0,
-          });
-          if ((result.registros_actualizados || 0) === 0) {
-            alert('Advertencia: la lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda.');
-          }
-          onClose();
+      const response = await fetch(
+        `/api/productos/proveedores/${proveedor.id}/upload-price-list/`,
+        {
+          method: "POST",
+          headers: { "X-CSRFToken": csrftoken },
+          body: formData,
+          credentials: "include",
         }
-      } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Error desconocido al importar.' }));
-        alert(`Error al importar: ${errorData.detail || response.statusText}`);
+      )
+
+      setLoading(false)
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ detail: "Error desconocido al importar." }))
+        setErrorFormulario(
+          `Error al importar: ${errorData.detail || response.statusText}`
+        )
+        return
       }
-    } catch (err) {
-      setLoading(false);
-      setImportando(false);
-      console.error("Error during import request:", err);
-      alert(`Error de red o conexión al importar: ${err.message}`);
+
+      const result = await response.json()
+      const importacionDiferida = result.modo_procesamiento === "diferido"
+
+      if (importacionDiferida) {
+        registrarProceso({
+          id: result.importacion_id,
+          estado: result.estado,
+          proveedorId: proveedor.id,
+          proveedorNombre: proveedor?.razon || proveedor?.nombre || "Proveedor",
+          tipo: "actualizacion_lista_precios",
+          mensaje: result.message || "Importacion de lista iniciada.",
+        })
+
+        setImportacionIniciada({
+          id: result.importacion_id,
+          estado: result.estado,
+        })
+        setMensajeImportacion(
+          "Proceso iniciado. Puede cerrar este modal; el seguimiento continua en el banner global."
+        )
+
+        toast.warning(
+          `Actualizacion iniciada para ${proveedor?.razon || proveedor?.nombre || "el proveedor"}.`,
+          { autoClose: 4000 }
+        )
+        return
+      }
+
+      onImport?.({
+        proveedor,
+        fileName: file.name,
+        status: "success",
+        message: result.message || "Lista importada correctamente.",
+        registrosProcesados: result.registros_procesados || 0,
+        registrosActualizados: result.registros_actualizados || 0,
+      })
+
+      if ((result.registros_actualizados || 0) === 0) {
+        toast.warning(
+          "La lista no produjo actualizaciones de costo para este proveedor. Verifique que el archivo corresponda."
+        )
+      }
+
+      toast.success(result.message || "Lista importada correctamente.")
+      onClose()
+    } catch (error) {
+      console.error("Error during import request:", error)
+      setErrorFormulario(`Error de red o conexion al importar: ${error.message}`)
+    } finally {
+      setImportando(false)
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <Transition show={open} as={Fragment} appear>
-      <Dialog as="div" className="relative z-50" onClose={() => { if (!importando) onClose(); }}>
-        {/* Fondo oscuro */}
+      <Dialog
+        as="div"
+        className="relative z-50"
+        onClose={() => {
+          if (!importando) onClose()
+        }}
+      >
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200"
@@ -377,81 +449,162 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
-                {/* Encabezado con colores FerreDesk */}
-                <div className={`bg-gradient-to-r ${theme.primario} p-6 relative`}>
+              <Dialog.Panel className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+                <div className={`relative bg-gradient-to-r ${theme.primario} p-6`}>
                   <button
                     onClick={onClose}
                     disabled={importando}
-                    className="absolute top-4 right-4 text-2xl text-slate-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute right-4 top-4 text-2xl text-slate-300 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     ×
                   </button>
                   <Dialog.Title as="h2" className="text-xl font-bold text-white">
                     Cargar Lista de Precios - {proveedor?.razon}
                   </Dialog.Title>
-                  <p className="text-slate-300 text-sm mt-1">Importá la lista Excel y previsualizá antes de aplicar</p>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Revise el archivo, valide la vista previa e inicie la actualizacion
+                  </p>
                 </div>
 
-                {/* Contenido */}
-                <div className="p-6 overflow-y-auto">
+                <div className="overflow-y-auto p-6">
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Esta actualizacion puede impactar productos, costos y listas en masa.
+                    Evite operar ventas, presupuestos, compras y productos hasta que finalice.
+                  </div>
+
                   <div className="mb-4">
-                    <input
-                      type="file"
+                    <ModernFileInput 
+                      label="Seleccionar lista de precios Excel"
+                      helperText="Formatos: .xlsx, .xls"
                       accept=".xlsx,.xls"
-                      ref={fileInputRef}
+                      currentFile={file}
                       onChange={handleFileChange}
-                      className="mb-2 block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
+                      disabled={importando}
                     />
+
                     {advertenciaNombreArchivo && (
-                      <div className="mb-3 p-2 text-sm bg-yellow-50 text-yellow-800 border border-yellow-200 rounded">
+                      <div className="mb-3 rounded border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800">
                         {advertenciaNombreArchivo}
                         {nombreArchivoSeleccionado ? (
-                          <span className="ml-1 italic">(archivo: {nombreArchivoSeleccionado})</span>
+                          <span className="ml-1 italic">
+                            (archivo: {nombreArchivoSeleccionado})
+                          </span>
                         ) : null}
                       </div>
                     )}
-                    <div className="grid grid-cols-4 gap-4 mb-2">
+
+                    <div className="mb-2 grid grid-cols-4 gap-4">
                       <div>
-                        <label htmlFor={`colCodigo-${proveedor?.id}`} className="block text-sm font-medium">Columna Código</label>
-                        <input id={`colCodigo-${proveedor?.id}`} type="text" value={colCodigo} onChange={e => setColCodigo(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                        <label
+                          htmlFor={`colCodigo-${proveedor?.id}`}
+                          className="block text-sm font-medium"
+                        >
+                          Columna Codigo
+                        </label>
+                        <input
+                          id={`colCodigo-${proveedor?.id}`}
+                          type="text"
+                          value={colCodigo}
+                          onChange={(event) => setColCodigo(event.target.value.toUpperCase())}
+                          className="w-full rounded border p-2"
+                          maxLength={2}
+                        />
                       </div>
                       <div>
-                        <label htmlFor={`colDenominacion-${proveedor?.id}`} className="block text-sm font-medium">Columna Denominación</label>
-                        <input id={`colDenominacion-${proveedor?.id}`} type="text" value={colDenominacion} onChange={e => setColDenominacion(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                        <label
+                          htmlFor={`colDenominacion-${proveedor?.id}`}
+                          className="block text-sm font-medium"
+                        >
+                          Columna Denominacion
+                        </label>
+                        <input
+                          id={`colDenominacion-${proveedor?.id}`}
+                          type="text"
+                          value={colDenominacion}
+                          onChange={(event) =>
+                            setColDenominacion(event.target.value.toUpperCase())
+                          }
+                          className="w-full rounded border p-2"
+                          maxLength={2}
+                        />
                       </div>
                       <div>
-                        <label htmlFor={`colPrecio-${proveedor?.id}`} className="block text-sm font-medium">Columna Precio</label>
-                        <input id={`colPrecio-${proveedor?.id}`} type="text" value={colPrecio} onChange={e => setColPrecio(e.target.value.toUpperCase())} className="border rounded p-2 w-full" maxLength={2} />
+                        <label
+                          htmlFor={`colPrecio-${proveedor?.id}`}
+                          className="block text-sm font-medium"
+                        >
+                          Columna Precio
+                        </label>
+                        <input
+                          id={`colPrecio-${proveedor?.id}`}
+                          type="text"
+                          value={colPrecio}
+                          onChange={(event) => setColPrecio(event.target.value.toUpperCase())}
+                          className="w-full rounded border p-2"
+                          maxLength={2}
+                        />
                       </div>
                       <div>
-                        <label htmlFor={`filaInicio-${proveedor?.id}`} className="block text-sm font-medium">Fila de Inicio</label>
-                        <input id={`filaInicio-${proveedor?.id}`} type="number" value={filaInicio} onChange={e => setFilaInicio(Number(e.target.value))} className="border rounded p-2 w-full" min={1} />
+                        <label
+                          htmlFor={`filaInicio-${proveedor?.id}`}
+                          className="block text-sm font-medium"
+                        >
+                          Fila de Inicio
+                        </label>
+                        <input
+                          id={`filaInicio-${proveedor?.id}`}
+                          type="number"
+                          value={filaInicio}
+                          onChange={(event) => setFilaInicio(Number(event.target.value))}
+                          className="w-full rounded border p-2"
+                          min={1}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Alert de errores manejado por useEffect para evitar múltiples prompts */}
+                  {errorFormulario && (
+                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {errorFormulario}
+                    </div>
+                  )}
 
-                  {loading && file && <div className="my-3 text-blue-600">Procesando vista previa...</div>}
+                  {loading && file && (
+                    <div className="my-3 text-blue-600">Procesando vista previa...</div>
+                  )}
 
                   {vistaPrevia.length > 0 && (
                     <div className="mb-4 max-h-60 overflow-y-auto">
-                      <h3 className="text-md font-semibold mb-2">Vista Previa (primeros {vistaPrevia.length} registros):</h3>
-                      <table className="min-w-full text-sm border">
+                      <h3 className="mb-2 text-md font-semibold">
+                        Vista previa (primeros {vistaPrevia.length} registros):
+                      </h3>
+                      <table className="min-w-full border text-sm">
                         <thead className="bg-gray-100">
                           <tr>
-                            <th className="border px-2 py-1 text-left">Código ({colCodigo})</th>
-                            <th className="border px-2 py-1 text-left">Denominación ({colDenominacion})</th>
-                            <th className="border px-2 py-1 text-left">Precio ({colPrecio})</th>
+                            <th className="border px-2 py-1 text-left">
+                              Codigo ({colCodigo})
+                            </th>
+                            <th className="border px-2 py-1 text-left">
+                              Denominacion ({colDenominacion})
+                            </th>
+                            <th className="border px-2 py-1 text-left">
+                              Precio ({colPrecio})
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
                           {vistaPrevia.map((item, index) => (
-                            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <tr
+                              key={`${item.codigo}-${index}`}
+                              className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                            >
                               <td className="border px-2 py-1">{item.codigo}</td>
                               <td className="border px-2 py-1">{item.denominacion}</td>
-                              <td className="border px-2 py-1">{typeof item.precio === 'number' ? item.precio.toFixed(2) : item.precio}</td>
+                              <td className="border px-2 py-1">
+                                {typeof item.precio === "number"
+                                  ? item.precio.toFixed(2)
+                                  : item.precio}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -459,20 +612,28 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     </div>
                   )}
 
-                  {(vistaPrevia.length === 0 && file && !loading && !errorVistaPrevia) && (
-                    <div className="my-3 p-3 bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-md">
-                      No se encontraron datos para la vista previa con la configuración actual.
+                  {vistaPrevia.length === 0 && file && !loading && !errorVistaPrevia && (
+                    <div className="my-3 rounded-md border border-yellow-300 bg-yellow-100 p-3 text-yellow-700">
+                      No se encontraron datos para la vista previa con la configuracion actual.
+                    </div>
+                  )}
+
+                  {errorVistaPrevia && (
+                    <div className="my-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-700">
+                      {errorVistaPrevia}
                     </div>
                   )}
 
                   {mensajeImportacion && (
-                    <div className={`my-3 p-3 border rounded-md ${
-                      importacion?.estado === 'error'
-                        ? 'bg-red-50 text-red-700 border-red-200'
-                        : importacion?.estado === 'completada'
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
+                    <div
+                      className={`my-3 rounded-md border p-3 ${
+                        procesoGlobal?.estado === "error"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : procesoGlobal?.estado === "completada"
+                            ? "border-green-200 bg-green-50 text-green-700"
+                            : "border-blue-200 bg-blue-50 text-blue-700"
+                      }`}
+                    >
                       {mensajeImportacion}
                     </div>
                   )}
@@ -481,16 +642,30 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
                     <button
                       onClick={onClose}
                       disabled={importando}
-                      className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleImport}
                       className={`${theme.botonPrimario} disabled:opacity-50`}
-                      disabled={importando || loading || !file || (errorVistaPrevia && vistaPrevia.length === 0)}
+                      disabled={
+                        Boolean(importacionIniciada) ||
+                        importando ||
+                        loading ||
+                        !file ||
+                        (errorVistaPrevia && vistaPrevia.length === 0)
+                      }
                     >
-                      {importando ? 'Importando...' : loading && !file ? 'Cargando...' : loading && file ? 'Preparando...' : 'Importar'}
+                      {importacionIniciada
+                        ? "Proceso iniciado"
+                        : importando
+                          ? "Iniciando..."
+                          : loading && !file
+                            ? "Cargando..."
+                            : loading && file
+                              ? "Preparando..."
+                              : "Iniciar actualizacion"}
                     </button>
                   </div>
                 </div>
@@ -500,7 +675,5 @@ const ListaPreciosModal = ({ open, onClose, proveedor, onImport }) => {
         </div>
       </Dialog>
     </Transition>
-  );
-};
-
-export default ListaPreciosModal; 
+  )
+}

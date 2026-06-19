@@ -76,13 +76,13 @@ describe('clienteAPI', () => {
 
   test('no agrega Content-Type para FormData', async () => {
     const formData = new FormData();
-    formData.append('logo_arca', new Blob(['x']), 'logo.jpg');
+    formData.append('certificado_arca', new Blob(['x']), 'certificado.pem');
 
     global.fetch
       .mockResolvedValueOnce(respuestaJSON({ csrfToken: 'token-form' }))
       .mockResolvedValueOnce(respuestaJSON({ ok: true }));
 
-    await clienteAPI('/api/productos/subir-logo-arca/', {
+    await clienteAPI('/api/ferreteria/', {
       method: 'POST',
       body: formData,
     });

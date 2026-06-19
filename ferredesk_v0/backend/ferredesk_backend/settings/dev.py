@@ -4,6 +4,7 @@ from .base import *
 import os
 
 DEBUG = True
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
 # SESSION_COOKIE_DOMAIN = ".localhost"

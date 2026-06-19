@@ -34,8 +34,9 @@ export const useFerreDeskTheme = () => {
     tabActiva: "bg-gradient-to-r from-orange-600 to-orange-700 border border-b-0 border-orange-600 font-semibold text-white shadow-sm",
     tabInactiva: "bg-slate-600/50 text-slate-200 hover:bg-slate-600 hover:text-white",
     
-    // Selects
+    // Inputs y Selects
     select: "text-sm font-semibold text-slate-300 bg-slate-800/70 border border-slate-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200",
+    input: "w-full text-sm font-medium text-slate-200 bg-slate-800/50 border border-slate-600/50 rounded-lg px-3 py-2.5 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-200",
     
     // Fondo de página
     fondo: "min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative",

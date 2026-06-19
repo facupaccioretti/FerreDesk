@@ -79,22 +79,8 @@ def test_f10_t7():
         assert ferre_a.logo_empresa.path != ferre_b.logo_empresa.path, "Ambos tenants sobreescribieron el mismo logo_empresa"
     print("Aislamiento de logo_empresa confirmado.")
 
-    # 3. Subir Logo ARCA (Activo Global)
-    print("Subiendo logo_arca global desde Tenant A...")
-    # Admin is staff by default in our setup
-    with schema_context('tenanta'):
-        user_a = client_a.handler._force_user
-        # just to make sure
-        from ferreapps.usuarios.models import Usuario
-        u = Usuario.objects.get(username='admin@tenanta.com')
-        u.is_staff = True
-        u.save()
-
-    file_arca = SimpleUploadedFile("arca_logo.jpg", dummy_image_content, content_type="image/jpeg")
-    resp_arca_upload = client_a.post('/api/productos/subir-logo-arca/', {'logo_arca': file_arca}, format='multipart')
-    assert resp_arca_upload.status_code == 200, f"Error subiendo logo ARCA: {resp_arca_upload.content}"
-
-    # Validar que B puede leer el mismo logo global
+    # 3. Validar Logo ARCA fijo (Activo Global)
+    print("Validando logo_arca fijo desde Tenant A/B...")
     resp_arca_b = client_b.get('/api/productos/servir-logo-arca/')
     assert resp_arca_b.status_code == 200, "Tenant B no pudo servir el logo ARCA global"
     print("Comportamiento de activos globales (logo ARCA) confirmado.")

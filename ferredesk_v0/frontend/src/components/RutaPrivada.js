@@ -1,5 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { useSessionUserQuery } from "../domains/session/useSessionUserQuery";
+import { useSetupStatusQuery } from "../domains/setup/useSetupStatusQuery";
+import AppShell from "../layouts/AppShell";
 
 const HOSTS_PUBLICOS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
@@ -51,74 +54,21 @@ export default function RutaPrivada({
     hostnameActual = window.location.hostname,
     permitirSetupIncompleto = false,
 }) {
-    const [estadoAcceso, setEstadoAcceso] = useState({
-        cargando: true,
-        estaAutenticado: false,
-        setupCompleto: false,
-        hostTenantValido: true,
+    const {
+        isLoading: cargandoSesion,
+        isAuthenticated,
+    } = useSessionUserQuery();
+    const {
+        isLoading: cargandoSetup,
+        setupCompleto,
+    } = useSetupStatusQuery({
+        enabled: esHostTenantValido(hostnameActual) && isAuthenticated,
     });
     const location = useLocation();
+    const hostTenantValido = esHostTenantValido(hostnameActual)
+    const cargando = hostTenantValido && (cargandoSesion || (isAuthenticated && cargandoSetup))
 
-    useEffect(() => {
-        let activo = true;
-
-        const verificarEstado = async () => {
-            if (!esHostTenantValido(hostnameActual)) {
-                if (activo) {
-                    setEstadoAcceso({
-                        cargando: false,
-                        estaAutenticado: false,
-                        setupCompleto: false,
-                        hostTenantValido: false,
-                    });
-                }
-                return;
-            }
-
-            try {
-                const respuestaUsuario = await fetch("/api/user/", {
-                    credentials: "include",
-                });
-                if (respuestaUsuario.status !== 200) {
-                    throw new Error("No autenticado");
-                }
-
-                const respuestaSetup = await fetch("/api/ferreteria/estado-setup/", {
-                    credentials: "include",
-                });
-                if (!respuestaSetup.ok) {
-                    throw new Error("No se pudo resolver el estado de setup");
-                }
-
-                const datosSetup = await respuestaSetup.json();
-                if (activo) {
-                    setEstadoAcceso({
-                        cargando: false,
-                        estaAutenticado: true,
-                        setupCompleto: datosSetup.setup_completo === true,
-                        hostTenantValido: true,
-                    });
-                }
-            } catch (error) {
-                if (activo) {
-                    setEstadoAcceso({
-                        cargando: false,
-                        estaAutenticado: false,
-                        setupCompleto: false,
-                        hostTenantValido: true,
-                    });
-                }
-            }
-        };
-
-        verificarEstado();
-
-        return () => {
-            activo = false;
-        };
-    }, [hostnameActual]);
-
-    if (estadoAcceso.cargando) {
+    if (cargando) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
@@ -126,25 +76,25 @@ export default function RutaPrivada({
         );
     }
 
-    if (!estadoAcceso.hostTenantValido) {
+    if (!hostTenantValido) {
         return <Navigate to="/" replace />;
     }
 
-    if (!estadoAcceso.estaAutenticado) {
+    if (!isAuthenticated) {
         return <Navigate to="/login" replace state={{ from: location.pathname }} />;
     }
 
     if (
-        !estadoAcceso.setupCompleto &&
+        !setupCompleto &&
         !permitirSetupIncompleto &&
         location.pathname !== "/setup"
     ) {
         return <Navigate to="/setup" replace />;
     }
 
-    if (estadoAcceso.setupCompleto && location.pathname === "/setup") {
+    if (setupCompleto && location.pathname === "/setup") {
         return <Navigate to="/home" replace />;
     }
 
-    return children;
+    return <AppShell>{children}</AppShell>;
 }

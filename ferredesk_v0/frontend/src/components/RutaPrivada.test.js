@@ -5,14 +5,31 @@ import { createRoot } from "react-dom/client";
 let mockPathnameActual = "/home";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const mockUseSessionUserQuery = jest.fn();
+const mockUseSetupStatusQuery = jest.fn();
+
 jest.mock(
     "react-router-dom",
     () => ({
         Navigate: ({ to }) => <div>redirigido:{to}</div>,
         useLocation: () => ({ pathname: mockPathnameActual }),
+        useNavigate: () => jest.fn(),
     }),
     { virtual: true }
 );
+
+jest.mock("../domains/session/useSessionUserQuery", () => ({
+    useSessionUserQuery: (...args) => mockUseSessionUserQuery(...args),
+}));
+
+jest.mock("../domains/setup/useSetupStatusQuery", () => ({
+    useSetupStatusQuery: (...args) => mockUseSetupStatusQuery(...args),
+}));
+
+jest.mock("../layouts/AppShell", () => ({
+    __esModule: true,
+    default: ({ children }) => <div data-testid="app-shell">{children}</div>,
+}));
 
 const RutaPrivada = require("./RutaPrivada").default;
 const { esHostTenantValido } = require("./RutaPrivada");
@@ -32,7 +49,6 @@ async function renderRutaPrivada({
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-
     await act(async () => {
         root.render(
             <RutaPrivada
@@ -60,6 +76,8 @@ async function renderRutaPrivada({
 describe("RutaPrivada", () => {
     afterEach(() => {
         jest.restoreAllMocks();
+        mockUseSessionUserQuery.mockReset();
+        mockUseSetupStatusQuery.mockReset();
         document.body.innerHTML = "";
     });
 
@@ -74,22 +92,14 @@ describe("RutaPrivada", () => {
     });
 
     test("redirige a /setup cuando el tenant esta autenticado pero incompleto", async () => {
-        global.fetch = jest
-            .fn()
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
-            })
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({
-                    setup_completo: false,
-                    campos_setup_faltantes: ["razon_social"],
-                    no_configurada: true,
-                }),
-            });
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: false,
+        });
 
         const vista = await renderRutaPrivada({ rutaInicial: "/home" });
 
@@ -100,22 +110,14 @@ describe("RutaPrivada", () => {
     });
 
     test("permite acceso normal cuando el tenant completo entra a ruta protegida", async () => {
-        global.fetch = jest
-            .fn()
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
-            })
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({
-                    setup_completo: true,
-                    campos_setup_faltantes: [],
-                    no_configurada: false,
-                }),
-            });
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: true,
+        });
 
         const vista = await renderRutaPrivada({ rutaInicial: "/home" });
 
@@ -125,22 +127,14 @@ describe("RutaPrivada", () => {
     });
 
     test("permite que un modulo maneje el setup incompleto dentro de su propia vista", async () => {
-        global.fetch = jest
-            .fn()
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
-            })
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({
-                    setup_completo: false,
-                    campos_setup_faltantes: ["razon_social"],
-                    no_configurada: true,
-                }),
-            });
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: false,
+        });
 
         const vista = await renderRutaPrivada({
             rutaInicial: "/home",
@@ -153,7 +147,14 @@ describe("RutaPrivada", () => {
     });
 
     test("no toma localhost publico como host valido para rutas tenant", async () => {
-        global.fetch = jest.fn();
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: false,
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: false,
+        });
 
         const vista = await renderRutaPrivada({
             rutaInicial: "/home",
@@ -161,28 +162,19 @@ describe("RutaPrivada", () => {
         });
 
         expect(vista.container.textContent).toContain("redirigido:/");
-        expect(global.fetch).not.toHaveBeenCalled();
 
         await vista.desmontar();
     });
 
     test("redirige a /home cuando el setup ya esta completo y el usuario entra a /setup", async () => {
-        global.fetch = jest
-            .fn()
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({ status: "success", user: { username: "admin@test.com" } }),
-            })
-            .mockResolvedValueOnce({
-                status: 200,
-                ok: true,
-                json: async () => ({
-                    setup_completo: true,
-                    campos_setup_faltantes: [],
-                    no_configurada: false,
-                }),
-            });
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: true,
+        });
 
         const vista = await renderRutaPrivada({ rutaInicial: "/setup" });
 

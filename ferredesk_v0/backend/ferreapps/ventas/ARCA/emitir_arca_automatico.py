@@ -61,7 +61,7 @@ def emitir_arca_automatico(venta: Venta) -> Dict[str, Any]:
             raise FerreDeskARCAError(str(exc)) from exc
         
         # Verificar configuración ARCA
-        if not ferreteria.modo_arca:
+        if not ferreteria.obtener_modo_arca_operativo():
             raise FerreDeskARCAError(f"Ferretería {ferreteria.id} no tiene modo ARCA configurado")
         
         if not ferreteria.punto_venta_arca:

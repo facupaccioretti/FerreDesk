@@ -19,6 +19,7 @@ def _split_env_list(value):
 
 DEBUG = False
 ALLOW_INSECURE_PUBLIC_URLS = True
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", True)
 
 PRIMARY_DOMAIN = os.environ.get("PRIMARY_DOMAIN", "lvh.me").strip().lower()
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://lvh.me:8000").strip()

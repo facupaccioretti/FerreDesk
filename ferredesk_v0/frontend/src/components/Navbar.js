@@ -1,10 +1,16 @@
 "use client"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAppShellContext } from "../contexts/AppShellContext"
 
-export default function Navbar({ user, onLogout }) {
+export default function Navbar({ user, onLogout, forceRender = false }) {
   const navigate = useNavigate()
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+  const { hasGlobalNavbar } = useAppShellContext()
+
+  if (hasGlobalNavbar && !forceRender) {
+    return null
+  }
 
   const handleNavigation = (path) => {
     navigate(path)
