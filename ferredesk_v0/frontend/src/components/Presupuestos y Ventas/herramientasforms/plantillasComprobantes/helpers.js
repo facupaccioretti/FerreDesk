@@ -280,7 +280,7 @@ export const generarHeaderComun = (data, ferreteriaConfig, styles, mostrarSiempr
           {ferreteriaConfig.logo_empresa && (
             <View style={styles.logoEmpresa}>
               <Image
-                src={`/api/productos/servir-logo-empresa/?v=${Date.now()}`}
+                src={ferreteriaConfig.logo_empresa}
                 style={styles.logoImagen}
               />
             </View>
