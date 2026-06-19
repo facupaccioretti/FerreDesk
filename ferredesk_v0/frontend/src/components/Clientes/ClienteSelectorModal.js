@@ -68,7 +68,7 @@ export default function ClienteSelectorModal({
     const timerId = setTimeout(() => {
       // El backend de Django REST Framework puede devolver un objeto con 'results',
       // por eso accedemos a data.results o data.
-      fetch(`/api/clientes/clientes/?search=${encodeURIComponent(termino)}`)
+      fetch(`/api/clientes/clientes/?search=${encodeURIComponent(termino)}&modal_search=true`)
         .then((res) => {
           if (!res.ok) {
             throw new Error("Error en la respuesta de la API")

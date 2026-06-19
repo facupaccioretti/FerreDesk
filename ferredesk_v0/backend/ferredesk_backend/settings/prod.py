@@ -19,7 +19,7 @@ def _domain_from_url(url):
 
 
 DEBUG = False
-ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", True)
 
 PRIMARY_DOMAIN = (
     os.environ.get("PRIMARY_DOMAIN", "").strip().lower()
