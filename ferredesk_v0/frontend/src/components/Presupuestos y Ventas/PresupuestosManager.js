@@ -37,6 +37,8 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
 import ModalTicketVenta from "./ModalTicketVenta"
 import useCajaAPI from "../../utils/useCajaAPI"
 import { toast } from "react-toastify"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 
 
@@ -48,7 +50,8 @@ const PresupuestosManager = () => {
   const theme = useFerreDeskTheme()
 
   // Estado y fetch para el usuario
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   const navigate = useNavigate()
 
   // Hook para generación de PDFs
@@ -63,17 +66,10 @@ const PresupuestosManager = () => {
     arcaListoParaEmitir,
   } = useFerreteriaAPI();
 
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
-
   const handleLogout = () => {
-    setUser(null)
-    window.location.href = "/login/"
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
   }
 
   useEffect(() => {

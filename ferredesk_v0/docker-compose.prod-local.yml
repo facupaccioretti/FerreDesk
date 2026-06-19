@@ -10,6 +10,18 @@ services:
   postgres:
     image: postgres:15
     container_name: ferredesk_prod_local_postgres
+    cpus: 0.10
+    mem_limit: 256m
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=1MB
+      - -c
+      - maintenance_work_mem=32MB
     environment:
       POSTGRES_DB: FerreDesk
       POSTGRES_USER: postgres
@@ -32,6 +44,10 @@ services:
       dockerfile: Dockerfile
     image: ferredesk:prod-local
     container_name: ferredesk_prod_local_app
+    cpus: 1.0
+    mem_limit: 2g
+    env_file:
+      - ferredesk-staging.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +56,8 @@ services:
       ENVIRONMENT: prod_local
       SECRET_KEY: prod-local-insecure-key
       DATABASE_URL: postgresql://postgres:fercien@postgres:5432/FerreDesk
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
       PRIMARY_DOMAIN: lvh.me
       PUBLIC_BASE_URL: http://lvh.me:8000
       FRONTEND_URL: http://lvh.me:8000
@@ -49,12 +67,52 @@ services:
       RESEND_API_KEY: prod-local-dummy
       RESEND_API_URL: https://api.resend.com/emails
       RESEND_TIMEOUT: "3"
-      ENABLE_EMBEDDED_WORKER: "true"
+      PROD_LOCAL_BOOTSTRAP: "true"
+      BOOTSTRAP_TENANT_NAME: FerreDesk Local
+      BOOTSTRAP_TENANT_SLUG: ferrelocal
+      BOOTSTRAP_ADMIN_EMAIL: admin@ferrelocal.lvh.me
+      BOOTSTRAP_ADMIN_PASSWORD: admin123local
+      BOOTSTRAP_AUTO_ACTIVATE: "true"
+      GUNICORN_WORKERS: "2"
+      GUNICORN_TIMEOUT: "120"
+    command: ["/app/start.prod-local.sh"]
     volumes:
       - ./media:/app/media
       - ./backups:/app/backups
     ports:
       - "8000:8000"
+
+  worker:
+    image: ferredesk:prod-local
+    container_name: ferredesk_prod_local_worker
+    profiles: ["background"]
+    cpus: 1.0
+    mem_limit: 2g
+    env_file:
+      - ferredesk-staging.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: ferredesk_backend.settings.prod_local
+      ENVIRONMENT: prod_local
+      SECRET_KEY: prod-local-insecure-key
+      DATABASE_URL: postgresql://postgres:fercien@postgres:5432/FerreDesk
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      PRIMARY_DOMAIN: lvh.me
+      PUBLIC_BASE_URL: http://lvh.me:8000
+      FRONTEND_URL: http://lvh.me:8000
+      ALLOWED_HOSTS: localhost,127.0.0.1,lvh.me,.lvh.me
+      CSRF_TRUSTED_ORIGINS: http://localhost:8000,http://127.0.0.1:8000,http://lvh.me:8000,http://*.lvh.me:8000
+      DEFAULT_FROM_EMAIL: no-reply@ferredesk.local
+      RESEND_API_KEY: prod-local-dummy
+      RESEND_API_URL: https://api.resend.com/emails
+      RESEND_TIMEOUT: "3"
+    command: ["python", "manage.py", "worker_tareas_pendientes"]
+    volumes:
+      - ./media:/app/media
+      - ./backups:/app/backups
 
 volumes:
   postgres_prod_local_data:

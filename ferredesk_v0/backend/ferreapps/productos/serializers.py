@@ -183,6 +183,7 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
     proveedor_habitual_id = serializers.IntegerField(read_only=True)
     stock_total = serializers.SerializerMethodField()
     costo_habitual = serializers.SerializerMethodField()
+    precios_listas = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
@@ -195,6 +196,7 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
             'idaliiva',
             'margen',
             'precio_lista_0',
+            'precios_listas',
             'stock_total',
             'proveedor_habitual_id',
             'costo_habitual',
@@ -222,6 +224,50 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
             .first()
         )
         return costo if costo is not None else 0
+
+    def get_precios_listas(self, obj):
+        margenes = self.context.get('margenes_listas_precio')
+        if margenes is None:
+            margenes = {
+                lista.numero: float(lista.margen_descuento)
+                for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
+            }
+            self.context['margenes_listas_precio'] = margenes
+
+        precios_prefetch = getattr(obj, 'precios_listas_prefetch', None)
+        precios_queryset = (
+            precios_prefetch
+            if precios_prefetch is not None
+            else obj.precios_listas.all()
+        )
+
+        overrides = {
+            precio.lista_numero: precio
+            for precio in precios_queryset
+            if precio.precio_manual
+        }
+
+        precio_base = float(obj.precio_lista_0 or 0)
+        resultado = []
+
+        for numero in [1, 2, 3, 4]:
+            if numero in overrides:
+                override = overrides[numero]
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': float(override.precio),
+                    'precio_manual': True,
+                })
+            else:
+                margen = margenes.get(numero, 0)
+                precio_calculado = round(precio_base * (1 + margen / 100), 2)
+                resultado.append({
+                    'lista_numero': numero,
+                    'precio': precio_calculado,
+                    'precio_manual': False,
+                })
+
+        return resultado
 
 class FerreteriaSerializer(serializers.ModelSerializer):
     # Campos obligatorios para identificación fiscal

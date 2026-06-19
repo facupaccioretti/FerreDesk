@@ -1,4 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../core/query/queryKeys'
+import { withQueryProfile } from '../core/query/queryProfiles'
+import { clienteAPI } from '../utils/clienteAPI'
 
 /**
  * usePaginacionAPI
@@ -56,23 +59,21 @@ export function usePaginacionAPI(claveCacheBase, urlBase, filtros = {}, pagina =
 
   // La clave incluye todos los parámetros que afectan al resultado.
   // TanStack Query guarda en caché cada combinación única automáticamente.
-  const claveQuery = [claveCacheBase, filtros, pagina, itemsPorPagina]
+  const parametrosQuery = {
+    ...filtros,
+    page: pagina,
+    limit: itemsPorPagina,
+  }
+  const claveQuery = queryKeys.resources.list(claveCacheBase, parametrosQuery)
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: claveQuery,
-    queryFn: async () => {
-      const res = await fetch(url, { credentials: 'include' })
-      if (!res.ok) throw new Error(`Error al obtener ${claveCacheBase}: ${res.status}`)
-      return res.json()
-    },
-    // Los datos se consideran "frescos" por 2 minutos. Pasado ese tiempo,
-    // en el próximo acceso se revalidarán silenciosamente en segundo plano.
-    staleTime: opciones.staleTime ?? 2 * 60 * 1000,
-    // Revalidar cuando el usuario vuelve a la pestaña del navegador
-    refetchOnWindowFocus: opciones.refetchOnWindowFocus ?? true,
-    // Mantener datos anteriores mientras llegan los nuevos (evita el parpadeo al cambiar de página)
-    placeholderData: (datosAnteriores) => datosAnteriores,
-    ...opciones,
+    queryFn: () => clienteAPI(url),
+    ...withQueryProfile("warmCatalog", {
+      // Mantener datos anteriores mientras llegan los nuevos (evita el parpadeo al cambiar de página)
+      placeholderData: (datosAnteriores) => datosAnteriores,
+      ...opciones,
+    }),
   })
 
   /**
@@ -81,7 +82,7 @@ export function usePaginacionAPI(claveCacheBase, urlBase, filtros = {}, pagina =
    * tabla se actualice sin que el usuario tenga que recargar.
    */
   const invalidarCache = () => {
-    queryClient.invalidateQueries({ queryKey: [claveCacheBase] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.resources.all(claveCacheBase) })
   }
 
   const resultados = Array.isArray(data) ? data : (data?.results ?? [])

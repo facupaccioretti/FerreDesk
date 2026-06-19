@@ -178,6 +178,15 @@ const VentaForm = ({
   // Funciones y variables para mantener compatibilidad de API interna
   const listaPrecioId = formulario.listaPrecioId || 0;
   const setListaPrecioId = (val) => actualizarFormulario({ listaPrecioId: val });
+  const productosDisponibles = useMemo(
+    () => (Array.isArray(productos) ? productos : []),
+    [productos],
+  )
+  const comprobantesDisponibles = Array.isArray(comprobantes) ? comprobantes : []
+  const clientesDisponibles = Array.isArray(clientes) ? clientes : []
+  const plazosDisponibles = Array.isArray(plazos) ? plazos : []
+  const vendedoresDisponibles = Array.isArray(vendedores) ? vendedores : []
+  const listasPrecioDisponibles = Array.isArray(listasPrecio) ? listasPrecio : []
 
   const alicuotasMap = useMemo(
     () =>
@@ -201,7 +210,7 @@ const VentaForm = ({
   const itemsGridRef = useRef()
   // Temporizador para mostrar overlay ARCA solo si la espera es real (evita condiciones de carrera)
   const temporizadorArcaRef = useRef(null)
-  const stockProveedores = useMemo(() => getStockProveedoresMap(productos), [productos])
+  const stockProveedores = useMemo(() => getStockProveedoresMap(productosDisponibles), [productosDisponibles])
   const arcaListoParaEmitir = arcaListoParaEmitirProp ?? Boolean(
     ferreteria?.tiene_certificado_arca &&
     ferreteria?.tiene_clave_privada_arca &&
@@ -216,7 +225,7 @@ const VentaForm = ({
   }, [loadingProductos, loadingProveedores, stockProveedores])
 
   // Nuevo: obtener comprobantes de tipo Venta (o los que no sean Presupuesto)
-  const comprobantesVenta = comprobantes.filter((c) => (c.tipo || "").toLowerCase() !== "presupuesto")
+  const comprobantesVenta = comprobantesDisponibles.filter((c) => (c.tipo || "").toLowerCase() !== "presupuesto")
 
   // Efecto de inicialización sincronizada
   useEffect(() => {
@@ -281,7 +290,7 @@ const VentaForm = ({
 
   // Determinar cliente seleccionado (siempre debe haber uno, por defecto el mostrador)
   const clienteSeleccionado =
-    clientes.find((c) => String(c.id) === String(formulario.clienteId)) ||
+    clientesDisponibles.find((c) => String(c.id) === String(formulario.clienteId)) ||
     clientesConDefecto.find((c) => String(c.id) === String(formulario.clienteId))
 
   // Construir objeto para validación fiscal con datos actuales del formulario
@@ -1034,8 +1043,8 @@ const VentaForm = ({
                     >
                       <option value="">Seleccionar...</option>
                       {(() => {
-                        const activos = Array.isArray(plazos) ? plazos.filter(p => p && p.activo === 'S') : []
-                        const seleccionado = Array.isArray(plazos) ? plazos.find(p => String(p.id) === String(formulario.plazoId)) : null
+                        const activos = plazosDisponibles.filter(p => p && p.activo === 'S')
+                        const seleccionado = plazosDisponibles.find(p => String(p.id) === String(formulario.plazoId)) || null
                         const visibles = seleccionado && seleccionado.activo !== 'S' ? [...activos, seleccionado] : activos
                         return visibles.map((p) => (
                           <option key={p.id} value={p.id}>{p.nombre}</option>
@@ -1056,7 +1065,7 @@ const VentaForm = ({
                       disabled={isReadOnly}
                     >
                       <option value="">Seleccionar...</option>
-                      {vendedores.map((v) => (
+                      {vendedoresDisponibles.map((v) => (
                         <option key={v.id} value={v.id}>{v.nombre}</option>
                       ))}
                     </select>
@@ -1113,7 +1122,7 @@ const VentaForm = ({
                       disabled={isReadOnly || loadingListas}
                       className="w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     >
-                      {listasPrecio.map((lista) => (
+                      {listasPrecioDisponibles.map((lista) => (
                         <option key={lista.numero} value={lista.numero}>
                           {lista.nombre}
                         </option>
@@ -1146,7 +1155,7 @@ const VentaForm = ({
                 onRowsChange={handleRowsChange}
                 initialItems={formulario.items}
                 listaPrecioId={listaPrecioId}
-                listasPrecio={listasPrecio}
+                listasPrecio={listasPrecioDisponibles}
               />
             </div>
 

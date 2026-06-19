@@ -6,7 +6,14 @@ from django.db.models import Max
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from ferreapps.productos.models import AlicuotaIVA, Proveedor, Stock, StockProve
+from ferreapps.productos.models import (
+    AlicuotaIVA,
+    ListaPrecio,
+    PrecioProductoLista,
+    Proveedor,
+    Stock,
+    StockProve,
+)
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
@@ -67,6 +74,23 @@ class PosProductoLookupAPITestCase(TenantTestCase):
                 porce=Decimal("21.00"),
             )
 
+        ListaPrecio.objects.update_or_create(
+            numero=1,
+            defaults={
+                "nombre": "Mayorista",
+                "margen_descuento": Decimal("-10.00"),
+                "activo": True,
+            },
+        )
+        ListaPrecio.objects.update_or_create(
+            numero=2,
+            defaults={
+                "nombre": "Revendedor",
+                "margen_descuento": Decimal("5.00"),
+                "activo": True,
+            },
+        )
+
         max_stock_id = Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0
         self.producto = Stock.objects.create(
             id=max_stock_id + 1,
@@ -88,6 +112,13 @@ class PosProductoLookupAPITestCase(TenantTestCase):
             cantidad=Decimal("8.00"),
             costo=Decimal("900.00"),
             codigo_producto_proveedor="COD-POS-001",
+        )
+        PrecioProductoLista.objects.create(
+            stock=self.producto,
+            lista_numero=2,
+            precio=Decimal("1400.00"),
+            precio_manual=True,
+            usuario_carga_manual=User.objects.get(username="admin@poslookup.test"),
         )
 
         self.producto_busqueda = Stock.objects.create(
@@ -146,6 +177,10 @@ class PosProductoLookupAPITestCase(TenantTestCase):
         self.assertEqual(payload["unidad"], "UN")
         self.assertEqual(payload["idaliiva"], self.alicuota.id)
         self.assertEqual(Decimal(str(payload["precio_lista_0"])), Decimal("1234.50"))
+        self.assertEqual(len(payload["precios_listas"]), 4)
+        self.assertEqual(payload["precios_listas"][1]["lista_numero"], 2)
+        self.assertEqual(Decimal(str(payload["precios_listas"][1]["precio"])), Decimal("1400.00"))
+        self.assertTrue(payload["precios_listas"][1]["precio_manual"])
         self.assertEqual(Decimal(str(payload["stock_total"])), Decimal("8.00"))
         self.assertEqual(payload["proveedor_habitual_id"], self.proveedor.id)
         self.assertEqual(Decimal(str(payload["costo_habitual"])), Decimal("900.00"))
@@ -161,6 +196,7 @@ class PosProductoLookupAPITestCase(TenantTestCase):
                 "idaliiva",
                 "margen",
                 "precio_lista_0",
+                "precios_listas",
                 "stock_total",
                 "proveedor_habitual_id",
                 "costo_habitual",

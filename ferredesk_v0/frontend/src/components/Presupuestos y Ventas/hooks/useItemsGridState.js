@@ -17,6 +17,17 @@ import {
     ALICUOTAS_POR_DEFECTO,
 } from '../herramientasforms/tipoItem'
 
+function resolverCostoHabitualProducto(producto) {
+    const proveedorHabitualId = producto?.proveedor_habitual?.id ?? producto?.proveedor_habitual_id ?? null
+    const costoDesdeProveedorHabitual = producto?.stock_proveedores?.find(
+        (sp) => sp?.proveedor?.id === proveedorHabitualId
+    )?.costo
+
+    return Number.parseFloat(
+        costoDesdeProveedorHabitual ?? producto?.costo_habitual ?? producto?.costo ?? 0
+    ) || 0
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Hook principal
 // ──────────────────────────────────────────────────────────────────
@@ -82,7 +93,7 @@ export function useItemsGridState({
 
     // Helper: obtiene precio final (con IVA) según lista de precios activa.
     // Usa la utilidad importada con fallback al cálculo legacy (costo + margen + IVA).
-    const obtenerPrecioBaseProducto = useCallback((producto, proveedorHabitual) => {
+    const obtenerPrecioBaseProducto = useCallback((producto) => {
         let precioBase = obtenerPrecioParaLista(producto, listaPrecioId, listasPrecio)
 
         const aliId = extraerIdAlicuota(producto.idaliiva ?? 3)
@@ -93,7 +104,7 @@ export function useItemsGridState({
         // POR QUÉ: Los stubs de edición no tienen stock_proveedores pero sí tienen
         // producto.costo (extraído de vdi_costo). Se usa como fallback final.
         if (!precioBase) {
-            const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? producto?.costo ?? 0) || 0
+            const costoNum = resolverCostoHabitualProducto(producto)
             const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
             const neto = costoNum * (1 + margenNum / 100)
             const precioLista0 = neto * (1 + aliPorc / 100)
@@ -487,11 +498,7 @@ export function useItemsGridState({
                 // No actualizar ítems bloqueados, genéricos o con precio editado manualmente
                 if (!row.producto || row.esBloqueado || row.precioEditadoManualmente) return row
 
-                const proveedorHabitual = row.producto.stock_proveedores?.find(
-                    sp => sp.proveedor?.id === row.producto.proveedor_habitual?.id
-                )
-
-                const nuevoPrecioFinal = obtenerPrecioBaseProducto(row.producto, proveedorHabitual)
+                const nuevoPrecioFinal = obtenerPrecioBaseProducto(row.producto)
 
                 // CORRECCIÓN: Si el precio calculado es 0 pero el ítem ya tiene precio > 0,
                 // significa que el producto es un stub (sin datos reales de proveedor/lista).

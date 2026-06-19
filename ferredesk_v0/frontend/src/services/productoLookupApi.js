@@ -1,14 +1,8 @@
 import { clienteAPI } from '../utils/clienteAPI'
+import { normalizarParametrosQuery, obtenerTenantScope } from '../core/query/tenantScope'
 
 export const MINIMO_CARACTERES_BUSQUEDA_PRODUCTO = 2
 export const LIMITE_BUSQUEDA_PRODUCTO_POR_DEFECTO = 20
-
-function obtenerHostTenantActual() {
-  if (typeof window === 'undefined' || !window.location?.host) {
-    return 'tenant-desconocido'
-  }
-  return window.location.host.toLowerCase()
-}
 
 function normalizarNumero(valor, fallback = 0) {
   const numero = Number(valor)
@@ -105,14 +99,7 @@ function limitarResultados(productos, limit) {
 }
 
 export function construirClaveTenantProducto(segmento, parametros = {}) {
-  const parametrosNormalizados = { ...parametros }
-  Object.keys(parametrosNormalizados).forEach((clave) => {
-    if (parametrosNormalizados[clave] === undefined || parametrosNormalizados[clave] === null || parametrosNormalizados[clave] === '') {
-      delete parametrosNormalizados[clave]
-    }
-  })
-
-  return [segmento, obtenerHostTenantActual(), parametrosNormalizados]
+  return [segmento, obtenerTenantScope(), normalizarParametrosQuery(parametros)]
 }
 
 export async function buscarProductoLookupRapidoActual({ codigo, signal } = {}) {
@@ -207,5 +194,5 @@ export async function buscarProductosCompraLigeroActual({
 }
 
 export function obtenerScopeTenantProducto() {
-  return obtenerHostTenantActual()
+  return obtenerTenantScope()
 }

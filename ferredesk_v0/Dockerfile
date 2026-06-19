@@ -47,8 +47,9 @@ RUN mkdir -p /app/staticfiles /app/media
 
 # Copiar scripts productivos
 COPY scripts/start.prod.sh /app/start.prod.sh
+COPY scripts/start.prod-local.sh /app/start.prod-local.sh
 COPY scripts/migrate.prod.sh /app/migrate.prod.sh
-RUN chmod +x /app/start.prod.sh /app/migrate.prod.sh && sed -i 's/\r$//g' /app/start.prod.sh /app/migrate.prod.sh
+RUN chmod +x /app/start.prod.sh /app/start.prod-local.sh /app/migrate.prod.sh && sed -i 's/\r$//g' /app/start.prod.sh /app/start.prod-local.sh /app/migrate.prod.sh
 
 # Exponer el Ãºnico puerto necesario
 EXPOSE 8000

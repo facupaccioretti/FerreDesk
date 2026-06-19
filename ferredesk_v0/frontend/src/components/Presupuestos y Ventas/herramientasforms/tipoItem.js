@@ -85,6 +85,17 @@ export const obtenerPorcentajeIVA = (idaliiva, aliMap = {}) => {
     return aliMap[idaliiva] ?? ALICUOTAS_POR_DEFECTO[idaliiva] ?? 0
 }
 
+const resolverCostoHabitualProducto = (producto) => {
+    const proveedorHabitualId = producto?.proveedor_habitual?.id ?? producto?.proveedor_habitual_id ?? null
+    const costoDesdeProveedorHabitual = producto?.stock_proveedores?.find(
+        (sp) => sp?.proveedor?.id === proveedorHabitualId
+    )?.costo
+
+    return Number.parseFloat(
+        costoDesdeProveedorHabitual ?? producto?.costo_habitual ?? producto?.costo ?? 0
+    ) || 0
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Fábrica: Ítem vacío
 // ──────────────────────────────────────────────────────────────────
@@ -185,10 +196,7 @@ export function crearItemDesdeProducto(producto, {
     const aliPorc = obtenerPorcentajeIVA(aliId, aliMap)
 
     // Buscar proveedor habitual para obtener costo
-    const proveedorHabitual = producto.stock_proveedores?.find(
-        sp => sp.proveedor?.id === producto.proveedor_habitual?.id
-    )
-    const costoNum = Number.parseFloat(proveedorHabitual?.costo ?? 0) || 0
+    const costoNum = resolverCostoHabitualProducto(producto)
     const margenNum = Number.parseFloat(producto?.margen ?? 0) || 0
 
     // Cálculo del precio final usando lista de precios activa con fallback a costo + margen + IVA

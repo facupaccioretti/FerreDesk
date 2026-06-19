@@ -34,19 +34,21 @@ ALLOWED_HOSTS = _split_env_list(
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-FRONTEND_BUILD_DIR = Path(os.environ.get("FRONTEND_BUILD_DIR", BASE_DIR.parent / "frontend" / "build"))
+FRONTEND_BUILD_DIR = Path(os.environ.get("FRONTEND_BUILD_DIR", BASE_DIR / "react_frontend"))
 REACT_APP_DIR = FRONTEND_BUILD_DIR
 
 TEMPLATES[0]["DIRS"] = [
-    FRONTEND_BUILD_DIR,
     BASE_DIR / "templates",
 ]
+if FRONTEND_BUILD_DIR.exists():
+    TEMPLATES[0]["DIRS"].insert(0, FRONTEND_BUILD_DIR)
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [
-    FRONTEND_BUILD_DIR / "static",
-]
+STATICFILES_DIRS = []
+frontend_static_dir = FRONTEND_BUILD_DIR / "static"
+if frontend_static_dir.exists():
+    STATICFILES_DIRS.append(frontend_static_dir)
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",

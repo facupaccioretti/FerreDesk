@@ -7,6 +7,8 @@ import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
 import { useStockProveAPI } from "../../utils/useStockProveAPI"
 import { usePaginacionAPI } from "../../hooks/usePaginacionAPI"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Importar el modal de familias
 import FamiliasModal from "./FamiliasModal"
@@ -83,16 +85,8 @@ const ProductosManager = () => {
   const [showFamiliasModal, setShowFamiliasModal] = useState(false)
   const [showListasPrecioModal, setShowListasPrecioModal] = useState(false)
   const [productoParaImprimirEtiquetas, setProductoParaImprimirEtiquetas] = useState(null)
-  const [user, setUser] = useState(null)
-
-  // Info usuario (para Navbar)
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
 
   // Estado de búsqueda para ProductosTable
   const [searchProductos, setSearchProductos] = useState("")
@@ -208,7 +202,7 @@ const ProductosManager = () => {
   }
 
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   }

@@ -17,6 +17,8 @@ import { useClientesAPI } from "../../utils/useClientesAPI"
 // Componentes hijos extraídos
 import ClientesTable from "./ClientesTable"
 import ClienteForm from "./ClienteForm"
+import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
@@ -92,7 +94,8 @@ const ClientesManager = () => {
   // Estado de ordenamiento
   const [ordenamiento, setOrdenamiento] = useState('desc') // 'asc' o 'desc'
 
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
 
   // Persistencia de tabs
   useEffect(() => {
@@ -100,17 +103,8 @@ const ClientesManager = () => {
     localStorage.setItem("clientesActiveTab", activeTab)
   }, [tabs, activeTab])
 
-  // Info usuario (para Navbar)
-  useEffect(() => {
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-  }, [])
-
   const handleLogout = () => {
-    fetch("/api/logout/", { method: "POST", credentials: "include" }).then(() => {
+    logout().finally(() => {
       window.location.href = "/login/"
     })
   }

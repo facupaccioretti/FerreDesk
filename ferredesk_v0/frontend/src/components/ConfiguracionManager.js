@@ -15,6 +15,8 @@ import { usePlazosAPI } from "../utils/usePlazosAPI"
 import { useCategoriasAPI } from "../utils/useCategoriasAPI"
 import MaestroModal from "./Clientes/MaestrosModales"
 import { clienteAPI } from "../utils/clienteAPI"
+import { useLogoutMutation } from "../domains/session/useLogoutMutation"
+import { useSessionUserQuery } from "../domains/session/useSessionUserQuery"
 
 // Pestaña: Información del Negocio
 const InformacionNegocio = ({ config, onConfigChange, loading }) => {
@@ -470,7 +472,8 @@ const ConfiguracionManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
 
-  const [user, setUser] = useState(null)
+  const { user } = useSessionUserQuery()
+  const { logout } = useLogoutMutation()
   const [config, setConfig] = useState({})
   const [loading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -593,13 +596,7 @@ const ConfiguracionManager = () => {
   }, [])
 
   useEffect(() => {
-    // Cargar datos del usuario y configuración
-    fetch("/api/user/", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "success") setUser(data.user)
-      })
-
+    // Cargar configuración
     fetch("/api/ferreteria/", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
@@ -700,9 +697,10 @@ const ConfiguracionManager = () => {
   }
 
   const handleLogout = useCallback(() => {
-    setUser(null)
-    window.location.href = "/login/"
-  }, [])
+    logout().finally(() => {
+      window.location.href = "/login/"
+    })
+  }, [logout])
 
   const tabs = [
     {

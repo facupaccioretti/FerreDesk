@@ -35,7 +35,16 @@
             "render.yaml documenta que en Render Free migrate_schemas sigue ejecutandose como comando manual operativo, referenciando INSTRUCCIONES-MIGRACION-MANUAL-RENDER.md.",
             "Verificacion de contenido realizada: start.prod.sh contiene gunicorn y ${PORT:-8000}; migrate.prod.sh contiene migrate_schemas; Dockerfile referencia start.prod.sh.",
             "Verificacion Docker real: docker build -t ferredesk_start_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0 -> build OK, con COPY scripts/start.prod.sh, COPY scripts/migrate.prod.sh y export final de la imagen ferredesk_start_test:latest.",
-            "Inspeccion real de la imagen: docker inspect ferredesk_start_test --format '{{json .Config.Cmd}} {{json .Config.Entrypoint}}' -> [\"/app/start.prod.sh\"] null."
+            "Inspeccion real de la imagen: docker inspect ferredesk_start_test --format '{{json .Config.Cmd}} {{json .Config.Entrypoint}}' -> [\"/app/start.prod.sh\"] null.",
+            "Follow-up prod-local 2026-06-19: se agrego `ferredesk_v0/scripts/start.prod-local.sh` para espera de Postgres + `migrate_schemas` + `bootstrap_prod_local` + `collectstatic`, manteniendo `start.prod.sh` sin migraciones para Render.",
+            "Follow-up prod-local 2026-06-19: `ferredesk_v0/docker-compose.prod-local.yml` ahora sobreescribe `command: [\"/app/start.prod-local.sh\"]`, desactiva el worker embebido en el web y define un servicio `worker` opcional bajo `profiles: [\"background\"]`.",
+            "Validacion real local prod-local: `python manage.py check --settings=ferredesk_backend.settings.prod_local` -> `System check identified no issues (0 silenced).`",
+            "Validacion real del comando local: `python manage.py bootstrap_prod_local --help --settings=ferredesk_backend.settings.prod_local` expuso correctamente el management command sin errores de importacion.",
+            "Validacion real de compose: `docker compose -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\docker-compose.prod-local.yml config` resolvio `app.command=[/app/start.prod-local.sh]`, `PROD_LOCAL_BOOTSTRAP=true` y mantuvo el worker fuera del servicio web por profile.",
+            "Validacion real de imagen prod-local: `docker build -t ferredesk_prod_local_test -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\Dockerfile C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0` completo el build incluyendo `COPY scripts/start.prod-local.sh /app/start.prod-local.sh`; la llamada original vencio timeout despues del export, pero el artefacto quedo disponible y `docker run --rm ferredesk_prod_local_test sh -c \"test -x /app/start.prod-local.sh && test -d /app/react_frontend/static && echo OK_PROD_LOCAL_IMAGE\"` devolvio `OK_PROD_LOCAL_IMAGE`.",
+            "Ajuste operativo 2026-06-19: el bootstrap local dejo de usar el slug reservado `demo`; `docker-compose.prod-local.yml` y `tenants/management/commands/bootstrap_prod_local.py` pasan a `ferrelocal` y `admin@ferrelocal.lvh.me` como defaults para evitar fallos de onboarding al levantar el entorno prod-local.",
+            "Ajuste operativo 2026-06-19: `docker-compose.prod-local.yml` paso a leer `ferredesk-staging.env` y a imponer limites similares a Render para simulacion local: `app` con `cpus: 1.0` y `mem_limit: 2g`; `postgres` con `cpus: 0.10`, `mem_limit: 256m` y parametros `max_connections=100`, `shared_buffers=64MB`, `work_mem=1MB`, `maintenance_work_mem=32MB`; `worker` opcional con `cpus: 1.0` y `mem_limit: 2g`.",
+            "Validacion real de limites en compose: `docker compose -f C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\docker-compose.prod-local.yml config` resolvio `app.cpus=1`, `app.mem_limit=2147483648`, `postgres.cpus=0.1`, `postgres.mem_limit=268435456` y el comando `postgres -c max_connections=100 -c shared_buffers=64MB -c work_mem=1MB -c maintenance_work_mem=32MB`."
           ]
         },
         "FC3-T1": {
@@ -440,6 +449,62 @@
             "Validacion real frontend tests: `CI=true npm test -- --runInBand useItemsGridState.test.js` -> `1 passed, 1 total`.",
             "Validacion real backend: `python manage.py check` en `ferredesk_v0/backend` -> `System check identified no issues (0 silenced).`",
             "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "POS-ITEMSGRID-HOTFIX-PRECIO-UNITARIO-2026-06-19": {
+          "done": true,
+          "decision": "Se corrigio la regresion del precio unitario final en ItemsGrid: el lookup POS liviano habia dejado afuera `precios_listas` y el frontend seguia intentando derivar costo desde `stock_proveedores`, aunque el contrato nuevo solo entregaba `costo_habitual` + `proveedor_habitual_id`.",
+          "evidencia": [
+            "`ferredesk_v0/backend/ferreapps/productos/serializers.py::ProductoLookupRapidoSerializer` ahora incluye `precios_listas`, preservando overrides manuales de listas 1-4 para que el precio visible del grid siga siendo el final correcto segun la lista activa.",
+            "`ferredesk_v0/frontend/src/components/Presupuestos y Ventas/herramientasforms/tipoItem.js` y `.../hooks/useItemsGridState.js` ahora resuelven costo habitual con fallback `stock_proveedores -> costo_habitual -> costo`, en lugar de depender solo del objeto proveedor habitual completo.",
+            "Cobertura nueva backend: `ferredesk_v0/backend/ferreapps/productos/tests/test_pos_lookup_api.py` valida que el lookup rapido devuelve `precios_listas` y respeta un override manual de lista.",
+            "Cobertura nueva frontend: `ferredesk_v0/frontend/src/components/Presupuestos y Ventas/hooks/useItemsGridState.test.js` valida que un producto resuelto por el lookup liviano carga `precioFinal` visible desde `precios_listas` y conserva `vdi_costo` desde `costo_habitual`.",
+            "Validacion real backend: `python manage.py test ferreapps.productos.tests.test_pos_lookup_api --settings=ferredesk_backend.settings.dev --keepdb` -> `Ran 4 tests ... OK`.",
+            "Validacion real frontend tests: `CI=true npm test -- --runInBand src/components/Presupuestos\\ y\\ Ventas/hooks/useItemsGridState.test.js --watch=false` -> `2 passed, 2 total`.",
+            "Validacion real frontend: `npm run build` en `ferredesk_v0/frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "DOC-ARCH-SERVER-STATE-2026-06-19": {
+          "done": true,
+          "decision": "Se documento una arquitectura unica de `server state` y cache para FerreDesk, orientada a reemplazar hooks legacy `useEffect + fetch` por una capa centralizada sobre TanStack Query, manteniendo `clienteAPI` como cliente HTTP base y priorizando cache frontend tenant-safe sobre cache backend indiscriminado.",
+          "evidencia": [
+            "Documento nuevo `C:\\Users\\admin\\Desktop\\FerreDesk\\Documentacion\\PLAN-ARQUITECTURA-SERVER-STATE-Y-CACHE-FERREDESK.md` con inventario por pantalla, evaluacion de `Productos`, propuesta de query keys/perfiles/factories, politicas de invalidacion y plan de rollout.",
+            "El analisis releva que `Productos` ya usa `QueryClientProvider`, `usePaginacionAPI` y hooks de lookup modernos, mientras `Clientes`, `Proveedores`, `Compras`, `Presupuestos`, `Informes`, `Caja` y `Cuenta Corriente` siguen dependiendo mayormente de hooks legacy con auto-fetch al montar.",
+            "La propuesta deja explicitado que el patron objetivo no es 'poner cache en cada manager', sino centralizar cliente HTTP, query keys tenant-aware, perfiles de cache, hooks de dominio y mutaciones con invalidacion declarativa.",
+            "Se incluye orden recomendado de migracion: cerrar `Productos` como patron final y luego extender a `Clientes`, `Presupuestos y Ventas`, `Compras`, `Proveedores`, `Informes`, `Caja`, `Cuenta Corriente`, `Dashboards` y `Home`."
+          ]
+        },
+        "ARCH-SESSION-QUERY-BASE-2026-06-19": {
+          "done": true,
+          "decision": "Se implemento la primera pieza reutilizable de la arquitectura de `server state`: una capa centralizada para la sesion del usuario y logout, reutilizada por las pantallas principales para cortar fetchs repetidos a `/api/user/` cada vez que monta un manager.",
+          "evidencia": [
+            "Nuevos archivos `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\core\\query\\queryProfiles.js` y `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\core\\query\\queryKeys.js` con perfiles de cache y claves base compartidas.",
+            "Nuevo dominio de sesion en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\domains\\session\\`: `sessionApi.js`, `useSessionUserQuery.js` y `useLogoutMutation.js`, usando `clienteAPI` y TanStack Query para unificar lectura de usuario autenticado e invalidacion de sesion.",
+            "Managers principales migrados a la capa comun de sesion: `Home`, `DashboardsManager`, `ConfiguracionManager`, `ClientesManager`, `ProductosManager`, `ProveedoresManager`, `ComprasManager`, `InformesManager`, `PresupuestosManager`, `CajaManager`, `CuentaCorrienteManager` y `CuentaCorrienteProveedorManager`.",
+            "Verificacion real de duplicados removidos: `rg -n '/api/user/'` sobre esos managers devolvio exit code 1, confirmando que ya no hacen `fetch('/api/user/')` directo al montar.",
+            "Validacion real frontend: `npm run build` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "ARCH-TENANT-AWARE-QUERY-KEYS-2026-06-19": {
+          "done": true,
+          "decision": "Se reforzo la base central del cache para que los recursos paginados y los lookups compartidos usen claves tenant-aware y una politica unica de perfil de query, evitando que el cache quede definido solo por el nombre del recurso.",
+          "evidencia": [
+            "Nuevo helper `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\core\\query\\tenantScope.js` con `obtenerTenantScope()` y `normalizarParametrosQuery()` como base comun para scope por host y sanitizacion de parametros.",
+            "`C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\core\\query\\queryKeys.js` ahora expone `queryKeys.resources.all(resource)` y `queryKeys.resources.list(resource, parametros)` incluyendo tenant actual y parametros normalizados.",
+            "`C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\hooks\\usePaginacionAPI.js` dejo de construir claves ad-hoc `[claveCacheBase, filtros, pagina, itemsPorPagina]`; ahora usa `queryKeys.resources.list(...)`, `clienteAPI(url)` y el perfil central `withQueryProfile('warmCatalog', ...)`.",
+            "`C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend\\src\\services\\productoLookupApi.js` dejo de duplicar la deteccion de tenant y la sanitizacion de parametros; ahora reutiliza `tenantScope.js`.",
+            "Verificacion real de wiring: `rg -n \"queryKeys\\.resources|obtenerTenantScope|normalizarParametrosQuery|withQueryProfile\" ...` confirmo integracion en `queryKeys.js`, `tenantScope.js`, `usePaginacionAPI.js` y `productoLookupApi.js`.",
+            "Validacion real frontend: `npm run build` en `C:\\Users\\admin\\Desktop\\FerreDesk\\ferredesk_v0\\frontend` -> `Compiled successfully.`"
+          ]
+        },
+        "DOC-PLAN-MAESTRO-SERVER-STATE-2026-06-19": {
+          "done": true,
+          "decision": "Se creo un plan maestro de ejecucion para optimizar FerreDesk por dominios, con criterios SOLID/DRY, arquitectura objetivo, tareas por modulo, anti-patrones, Definition of Done y orden de rollout pensado para que otros agentes puedan replicar el trabajo sin improvisar patrones nuevos.",
+          "evidencia": [
+            "Documento nuevo `C:\\Users\\admin\\Desktop\\FerreDesk\\Documentacion\\PLAN-MAESTRO-OPTIMIZACION-FERREDESK-SERVER-STATE.md`.",
+            "El plan define infraestructura comun, sesion/tenant, catalogos compartidos, y tareas separadas para `Productos`, `Clientes`, `Proveedores`, `Compras`, `Ventas`, `Informes`, `Dashboards`, `Caja`, `Cuenta Corriente` y `Configuracion`.",
+            "El plan incluye reglas de invalidacion alineadas con TanStack Query y referencia de criterios oficiales vigentes: `Important Defaults`, `Query Keys` e `Invalidations from Mutations` de la documentacion oficial de TanStack Query.",
+            "El documento fija Definition of Done, checklist de revision, tareas ideales para agentes y criterio explicito para considerar que un modulo ya quedo al nivel del patron objetivo."
           ]
         }
       }
