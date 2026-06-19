@@ -31,10 +31,17 @@ export function useFamiliasAPI() {
         credentials: 'include',
         body: JSON.stringify(familia)
       });
-      if (!res.ok) throw new Error('Error al crear familia');
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        const msg = errData.detail || (errData.non_field_errors && errData.non_field_errors[0]) || (Object.keys(errData).length > 0 ? JSON.stringify(errData) : 'Error al crear familia');
+        throw new Error(msg);
+      }
       await fetchFamilias();
+      return { success: true };
     } catch (err) {
       setError(err.message);
+      return { error: err.message };
     }
   };
 
@@ -47,10 +54,17 @@ export function useFamiliasAPI() {
         credentials: 'include',
         body: JSON.stringify(updated)
       });
-      if (!res.ok) throw new Error('Error al editar familia');
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        const msg = errData.detail || (errData.non_field_errors && errData.non_field_errors[0]) || (Object.keys(errData).length > 0 ? JSON.stringify(errData) : 'Error al editar familia');
+        throw new Error(msg);
+      }
       await fetchFamilias();
+      return { success: true };
     } catch (err) {
       setError(err.message);
+      return { error: err.message };
     }
   };
 

@@ -187,28 +187,32 @@ class StockViewSet(viewsets.ModelViewSet):
         # Si no se especifica 'acti' en los parámetros, filtrar por activos por defecto
         if 'acti' not in self.request.query_params:
             queryset = queryset.filter(acti='S')
+
+        tipo_codigo = (self.request.query_params.get('tipo_codigo') or '').strip().lower()
+        if tipo_codigo in {'con_codigo_interno', 'interno'}:
+            queryset = queryset.filter(
+                codigo_barras__isnull=False,
+                tipo_codigo_barras__in=['EAN13', 'CODE128'],
+            ).exclude(codigo_barras='')
+        elif tipo_codigo in {'con_codigo_externo', 'externo'}:
+            queryset = queryset.filter(
+                codigo_barras__isnull=False,
+                tipo_codigo_barras='EXTERNO',
+            ).exclude(codigo_barras='')
+        elif tipo_codigo in {'sin_codigo', 'sin_codigo_barras'}:
+            queryset = queryset.filter(Q(codigo_barras__isnull=True) | Q(codigo_barras=''))
         
         # Ordenamiento
         orden = self.request.query_params.get('orden', 'id')
         direccion = self.request.query_params.get('direccion', 'desc')
         
         if orden == 'id':
-            if direccion == 'asc':
-                queryset = queryset.order_by('id')
-            else:
-                queryset = queryset.order_by('-id')
+            queryset = queryset.order_by('id') if direccion == 'asc' else queryset.order_by('-id')
         elif orden == 'deno':
-            if direccion == 'asc':
-                queryset = queryset.order_by('deno')
-            else:
-                queryset = queryset.order_by('-deno')
+            queryset = queryset.order_by(Lower('deno').asc(), 'id') if direccion == 'asc' else queryset.order_by(Lower('deno').desc(), '-id')
         elif orden == 'codvta':
-            if direccion == 'asc':
-                queryset = queryset.order_by('codvta')
-            else:
-                queryset = queryset.order_by('-codvta')
+            queryset = queryset.order_by(Lower('codvta').asc(), 'id') if direccion == 'asc' else queryset.order_by(Lower('codvta').desc(), '-id')
         else:
-            # Ordenamiento por defecto: más recientes primero
             queryset = queryset.order_by('-id')
         
         return queryset
@@ -472,10 +476,26 @@ class PosProductoSearchAPIView(APIView):
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')
 class StockProveViewSet(viewsets.ModelViewSet):
-    queryset = StockProve.objects.all()
+    queryset = StockProve.objects.select_related('proveedor', 'stock').all()
     serializer_class = StockProveSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['stock', 'proveedor']
+    pagination_class = PaginacionPorPaginaConLimite
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related('proveedor', 'stock')
+        stock_id = self.request.query_params.get('stock')
+        proveedor_id = self.request.query_params.get('proveedor')
+
+        if stock_id:
+            queryset = queryset.filter(stock_id=stock_id)
+        if proveedor_id:
+            queryset = queryset.filter(proveedor_id=proveedor_id)
+
+        if getattr(self, 'action', None) == 'list' and not stock_id and not proveedor_id:
+            return queryset.none()
+
+        return queryset.order_by('-id')
 
 class FamiliaFilter(FilterSet):
     """
@@ -507,7 +527,8 @@ class FamiliaFilter(FilterSet):
 
 # cache_page de 12hs: Familias y Alícuotas son datos maestros que rara vez cambian.
 # Se aplica solo a 'list' para no interferir con create/update/delete.
-@method_decorator(cache_page(60 * 60 * 12), name='list')
+# DESACTIVADO: Causaba que el modal de Familias no se actualice en tiempo real tras crear/editar.
+# @method_decorator(cache_page(60 * 60 * 12), name='list')
 class FamiliaViewSet(viewsets.ModelViewSet):
     queryset = Familia.objects.all()
     serializer_class = FamiliaSerializer
