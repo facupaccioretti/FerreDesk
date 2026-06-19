@@ -4,13 +4,14 @@ from .base import *
 import os
 
 DEBUG = True
-ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
+ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", True)
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".localhost", ".lvh.me"]
 # SESSION_COOKIE_DOMAIN = ".localhost"
 
 # Ruta al build del frontend en desarrollo
 FRONTEND_BUILD_DIR = BASE_DIR.parent / "frontend" / "build"
+FRONTEND_PUBLIC_DIR = BASE_DIR.parent / "frontend" / "public"
 # Directorio raíz del build de React que usan las vistas de serve_react_app
 REACT_APP_DIR = FRONTEND_BUILD_DIR
 

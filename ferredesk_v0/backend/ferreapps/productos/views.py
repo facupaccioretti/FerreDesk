@@ -1457,7 +1457,7 @@ class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([permissions.AllowAny])
 def servir_logo_arca(request):
     """
-    Endpoint para servir el logo ARCA desde la carpeta media.
+    Endpoint estable para servir el logo oficial ARCA versionado con la app.
     URL: /api/productos/servir-logo-arca/
     """
     try:
@@ -1470,61 +1470,8 @@ def servir_logo_arca(request):
         response["Pragma"] = "no-cache"
         response["Expires"] = "0"
         return response
-        ruta_logo = os.path.join(settings.MEDIA_ROOT, 'logos', 'logo-arca.jpg')
-        print(f'DEBUG: Intentando servir logo desde: {ruta_logo}')
-        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
-        
-        if not os.path.exists(ruta_logo):
-            print(f'ERROR: Logo ARCA no encontrado en {ruta_logo}')
-            return Response({'detail': 'Logo ARCA no encontrado'}, status=404)
-        
-        print(f'Sirviendo logo desde {ruta_logo}')
-        response = FileResponse(
-            open(ruta_logo, 'rb'),
-            content_type='image/jpeg',
-            headers={
-                'Content-Disposition': 'inline; filename="logo-arca.jpg"',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                # Desactivar caché para evitar logos viejos en PDFs
-                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        )
-        return response
     except Exception as e:
-        print(f'ERROR: Error al servir logo: {str(e)}')
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
-
-
-@api_view(['POST'])
-@permission_classes([EsAdminTenant])
-@transaction.atomic
-def subir_logo_arca(request):
-    """
-    Sube el logo de ARCA a media/logos/logo-arca.jpg (sobrescribe si existe).
-    Requiere usuario autenticado con permisos (staff recomendado a nivel URL/permiso).
-    """
-    try:
-        archivo = request.FILES.get('logo_arca')
-        if not archivo:
-            return Response({'detail': 'No se envió archivo logo_arca.'}, status=400)
-
-        logos_dir = os.path.join(settings.MEDIA_ROOT, 'logos')
-        os.makedirs(logos_dir, exist_ok=True)
-        destino_path = os.path.join(logos_dir, 'logo-arca.jpg')
-
-        # Guardar siempre como .jpg (el contenido puede venir en png/webp, pero se guarda como binario tal cual)
-        # Si quisieras convertir a JPG real, habría que usar PIL, pero aquí solo escribimos bytes.
-        with open(destino_path, 'wb') as f:
-            for chunk in archivo.chunks():
-                f.write(chunk)
-
-        return Response({'detail': 'Logo ARCA subido correctamente.', 'path': destino_path}, status=200)
-    except Exception as e:
-        return Response({'detail': f'Error al subir logo ARCA: {str(e)}'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -1753,4 +1700,5 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
             return "Se encontraron productos similares. Te sugerimos revisar si alguno corresponde al producto que estás creando."
         
         return "Se encontraron productos con cierta similitud. Te sugerimos revisar antes de continuar."
+
 
