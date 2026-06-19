@@ -22,6 +22,7 @@ import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { leerConsultaPersistida, guardarConsultaPersistida } from "../../utils/consultaPersistida"
 
 // Contenedor principal de gestión de clientes
 const ClientesManager = () => {
@@ -45,8 +46,10 @@ const ClientesManager = () => {
   }, [error, clearError])
 
   // Búsqueda
-  const [search, setSearch] = useState("")
-  const [searchInactivos, setSearchInactivos] = useState("")
+  const [search, setSearch] = useState(() => leerConsultaPersistida("clientes_search", ""))
+  const [searchInactivos, setSearchInactivos] = useState(() => leerConsultaPersistida("clientes_search_inactivos", ""))
+  const [appliedSearch, setAppliedSearch] = useState(() => leerConsultaPersistida("clientes_search", ""))
+  const [appliedSearchInactivos, setAppliedSearchInactivos] = useState(() => leerConsultaPersistida("clientes_search_inactivos", ""))
 
   // ---------- Tabs tipo navegador ----------
   const [tabs, setTabs] = useState(() => {
@@ -85,6 +88,33 @@ const ClientesManager = () => {
     const savedActiveTab = localStorage.getItem("clientesActiveTab")
     return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
+
+  const handleBuscarClientes = useCallback(() => {
+    if (activeTab === "lista") {
+      if (!search || search.trim() === "") return
+      setAppliedSearch(search)
+      guardarConsultaPersistida("clientes_search", search)
+      setPagina(1)
+    } else if (activeTab === "inactivos") {
+      if (!searchInactivos || searchInactivos.trim() === "") return
+      setAppliedSearchInactivos(searchInactivos)
+      guardarConsultaPersistida("clientes_search_inactivos", searchInactivos)
+      setPagina(1)
+    }
+  }, [activeTab, search, searchInactivos])
+
+  const handleLimpiarClientes = useCallback(() => {
+    setPagina(1)
+    if (activeTab === "lista") {
+      setSearch("")
+      setAppliedSearch("")
+      guardarConsultaPersistida("clientes_search", "")
+    } else if (activeTab === "inactivos") {
+      setSearchInactivos("")
+      setAppliedSearchInactivos("")
+      guardarConsultaPersistida("clientes_search_inactivos", "")
+    }
+  }, [activeTab])
 
 
   const [expandedClientId, setExpandedClientId] = useState(null)
@@ -156,8 +186,15 @@ const ClientesManager = () => {
   }
 
   // Filtrado de clientes activos e inactivos con useMemo para optimización
-  const clientesActivos = React.useMemo(() => clientes, [clientes])
-  const clientesInactivos = React.useMemo(() => clientes, [clientes])
+  const clientesActivos = React.useMemo(() => {
+    if (!appliedSearch || appliedSearch.trim() === "") return []
+    return clientes
+  }, [clientes, appliedSearch])
+  
+  const clientesInactivos = React.useMemo(() => {
+    if (!appliedSearchInactivos || appliedSearchInactivos.trim() === "") return []
+    return clientes
+  }, [clientes, appliedSearchInactivos])
 
   // ---------- Hooks de entidades relacionales ----------
   const { barrios, setBarrios } = useBarriosAPI()
@@ -181,24 +218,25 @@ const ClientesManager = () => {
   // ------------------------------------------------------------------
   // Efecto: cada vez que cambia búsqueda o pestaña, pedimos al backend con activo=A/I
   useEffect(() => {
-    const termino = activeTab === "inactivos" ? searchInactivos : search
+    const termino = activeTab === "inactivos" ? appliedSearchInactivos : appliedSearch
+    if (!termino || termino.trim() === "") return // Evitar fetch si no hay termino
+    
     const timeout = setTimeout(() => {
       const filtros = {}
       if (termino && termino.trim() !== "") {
-        filtros.razon__icontains = termino.trim()
-        filtros.fantasia__icontains = termino.trim()
+        filtros.search = termino.trim()
       }
       if (activeTab === "lista") filtros.activo = "A"
       if (activeTab === "inactivos") filtros.activo = "I"
       fetchClientes(filtros, pagina, itemsPorPagina, 'id', ordenamiento)
     }, 300)
     return () => clearTimeout(timeout)
-  }, [search, searchInactivos, activeTab, pagina, itemsPorPagina, ordenamiento, fetchClientes])
+  }, [appliedSearch, appliedSearchInactivos, activeTab, pagina, itemsPorPagina, ordenamiento, fetchClientes])
 
   // Resetear a página 1 cuando cambian pestaña o términos de búsqueda correspondientes
   useEffect(() => { setPagina(1) }, [activeTab])
-  useEffect(() => { if (activeTab === "lista") setPagina(1) }, [search, activeTab])
-  useEffect(() => { if (activeTab === "inactivos") setPagina(1) }, [searchInactivos, activeTab])
+  useEffect(() => { if (activeTab === "lista") setPagina(1) }, [appliedSearch, activeTab])
+  useEffect(() => { if (activeTab === "inactivos") setPagina(1) }, [appliedSearchInactivos, activeTab])
 
   // Eliminar cualquier renderizado visual de error relacionado a 'error' en la UI
 
@@ -290,6 +328,8 @@ const ClientesManager = () => {
                     onOrdenamientoChange={handleOrdenamientoChange}
                     ordenamientoControlado={ordenamiento === 'asc'}
                     cargando={loading}
+                    onBuscar={handleBuscarClientes}
+                    onLimpiar={handleLimpiarClientes}
                   />
                 )}
 

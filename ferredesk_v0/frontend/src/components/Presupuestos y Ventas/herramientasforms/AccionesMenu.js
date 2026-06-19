@@ -58,14 +58,14 @@ const AccionesMenu = ({
               const ComponenteBoton = boton.componente
               return (
                 <div key={index} className="group">
-                  <button
+                  <div
                     onClick={(e) => {
+                      if (boton.disabled) return;
                       e.stopPropagation()
                       boton.onClick()
                       triggerProps.onClick(e) // Cierra el tooltip después de la acción
                     }}
-                    disabled={boton.disabled}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 bg-slate-50/50 hover:bg-slate-100/80 transition-all duration-200 border border-transparent hover:border-slate-200/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 bg-slate-50/50 transition-all duration-200 border border-transparent cursor-pointer ${boton.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100/80 hover:border-slate-200/50'}`}
                     title={boton.titulo}
                   >
                     <div className="flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center">
@@ -92,7 +92,7 @@ const AccionesMenu = ({
                     <span className="text-xs text-slate-700 font-medium text-left leading-tight">
                       {boton.titulo}
                     </span>
-                  </button>
+                  </div>
 
                   {/* Separador sutil entre elementos */}
                   {index < botones.length - 1 && (

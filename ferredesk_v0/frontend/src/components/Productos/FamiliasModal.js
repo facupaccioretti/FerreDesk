@@ -14,14 +14,22 @@ function FamiliasModal({ open, onClose, familias, addFamilia, updateFamilia, del
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.deno) return alert("El nombre es obligatorio")
     if (!form.nivel) return alert("El nivel es obligatorio")
+    
+    let result;
     if (editId) {
-      updateFamilia(editId, form)
+      result = await updateFamilia(editId, form)
     } else {
-      addFamilia(form)
+      result = await addFamilia(form)
     }
+    
+    if (result && result.error) {
+      alert(result.error)
+      return
+    }
+
     setForm({ deno: "", comentario: "", nivel: "", acti: "S" })
     setEditId(null)
   }

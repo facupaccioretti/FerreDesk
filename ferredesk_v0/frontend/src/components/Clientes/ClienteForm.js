@@ -223,16 +223,35 @@ const ClienteForm = ({
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
 
+  useEffect(() => {
+    let cancelled = false
+
+    const cargarCatalogoSiFalta = async (listaActual, setLista, url, mensajeError) => {
+      if (!Array.isArray(listaActual) || listaActual.length > 0 || typeof setLista !== "function") return
+      try {
+        const res = await fetch(url, { credentials: "include" })
+        if (!res.ok) throw new Error(mensajeError)
+        const data = await res.json()
+        if (!cancelled) {
+          setLista(Array.isArray(data) ? data : data.results || [])
+        }
+      } catch (_) { }
+    }
+
+    cargarCatalogoSiFalta(barrios, setBarrios, "/api/clientes/barrios/", "Error al obtener barrios")
+    cargarCatalogoSiFalta(localidades, setLocalidades, "/api/clientes/localidades/", "Error al obtener localidades")
+
+    return () => {
+      cancelled = true
+    }
+  }, [barrios, localidades, setBarrios, setLocalidades])
+
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
 
   // Ref para conocer el CUIT actual dentro de efectos sin agregar dependencias
   const cuitActualRef = useRef(form.cuit)
   useEffect(() => { cuitActualRef.current = form.cuit }, [form.cuit])
-
-  // Constante para determinar si estamos en modo PRODUCCION
-  const MODO_PRODUCCION = 'PROD'
-  const esModoProduccion = ferreteria?.modo_arca === MODO_PRODUCCION
 
   // Helper: lista solo activos pero conservando la opción seleccionada aunque esté inactiva
   const filtrarActivosConSeleccion = useCallback((lista, seleccionadoId) => {
@@ -561,7 +580,7 @@ const ClienteForm = ({
       })
       if (!res.ok) throw new Error("Error al crear")
       // Refrescar la lista
-      const data = await fetch(url).then((r) => r.json())
+      const data = await fetch(url, { credentials: "include" }).then((r) => r.json())
       setList(Array.isArray(data) ? data : data.results || [])
       closeModal()
     } catch (err) {

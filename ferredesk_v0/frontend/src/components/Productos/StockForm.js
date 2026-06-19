@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useStockProveAPI } from "../../utils/useStockProveAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 import useDetectorDenominaciones from "../../utils/useDetectorDenominaciones"
@@ -64,11 +63,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const refContenedorDenominacion = useRef(null)
   const referenciaCampoBusqueda = useRef(null)
 
-  // APIs existentes
-  const isEdicion = !!stock?.id
-  // Evitar fetch global de stockprove en edición: solo en modo "nuevo" usamos el hook
-  const stockProveAPI = useStockProveAPI()
-  const stockProve = isEdicion ? [] : stockProveAPI.stockProve
+  // Las relaciones stock/proveedor se resuelven desde el detalle cargado o el estado local del form.
+  const stockProve = []
   const { alicuotas } = useAlicuotasIVAAPI()
 
   // Hook para obtener la configuración de la ferretería

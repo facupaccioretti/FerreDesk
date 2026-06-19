@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { fechaHoyLocal } from './fechas';
 
 export const useStockBajoAPI = () => {
@@ -7,12 +7,23 @@ export const useStockBajoAPI = () => {
   const [error, setError] = useState(null);
   const [totalProductos, setTotalProductos] = useState(0);
 
-  const obtenerProductosStockBajo = async () => {
+  const construirQuery = (parametros = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(parametros).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+    const query = params.toString()
+    return query ? `?${query}` : ''
+  }
+
+  const obtenerProductosStockBajo = async (parametros = {}) => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch('/api/informes/stock-bajo/', {
+      const response = await fetch(`/api/informes/stock-bajo/${construirQuery(parametros)}`, {
         credentials: 'include'
       });
       
@@ -21,13 +32,9 @@ export const useStockBajoAPI = () => {
       }
       
       const data = await response.json();
-      
-      if (data.status === 'success') {
-        setProductos(data.data);
-        setTotalProductos(data.total_productos);
-      } else {
-        throw new Error(data.message || 'Error en la respuesta del servidor');
-      }
+      const lista = Array.isArray(data) ? data : (data.results || [])
+      setProductos(lista);
+      setTotalProductos(typeof data.count === 'number' ? data.count : lista.length);
     } catch (err) {
       setError(err.message);
       setProductos([]);
@@ -37,9 +44,9 @@ export const useStockBajoAPI = () => {
     }
   };
 
-  const generarPDF = async () => {
+  const generarPDF = async (parametros = {}) => {
     try {
-      const response = await fetch('/api/informes/stock-bajo/pdf/', {
+      const response = await fetch(`/api/informes/stock-bajo/pdf/${construirQuery(parametros)}`, {
         credentials: 'include'
       });
       
@@ -65,9 +72,11 @@ export const useStockBajoAPI = () => {
     }
   };
 
-  useEffect(() => {
-    obtenerProductosStockBajo();
-  }, []);
+  const limpiarResultados = () => {
+    setProductos([])
+    setTotalProductos(0)
+    setError(null)
+  }
 
   return {
     productos,
@@ -75,6 +84,7 @@ export const useStockBajoAPI = () => {
     error,
     totalProductos,
     obtenerProductosStockBajo,
-    generarPDF
+    generarPDF,
+    limpiarResultados
   };
 }; 

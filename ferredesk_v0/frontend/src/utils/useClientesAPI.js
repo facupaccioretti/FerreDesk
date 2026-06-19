@@ -3,7 +3,7 @@ import { clienteAPI } from './clienteAPI';
 
 export function useClientesAPI(filtrosIniciales = {}, opciones = { autoFetch: true }) {
   const [clientes, setClientes] = useState([]);
-  const [loading, setLoading] = useState(!opciones.autoFetch);
+  const [loading, setLoading] = useState(opciones.autoFetch === true);
   const [error, setError] = useState(null);
   const [total, setTotal] = useState(0);
   const lastQueryKeyRef = useRef('');

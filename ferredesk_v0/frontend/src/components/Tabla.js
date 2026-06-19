@@ -49,6 +49,8 @@ const Tabla = ({
   datos = [],
   valorBusqueda = "",
   onCambioBusqueda = () => { },
+  onBuscar = null,
+  onLimpiar = null,
   filasPorPaginaInicial = 10,
   opcionesFilasPorPagina = [10, 20, 30, 40, 50],
   paginadorVisible = true,
@@ -129,15 +131,39 @@ const Tabla = ({
           <div className="flex items-center justify-between gap-4">
             {/* Buscador */}
             {mostrarBuscador && (
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={placeholderBuscador}
-                  className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
-                  value={valorBusqueda}
-                  onChange={(e) => onCambioBusqueda(e.target.value)}
-                />
+              <div className="flex items-center gap-2 flex-1 max-w-xl">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder={placeholderBuscador}
+                    className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
+                    value={valorBusqueda}
+                    onChange={(e) => onCambioBusqueda(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && typeof onBuscar === "function") {
+                        e.preventDefault()
+                        onBuscar()
+                      }
+                    }}
+                  />
+                </div>
+                {typeof onBuscar === "function" && (
+                  <button
+                    onClick={onBuscar}
+                    className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-medium rounded-lg text-sm transition-colors duration-150 shadow-sm whitespace-nowrap"
+                  >
+                    Buscar
+                  </button>
+                )}
+                {typeof onLimpiar === "function" && (
+                  <button
+                    onClick={onLimpiar}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-medium rounded-lg border border-slate-200 text-sm transition-colors duration-150 whitespace-nowrap"
+                  >
+                    Limpiar
+                  </button>
+                )}
               </div>
             )}
 
@@ -239,7 +265,7 @@ const Tabla = ({
                         <Search className="w-5 h-5 text-slate-400" />
                       </div>
                       <p className="text-sm font-medium">No se encontraron resultados</p>
-                      {valorBusqueda && <p className="text-xs text-slate-400">Intenta con otros términos de búsqueda</p>}
+                      {valorBusqueda && <p className="text-xs text-slate-400"></p>}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2">

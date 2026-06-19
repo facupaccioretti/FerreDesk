@@ -5,28 +5,81 @@ import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined';
 import { useStockBajoAPI } from '../../utils/useStockBajoAPI';
 import Tabla from '../Tabla';
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
+import { guardarConsultaPersistida, leerConsultaPersistida, limpiarConsultaPersistida } from "../../utils/consultaPersistida";
 
 const StockBajoList = () => {
+  const estadoPersistido = leerConsultaPersistida("stockBajoConsultaPersistida", {});
   const theme = useFerreDeskTheme();
-  const { productos, loading, error, totalProductos, obtenerProductosStockBajo, generarPDF } = useStockBajoAPI();
+  const { productos, loading, error, totalProductos, obtenerProductosStockBajo, generarPDF, limpiarResultados } = useStockBajoAPI();
   const [generandoPDF, setGenerandoPDF] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => estadoPersistido.searchTerm || "");
+  const [consultaEjecutada, setConsultaEjecutada] = useState(() => estadoPersistido.consultaEjecutada || false);
+  const [filtroAplicado, setFiltroAplicado] = useState(() => estadoPersistido.filtroAplicado || "");
+  const [pagina, setPagina] = useState(() => estadoPersistido.pagina || 1);
+  const [itemsPorPagina, setItemsPorPagina] = useState(() => estadoPersistido.itemsPorPagina || 20);
+  const [ordenamiento, setOrdenamiento] = useState(() => estadoPersistido.ordenamiento || "asc");
 
   useEffect(() => {
     document.title = "Informe Stock Bajo - FerreDesk";
   }, []);
 
+  useEffect(() => {
+    guardarConsultaPersistida("stockBajoConsultaPersistida", {
+      searchTerm,
+      consultaEjecutada,
+      filtroAplicado,
+      pagina,
+      itemsPorPagina,
+      ordenamiento,
+    });
+  }, [searchTerm, consultaEjecutada, filtroAplicado, pagina, itemsPorPagina, ordenamiento]);
+
+  useEffect(() => {
+    if (consultaEjecutada) {
+      obtenerProductosStockBajo({
+        search: filtroAplicado,
+        page: pagina,
+        limit: itemsPorPagina,
+        orden: "denominacion",
+        direccion: ordenamiento,
+      });
+    }
+  }, [consultaEjecutada, filtroAplicado, pagina, itemsPorPagina, ordenamiento, obtenerProductosStockBajo]);
+
   const handleGenerarPDF = async () => {
     setGenerandoPDF(true);
     try {
-      await generarPDF();
+      await generarPDF({
+        search: filtroAplicado,
+        orden: "denominacion",
+        direccion: ordenamiento,
+      });
     } finally {
       setGenerandoPDF(false);
     }
   };
 
   const handleRefresh = () => {
-    obtenerProductosStockBajo();
+    setPagina(1);
+    setFiltroAplicado(searchTerm.trim());
+    setConsultaEjecutada(true);
+  };
+
+  const handleEjecutarInforme = () => {
+    setPagina(1);
+    setFiltroAplicado(searchTerm.trim());
+    setConsultaEjecutada(true);
+  };
+
+  const handleLimpiarInforme = () => {
+    setSearchTerm("");
+    setConsultaEjecutada(false);
+    setFiltroAplicado("");
+    setPagina(1);
+    setItemsPorPagina(20);
+    setOrdenamiento("asc");
+    limpiarResultados();
+    limpiarConsultaPersistida("stockBajoConsultaPersistida");
   };
 
   const columnas = [
@@ -68,6 +121,29 @@ const StockBajoList = () => {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Consulta de stock bajo</p>
+            <p className="text-xs text-slate-500">Ejecutá el informe manualmente para evitar cargas automáticas innecesarias.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleEjecutarInforme}
+              className={theme.botonPrimario + " !py-2 !h-auto text-xs"}
+            >
+              Ejecutar informe
+            </button>
+            <button
+              onClick={handleLimpiarInforme}
+              className="px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 font-semibold text-xs shadow-sm"
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Mini Header / Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 py-2 px-4 rounded-xl">
@@ -83,7 +159,7 @@ const StockBajoList = () => {
         <div className="flex gap-2">
           <button
             onClick={handleRefresh}
-            disabled={loading}
+            disabled={loading || !consultaEjecutada}
             className="px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 font-semibold flex items-center gap-2 text-xs shadow-sm disabled:opacity-50"
           >
             <RefreshOutlinedIcon className="w-4 h-4" />
@@ -92,7 +168,7 @@ const StockBajoList = () => {
 
           <button
             onClick={handleGenerarPDF}
-            disabled={generandoPDF || loading || productos.length === 0}
+            disabled={generandoPDF || loading || productos.length === 0 || !consultaEjecutada}
             className={theme.botonPrimario + " !py-2 !h-auto flex items-center gap-2 text-xs"}
           >
             <PictureAsPdfOutlinedIcon className="w-4 h-4" />
@@ -113,19 +189,33 @@ const StockBajoList = () => {
       <div className="w-full">
         <Tabla
           columnas={columnas}
-          datos={productos}
-          cargando={loading}
+          datos={consultaEjecutada ? productos : []}
+          cargando={consultaEjecutada ? loading : false}
           valorBusqueda={searchTerm}
           onCambioBusqueda={setSearchTerm}
           filasPorPaginaInicial={20}
           mostrarOrdenamiento={true}
           tamañoEncabezado="pequeño"
           filasCompactas={true}
+          paginacionControlada={true}
+          paginaActual={pagina}
+          onPageChange={setPagina}
+          itemsPerPage={itemsPorPagina}
+          onItemsPerPageChange={setItemsPorPagina}
+          totalRemoto={totalProductos}
+          busquedaRemota={true}
+          onOrdenamientoChange={(ascendente) => {
+            setOrdenamiento(ascendente ? "asc" : "desc")
+            setPagina(1)
+          }}
+          ordenamientoControlado={ordenamiento === "asc"}
+          mensajeVacio={consultaEjecutada ? "No se encontraron resultados" : "Informe sin ejecutar"}
+          subtituloVacio={consultaEjecutada ? "" : "Presioná Ejecutar informe para consultar stock bajo."}
         />
       </div>
 
       {/* Footer Minimalista */}
-      {!loading && productos.length > 0 && (
+      {!loading && consultaEjecutada && productos.length > 0 && (
         <div className="flex justify-end pr-2">
           <span className="text-[10px] text-slate-400 font-medium italic">
             Sincronizado: {new Date().toLocaleTimeString('es-AR')}

@@ -175,6 +175,9 @@ export default function ProductosTable({
   setSearchProductos,
   buscarPorCodigoProveedor = false,
   setBuscarPorCodigoProveedor = () => { },
+  onBuscar = () => { },
+  onLimpiar = () => { },
+  consultaEjecutada = false,
   paginacionControlada = false,
   paginaActual,
   onPageChange,
@@ -239,77 +242,7 @@ export default function ProductosTable({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filtros de familias */}
-      <div className="mb-2 flex items-center gap-2 flex-wrap">
-        <div>
-          <label className="block text-xs text-slate-600">Familia</label>
-          <select
-            value={fam1Filtro}
-            onChange={(e) => setFam1Filtro(e.target.value)}
-            className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
-          >
-            <option value="">Todas</option>
-            {familias
-              .filter((f) => f.nivel === "1")
-              .map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.deno}
-                </option>
-              ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-600">Subfamilia</label>
-          <select
-            value={fam2Filtro}
-            onChange={(e) => setFam2Filtro(e.target.value)}
-            className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
-          >
-            <option value="">Todas</option>
-            {familias
-              .filter((f) => f.nivel === "2")
-              .map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.deno}
-                </option>
-              ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-600">Sub-sub</label>
-          <select
-            value={fam3Filtro}
-            onChange={(e) => setFam3Filtro(e.target.value)}
-            className="pl-2 pr-2 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-sm"
-          >
-            <option value="">Todas</option>
-            {familias
-              .filter((f) => f.nivel === "3")
-              .map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.deno}
-                </option>
-              ))}
-          </select>
-        </div>
-      </div>
-
       <div className="flex-1">
-        {/* Toggle de modo de búsqueda por código de proveedor */}
-        <div className="mb-2 flex items-center">
-          <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none hover:text-orange-600 transition-colors">
-            <input
-              type="checkbox"
-              checked={buscarPorCodigoProveedor}
-              onChange={(e) => {
-                setBuscarPorCodigoProveedor(e.target.checked)
-                setSearchProductos('') // Limpiar búsqueda al cambiar modo para evitar resultados cruzados
-              }}
-              className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-            />
-            Buscar por código de proveedor
-          </label>
-        </div>
         {/* Definición de columnas */}
         {(() => {
           const columnas = [
@@ -369,6 +302,8 @@ export default function ProductosTable({
               datos={productos}
               valorBusqueda={searchProductos}
               onCambioBusqueda={setSearchProductos}
+              onBuscar={onBuscar}
+              onLimpiar={onLimpiar}
               mostrarBuscador={true}
               placeholderBuscador={buscarPorCodigoProveedor ? "Buscar por código de proveedor..." : "Buscar en tabla..."}
               mostrarOrdenamiento={true}
@@ -382,6 +317,8 @@ export default function ProductosTable({
               onOrdenamientoChange={onOrdenamientoChange}
               ordenamientoControlado={ordenamientoControlado}
               cargando={cargando}
+              mensajeVacio={consultaEjecutada ? "No se encontraron resultados" : "Sin consulta ejecutada"}
+              subtituloVacio={consultaEjecutada ? "" : "Usá los filtros y presioná Buscar para consultar productos."}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 

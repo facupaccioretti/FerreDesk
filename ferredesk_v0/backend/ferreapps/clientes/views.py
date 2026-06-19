@@ -17,6 +17,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q, ProtectedError
 from .algoritmo_cuit_utils import validar_cuit
+from django.db.models.functions import Lower
 
 # Create your views here.
 logger = logging.getLogger('ferredesk_arca.procesar_cuit_arca')
@@ -89,7 +90,20 @@ class ClienteViewSet(viewsets.ModelViewSet):
         Retorna el queryset base optimizado, aplicando búsqueda si se proporciona el parámetro 'search'.
         """
         # Queryset base excluyendo el cliente por defecto (id=1)
-        queryset = Cliente.objects.exclude(id=1).select_related('iva')
+        queryset = (
+            Cliente.objects
+            .exclude(id=1)
+            .select_related(
+                'iva',
+                'barrio',
+                'localidad',
+                'provincia',
+                'transporte',
+                'vendedor',
+                'plazo',
+                'categoria',
+            )
+        )
         
         # Filtro opcional: solo clientes con movimientos en la tabla VENTA
         if self.request.query_params.get('con_ventas') == '1':
@@ -98,7 +112,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(id__in=ids_con_ventas)
         
         # Parámetro de búsqueda de texto libre
-        termino_busqueda = self.request.query_params.get('search', '')
+        termino_busqueda = (self.request.query_params.get('search', '') or '').strip()
         
         if termino_busqueda:
             # Búsqueda en múltiples campos usando Q objects
@@ -107,31 +121,36 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 Q(fantasia__icontains=termino_busqueda) |
                 Q(cuit__icontains=termino_busqueda) |
                 Q(domicilio__icontains=termino_busqueda) |
-                Q(iva__nombre__icontains=termino_busqueda)
+                Q(iva__nombre__icontains=termino_busqueda) |
+                Q(tel1__icontains=termino_busqueda) |
+                Q(tel2__icontains=termino_busqueda) |
+                Q(tel3__icontains=termino_busqueda) |
+                Q(email__icontains=termino_busqueda)
             ).distinct()
+
+        provincia_id = self.request.query_params.get('provincia')
+        localidad_id = self.request.query_params.get('localidad')
+        condicion_iva = self.request.query_params.get('condicion_iva') or self.request.query_params.get('iva')
+
+        if provincia_id:
+            queryset = queryset.filter(provincia_id=provincia_id)
+        if localidad_id:
+            queryset = queryset.filter(localidad_id=localidad_id)
+        if condicion_iva:
+            queryset = queryset.filter(iva_id=condicion_iva)
         
         # Ordenamiento
         orden = self.request.query_params.get('orden', 'id')
         direccion = self.request.query_params.get('direccion', 'desc')
 
-        if orden == 'id':
-            if direccion == 'asc':
-                queryset = queryset.order_by('id')
-            else:
-                queryset = queryset.order_by('-id')
-        elif orden == 'razon':
-            if direccion == 'asc':
-                queryset = queryset.order_by('razon')
-            else:
-                queryset = queryset.order_by('-razon')
+        if orden == 'razon':
+            queryset = queryset.order_by(Lower('razon').asc(), 'id') if direccion == 'asc' else queryset.order_by(Lower('razon').desc(), '-id')
         elif orden == 'fantasia':
-            if direccion == 'asc':
-                queryset = queryset.order_by('fantasia')
-            else:
-                queryset = queryset.order_by('-fantasia')
+            queryset = queryset.order_by(Lower('fantasia').asc(nulls_last=True), 'id') if direccion == 'asc' else queryset.order_by(Lower('fantasia').desc(nulls_last=True), '-id')
+        elif orden == 'cuit':
+            queryset = queryset.order_by('cuit', 'id') if direccion == 'asc' else queryset.order_by('-cuit', '-id')
         else:
-            # Ordenamiento por defecto: más recientes primero
-            queryset = queryset.order_by('-id')
+            queryset = queryset.order_by('id') if direccion == 'asc' else queryset.order_by('-id')
         
         return queryset
 

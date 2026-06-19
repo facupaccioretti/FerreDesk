@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
+import FiltrosProductos from "./FiltrosProductos"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
 import { useProveedoresAPI } from "../../utils/useProveedoresAPI"
@@ -21,6 +22,7 @@ import { ImprimirEtiquetasModal } from "./codigoBarras"
 
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+import { leerConsultaPersistida, guardarConsultaPersistida } from "../../utils/consultaPersistida"
 
 const ProductosManager = () => {
   // Hook del tema de FerreDesk
@@ -89,7 +91,22 @@ const ProductosManager = () => {
   const { logout } = useLogoutMutation()
 
   // Estado de búsqueda para ProductosTable
-  const [searchProductos, setSearchProductos] = useState("")
+  const [searchProductos, setSearchProductos] = useState(() => leerConsultaPersistida("productos_search", ""))
+  const [searchVal, setSearchVal] = useState(() => leerConsultaPersistida("productos_search", ""))
+
+  const handleBuscarProductos = useCallback(() => {
+    if (!searchVal || searchVal.trim() === "") return
+    setSearchProductos(searchVal)
+    guardarConsultaPersistida("productos_search", searchVal)
+    setPagina(1)
+  }, [searchVal])
+
+  const handleLimpiarBusquedaProductos = useCallback(() => {
+    setSearchVal("")
+    setSearchProductos("")
+    guardarConsultaPersistida("productos_search", "")
+    setPagina(1)
+  }, [])
 
   // Estado de paginación
   const [pagina, setPagina] = useState(1)
@@ -254,26 +271,29 @@ const ProductosManager = () => {
     '/api/productos/stock/',
     filtrosProductos,
     pagina,
-    itemsPorPagina
+    itemsPorPagina,
+    { enabled: !!(searchProductos && searchProductos.trim() !== "") }
   )
 
   // Filtrar productos activos/inactivos con memo para rendimiento
   // Si el campo acti no está presente, mostrar todos los productos como activos
   const productosActivosBase = useMemo(() => {
+    if (!searchProductos || searchProductos.trim() === "") return []
     if (productos.length > 0 && productos[0].acti === undefined) {
       // Si el campo acti no está presente, mostrar todos los productos
       return productos
     }
     return productos.filter((p) => p.acti === "S")
-  }, [productos])
+  }, [productos, searchProductos])
 
   const productosInactivosBase = useMemo(() => {
+    if (!searchProductos || searchProductos.trim() === "") return []
     if (productos.length > 0 && productos[0].acti === undefined) {
       // Si el campo acti no está presente, no mostrar productos inactivos
       return []
     }
     return productos.filter((p) => p.acti === "N")
-  }, [productos])
+  }, [productos, searchProductos])
 
   const aplicaFiltrosFamilia = useCallback((prod) => {
     const fam1 = prod.idfam1 && typeof prod.idfam1 === "object" ? prod.idfam1.id : prod.idfam1
@@ -351,28 +371,23 @@ const ProductosManager = () => {
               </div>
 
               <div className="flex-1 p-6">
-                {/* Botones de acción solo en la tab de lista */}
-                {activeTab === "lista" && (
-                  <div className="mb-4 flex gap-2">
-                    <button
-                      onClick={() => openTab(`nuevo-${Date.now()}`, "Nuevo Producto")}
-                      className={theme.botonPrimario}
-                    >
-                      <span className="text-lg">+</span> Nuevo Producto
-                    </button>
-                    <button
-                      onClick={() => setShowFamiliasModal(true)}
-                      className={theme.botonPrimario}
-                    >
-                      Gestionar Familias
-                    </button>
-                    <button
-                      onClick={() => setShowListasPrecioModal(true)}
-                      className={theme.botonPrimario}
-                    >
-                      Actualizar Listas
-                    </button>
-                  </div>
+                {/* Filtros y acciones para las tabs de lista y inactivos */}
+                {(activeTab === "lista" || activeTab === "inactivos") && (
+                  <FiltrosProductos
+                    familias={familias}
+                    fam1Filtro={fam1Filtro}
+                    setFam1Filtro={setFam1Filtro}
+                    fam2Filtro={fam2Filtro}
+                    setFam2Filtro={setFam2Filtro}
+                    fam3Filtro={fam3Filtro}
+                    setFam3Filtro={setFam3Filtro}
+                    buscarPorCodigoProveedor={buscarPorCodigoProveedor}
+                    setBuscarPorCodigoProveedor={setBuscarPorCodigoProveedor}
+                    setSearchProductos={setSearchVal}
+                    onNuevoProducto={() => openTab(`nuevo-${Date.now()}`, "Nuevo Producto")}
+                    onGestionarFamilias={() => setShowFamiliasModal(true)}
+                    onActualizarListas={() => setShowListasPrecioModal(true)}
+                  />
                 )}
                 {/* Contenido de pestañas */}
                 {activeTab === "lista" && (
@@ -383,12 +398,6 @@ const ProductosManager = () => {
                     setProveedores={addProveedor}
                     expandedId={expandedId}
                     setExpandedId={setExpandedId}
-                    fam1Filtro={fam1Filtro}
-                    setFam1Filtro={setFam1Filtro}
-                    fam2Filtro={fam2Filtro}
-                    setFam2Filtro={setFam2Filtro}
-                    fam3Filtro={fam3Filtro}
-                    setFam3Filtro={setFam3Filtro}
                     addFamilia={addFamilia}
                     updateFamilia={updateFamilia}
                     deleteFamilia={deleteFamilia}
@@ -399,10 +408,11 @@ const ProductosManager = () => {
                     onEdit={handleEditProducto}
                     onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                     onUpdateStock={handleUpdateStock}
-                    searchProductos={searchProductos}
-                    setSearchProductos={setSearchProductos}
+                    searchProductos={searchVal}
+                    setSearchProductos={setSearchVal}
                     buscarPorCodigoProveedor={buscarPorCodigoProveedor}
-                    setBuscarPorCodigoProveedor={setBuscarPorCodigoProveedor}
+                    onBuscar={handleBuscarProductos}
+                    onLimpiar={handleLimpiarBusquedaProductos}
                     paginacionControlada={true}
                     paginaActual={pagina}
                     onPageChange={setPagina}
@@ -423,12 +433,6 @@ const ProductosManager = () => {
                     setProveedores={addProveedor}
                     expandedId={expandedId}
                     setExpandedId={setExpandedId}
-                    fam1Filtro={fam1Filtro}
-                    setFam1Filtro={setFam1Filtro}
-                    fam2Filtro={fam2Filtro}
-                    setFam2Filtro={setFam2Filtro}
-                    fam3Filtro={fam3Filtro}
-                    setFam3Filtro={setFam3Filtro}
                     addFamilia={addFamilia}
                     updateFamilia={updateFamilia}
                     deleteFamilia={deleteFamilia}
@@ -439,10 +443,11 @@ const ProductosManager = () => {
                     onEdit={handleEditProducto}
                     onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                     onUpdateStock={handleUpdateStock}
-                    searchProductos={searchProductos}
-                    setSearchProductos={setSearchProductos}
+                    searchProductos={searchVal}
+                    setSearchProductos={setSearchVal}
                     buscarPorCodigoProveedor={buscarPorCodigoProveedor}
-                    setBuscarPorCodigoProveedor={setBuscarPorCodigoProveedor}
+                    onBuscar={handleBuscarProductos}
+                    onLimpiar={handleLimpiarBusquedaProductos}
                     paginacionControlada={true}
                     paginaActual={pagina}
                     onPageChange={setPagina}

@@ -34,6 +34,9 @@ const ClientesTable = ({
   onOrdenamientoChange = null,
   ordenamientoControlado = null,
   cargando = false,
+  consultaEjecutada = false,
+  onBuscar = null,
+  onLimpiar = null,
 }) => {
   // Función para generar los botones de acciones para clientes
   const generarBotonesCliente = (cliente) => {
@@ -246,13 +249,13 @@ const ClientesTable = ({
                         <div className="flex justify-between">
                           <span className="text-slate-500">Zona:</span>
                           <span className="font-medium text-slate-700">
-                            {barrios.find((b) => String(b.id) === String(cli.barrio))?.nombre || "N/A"}
+                            {barrios.find((b) => String(b.id) === String(cli.barrio))?.nombre || cli.barrio || "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Localidad:</span>
                           <span className="font-medium text-slate-700">
-                            {localidades.find((l) => String(l.id) === String(cli.localidad))?.nombre || "N/A"}
+                            {localidades.find((l) => String(l.id) === String(cli.localidad))?.nombre || cli.localidad || "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -344,9 +347,11 @@ const ClientesTable = ({
   // Filtrado de clientes para pasarlo a Tabla (la búsqueda global la gestiona Tabla)
   // Tabla no filtra por visibilidad de datos nulos; podemos replicar anterior
   // ---------------------------------------------------------------------------
-  const clientesFiltrados = (clientes || []).filter(
-    (cli) => cli && ((cli.razon ? cli.razon.toLowerCase() : "").includes(search.toLowerCase()) || (cli.fantasia ? cli.fantasia.toLowerCase() : "").includes(search.toLowerCase())),
-  )
+  const clientesFiltrados = busquedaRemota
+    ? (clientes || [])
+    : (clientes || []).filter(
+      (cli) => cli && ((cli.razon ? cli.razon.toLowerCase() : "").includes(search.toLowerCase()) || (cli.fantasia ? cli.fantasia.toLowerCase() : "").includes(search.toLowerCase())),
+    )
 
   return (
     <Tabla
@@ -354,6 +359,8 @@ const ClientesTable = ({
       datos={clientesFiltrados}
       valorBusqueda={search}
       onCambioBusqueda={setSearch}
+      onBuscar={onBuscar}
+      onLimpiar={onLimpiar}
       filasPorPaginaInicial={10}
       paginacionControlada={paginacionControlada}
       paginaActual={paginaActual}
@@ -366,6 +373,8 @@ const ClientesTable = ({
       ordenamientoControlado={ordenamientoControlado}
       renderFila={renderFila}
       cargando={cargando}
+      mensajeVacio={consultaEjecutada ? "No hay datos para mostrar." : "No hay datos para mostrar"}
+      subtituloVacio={consultaEjecutada ? "" : "Ajustá los filtros."}
     />
   )
 }
