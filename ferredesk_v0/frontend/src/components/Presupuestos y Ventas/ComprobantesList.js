@@ -5,7 +5,7 @@ import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoT
 import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
-import Paginador from "../Paginador"
+import Tabla from "../Tabla"
 
 /**
  * Función para obtener el icono y etiqueta de un comprobante
@@ -237,20 +237,6 @@ const ComprobanteAcciones = ({
 /**
  * Componente principal para la lista de comprobantes
  * Extraído de PresupuestosManager.js
- * 
- * @param {Object} props - Props del componente
- * @param {Array} props.comprobantes - Lista de comprobantes a mostrar
- * @param {Array} props.datosPagina - Datos paginados para mostrar
- * @param {Object} props.acciones - Funciones de acciones disponibles
- * @param {boolean} props.isFetchingForConversion - Estado de carga para conversión
- * @param {number} props.fetchingPresupuestoId - ID del presupuesto siendo convertido
- * @param {Function} props.esFacturaInternaConvertible - Función para verificar si es factura interna convertible
- * @param {number} props.totalItems - Total de items
- * @param {number} props.itemsPorPagina - Items por página
- * @param {number} props.paginaActual - Página actual
- * @param {Function} props.setPaginaActual - Función para cambiar página
- * @param {Function} props.setItemsPorPagina - Función para cambiar items por página
- * @returns {JSX.Element} - Tabla de comprobantes con paginación
  */
 const ComprobantesList = ({
   comprobantes,
@@ -265,143 +251,225 @@ const ComprobantesList = ({
   setPaginaActual,
   setItemsPorPagina,
 }) => {
-  return (
-    <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full divide-y divide-slate-200" style={{ minWidth: "1200px", tableLayout: "fixed" }}>
-          <thead className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
-            <tr>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "22%" }}>
-                Comprobante
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "32%" }}>
-                N°
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
-                Fecha
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "18%" }}>
-                Cliente
-              </th>
-              <th className="px-3 py-3 text-right text-sm font-semibold text-slate-100" style={{ width: "14%" }}>
-                Total
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-slate-100" style={{ width: "50px" }}>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-300 leading-tight">
-            {datosPagina.map((p) => {
-              // Obtener datos del comprobante
-              let comprobanteObj = null
-              if (typeof p.comprobante === "object" && p.comprobante !== null) {
-                comprobanteObj = p.comprobante
-              } else if (p.comprobante) {
-                comprobanteObj = (comprobantes || []).find((c) => c.id === p.comprobante) || null
-              }
+  const columnas = [
+    { id: "comprobante", titulo: "Comprobante", align: "left", ancho: "22%" },
+    { id: "numero", titulo: "N°", align: "left", ancho: "32%" },
+    { id: "fecha", titulo: "Fecha", align: "left", ancho: "14%" },
+    { id: "cliente", titulo: "Cliente", align: "left", ancho: "18%" },
+    { id: "total", titulo: "Total", align: "right", ancho: "14%" },
+    { id: "acciones", titulo: "", align: "left", ancho: "50px" },
+  ]
 
-              const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
-              const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
-              const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
+  const renderFila = (p) => {
+    // Obtener datos del comprobante
+    let comprobanteObj = null
+    if (typeof p.comprobante === "object" && p.comprobante !== null) {
+      comprobanteObj = p.comprobante
+    } else if (p.comprobante) {
+      comprobanteObj = (comprobantes || []).find((c) => c.id === p.comprobante) || null
+    }
 
-              const { icon, label } = getComprobanteIconAndLabel(
-                comprobanteTipo,
-                comprobanteNombre,
-                comprobanteLetra,
-              )
+    const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
+    const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
+    const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
 
-              // Quitar letra del numero_formateado si existe
-              let numeroSinLetra = p.numero_formateado
-              if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
-                numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
-              }
+    const { icon, label } = getComprobanteIconAndLabel(
+      comprobanteTipo,
+      comprobanteNombre,
+      comprobanteLetra,
+    )
 
-              // Lógica para mostrar tooltips de comprobantes asociados
-              const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
-              const facturasAnuladas = p.facturas_anuladas || []
-              const tieneNotasCredito = notasCreditoAsociadas.length > 0
-              const tieneFacturasAnuladas = facturasAnuladas.length > 0
+    // Quitar letra del numero_formateado si existe
+    let numeroSinLetra = p.numero_formateado
+    if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
+      numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
+    }
 
-              return (
-                <tr key={p.id} className="hover:bg-slate-200">
-                  {/* Comprobante */}
-                  <td className="px-2 py-0.5 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex items-center gap-2 text-slate-700">
-                        {icon} <span className="font-medium">{label}</span>
-                      </div>
-                      {/* Renderizar tooltip si hay notas de crédito asociadas a la factura */}
-                      {tieneNotasCredito && (
-                        <ComprobanteAsociadoTooltip
-                          documentos={notasCreditoAsociadas}
-                          titulo="Comprobantes Asociados"
-                        />
-                      )}
-                      {/* Renderizar tooltip si la NC anula facturas */}
-                      {tieneFacturasAnuladas && (
-                        <ComprobanteAsociadoTooltip
-                          documentos={facturasAnuladas}
-                          titulo="Comprobantes Asociados"
-                        />
-                      )}
-                    </div>
-                  </td>
+    // Lógica para mostrar tooltips de comprobantes asociados
+    const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
+    const facturasAnuladas = p.facturas_anuladas || []
+    const tieneNotasCredito = notasCreditoAsociadas.length > 0
+    const tieneFacturasAnuladas = facturasAnuladas.length > 0
 
-                  {/* Número */}
-                  <td className="px-2 py-0.5 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-800">
-                        {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
-                      </span>
-                      {p.convertida_a_fiscal && p.factura_fiscal_info && (
-                        <TooltipFacturado facturaInfo={p.factura_fiscal_info} />
-                      )}
-                    </div>
-                  </td>
+    return (
+      <tr key={p.id} className="hover:bg-slate-200">
+        {/* Comprobante */}
+        <td className="px-2 py-0.5 whitespace-nowrap">
+          <div className="flex items-center">
+            <div className="flex items-center gap-2 text-slate-700">
+              {icon} <span className="font-medium">{label}</span>
+            </div>
+            {tieneNotasCredito && (
+              <ComprobanteAsociadoTooltip
+                documentos={notasCreditoAsociadas}
+                titulo="Comprobantes Asociados"
+              />
+            )}
+            {tieneFacturasAnuladas && (
+              <ComprobanteAsociadoTooltip
+                documentos={facturasAnuladas}
+                titulo="Comprobantes Asociados"
+              />
+            )}
+          </div>
+        </td>
 
-                  {/* Fecha */}
-                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fecha}</td>
+        {/* Número */}
+        <td className="px-2 py-0.5 whitespace-nowrap">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800">
+              {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
+            </span>
+            {p.convertida_a_fiscal && p.factura_fiscal_info && (
+              <TooltipFacturado facturaInfo={p.factura_fiscal_info} />
+            )}
+          </div>
+        </td>
 
-                  {/* Cliente */}
-                  <td className="px-2 py-0.5 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
+        {/* Fecha */}
+        <td className="px-2 py-0.5 whitespace-nowrap text-slate-600">{p.fecha}</td>
 
-                  {/* Total */}
-                  <td className="px-2 py-0.5 whitespace-nowrap text-right">
-                    <span className="font-semibold text-slate-800 min-w-[64px]">${formatearMoneda(p.total)}</span>
-                  </td>
+        {/* Cliente */}
+        <td className="px-2 py-0.5 whitespace-nowrap text-slate-700 font-medium">{p.cliente}</td>
 
-                  {/* Acciones */}
-                  <td className="px-2 py-0.5 whitespace-nowrap">
-                    <div className="flex gap-1">
-                      <ComprobanteAcciones
-                        comprobante={p}
-                        acciones={acciones}
-                        isFetchingForConversion={isFetchingForConversion}
-                        fetchingPresupuestoId={fetchingPresupuestoId}
-                        esFacturaInternaConvertible={esFacturaInternaConvertible}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        {/* Total */}
+        <td className="px-2 py-0.5 whitespace-nowrap text-right">
+          <span className="font-semibold text-slate-800 min-w-[64px]">${formatearMoneda(p.total)}</span>
+        </td>
+
+        {/* Acciones */}
+        <td className="px-2 py-0.5 whitespace-nowrap">
+          <div className="flex gap-1">
+            <ComprobanteAcciones
+              comprobante={p}
+              acciones={acciones}
+              isFetchingForConversion={isFetchingForConversion}
+              fetchingPresupuestoId={fetchingPresupuestoId}
+              esFacturaInternaConvertible={esFacturaInternaConvertible}
+            />
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  const renderCardMobile = (p) => {
+    // Obtener datos del comprobante
+    let comprobanteObj = null
+    if (typeof p.comprobante === "object" && p.comprobante !== null) {
+      comprobanteObj = p.comprobante
+    } else if (p.comprobante) {
+      comprobanteObj = (comprobantes || []).find((c) => c.id === p.comprobante) || null
+    }
+
+    const comprobanteNombre = comprobanteObj ? comprobanteObj.nombre : ""
+    const comprobanteLetra = comprobanteObj ? comprobanteObj.letra : ""
+    const comprobanteTipo = comprobanteObj ? comprobanteObj.tipo : ""
+
+    const { icon, label } = getComprobanteIconAndLabel(
+      comprobanteTipo,
+      comprobanteNombre,
+      comprobanteLetra,
+    )
+
+    let numeroSinLetra = p.numero_formateado
+    if (numeroSinLetra && comprobanteLetra && numeroSinLetra.startsWith(comprobanteLetra + " ")) {
+      numeroSinLetra = numeroSinLetra.slice(comprobanteLetra.length + 1)
+    }
+
+    const notasCreditoAsociadas = p.notas_credito_que_la_anulan || []
+    const facturasAnuladas = p.facturas_anuladas || []
+    const tieneNotasCredito = notasCreditoAsociadas.length > 0
+    const tieneFacturasAnuladas = facturasAnuladas.length > 0
+
+    return (
+      <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 hover:border-orange-200 transition-colors">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-600">{icon}</span>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Comprobante</span>
+              <p className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 leading-tight">
+                {label}
+                {tieneNotasCredito && (
+                  <ComprobanteAsociadoTooltip
+                    documentos={notasCreditoAsociadas}
+                    titulo="Comprobantes Asociados"
+                  />
+                )}
+                {tieneFacturasAnuladas && (
+                  <ComprobanteAsociadoTooltip
+                    documentos={facturasAnuladas}
+                    titulo="Comprobantes Asociados"
+                  />
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide block">Número</span>
+            <div className="flex items-center gap-1.5 justify-end">
+              <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-semibold">
+                {(comprobanteLetra ? comprobanteLetra + " " : "") + (numeroSinLetra || p.numero)}
+              </span>
+              {p.convertida_a_fiscal && p.factura_fiscal_info && (
+                <TooltipFacturado facturaInfo={p.factura_fiscal_info} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs">
+          <div>
+            <span className="text-slate-500 block font-medium">Fecha</span>
+            <p className="text-slate-700">{p.fecha}</p>
+          </div>
+          <div>
+            <span className="text-slate-500 block font-medium">Cliente</span>
+            <p className="text-slate-700 truncate" title={p.cliente}>{p.cliente}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 border-t border-slate-100 pt-3 flex justify-between items-center">
+          <div>
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide block leading-none">Total</span>
+            <span className="font-bold text-slate-900 text-base">
+              ${formatearMoneda(p.total)}
+            </span>
+          </div>
+          <div>
+            <ComprobanteAcciones
+              comprobante={p}
+              acciones={acciones}
+              isFetchingForConversion={isFetchingForConversion}
+              fetchingPresupuestoId={fetchingPresupuestoId}
+              esFacturaInternaConvertible={esFacturaInternaConvertible}
+            />
+          </div>
+        </div>
       </div>
+    )
+  }
 
-      {/* Paginador */}
-      <Paginador
-        totalItems={totalItems}
-        itemsPerPage={itemsPorPagina}
-        currentPage={paginaActual}
-        onPageChange={setPaginaActual}
-        onItemsPerPageChange={(n) => {
-          setItemsPorPagina(n)
-          setPaginaActual(1)
-        }}
-        opcionesItemsPorPagina={[1, 10, 15, 25, 50]}
-      />
-    </>
+  return (
+    <Tabla
+      columnas={columnas}
+      datos={datosPagina}
+      renderFila={renderFila}
+      renderCardMobile={renderCardMobile}
+      mostrarBuscador={false}
+      mostrarOrdenamiento={false}
+      paginacionControlada={true}
+      paginaActual={paginaActual}
+      onPageChange={setPaginaActual}
+      itemsPerPage={itemsPorPagina}
+      onItemsPerPageChange={(n) => {
+        setItemsPorPagina(n)
+        setPaginaActual(1)
+      }}
+      opcionesFilasPorPagina={[1, 10, 15, 25, 50]}
+      totalRemoto={totalItems}
+    />
   )
 }
 

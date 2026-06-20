@@ -183,6 +183,64 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
     )
   }
 
+  const renderCardMobile = (caja) => {
+    const diferencia = parseFloat(caja.diferencia) || 0
+    const diferenciaColor =
+      diferencia > 0
+        ? "text-green-600 font-semibold"
+        : diferencia < 0
+          ? "text-red-600 font-semibold"
+          : "text-slate-600 font-medium"
+
+    return (
+      <div
+        key={caja.id}
+        onClick={() => handleClickFila(caja)}
+        className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 hover:border-slate-300 cursor-pointer transition-all duration-150 mb-3 flex flex-col gap-2"
+      >
+        <div className="flex justify-between items-start">
+          <div>
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Fecha Apertura</span>
+            <p className="font-semibold text-slate-800 text-xs">
+              {formatearFecha(caja.fecha_hora_inicio, true)}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2">
+          <div>
+            <span className="text-slate-500 block">Usuario</span>
+            <span className="font-medium text-slate-700">
+              {caja.usuario?.username || caja.usuario_nombre || "-"}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Sucursal</span>
+            <span className="font-medium text-slate-700">{caja.sucursal || "-"}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-xs border-t border-slate-100 pt-2">
+          <div>
+            <span className="text-slate-500 block">Inicial</span>
+            <span className="font-medium text-slate-700">${formatearMoneda(caja.saldo_inicial)}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Final</span>
+            <span className="font-medium text-slate-700">${formatearMoneda(caja.saldo_final_declarado)}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Diferencia</span>
+            <span className={diferenciaColor}>
+              {diferencia !== 0 ? (diferencia > 0 ? "+" : "") : ""}
+              ${formatearMoneda(Math.abs(diferencia))}
+            </span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {/* Banner Abrir Caja compacto si no hay caja abierta */}
@@ -288,6 +346,7 @@ const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtr
           filasPorPaginaInicial={20}
           paginadorVisible={true}
           renderFila={renderFila}
+          renderCardMobile={renderCardMobile}
           sinEstilos={true}
           cargando={cargando}
         />

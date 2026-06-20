@@ -141,7 +141,57 @@ const ComprasList = ({
     </tr>
   ), [generarBotonesCompra])
 
+  const renderCardMobile = useCallback((compra) => {
+    return (
+      <div
+        key={compra.comp_id}
+        className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 hover:border-orange-200 transition-colors mb-3 flex flex-col gap-2"
+      >
+        <div className="flex justify-between items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Proveedor</span>
+            <p className="font-semibold text-slate-800 text-sm truncate">
+              {compra.proveedor_nombre || compra.comp_razon_social}
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5">
+            {compra.comp_estado === 'BORRADOR' && (
+              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">Abierta</span>
+            )}
+            {compra.comp_estado === 'CERRADA' && (
+              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800">Cerrada</span>
+            )}
+            {compra.comp_estado === 'ANULADA' && (
+              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800">Anulada</span>
+            )}
+          </div>
+        </div>
 
+        <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2">
+          <div>
+            <span className="text-slate-500 block">Factura N°</span>
+            <span className="font-medium text-slate-700 font-mono">{compra.comp_numero_factura || "-"}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Fecha</span>
+            <span className="font-medium text-slate-700">{formatDate(compra.comp_fecha)}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-end border-t border-slate-100 pt-2 mt-1">
+          <div>
+            <span className="text-[10px] text-slate-500 block leading-none mb-1">Total ({compra.cantidad_items || 0} ítems)</span>
+            <span className="font-bold text-slate-900 text-sm">
+              {formatCurrency(compra.comp_total_final)}
+            </span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <AccionesMenu botones={generarBotonesCompra(compra)} />
+          </div>
+        </div>
+      </div>
+    )
+  }, [generarBotonesCompra])
 
   // Los errores se manejan con alertas del navegador, no se muestran en la UI
 
@@ -154,6 +204,7 @@ const ComprasList = ({
       valorBusqueda={search}
       onCambioBusqueda={setSearch}
       renderFila={renderFila}
+      renderCardMobile={renderCardMobile}
       cargando={cargando}
       // Paginación controlada
       paginacionControlada={paginacionControlada}

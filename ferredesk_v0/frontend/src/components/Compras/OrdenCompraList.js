@@ -94,6 +94,47 @@ const OrdenCompraList = ({
     </tr>
   ), [generarBotonesOrdenCompra])
 
+  const renderCardMobile = useCallback((orden) => {
+    return (
+      <div
+        key={orden.ord_id}
+        className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 hover:border-orange-200 transition-colors mb-3 flex flex-col gap-2"
+      >
+        <div className="flex justify-between items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Proveedor</span>
+            <p className="font-semibold text-slate-800 text-sm truncate">
+              {orden.proveedor_nombre || orden.ord_razon_social}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2">
+          <div>
+            <span className="text-slate-500 block">Orden N°</span>
+            <span className="font-medium text-slate-700 font-mono">{orden.ord_numero || "-"}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Fecha</span>
+            <span className="font-medium text-slate-700">{formatDate(orden.ord_fecha)}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-end border-t border-slate-100 pt-2 mt-1">
+          <div>
+            <span className="text-[10px] text-slate-500 block leading-none mb-1">Ítems</span>
+            <span className="font-semibold text-slate-800 text-sm">
+              {orden.cantidad_items || 0}
+            </span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <AccionesMenu botones={generarBotonesOrdenCompra(orden)} />
+          </div>
+        </div>
+      </div>
+    )
+  }, [generarBotonesOrdenCompra])
+
   // Los errores se manejan con alertas del navegador, no se muestran en la UI
 
   return (
@@ -104,6 +145,7 @@ const OrdenCompraList = ({
         datos={ordenesCompra}
         mostrarOrdenamiento={true}
         renderFila={renderFila}
+        renderCardMobile={renderCardMobile}
         cargando={cargando}
         // Paginación controlada
         paginacionControlada={paginacionControlada}

@@ -1,54 +1,40 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Search, ArrowUpDown } from "lucide-react"
+import { Search, ArrowUpDown, Inbox } from "lucide-react"
 import Paginador from "./Paginador"
 
-// -----------------------------------------------------------------------------
-// Constantes de estilo FerreDesk
-// -----------------------------------------------------------------------------
-const ESPACIO_HORIZONTAL_CELDA = "px-3"
-const ESPACIO_VERTICAL_CELDA = "py-2"
-const ESPACIO_VERTICAL_CELDA_PEQUEÑA = "py-1"
-
-// Nota: la variante compacta se calcula dentro del componente para acceder a props
-
-// -----------------------------------------------------------------------------
-// Función para búsqueda por comodines
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 const filtrarConComodines = (datos, terminoBusqueda) => {
-  if (!terminoBusqueda || !terminoBusqueda.trim()) {
-    return datos
-  }
+  const termino = terminoBusqueda?.trim()
+  if (!termino) return datos
 
-  // Dividir el término en palabras individuales
-  const palabras = terminoBusqueda.toLowerCase().trim().split(/\s+/)
+  const palabras = termino.toLowerCase().split(/\s+/)
 
-  if (palabras.length === 0) {
-    return datos
-  }
-
-  // Si solo hay una palabra, usar búsqueda tradicional para mantener compatibilidad
   if (palabras.length === 1) {
-    const termino = palabras[0]
-    return datos.filter((fila) => JSON.stringify(fila).toLowerCase().includes(termino))
+    return datos.filter((fila) =>
+      JSON.stringify(fila).toLowerCase().includes(palabras[0])
+    )
   }
 
-  // Búsqueda por comodines: TODAS las palabras deben estar presentes
   return datos.filter((fila) => {
-    const textoCompleto = JSON.stringify(fila).toLowerCase()
-    return palabras.every(palabra => textoCompleto.includes(palabra))
+    const texto = JSON.stringify(fila).toLowerCase()
+    return palabras.every((p) => texto.includes(p))
   })
 }
 
-// -----------------------------------------------------------------------------
-// Tabla genérica con estética FerreDesk
-// -----------------------------------------------------------------------------
+const ALIGN_CLASS = { left: "text-left", center: "text-center", right: "text-right" }
+
+// ---------------------------------------------------------------------------
+// Tabla
+// ---------------------------------------------------------------------------
 const Tabla = ({
   columnas = [],
   datos = [],
   valorBusqueda = "",
-  onCambioBusqueda = () => { },
+  onCambioBusqueda = () => {},
   onBuscar = null,
   onLimpiar = null,
   filasPorPaginaInicial = 10,
@@ -62,7 +48,7 @@ const Tabla = ({
   tamañoEncabezado = "normal", // "normal" | "pequeño"
   filasCompactas = false,
   claseTbody = "",
-  // --- Nuevos props opcionales para paginación controlada ---
+  // Paginación controlada
   paginacionControlada = false,
   paginaActual: paginaControlada,
   onPageChange: onPageChangeControlada,
@@ -70,142 +56,196 @@ const Tabla = ({
   onItemsPerPageChange: onItemsPerPageChangeControlada,
   totalRemoto = null,
   busquedaRemota = false,
-  // --- Nuevos props para ordenamiento remoto ---
+  // Ordenamiento remoto
   onOrdenamientoChange = null,
-  ordenamientoControlado = null, // Estado de ordenamiento desde el padre
-  // --- Prop para estado de carga ---
+  ordenamientoControlado = null,
+  // Carga
   cargando = false,
-  // --- Prop para clave personalizada en filas ---
+  // Clave personalizada
   customKey = null,
+  // Renderizado responsivo para mobile
+  renderCardMobile = null,
 }) => {
   const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
-  const [filasPorPagina, setFilasPorPagina] = useState(itemsPerPageControlada || filasPorPaginaInicial)
+  const [filasPorPagina, setFilasPorPagina] = useState(
+    itemsPerPageControlada || filasPorPaginaInicial
+  )
   const [ordenAscendente, setOrdenAscendente] = useState(false)
 
-  // Mantener sincronizado el estado interno cuando la paginación es controlada externamente
   useEffect(() => {
     if (paginacionControlada && paginaControlada) setPaginaActual(paginaControlada)
   }, [paginacionControlada, paginaControlada])
+
   useEffect(() => {
-    if (paginacionControlada && itemsPerPageControlada) setFilasPorPagina(itemsPerPageControlada)
+    if (paginacionControlada && itemsPerPageControlada)
+      setFilasPorPagina(itemsPerPageControlada)
   }, [paginacionControlada, itemsPerPageControlada])
 
   useEffect(() => {
     if (!paginacionControlada) setPaginaActual(1)
   }, [valorBusqueda, datos, paginacionControlada])
 
-  const datosFiltrados = useMemo(() => {
-    let datosProcesados = datos
+  // Valor efectivo de ordenamiento (controlado vs local)
+  const esAscendente =
+    ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente
 
-    // Si la búsqueda es remota, no filtramos localmente
+  const toggleOrden = () => {
+    if (paginacionControlada && onOrdenamientoChange) {
+      onOrdenamientoChange(!esAscendente)
+    } else {
+      setOrdenAscendente((prev) => !prev)
+    }
+  }
+
+  const datosFiltrados = useMemo(() => {
+    let resultado = datos
+
     if (!busquedaRemota && valorBusqueda) {
-      datosProcesados = filtrarConComodines(datos, valorBusqueda)
+      resultado = filtrarConComodines(datos, valorBusqueda)
     }
 
-    // En modo controlado no ordenamos localmente (lo debe hacer el servidor si aplica)
     if (!paginacionControlada && mostrarOrdenamiento) {
-      return datosProcesados.sort((a, b) => {
+      return [...resultado].sort((a, b) => {
         const idA = a.id || 0
         const idB = b.id || 0
-        return ordenAscendente ? idA - idB : idB - idA
+        return esAscendente ? idA - idB : idB - idA
       })
     }
 
-    return datosProcesados
-  }, [datos, valorBusqueda, ordenAscendente, mostrarOrdenamiento, paginacionControlada, busquedaRemota])
+    return resultado
+  }, [datos, valorBusqueda, esAscendente, mostrarOrdenamiento, paginacionControlada, busquedaRemota])
 
   const indiceInicio = (paginaActual - 1) * filasPorPagina
   const datosVisibles = paginacionControlada
     ? datosFiltrados
-    : (paginadorVisible ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina) : datosFiltrados)
+    : paginadorVisible
+    ? datosFiltrados.slice(indiceInicio, indiceInicio + filasPorPagina)
+    : datosFiltrados
 
-  // Clases calculadas según modo compacto para las celdas por defecto (cuando no se usa renderFila)
-  const clasesCeldaBaseCalculadas = `${ESPACIO_HORIZONTAL_CELDA} ${filasCompactas ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA
-    } whitespace-nowrap ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-700`
+  // Clases de celda (texto y padding)
+  const esSmall = tamañoEncabezado === "pequeño"
+  const pyFila = filasCompactas ? "py-1" : "py-2"
+  const textSize = esSmall ? "text-xs" : "text-sm"
+  const clasesCeldaBase = `px-3 ${pyFila} ${textSize} text-slate-700 max-w-[200px] truncate`
 
   return (
-    <div className={`flex flex-col h-full overflow-hidden ${sinEstilos ? '' : 'bg-gradient-to-br from-slate-50 via-white to-orange-50/20 rounded-xl border border-slate-200/60 shadow-sm'}`}>
-      {/* Header con buscador y controles */}
-      {!sinEstilos && (
-        <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white/80 rounded-t-xl">
-          <div className="flex items-center justify-between gap-4">
+    <div
+      className={`flex flex-col h-full overflow-hidden ${
+        sinEstilos ? "" : "bg-white rounded-lg border border-slate-200 shadow-sm"
+      }`}
+    >
+      {/* Barra de controles */}
+      {!sinEstilos && (mostrarBuscador || mostrarOrdenamiento || typeof onBuscar === "function" || typeof onLimpiar === "function") && (
+        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 rounded-t-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
             {/* Buscador */}
             {mostrarBuscador && (
-              <div className="flex items-center gap-2 flex-1 max-w-xl">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder={placeholderBuscador}
-                    className="pl-10 pr-4 py-2.5 w-full rounded-lg border border-slate-200 bg-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 transition-all duration-200 text-sm"
-                    value={valorBusqueda}
-                    onChange={(e) => onCambioBusqueda(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && typeof onBuscar === "function") {
-                        e.preventDefault()
-                        onBuscar()
-                      }
-                    }}
-                  />
-                </div>
-                {typeof onBuscar === "function" && (
-                  <button
-                    onClick={onBuscar}
-                    className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-medium rounded-lg text-sm transition-colors duration-150 shadow-sm whitespace-nowrap"
-                  >
-                    Buscar
-                  </button>
-                )}
-                {typeof onLimpiar === "function" && (
-                  <button
-                    onClick={onLimpiar}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-medium rounded-lg border border-slate-200 text-sm transition-colors duration-150 whitespace-nowrap"
-                  >
-                    Limpiar
-                  </button>
-                )}
+              <div className="relative w-full sm:flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={placeholderBuscador}
+                  value={valorBusqueda}
+                  onChange={(e) => onCambioBusqueda(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && typeof onBuscar === "function") {
+                      e.preventDefault()
+                      onBuscar()
+                    }
+                  }}
+                  className="pl-8 pr-3 py-1.5 sm:py-2 w-full rounded-md border border-slate-200 bg-white text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-colors"
+                />
               </div>
             )}
 
-            {/* Control de ordenamiento */}
-            {mostrarOrdenamiento && (
-              <button
-                onClick={() => {
-                  if (paginacionControlada && onOrdenamientoChange) {
-                    // En modo controlado, notificar al componente padre
-                    const nuevoOrdenamiento = ordenamientoControlado !== null ? !ordenamientoControlado : !ordenAscendente;
-                    onOrdenamientoChange(nuevoOrdenamiento);
-                  } else {
-                    // En modo local, cambiar estado interno
-                    setOrdenAscendente(!ordenAscendente);
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-2.5 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg border border-slate-200 bg-white/80 transition-all duration-200 text-sm font-medium"
-                title={
-                  (ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Cambiar a orden descendente (más recientes primero)" : "Cambiar a orden ascendente (más antiguos primero)"
-                }
-              >
-                <ArrowUpDown
-                  className={`w-4 h-4 transition-transform duration-200 ${(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "rotate-180" : ""}`}
-                />
-                <span className="hidden sm:inline">{(ordenamientoControlado !== null ? ordenamientoControlado : ordenAscendente) ? "Más antiguos" : "Más recientes"}</span>
-              </button>
-            )}
+            {/* Grupo de Botones de Control */}
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end sm:justify-start">
+              {typeof onBuscar === "function" && (
+                <button
+                  onClick={onBuscar}
+                  className="flex-1 sm:flex-none px-2.5 py-1.5 sm:px-3 sm:py-2 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white text-xs sm:text-sm font-medium rounded-md transition-colors whitespace-nowrap"
+                >
+                  Buscar
+                </button>
+              )}
+
+              {typeof onLimpiar === "function" && (
+                <button
+                  onClick={onLimpiar}
+                  className="flex-1 sm:flex-none px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-600 text-xs sm:text-sm font-medium rounded-md border border-slate-200 transition-colors whitespace-nowrap"
+                >
+                  Limpiar
+                </button>
+              )}
+
+              {mostrarOrdenamiento && (
+                <button
+                  onClick={toggleOrden}
+                  title={esAscendente ? "Más recientes primero" : "Más antiguos primero"}
+                  className="flex items-center justify-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-md border border-slate-200 bg-white transition-colors text-xs sm:text-sm font-medium ml-auto sm:ml-0"
+                >
+                  <ArrowUpDown className={`w-3.5 h-3.5 transition-transform ${esAscendente ? "rotate-180" : ""}`} />
+                  <span className="hidden sm:inline">
+                    {esAscendente ? "Más antiguos" : "Más recientes"}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Contenedor de tabla */}
+      {/* Tabla */}
       <div className="flex-1 overflow-auto">
-        <table className="min-w-full rounded-lg overflow-hidden">
-          {/* Encabezado */}
+        {/* Vista Mobile: Cards (solo si se provee renderCardMobile) */}
+        {renderCardMobile && (
+          <div className={`md:hidden space-y-3 p-4 ${
+            cargando && datosVisibles.length > 0
+              ? "opacity-40 pointer-events-none select-none"
+              : ""
+          } transition-opacity duration-200`}>
+            {datosVisibles.length === 0 ? (
+              <div className="py-14 text-center text-slate-400 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col items-center justify-center gap-2">
+                {cargando ? (
+                  <>
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-orange-600" />
+                    <p className="text-sm">Cargando...</p>
+                  </>
+                ) : (
+                  <>
+                    <Inbox className="w-8 h-8 text-slate-300" />
+                    <p className="text-sm">
+                      {valorBusqueda
+                        ? "Sin resultados para la búsqueda"
+                        : "No hay datos para mostrar"}
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              datosVisibles.map((fila, idxVisible) => {
+                const rowKey = customKey
+                  ? customKey(fila, idxVisible)
+                  : fila.id ?? indiceInicio + idxVisible
+                return (
+                  <div key={rowKey}>
+                    {renderCardMobile(fila, idxVisible, indiceInicio)}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
+
+        <table className={`min-w-full border-collapse ${renderCardMobile ? "hidden md:table" : ""}`}>
           <thead className="sticky top-0 z-10">
-            <tr className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 border-b border-slate-600">
+            <tr className="bg-slate-800 border-b border-slate-700">
               {columnas.map((col) => (
                 <th
                   key={col.id}
-                  className={`${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                    } ${ESPACIO_HORIZONTAL_CELDA} ${tamañoEncabezado === "pequeño" ? ESPACIO_VERTICAL_CELDA_PEQUEÑA : ESPACIO_VERTICAL_CELDA} font-semibold ${tamañoEncabezado === "pequeño" ? "text-xs" : "text-sm"} text-slate-100 bg-gradient-to-b from-transparent to-slate-800/20`}
+                  className={`px-3 ${esSmall ? "py-1.5" : "py-2"} ${textSize} font-semibold text-slate-100 ${
+                    ALIGN_CLASS[col.align || "left"]
+                  } whitespace-nowrap`}
                   style={col.ancho ? { width: col.ancho } : undefined}
                 >
                   {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
@@ -214,35 +254,42 @@ const Tabla = ({
             </tr>
           </thead>
 
-          {/* Cuerpo */}
           {/*
-            Patrón stale-while-revalidate:
-            - Si hay datos previos y se está cargando la página siguiente, se atenúan
-              las filas existentes (opacity-40) sin destruirlas. El usuario sabe que se
-              está actualizando sin perder el contexto visual.
-            - Si no hay datos (primera carga o tabla vacía), se muestra el spinner centrado.
+            Patrón stale-while-revalidate: si hay datos y se está cargando la
+            página siguiente, se atenúan las filas existentes en lugar de
+            destruirlas, preservando el contexto visual del usuario.
           */}
-          <tbody className={`${filasCompactas ? "divide-y divide-slate-300" : "divide-y-2 divide-slate-300"} ${claseTbody} ${cargando && datosVisibles.length > 0 ? "opacity-40 pointer-events-none select-none" : ""} transition-opacity duration-200`}>
+          <tbody
+            className={`divide-y divide-slate-100 ${claseTbody} ${
+              cargando && datosVisibles.length > 0
+                ? "opacity-40 pointer-events-none select-none"
+                : ""
+            } transition-opacity duration-200`}
+          >
             {datosVisibles.map((fila, idxVisible) => {
-              const indiceGlobal = indiceInicio + idxVisible
-
-              // Si existe renderFila lo usamos y asumimos que devuelve <tr> o un array de <tr>
               if (typeof renderFila === "function") {
                 return renderFila(fila, idxVisible, indiceInicio)
               }
 
-              // Renderizado por defecto por columnas
-              const rowKey = customKey ? customKey(fila, idxVisible) : (fila.id || indiceGlobal)
+              const rowKey = customKey
+                ? customKey(fila, idxVisible)
+                : fila.id ?? indiceInicio + idxVisible
+
               return (
-                <tr key={rowKey} className="hover:bg-slate-200 transition-colors duration-150">
+                <tr
+                  key={rowKey}
+                  className="bg-white hover:bg-orange-50/40 transition-colors duration-100"
+                >
                   {columnas.map((col) => {
-                    const contenido = col.render ? col.render(fila, idxVisible, indiceInicio) : fila[col.id]
+                    const contenido = col.render
+                      ? col.render(fila, idxVisible, indiceInicio)
+                      : fila[col.id]
                     return (
                       <td
                         key={col.id}
-                        className={`${clasesCeldaBaseCalculadas} bg-white ${{ left: "text-left", center: "text-center", right: "text-right" }[col.align || "left"]
-                          }`}
+                        className={`${clasesCeldaBase} ${ALIGN_CLASS[col.align || "left"]}`}
                         style={col.ancho ? { width: col.ancho } : undefined}
+                        title={typeof contenido === "string" ? contenido : undefined}
                       >
                         {contenido}
                       </td>
@@ -252,25 +299,26 @@ const Tabla = ({
               )
             })}
 
-            {/* Estado: sin datos o primera carga sin datos previos */}
-            {(cargando || datosVisibles.length === 0) && datosVisibles.length === 0 && (
+            {/* Estado vacío / cargando */}
+            {datosVisibles.length === 0 && (
               <tr>
                 <td
                   colSpan={columnas.length}
-                  className="text-center py-12 text-slate-500 bg-gradient-to-b from-slate-50/50 to-white/80"
+                  className="py-14 text-center text-slate-400 bg-white"
                 >
-                  {!cargando ? (
+                  {cargando ? (
                     <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                        <Search className="w-5 h-5 text-slate-400" />
-                      </div>
-                      <p className="text-sm font-medium">No se encontraron resultados</p>
-                      {valorBusqueda && <p className="text-xs text-slate-400"></p>}
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-orange-600" />
+                      <p className="text-sm">Cargando...</p>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-                      <p className="text-sm font-medium">Cargando tabla</p>
+                      <Inbox className="w-8 h-8 text-slate-300" />
+                      <p className="text-sm">
+                        {valorBusqueda
+                          ? "Sin resultados para la búsqueda"
+                          : "No hay datos para mostrar"}
+                      </p>
                     </div>
                   )}
                 </td>
@@ -282,12 +330,14 @@ const Tabla = ({
 
       {/* Paginador */}
       {paginadorVisible && !sinEstilos && (
-        <div className="p-4 border-t border-slate-200/60 bg-gradient-to-r from-white/80 to-slate-50 rounded-b-xl">
+        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 rounded-b-lg">
           <Paginador
             totalItems={totalRemoto ?? datosFiltrados.length}
             itemsPerPage={filasPorPagina}
             currentPage={paginaActual}
-            onPageChange={(p) => (paginacionControlada ? onPageChangeControlada?.(p) : setPaginaActual(p))}
+            onPageChange={(p) =>
+              paginacionControlada ? onPageChangeControlada?.(p) : setPaginaActual(p)
+            }
             onItemsPerPageChange={(n) => {
               if (paginacionControlada) {
                 onItemsPerPageChangeControlada?.(n)
