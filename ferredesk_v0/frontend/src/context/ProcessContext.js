@@ -120,6 +120,18 @@ function mapearEstadoProceso(proceso, payload) {
   }
 }
 
+function sonProcesosIguales(procesoAnterior, procesoActualizado) {
+  const clavesAnteriores = Object.keys(procesoAnterior)
+  const clavesActualizadas = Object.keys(procesoActualizado)
+
+  return (
+    clavesAnteriores.length === clavesActualizadas.length &&
+    clavesAnteriores.every(
+      (clave) => procesoAnterior[clave] === procesoActualizado[clave]
+    )
+  )
+}
+
 export function ProcessProvider({ children }) {
   const tenantScope = obtenerTenantScope()
   const queryClient = useQueryClient()
@@ -229,15 +241,21 @@ export function ProcessProvider({ children }) {
           return
         }
 
-        setProcesos((anteriores) =>
-          anteriores.map((proceso) => {
+        setProcesos((anteriores) => {
+          const siguientes = anteriores.map((proceso) => {
             const actualizado = resultados.find(
               (resultado) =>
                 resultado.id === proceso.id && resultado.tipo === proceso.tipo
             )
             return actualizado || proceso
           })
-        )
+
+          return siguientes.some(
+            (proceso, indice) => !sonProcesosIguales(anteriores[indice], proceso)
+          )
+            ? siguientes
+            : anteriores
+        })
       } finally {
         if (!cancelado) {
           setLoading(false)
