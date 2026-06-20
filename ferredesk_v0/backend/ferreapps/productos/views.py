@@ -1508,14 +1508,11 @@ def servir_logo_empresa(request):
         if not ferreteria or not ferreteria.logo_empresa:
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
-        # Obtener la ruta del archivo
+        # Trabajar exclusivamente con la API de Storage. Los backends remotos
+        # como S3/R2 no exponen una ruta local mediante ``storage.path()``.
         storage = ferreteria.logo_empresa.storage
         nombre_logo = ferreteria.logo_empresa.name
-        ruta_logo = storage.path(nombre_logo) if hasattr(storage, 'path') else nombre_logo
-        
-        print(f'DEBUG: Intentando servir logo empresa desde: {nombre_logo}')
-        print(f'DEBUG: ¿Existe el archivo? {os.path.exists(ruta_logo)}')
-        
+
         if not storage.exists(nombre_logo):
             return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
         
@@ -1532,7 +1529,6 @@ def servir_logo_empresa(request):
             }
             content_type = content_type_map.get(extension, 'image/jpeg')
         
-        print(f'Sirviendo logo empresa desde {nombre_logo}')
         response = FileResponse(
             storage.open(nombre_logo, 'rb'),
             content_type=content_type,

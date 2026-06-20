@@ -2,15 +2,12 @@ import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Mail } from "lucide-react";
 
-import { useFerreDeskTheme } from "../../../hooks/useFerreDeskTheme";
 import useOnboardingVerificationAPI from "../../../utils/useOnboardingVerificationAPI";
 
 const PendienteVerificacion = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { reenviarEmail } = useOnboardingVerificationAPI();
-  const theme = useFerreDeskTheme();
-
   const email = searchParams.get("email") || "";
   const emailEnviado = searchParams.get("emailEnviado") !== "false";
   const requiereReenvio = searchParams.get("requiereReenvio") === "true";

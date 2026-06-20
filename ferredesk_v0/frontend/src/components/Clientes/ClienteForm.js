@@ -122,7 +122,7 @@ const ClienteForm = ({
   const { formRef, getFormProps } = useNavegacionForm()
 
   // Hook para obtener configuración de ferretería
-  const { ferreteria } = useFerreteriaAPI()
+  useFerreteriaAPI()
 
   // Detectar recarga/navegación para no limpiar el borrador en ese caso
   useEffect(() => {
