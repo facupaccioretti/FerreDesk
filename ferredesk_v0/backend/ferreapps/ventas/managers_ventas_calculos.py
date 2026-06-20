@@ -88,6 +88,14 @@ class VentaDetalleItemQuerySet(models.QuerySet):
             2
         )
 
+        subtotal_bruto_item_calculado = Round(
+            ExpressionWrapper(
+                Round(precio_unitario_final_con_descuentos_sin_iva, 2) * F('vdi_cantidad'),
+                output_field=DecimalField(max_digits=15, decimal_places=2)
+            ),
+            2
+        )
+
         return self.annotate(
             ali_porce=alicuota_porcentaje,
             codigo=F('vdi_idsto__codvta'),
@@ -99,6 +107,7 @@ class VentaDetalleItemQuerySet(models.QuerySet):
             precio_unitario_bonif_desc_sin_iva=precio_unitario_final_con_descuentos_sin_iva,
             precio_unitario_bonificado_con_iva=Round(precio_unitario_final_con_descuentos_sin_iva * divisor_iva, 2),
             precio_unitario_bonificado=Round(precio_unitario_final_con_descuentos_sin_iva, 2),
+            subtotal_bruto_item=subtotal_bruto_item_calculado,
             subtotal_neto=subtotal_neto_calculado,
             iva_monto=iva_monto_calculado,
             total_item=total_item_calculado,
