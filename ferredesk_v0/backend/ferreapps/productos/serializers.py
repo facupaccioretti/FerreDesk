@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.urls import reverse
 from rest_framework import serializers
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista, ListaPrecio
 from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
@@ -373,7 +374,8 @@ class FerreteriaSerializer(serializers.ModelSerializer):
         try:
             if instance.logo_empresa:
                 request = self.context.get('request') if hasattr(self, 'context') else None
-                rep['logo_empresa'] = request.build_absolute_uri(instance.logo_empresa.url) if request else instance.logo_empresa.url
+                logo_url = reverse('servir-logo-empresa')
+                rep['logo_empresa'] = request.build_absolute_uri(logo_url) if request else logo_url
             else:
                 rep['logo_empresa'] = None
         except Exception:
