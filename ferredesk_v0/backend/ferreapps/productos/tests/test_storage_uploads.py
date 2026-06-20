@@ -56,8 +56,8 @@ class ServirLogoEmpresaTest(SimpleTestCase):
             def path(self, _nombre):
                 raise AssertionError("Un storage R2 no debe resolver paths locales")
 
-            def exists(self, nombre):
-                return nombre == "logos/tenant_demo/logo.png"
+            def exists(self, _nombre):
+                raise AssertionError("El endpoint no debe depender de HEAD/exists en R2")
 
             def open(self, nombre, modo):
                 self.nombre_abierto = nombre

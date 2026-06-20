@@ -1513,9 +1513,6 @@ def servir_logo_empresa(request):
         storage = ferreteria.logo_empresa.storage
         nombre_logo = ferreteria.logo_empresa.name
 
-        if not storage.exists(nombre_logo):
-            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
-        
         # Determinar el tipo de contenido basado en la extensión
         content_type, _ = mimetypes.guess_type(nombre_logo)
         if not content_type:
@@ -1529,8 +1526,13 @@ def servir_logo_empresa(request):
             }
             content_type = content_type_map.get(extension, 'image/jpeg')
         
+        try:
+            archivo_logo = storage.open(nombre_logo, 'rb')
+        except FileNotFoundError:
+            return Response({'detail': 'Logo de empresa no encontrado'}, status=404)
+
         response = FileResponse(
-            storage.open(nombre_logo, 'rb'),
+            archivo_logo,
             content_type=content_type,
             headers={
                 'Content-Disposition': f'inline; filename="{os.path.basename(nombre_logo)}"',
