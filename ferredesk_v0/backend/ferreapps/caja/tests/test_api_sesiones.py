@@ -116,6 +116,7 @@ class SesionCajaAPITests(APITestCase, CajaTestMixin):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['sesion']['estado'], ESTADO_CAJA_CERRADA)
         self.assertIn('resumen', response.data)
+        self.assertNotIn('backup_en_progreso', response.data)
     
     def test_cerrar_caja_sin_caja_abierta(self):
         """Verifica error al cerrar sin caja abierta."""

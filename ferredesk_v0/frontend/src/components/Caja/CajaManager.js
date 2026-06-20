@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
-import { useSistemaAPI } from "../../utils/useSistemaAPI"
 import { toast } from "react-toastify"
 import CajasHistorialTable from "./CajasHistorialTable"
 import CajaDetalleView from "./CajaDetalleView"
@@ -45,8 +44,6 @@ const CajaManager = () => {
     obtenerMovimientos,
   } = useCajaAPI()
 
-  const { obtenerEstadoBackup } = useSistemaAPI()
-
   // Estados de tabs
   const [tabs, setTabs] = useState(() => {
     try {
@@ -80,42 +77,6 @@ const CajaManager = () => {
     }, 300)
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])
-
-  // Lógica de monitoreo de Backup
-  const pollingRef = useRef(null)
-
-  const detenerMonitoreo = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-  }
-
-  const iniciarMonitoreoBackup = useCallback(() => {
-    detenerMonitoreo()
-
-    pollingRef.current = setInterval(async () => {
-      try {
-        const respuesta = await obtenerEstadoBackup()
-
-        // Notificamos al usuario según el resultado final para que sepa que ya puede apagar el sistema.
-        if (respuesta.estado === "EXITO") {
-          toast.success("RESPALDO COMPLETADO: La copia de seguridad se realizó correctamente.")
-          detenerMonitoreo()
-        } else if (respuesta.estado === "ERROR") {
-          toast.error(`FALLO EL RESPALDO: ${respuesta.error || "Error desconocido"}. Por favor consulte con soporte.`)
-          detenerMonitoreo()
-        }
-      } catch (err) {
-        console.error("Error consultando estado de backup:", err)
-      }
-    }, 5000)
-  }, [obtenerEstadoBackup])
-
-  // Aseguramos que no queden intervalos activos si el usuario sale de la vista de Caja.
-  useEffect(() => {
-    return () => detenerMonitoreo()
-  }, [])
 
   // Estado de la caja abierta
   const [tieneCajaAbierta, setTieneCajaAbierta] = useState(false)
@@ -213,20 +174,11 @@ const CajaManager = () => {
   // Cerrar caja
   const handleCerrarCaja = async (saldoDeclarado, observaciones) => {
     try {
-      const resultado = await cerrarCaja(saldoDeclarado, observaciones)
+      await cerrarCaja(saldoDeclarado, observaciones)
       setTieneCajaAbierta(false)
       setSesionActual(null)
       setResumenCaja(null)
       setMovimientos([])
-
-      // Mostramos una advertencia persistente para evitar cierres accidentales del servidor.
-      if (resultado.backup_en_progreso) {
-        toast.warning("BACKUP EN CURSO: El sistema se está respaldando de fondo. Por favor, no apague el servidor/computadora principal.", {
-          autoClose: false,
-          toastId: "backup-progress"
-        })
-        iniciarMonitoreoBackup()
-      }
 
       // Recargar estado para actualizar historial
       await cargarEstadoCaja()

@@ -21,12 +21,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para Postgres.
-RUN apt-get update && apt-get install -y \
+# Dependencias de compilación y conexión para psycopg/Django. No se instalan
+# clientes PostgreSQL: la aplicación no ejecuta dumps ni restores locales.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
-    postgresql-client \
     netcat-traditional \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements

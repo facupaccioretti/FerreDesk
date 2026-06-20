@@ -10,6 +10,10 @@ const ProcessContext = createContext(null)
 const ESTADOS_ACTIVOS = new Set(["pendiente", "procesando"])
 const IMPACTO_CRITICO = "critico"
 const STORAGE_PREFIX = "ferredesk_processes_v1"
+const TIPOS_SOPORTADOS = new Set([
+  "actualizacion_lista_precios",
+  "carga_inicial_proveedor",
+])
 
 function crearStorageKey(tenantScope) {
   return `${STORAGE_PREFIX}:${tenantScope}`
@@ -54,7 +58,11 @@ function construirMensajeProceso(proceso) {
 }
 
 function normalizarProcesoPersistido(proceso, tenantScope) {
-  if (!proceso || !proceso.id || !proceso.tipo || !proceso.proveedorId) {
+  if (!proceso || !proceso.id || !TIPOS_SOPORTADOS.has(proceso.tipo)) {
+    return null
+  }
+
+  if (!proceso.proveedorId) {
     return null
   }
 
@@ -106,7 +114,7 @@ function mapearEstadoProceso(proceso, payload) {
     creado_en: payload?.creado_en || proceso.creado_en,
     finalizado_en: payload?.finalizado_en || proceso.finalizado_en,
     iniciado_en: payload?.iniciado_en || proceso.iniciado_en,
-    mensaje_error: payload?.mensaje_error || "",
+    mensaje_error: payload?.mensaje_error || payload?.error || "",
     registros_actualizados: payload?.registros_actualizados || 0,
     registros_creados: payload?.registros_creados || 0,
     registros_procesados: payload?.registros_procesados || 0,

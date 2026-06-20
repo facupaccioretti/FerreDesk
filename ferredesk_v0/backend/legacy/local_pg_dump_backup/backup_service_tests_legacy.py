@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from django.db import connection
 from django.test import SimpleTestCase
 
-from ferreapps.sistema.services.backup_service import (
+from legacy.local_pg_dump_backup.backup_service import (
     ESTADO_BACKUP,
     _construir_nombre_archivo_backup,
     _construir_ruta_storage_backup,
@@ -29,35 +29,38 @@ class BackupServiceTests(SimpleTestCase):
         ESTADO_BACKUP['ultima_ejecucion'] = None
         ESTADO_BACKUP['error'] = None
 
-    @patch('ferreapps.sistema.services.backup_service.threading.Thread')
-    @patch('ferreapps.sistema.services.backup_service._obtener_schema_activo', return_value='ferretest')
+    @patch('legacy.local_pg_dump_backup.backup_service.threading.Thread')
+    @patch('legacy.local_pg_dump_backup.backup_service._obtener_schema_activo', return_value='ferretest')
     def test_ejecutar_backup_asincrono_inicia_hilo_con_schema_activo(self, mock_schema, mock_thread):
         """
         Verifica que al llamar a ejecutar_backup_asincrono se dispare un hilo
         nuevo y se le pase el schema activo para no perder el tenant.
         """
-        ejecutar_backup_asincrono()
+        iniciado = ejecutar_backup_asincrono()
 
         mock_thread.assert_called_once_with(target=_proceso_backup_interno, args=('ferretest',))
         instancia_hilo = mock_thread.return_value
         instancia_hilo.start.assert_called_once()
+        self.assertTrue(iniciado)
+        self.assertEqual(ESTADO_BACKUP['estado'], 'EN_CURSO')
 
-    @patch('ferreapps.sistema.services.backup_service.threading.Thread')
-    @patch('ferreapps.sistema.services.backup_service.logger.warning')
+    @patch('legacy.local_pg_dump_backup.backup_service.threading.Thread')
+    @patch('legacy.local_pg_dump_backup.backup_service.logger.warning')
     def test_ejecutar_backup_asincrono_ignora_si_en_curso(self, mock_logger, mock_thread):
         """
         Verifica que si existe un backup EN_CURSO, no se inicie un hilo redundante.
         """
         ESTADO_BACKUP['estado'] = 'EN_CURSO'
 
-        ejecutar_backup_asincrono()
+        iniciado = ejecutar_backup_asincrono()
 
         mock_logger.assert_called_once_with("Intento de backup ignorado: Ya hay uno en curso.")
         mock_thread.assert_not_called()
+        self.assertFalse(iniciado)
 
-    @patch('ferreapps.sistema.services.backup_service.os.name', 'nt')
+    @patch('legacy.local_pg_dump_backup.backup_service.os.name', 'nt')
     @patch.dict('os.environ', clear=True)
-    @patch('ferreapps.sistema.services.backup_service.os.path.exists')
+    @patch('legacy.local_pg_dump_backup.backup_service.os.path.exists')
     def test_obtener_ruta_pg_dump_windows_fallback(self, mock_exists):
         """
         Simulamos que estamos en Windows y no se encuentra pg_dump en ninguna
@@ -101,9 +104,9 @@ class BackupServiceTests(SimpleTestCase):
         ):
             _validar_schema_respaldo('public')
 
-    @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
-    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service._limpiar_backups_antiguos')
+    @patch('legacy.local_pg_dump_backup.backup_service.default_storage.save')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_exito(self, mock_run, mock_storage_save, mock_limpiar):
         """
         Simulamos un backup exitoso de pg_dump (returncode = 0).
@@ -135,9 +138,9 @@ class BackupServiceTests(SimpleTestCase):
         self.assertEqual(mock_storage_save.call_args.args[0].split('/')[0], 'ferretest')
         self.assertIn('/backups/backup_ferretest_', mock_storage_save.call_args.args[0])
 
-    @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
-    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service._limpiar_backups_antiguos')
+    @patch('legacy.local_pg_dump_backup.backup_service.default_storage.save')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_error_comando(self, mock_run, mock_storage_save, mock_limpiar):
         """
         Simulamos que pg_dump falla (returncode diferente de 0).
@@ -169,7 +172,7 @@ class BackupServiceTests(SimpleTestCase):
         self.assertIn('/backups/backup_ferretest_', mock_storage_save.call_args.args[0])
         self.assertTrue(mock_storage_save.call_args.args[0].endswith('.err'))
 
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_rechaza_public(self, mock_run):
         """
         El flujo operativo de tenant debe rechazar explicitamente el schema public.
@@ -180,7 +183,7 @@ class BackupServiceTests(SimpleTestCase):
         self.assertIn("no permite respaldar el schema 'public'", ESTADO_BACKUP['error'])
         mock_run.assert_not_called()
 
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_pg_dump_no_encontrado(self, mock_run):
         """
         Si pg_dump no esta instalado, subprocess.run lanza FileNotFoundError.
@@ -196,7 +199,7 @@ class BackupServiceTests(SimpleTestCase):
             'El comando pg_dump no se encuentra instalado en el servidor.'
         )
 
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_excepcion_critica(self, mock_run):
         """
         Si ocurre alguna excepcion a nivel codigo (Python),
@@ -209,9 +212,9 @@ class BackupServiceTests(SimpleTestCase):
         self.assertEqual(ESTADO_BACKUP['estado'], 'ERROR')
         self.assertIn("Fallo catastrofico", ESTADO_BACKUP['error'])
 
-    @patch('ferreapps.sistema.services.backup_service._limpiar_backups_antiguos')
-    @patch('ferreapps.sistema.services.backup_service.default_storage.save')
-    @patch('ferreapps.sistema.services.backup_service.subprocess.run')
+    @patch('legacy.local_pg_dump_backup.backup_service._limpiar_backups_antiguos')
+    @patch('legacy.local_pg_dump_backup.backup_service.default_storage.save')
+    @patch('legacy.local_pg_dump_backup.backup_service.subprocess.run')
     def test_proceso_backup_interno_usa_schema_activo_y_no_public(self, mock_run, mock_storage_save, mock_limpiar):
         """
         Verifica que el comando real use connection.schema_name del tenant activo
