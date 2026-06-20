@@ -223,6 +223,10 @@ export default function ListaPreciosModal({ open, onClose, proveedor, onImport }
           i += 1
         ) {
           const row = dataRows[i]
+          if (!row) {
+            continue
+          }
+
           const codigo = row[codigoIdx]
           const precio = row[precioIdx]
           const denominacion = row[denominacionIdx]

@@ -105,6 +105,26 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
             codigo_producto_proveedor="COD-002",
         )
 
+    def test_consulta_estado_importacion_devuelve_el_estado_persistido(self):
+        importacion = ImportacionListaPreciosProveedor.objects.create(
+            proveedor=self.proveedor,
+            usuario=self.usuario,
+            estado=ImportacionListaPreciosProveedor.ESTADO_COMPLETADA,
+            nombre_archivo="lista.csv",
+            archivo_temporal=SimpleUploadedFile("lista.csv", b"codigo,precio\n"),
+            registros_procesados=2,
+            registros_actualizados=2,
+        )
+
+        response = self.client.get(
+            f"/api/productos/proveedores/{self.proveedor.id}/importaciones-listas/{importacion.id}/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["estado"], "completada")
+        self.assertEqual(response.json()["registros_procesados"], 2)
+        self.assertEqual(response.json()["registros_actualizados"], 2)
+
     @override_settings(
         IMPORTACION_LISTA_MAX_BYTES_SYNC=1024 * 1024,
         IMPORTACION_LISTA_MAX_FILAS_SYNC=100,

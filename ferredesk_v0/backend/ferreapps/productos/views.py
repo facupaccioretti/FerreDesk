@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse, Http404, FileResponse
 from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
-from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID, PrecioProductoLista, ListaPrecio
+from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProveedorExcel, ProductoTempID, PrecioProductoLista, ListaPrecio, ImportacionListaPreciosProveedor
 from .serializers import (
     StockSerializer,
     ProductoLookupRapidoSerializer,
