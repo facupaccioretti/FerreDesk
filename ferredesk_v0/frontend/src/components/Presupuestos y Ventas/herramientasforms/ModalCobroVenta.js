@@ -12,6 +12,7 @@ const CLIENTE_CONSUMIDOR_FINAL_ID = "1"
 /** Tolerancia en pesos para considerar "exacto" el pago (consumidor final) */
 const TOLERANCIA_PESOS = 0.01
 const LONGITUD_CUIT = 11
+const CODIGOS_METODOS_BANCARIOS = ["transferencia", "qr", "tarjeta_debito", "tarjeta_credito"]
 
 
 /**
@@ -165,7 +166,7 @@ const ModalCobroVenta = ({
     const metodo = metodosPago.find((m) => m.id === metodoPagoId)
     if (!metodo) return false
     const codigo = (metodo.codigo || "").toLowerCase()
-    return ["transferencia", "qr", "tarjeta_debito", "tarjeta_credito"].includes(codigo)
+    return CODIGOS_METODOS_BANCARIOS.includes(codigo)
   }
 
   const esMetodoEfectivoPorId = (metodoPagoId) => {
@@ -187,15 +188,15 @@ const ModalCobroVenta = ({
       return
     }
 
-    // Validación específica para transferencias/QR: requieren banco destino
+    // Validación específica para medios bancarios: requieren cuenta destino
     for (const linea of lineasPago) {
       if (esMetodoBancarioPorId(linea.metodo_pago_id)) {
         if (!cuentasBanco.length) {
-          window.alert("No hay cuentas bancarias configuradas. Configure al menos una cuenta en el Maestro de Bancos antes de cobrar por transferencia/QR.")
+          window.alert("No hay cuentas bancarias configuradas. Configure al menos una cuenta en el Maestro de Bancos antes de cobrar por transferencia, QR o tarjeta.")
           return
         }
         if (!linea.cuenta_banco_id) {
-          window.alert("Debe seleccionar el banco/billetera de destino para cada pago bancario (Transferencia, QR, Tarjetas).")
+          window.alert("Debe seleccionar el banco, billetera o cuenta de destino para cada pago bancario (Transferencia, QR, Tarjetas).")
           return
         }
       }
@@ -522,7 +523,7 @@ const ModalCobroVenta = ({
                                   })
                                   .map((m) => {
                                     const codigo = (m.codigo || "").toLowerCase()
-                                    const esBancario = codigo === "transferencia" || codigo === "qr"
+                                    const esBancario = CODIGOS_METODOS_BANCARIOS.includes(codigo)
                                     const deshabilitarPorBanco = esBancario && cuentasBanco.length === 0
                                     return (
                                       <option

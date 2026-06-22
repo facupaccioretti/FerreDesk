@@ -5,6 +5,8 @@ import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteAPI from "../../utils/useCuentaCorrienteAPI"
 
+const CODIGOS_METODOS_BANCARIOS = ['TRANSFERENCIA', 'QR', 'TARJETA_DEBITO', 'TARJETA_CREDITO']
+
 const NuevoReciboModal = ({
   modal,
   onClose,
@@ -212,8 +214,8 @@ const NuevoReciboModal = ({
         setError('Debe seleccionar el método de pago para todos los items')
         return
       }
-      if (p.codigo === 'TRANSFERENCIA' && !p.cuenta_banco_id) {
-        setError('Debe indicar la cuenta de destino para las transferencias')
+      if (CODIGOS_METODOS_BANCARIOS.includes(p.codigo) && !p.cuenta_banco_id) {
+        setError('Debe indicar la cuenta de destino para transferencias, QR y tarjetas')
         return
       }
       if (p.codigo === 'CHEQUE') {
@@ -617,14 +619,21 @@ const NuevoReciboModal = ({
                                   onChange={(e) => actualizarPago(idx, 'metodo_pago_id', e.target.value)}
                                 >
                                   <option value="">Seleccione...</option>
-                                  {metodosPago.map(m => (
-                                    <option key={m.id} value={m.id}>{m.nombre}</option>
-                                  ))}
+                                  {metodosPago.map(m => {
+                                    const codigo = (m.codigo || '').toUpperCase()
+                                    const deshabilitarPorBanco =
+                                      CODIGOS_METODOS_BANCARIOS.includes(codigo) && cuentasBanco.length === 0
+                                    return (
+                                      <option key={m.id} value={m.id} disabled={deshabilitarPorBanco}>
+                                        {m.nombre}{deshabilitarPorBanco ? ' (configurar bancos primero)' : ''}
+                                      </option>
+                                    )
+                                  })}
                                 </select>
                               </div>
 
                               {/* Campos condicionales por código */}
-                              {pago.codigo === 'TRANSFERENCIA' && (
+                              {CODIGOS_METODOS_BANCARIOS.includes(pago.codigo) && (
                                 <div>
                                   <label className="text-[10px] font-bold text-slate-500 uppercase">Cuenta Destino</label>
                                   <select

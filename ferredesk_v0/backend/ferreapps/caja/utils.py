@@ -229,7 +229,7 @@ def registrar_valores_y_movimientos(
         metodos_bancarios = [CODIGO_TRANSFERENCIA, CODIGO_QR, CODIGO_TARJETA_DEBITO, CODIGO_TARJETA_CREDITO]
         
         if metodo_pago.codigo in metodos_bancarios:
-            if metodo_pago.codigo in [CODIGO_TRANSFERENCIA, CODIGO_QR] and not cuenta_banco_id:
+            if not cuenta_banco_id:
                 raise ValidationError(
                     f'Debe indicar cuenta_banco_id para pagos por {metodo_pago.nombre}.'
                 )
