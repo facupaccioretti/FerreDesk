@@ -69,67 +69,23 @@ def resolve_recent_activity_range(*, fecha_desde=None, fecha_hasta=None):
 
 
 def _calcular_saldo_teorico_sesion(sesion):
-    pagos_efectivo = _decimal_or_zero(
-        PagoVenta.objects.filter(
-            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=False,
-        )
-        .exclude(venta__ven_estado="AN")
-        .exclude(recibo__rec_estado=Recibo.ESTADO_ANULADO)
-        .aggregate(total=Sum("monto"))["total"]
-    )
-
-    vueltos = _decimal_or_zero(
-        PagoVenta.objects.filter(
-            venta__sesion_caja=sesion,
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=True,
-        )
-        .exclude(venta__ven_estado="AN")
-        .aggregate(total=Sum("monto"))["total"]
-    )
-
     ingresos = _decimal_or_zero(
         sesion.movimientos.filter(tipo=TIPO_MOVIMIENTO_ENTRADA).aggregate(total=Sum("monto"))["total"]
     )
     egresos = _decimal_or_zero(
         sesion.movimientos.filter(tipo=TIPO_MOVIMIENTO_SALIDA).aggregate(total=Sum("monto"))["total"]
     )
-    return sesion.saldo_inicial + pagos_efectivo - vueltos + ingresos - egresos
+    return sesion.saldo_inicial + ingresos - egresos
 
 
 def _calcular_caja_actual():
     decimal_field = DecimalField(max_digits=15, decimal_places=2)
-    pagos_efectivo_subquery = (
-        PagoVenta.objects.filter(
-            Q(venta__sesion_caja=OuterRef("pk")) | Q(recibo__sesion_caja=OuterRef("pk")),
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=False,
-        )
-        .exclude(venta__ven_estado="AN")
-        .exclude(recibo__rec_estado=Recibo.ESTADO_ANULADO)
-        .values()
-        .annotate(total=Sum("monto"))
-        .values("total")[:1]
-    )
-    vueltos_subquery = (
-        PagoVenta.objects.filter(
-            venta__sesion_caja=OuterRef("pk"),
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=True,
-        )
-        .exclude(venta__ven_estado="AN")
-        .values()
-        .annotate(total=Sum("monto"))
-        .values("total")[:1]
-    )
     ingresos_subquery = (
         MovimientoCaja.objects.filter(
             sesion_caja=OuterRef("pk"),
             tipo=TIPO_MOVIMIENTO_ENTRADA,
         )
-        .values()
+        .values("sesion_caja")
         .annotate(total=Sum("monto"))
         .values("total")[:1]
     )
@@ -138,20 +94,12 @@ def _calcular_caja_actual():
             sesion_caja=OuterRef("pk"),
             tipo=TIPO_MOVIMIENTO_SALIDA,
         )
-        .values()
+        .values("sesion_caja")
         .annotate(total=Sum("monto"))
         .values("total")[:1]
     )
 
     sesiones = SesionCaja.objects.filter(estado=ESTADO_CAJA_ABIERTA).annotate(
-        pagos_efectivo=Coalesce(
-            Subquery(pagos_efectivo_subquery, output_field=decimal_field),
-            Value(ZERO, output_field=decimal_field),
-        ),
-        vueltos=Coalesce(
-            Subquery(vueltos_subquery, output_field=decimal_field),
-            Value(ZERO, output_field=decimal_field),
-        ),
         ingresos=Coalesce(
             Subquery(ingresos_subquery, output_field=decimal_field),
             Value(ZERO, output_field=decimal_field),
@@ -164,7 +112,7 @@ def _calcular_caja_actual():
     total = _decimal_or_zero(
         sesiones.aggregate(
             total=Sum(
-                F("saldo_inicial") + F("pagos_efectivo") - F("vueltos") + F("ingresos") - F("egresos"),
+                F("saldo_inicial") + F("ingresos") - F("egresos"),
                 output_field=decimal_field,
             )
         )["total"]

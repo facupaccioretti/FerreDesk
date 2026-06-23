@@ -222,11 +222,25 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             monto=Decimal("200.00"),
             es_vuelto=False,
         )
+        MovimientoCaja.objects.create(
+            sesion_caja=sesion_abierta,
+            usuario=self.usuario,
+            tipo=TIPO_MOVIMIENTO_ENTRADA,
+            monto=Decimal("200.00"),
+            descripcion="Pago venta",
+        )
         PagoVenta.objects.create(
             venta=venta_abierta,
             metodo_pago=metodo_efectivo,
             monto=Decimal("30.00"),
             es_vuelto=True,
+        )
+        MovimientoCaja.objects.create(
+            sesion_caja=sesion_abierta,
+            usuario=self.usuario,
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            monto=Decimal("30.00"),
+            descripcion="Vuelto venta",
         )
         MovimientoCaja.objects.create(
             sesion_caja=sesion_abierta,
@@ -262,6 +276,36 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["caja"]["monto"], "1200.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "1200.00")
         self.assertTrue(payload["seniales"]["hay_caja_abierta"])
+
+    def test_no_doble_conteo_al_registrar_venta(self):
+        from ferreapps.caja.utils import registrar_pagos_venta, registrar_vuelto
+
+        metodo_efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo=CODIGO_EFECTIVO,
+            defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
+        )
+
+        sesion_abierta = self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("1000.00"))
+        venta_abierta = self._crear_venta(2005, sesion_caja=sesion_abierta)
+        
+        # Simular flujo real que crea PagoVenta y MovimientoCaja
+        registrar_pagos_venta(
+            venta=venta_abierta,
+            sesion_caja=sesion_abierta,
+            pagos=[{'metodo_pago_id': metodo_efectivo.id, 'monto': Decimal("200.00")}]
+        )
+        registrar_vuelto(
+            venta=venta_abierta,
+            sesion_caja=sesion_abierta,
+            monto_vuelto=Decimal("30.00"),
+            metodo_pago_id=metodo_efectivo.id
+        )
+
+        payload = build_control_fondos_payload()
+        kpis = payload["resumen_actual"]["kpis"]
+
+        # El saldo teórico (1000 + 200 - 30 = 1170) no debería estar duplicado.
+        self.assertEqual(kpis["caja"]["monto"], "1170.00")
 
     def test_control_fondos_reutiliza_cache_corta_por_tenant_y_parametros(self):
         with patch(
