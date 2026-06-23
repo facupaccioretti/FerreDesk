@@ -30,7 +30,7 @@ const CajaMovimientos = ({ movimientos, theme }) => {
   return (
     <div>
       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
-        Movimientos Manuales
+        Libro de Caja
       </h3>
 
       {movimientosOrdenados.length === 0 ? (

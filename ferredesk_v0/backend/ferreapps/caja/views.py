@@ -231,46 +231,19 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         
         Fórmula:
         Saldo = Saldo Inicial 
-              + Pagos en efectivo (que afectan arqueo)
-              - Vueltos en efectivo
-              + Ingresos manuales
-              - Egresos manuales
+              + Ingresos manuales y automáticos
+              - Egresos manuales y automáticos
         """
         saldo = sesion.saldo_inicial
         
-        # Sumar pagos que afectan arqueo (efectivo)
-        # Consideramos tanto pagos de Ventas como de Recibos vinculados a esta sesión
-        pagos_efectivo = PagoVenta.objects.filter(
-            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=False
-        ).exclude(
-            venta__ven_estado='AN'
-        ).exclude(
-            recibo__rec_estado='N'
-        ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-        
-        saldo += pagos_efectivo
-        
-        # Restar vueltos dados (solo aplica a ventas en este ERP)
-        vueltos = PagoVenta.objects.filter(
-            venta__sesion_caja=sesion,
-            metodo_pago__afecta_arqueo=True,
-            es_vuelto=True,
-        ).exclude(
-            venta__ven_estado='AN'
-        ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-        
-        saldo -= vueltos
-        
-        # Sumar ingresos manuales
+        # Sumar ingresos manuales y automáticos
         ingresos = sesion.movimientos.filter(
             tipo=TIPO_MOVIMIENTO_ENTRADA
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         saldo += ingresos
         
-        # Restar egresos manuales
+        # Restar egresos manuales y automáticos
         egresos = sesion.movimientos.filter(
             tipo=TIPO_MOVIMIENTO_SALIDA
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
