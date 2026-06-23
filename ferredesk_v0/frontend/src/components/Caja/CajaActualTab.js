@@ -31,19 +31,16 @@ const CajaActualTab = ({
   const [modalObservacionesVisible, setModalObservacionesVisible] = useState(false)
   const [tipoMovimiento, setTipoMovimiento] = useState("ENTRADA")
 
-  // Abrir modal de movimiento
   const abrirModalMovimiento = (tipo) => {
     setTipoMovimiento(tipo)
     setModalMovimientoVisible(true)
   }
 
-  // Registrar movimiento
   const handleNuevoMovimiento = async (monto, descripcion) => {
     await onNuevoMovimiento(tipoMovimiento, monto, descripcion)
     setModalMovimientoVisible(false)
   }
 
-  // Cerrar caja
   const handleCerrarCaja = async (saldoDeclarado, observaciones) => {
     await onCerrarCaja(saldoDeclarado, observaciones)
     setModalCerrarVisible(false)
@@ -51,26 +48,15 @@ const CajaActualTab = ({
 
   if (!sesion) {
     return (
-      <div className="p-12 text-center">
-        <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-slate-100 flex items-center justify-center">
-          <svg
-            className="w-12 h-12 text-slate-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-            />
+      <div className="py-10 text-center">
+        <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
+          <svg className="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </div>
-        <h3 className="text-xl font-semibold text-slate-700 mb-2">No hay caja abierta</h3>
-        <p className="text-slate-500 mb-6">
-          Para registrar ventas y movimientos, primero debe abrir una caja.
-        </p>
+        <h3 className="text-sm font-semibold text-[#1e2d3d] mb-1">No hay caja abierta</h3>
+        <p className="text-slate-500 text-xs">Para registrar ventas y movimientos, primero debe abrir una caja.</p>
       </div>
     )
   }
@@ -78,54 +64,72 @@ const CajaActualTab = ({
   return (
     <>
       <div className="space-y-3">
-        {/* Botones de acción */}
-        <div className="flex flex-wrap justify-end gap-2">
-          <button
-            onClick={() => abrirModalMovimiento("ENTRADA")}
-            className={`${theme.botonPrimario} flex items-center gap-1.5 px-3 py-1.5 text-xs`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0-16l-4 4m4-4l4 4" />
-            </svg>
-            Ingreso
-          </button>
-          <button
-            onClick={() => abrirModalMovimiento("SALIDA")}
-            className={`${theme.botonSecundario} flex items-center gap-1.5 px-3 py-1.5 text-xs`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20V4m0 16l4-4m-4 4l-4-4" />
-            </svg>
-            Egreso
-          </button>
-          <button
-            onClick={onRefrescar}
-            disabled={loading}
-            className={`${theme.botonSecundario} flex items-center gap-1.5 px-3 py-1.5 text-xs`}
-          >
-            <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Actualizar
-          </button>
-          <button
-            onClick={() => setModalCierreXVisible(true)}
-            className={`${theme.botonSecundario} flex items-center gap-1.5 px-3 py-1.5 text-xs`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            Cierre X
-          </button>
-          <button
-            onClick={() => setModalCerrarVisible(true)}
-            className={`${theme.botonSecundario} flex items-center gap-1.5 px-3 py-1.5 text-xs`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Cerrar Caja (Z)
-          </button>
+        {/* Barra de acciones */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            Acciones
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {/* Ingreso — acción primaria */}
+            <button
+              onClick={() => abrirModalMovimiento("ENTRADA")}
+              className="inline-flex items-center gap-1.5 bg-[#e8641a] hover:bg-[#cf5815] text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors active:scale-95"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m0-16l-4 4m4-4l4 4" />
+              </svg>
+              Ingreso
+            </button>
+
+            {/* Egreso */}
+            <button
+              onClick={() => abrirModalMovimiento("SALIDA")}
+              className="inline-flex items-center gap-1.5 border border-[#e8641a] text-[#e8641a] hover:bg-orange-50 text-xs font-semibold px-3 py-1.5 rounded transition-colors active:scale-95"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 20V4m0 16l4-4m-4 4l-4-4" />
+              </svg>
+              Egreso
+            </button>
+
+            {/* Separador visual */}
+            <span className="w-px bg-slate-200 self-stretch mx-0.5" />
+
+            {/* Acciones secundarias — estilo navy outline */}
+            <button
+              onClick={onRefrescar}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 border border-[#1e2d3d] text-[#1e2d3d] hover:bg-slate-100 text-xs font-semibold px-3 py-1.5 rounded transition-colors active:scale-95 disabled:opacity-50"
+            >
+              <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Actualizar
+            </button>
+
+            <button
+              onClick={() => setModalCierreXVisible(true)}
+              className="inline-flex items-center gap-1.5 border border-[#1e2d3d] text-[#1e2d3d] hover:bg-slate-100 text-xs font-semibold px-3 py-1.5 rounded transition-colors active:scale-95"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              Cierre X
+            </button>
+
+            <button
+              onClick={() => setModalCerrarVisible(true)}
+              className="inline-flex items-center gap-1.5 bg-[#1e2d3d] hover:bg-[#162230] text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors active:scale-95"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Cerrar Caja (Z)
+            </button>
+          </div>
         </div>
 
         {/* Estado de la caja */}
@@ -163,7 +167,6 @@ const CajaActualTab = ({
           loading={loading}
         />
       )}
-
       {modalMovimientoVisible && (
         <ModalNuevoMovimiento
           tipo={tipoMovimiento}
@@ -172,7 +175,6 @@ const CajaActualTab = ({
           loading={loading}
         />
       )}
-
     </>
   )
 }

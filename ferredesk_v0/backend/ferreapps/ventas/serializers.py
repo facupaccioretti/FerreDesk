@@ -545,9 +545,6 @@ class VentaSerializer(serializers.ModelSerializer):
                 bonif = item.get('vdi_bonifica')
                 if not bonif or float(bonif) == 0:
                     item['vdi_bonifica'] = bonif_general
-            # -------------------------------------------------------------------------------
-            # Usar actualización inteligente en lugar de eliminar y recrear
-            self._actualizar_items_venta_inteligente(instance, items_data)
 
         # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS + COMPLETADO DE ALÍCUOTA -------
         if items_data is not None:
@@ -584,6 +581,10 @@ class VentaSerializer(serializers.ModelSerializer):
                         except Exception:
                             it['vdi_idaliiva'] = 3
         # ----------------------------------------------------------------------------
+
+        if items_data:
+            # Usar actualización inteligente solo después de validar y normalizar los ítems.
+            self._actualizar_items_venta_inteligente(instance, items_data)
 
         return instance
 

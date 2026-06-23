@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined';
-import { useStockBajoAPI } from '../../utils/useStockBajoAPI';
+import { useStockBajoQuery, generarPDFStockBajo } from '../../utils/useStockBajoAPI';
 import Tabla from '../Tabla';
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme";
 import { guardarConsultaPersistida, leerConsultaPersistida, limpiarConsultaPersistida } from "../../utils/consultaPersistida";
@@ -10,14 +10,30 @@ import { guardarConsultaPersistida, leerConsultaPersistida, limpiarConsultaPersi
 const StockBajoList = () => {
   const estadoPersistido = leerConsultaPersistida("stockBajoConsultaPersistida", {});
   const theme = useFerreDeskTheme();
-  const { productos, loading, error, totalProductos, obtenerProductosStockBajo, generarPDF, limpiarResultados } = useStockBajoAPI();
-  const [generandoPDF, setGenerandoPDF] = useState(false);
-  const [searchTerm, setSearchTerm] = useState(() => estadoPersistido.searchTerm || "");
   const [consultaEjecutada, setConsultaEjecutada] = useState(() => estadoPersistido.consultaEjecutada || false);
   const [filtroAplicado, setFiltroAplicado] = useState(() => estadoPersistido.filtroAplicado || "");
   const [pagina, setPagina] = useState(() => estadoPersistido.pagina || 1);
   const [itemsPorPagina, setItemsPorPagina] = useState(() => estadoPersistido.itemsPorPagina || 20);
   const [ordenamiento, setOrdenamiento] = useState(() => estadoPersistido.ordenamiento || "asc");
+
+  const queryResult = useStockBajoQuery(
+    {
+      search: filtroAplicado,
+      page: pagina,
+      limit: itemsPorPagina,
+      orden: "denominacion",
+      direccion: ordenamiento,
+    },
+    consultaEjecutada
+  );
+  
+  const loading = queryResult.isFetching || queryResult.isLoading;
+  const error = queryResult.error?.message || null;
+  const productos = queryResult.data?.productos || [];
+  const totalProductos = queryResult.data?.totalProductos || 0;
+  const [generandoPDF, setGenerandoPDF] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(() => estadoPersistido.searchTerm || "");
+
 
   useEffect(() => {
     document.title = "Informe Stock Bajo - FerreDesk";
@@ -34,22 +50,12 @@ const StockBajoList = () => {
     });
   }, [searchTerm, consultaEjecutada, filtroAplicado, pagina, itemsPorPagina, ordenamiento]);
 
-  useEffect(() => {
-    if (consultaEjecutada) {
-      obtenerProductosStockBajo({
-        search: filtroAplicado,
-        page: pagina,
-        limit: itemsPorPagina,
-        orden: "denominacion",
-        direccion: ordenamiento,
-      });
-    }
-  }, [consultaEjecutada, filtroAplicado, pagina, itemsPorPagina, ordenamiento, obtenerProductosStockBajo]);
+
 
   const handleGenerarPDF = async () => {
     setGenerandoPDF(true);
     try {
-      await generarPDF({
+      await generarPDFStockBajo({
         search: filtroAplicado,
         orden: "denominacion",
         direccion: ordenamiento,
@@ -63,6 +69,7 @@ const StockBajoList = () => {
     setPagina(1);
     setFiltroAplicado(searchTerm.trim());
     setConsultaEjecutada(true);
+    if (consultaEjecutada) queryResult.refetch();
   };
 
   const handleEjecutarInforme = () => {
@@ -78,7 +85,6 @@ const StockBajoList = () => {
     setPagina(1);
     setItemsPorPagina(20);
     setOrdenamiento("asc");
-    limpiarResultados();
     limpiarConsultaPersistida("stockBajoConsultaPersistida");
   };
 

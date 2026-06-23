@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ferredesk_backend.settings.dev')
 django.setup()
 
-from ferreapps.sistema.services.backup_service import _proceso_backup_interno, ESTADO_BACKUP
+from legacy.local_pg_dump_backup.backup_service import _proceso_backup_interno, ESTADO_BACKUP
 from tenants.models import EmpresaTenant
 
 def verificar_backup_aislado(schema_name, other_schema_name):

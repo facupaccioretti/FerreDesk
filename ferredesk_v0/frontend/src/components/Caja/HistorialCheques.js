@@ -11,6 +11,8 @@ import ModalDepositarCheque from "./ModalDepositarCheque"
 import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMenu"
 import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonReactivar, BotonAcreditar } from "../Botones"
 
+const NAVY = "#1e2d3d"
+
 const ESTADOS = [
     { value: "", label: "Todos" },
     { value: "EN_CARTERA", label: "En Cartera" },
@@ -20,17 +22,23 @@ const ESTADOS = [
     { value: "RECHAZADO", label: "Rechazado" },
 ]
 
-/**
- * Historial completo de cheques con trazabilidad.
- * Permite filtrar por estado y buscar por datos clave.
- */
 const ESTADOS_PUEDEN_MARCAR_RECHAZADO = ["EN_CARTERA", "DEPOSITADO", "ENTREGADO"]
 
-const HistorialCheques = () => {
+// Mapa de estilos por estado — solo navy, naranja y slate. Los charts/indicadores
+// de estado de cheque son la excepción admitida para color extra.
+const ESTADO_META = {
+    EN_CARTERA:  { label: "En Cartera",  cls: "bg-[#1e2d3d] text-white" },
+    DEPOSITADO:  { label: "Depositado",  cls: "border border-[#e8641a] text-[#e8641a]" },
+    ENTREGADO:   { label: "Endosado",    cls: "border border-slate-400 text-slate-600" },
+    RECHAZADO:   { label: "Rechazado",   cls: "bg-slate-700 text-white" },
+    ACREDITADO:  { label: "Acreditado",  cls: "bg-[#e8641a] text-white" },
+}
+
+const HistorialCheques = ({ filtroEstadoInicial = "" }) => {
     const { obtenerCheques, marcarChequeRechazado, reactivarCheque, acreditarCheque, obtenerCuentasBanco } = useCajaAPI()
     const [cheques, setCheques] = useState([])
     const [cargando, setCargando] = useState(true)
-    const [filtroEstado, setFiltroEstado] = useState("")
+    const [filtroEstado, setFiltroEstado] = useState(filtroEstadoInicial || "")
     const [busqueda, setBusqueda] = useState("")
     const [procesandoId, setProcesandoId] = useState(null)
     const [modalAccion, setModalAccion] = useState({ cheque: null, modo: "rechazar" })
@@ -42,7 +50,6 @@ const HistorialCheques = () => {
     const cargar = useCallback(async () => {
         setCargando(true)
         try {
-            // Si filtroEstado es "", trae todos
             const res = await obtenerCheques(filtroEstado || null)
             const lista = res?.results ?? (Array.isArray(res) ? res : [])
             setCheques(lista)
@@ -54,49 +61,26 @@ const HistorialCheques = () => {
         }
     }, [obtenerCheques, filtroEstado])
 
-    useEffect(() => {
-        cargar()
-    }, [cargar])
-
-    // Se usan formateadores centralizados de ../../utils/formatters
+    useEffect(() => { cargar() }, [cargar])
+    useEffect(() => { setFiltroEstado(filtroEstadoInicial || "") }, [filtroEstadoInicial])
 
     const renderEstado = (estado) => {
-        let color = "bg-slate-100 text-slate-700"
-        let texto = estado
-
-        switch (estado) {
-            case "EN_CARTERA":
-                color = "bg-blue-100 text-blue-700"
-                texto = "En Cartera"
-                break
-            case "DEPOSITADO":
-                color = "bg-green-100 text-green-700"
-                texto = "Depositado"
-                break
-            case "ENTREGADO":
-                color = "bg-purple-100 text-purple-700"
-                texto = "Endosado"
-                break
-            case "RECHAZADO":
-                color = "bg-red-100 text-red-700"
-                texto = "Rechazado"
-                break
-            case "ACREDITADO":
-                color = "bg-teal-100 text-teal-700"
-                texto = "Acreditado"
-                break
-            default:
-                break
-        }
-        return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${color}`}>{texto}</span>
+        const meta = ESTADO_META[estado] ?? { label: estado, cls: "border border-slate-300 text-slate-500" }
+        return (
+            <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-sm ${meta.cls}`}>
+                {meta.label}
+            </span>
+        )
     }
 
     const renderDestino = (c) => {
-        if (c.estado === "DEPOSITADO" && c.cuenta_banco_deposito_nombre) {
+        if ((c.estado === "DEPOSITADO" || c.estado === "ACREDITADO") && c.cuenta_banco_deposito_nombre) {
             return (
-                <div className="flex flex-col">
-                    <span className="text-xs text-slate-500">Cuenta Propia</span>
-                    <span className="text-sm text-slate-700 font-medium">
+                <div className="flex flex-col leading-tight">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wide">
+                        {c.estado === "ACREDITADO" ? "Acreditado en" : "Cuenta propia"}
+                    </span>
+                    <span className="text-xs text-[#1e2d3d] font-medium truncate max-w-[110px]">
                         {c.cuenta_banco_deposito_nombre}
                     </span>
                 </div>
@@ -104,84 +88,41 @@ const HistorialCheques = () => {
         }
         if (c.estado === "ENTREGADO" && c.proveedor_nombre) {
             return (
-                <div className="flex flex-col">
-                    <span className="text-xs text-slate-500">Proveedor</span>
-                    <span className="text-sm text-slate-700 font-medium">
+                <div className="flex flex-col leading-tight">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wide">Proveedor</span>
+                    <span className="text-xs text-[#1e2d3d] font-medium truncate max-w-[110px]">
                         {c.proveedor_nombre}
                     </span>
                 </div>
             )
         }
-        if (c.estado === "ACREDITADO" && c.cuenta_banco_deposito_nombre) {
-            return (
-                <div className="flex flex-col">
-                    <span className="text-xs text-teal-600">Acreditado en</span>
-                    <span className="text-sm text-slate-700 font-medium">
-                        {c.cuenta_banco_deposito_nombre}
-                    </span>
-                </div>
-            )
-        }
-        return <span className="text-slate-400">-</span>
+        return <span className="text-slate-300">—</span>
     }
 
-    const abrirModalMarcarRechazado = (cheque) => {
-        setModalAccion({ cheque, modo: "rechazar" })
-    }
-
-    const abrirModalReactivar = (cheque) => {
-        setModalAccion({ cheque, modo: "reactivar" })
-    }
+    const abrirModalMarcarRechazado = (cheque) => setModalAccion({ cheque, modo: "rechazar" })
+    const abrirModalReactivar = (cheque) => setModalAccion({ cheque, modo: "reactivar" })
 
     const confirmarAccion = () => {
         const { cheque, modo } = modalAccion
         if (!cheque) return
-
         setProcesandoId(cheque.id)
-
-        const apiCall = modo === "rechazar"
-            ? marcarChequeRechazado(cheque.id)
-            : reactivarCheque(cheque.id)
-
+        const apiCall = modo === "rechazar" ? marcarChequeRechazado(cheque.id) : reactivarCheque(cheque.id)
         apiCall
-            .then(() => {
-                setModalAccion({ cheque: null, modo: "rechazar" })
-                return cargar()
-            })
-            .catch((err) => {
-                console.error(`Error en acción ${modo}:`, err)
-                alert(err.message || `Error al ${modo} cheque`)
-            })
+            .then(() => { setModalAccion({ cheque: null, modo: "rechazar" }); return cargar() })
+            .catch((err) => { console.error(`Error en acción ${modo}:`, err); alert(err.message || `Error al ${modo} cheque`) })
             .finally(() => setProcesandoId(null))
     }
 
-    const abrirDetalle = (cheque) => {
-        setModalDetalle(cheque)
-    }
+    const abrirDetalle = (cheque) => setModalDetalle(cheque)
+    const cerrarDetalle = () => setModalDetalle(null)
+    const abrirEditar = (cheque) => setModalEditar(cheque)
+    const cerrarEditar = () => setModalEditar(null)
+    const confirmarEditar = async () => { setModalEditar(null); await cargar() }
 
-    const cerrarDetalle = () => {
-        setModalDetalle(null)
-    }
-
-    const abrirEditar = (cheque) => {
-        setModalEditar(cheque)
-    }
-
-    const cerrarEditar = () => {
-        setModalEditar(null)
-    }
-
-    const confirmarEditar = async (chequeActualizado) => {
-        setModalEditar(null)
-        await cargar() // Recargar lista después de editar
-    }
-
-    // Acreditar: abrir modal de selección de banco
     const abrirModalAcreditar = async (cheque) => {
         try {
             const res = await obtenerCuentasBanco(true)
-            const lista = res?.results ?? (Array.isArray(res) ? res : [])
-            setCuentasBanco(lista)
+            setCuentasBanco(res?.results ?? (Array.isArray(res) ? res : []))
         } catch (err) {
             console.error("Error cargando cuentas banco:", err)
             setCuentasBanco([])
@@ -204,102 +145,110 @@ const HistorialCheques = () => {
         }
     }
 
-    // Función para generar botones del menú de acciones para cada cheque
     const generarBotonesCheque = (cheque) => {
         const botones = []
         const estaProcesando = procesandoId === cheque.id
 
-        // Ver detalle - siempre disponible
-        botones.push({
-            componente: BotonVerDetalle,
-            onClick: () => abrirDetalle(cheque),
-            titulo: "Ver detalle",
-            disabled: false,
-        })
-
-        // Editar - solo si está EN_CARTERA
+        botones.push({ componente: BotonVerDetalle, onClick: () => abrirDetalle(cheque), titulo: "Ver detalle", disabled: false })
         if (cheque.estado === "EN_CARTERA") {
-            botones.push({
-                componente: BotonEditar,
-                onClick: () => abrirEditar(cheque),
-                titulo: "Editar",
-                disabled: false,
-            })
+            botones.push({ componente: BotonEditar, onClick: () => abrirEditar(cheque), titulo: "Editar", disabled: false })
         }
-
-        // Marcar rechazado - solo si puede marcarse como rechazado
         if (ESTADOS_PUEDEN_MARCAR_RECHAZADO.includes(cheque.estado)) {
-            botones.push({
-                componente: BotonMarcarRechazado,
-                onClick: () => abrirModalMarcarRechazado(cheque),
-                titulo: "Marcar rechazado",
-                disabled: estaProcesando,
-            })
+            botones.push({ componente: BotonMarcarRechazado, onClick: () => abrirModalMarcarRechazado(cheque), titulo: "Marcar rechazado", disabled: estaProcesando })
         }
-
-        // Acreditar - solo si está DEPOSITADO
         if (cheque.estado === "DEPOSITADO") {
-            botones.push({
-                componente: BotonAcreditar,
-                onClick: () => abrirModalAcreditar(cheque),
-                titulo: "Acreditar (fondos ingresados)",
-                disabled: estaProcesando,
-            })
+            botones.push({ componente: BotonAcreditar, onClick: () => abrirModalAcreditar(cheque), titulo: "Acreditar (fondos ingresados)", disabled: estaProcesando })
         }
-
         return botones
     }
 
     const columnas = [
-        { id: "numero", titulo: "N°", render: (c) => <span className="text-sm font-medium text-slate-800">{c.numero}</span> },
+        {
+            id: "numero",
+            titulo: "N°",
+            render: (c) => <span className="text-xs font-semibold text-[#1e2d3d]">{c.numero}</span>,
+        },
         {
             id: "tipo",
             titulo: "TIPO",
             render: (c) => (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${c.tipo_cheque === "DIFERIDO" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
-                    }`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold uppercase ${
+                    c.tipo_cheque === "DIFERIDO"
+                        ? "border border-[#e8641a] text-[#e8641a]"
+                        : "bg-[#1e2d3d] text-white"
+                }`}>
                     {c.tipo_cheque === "DIFERIDO" ? "Dif" : "Día"}
                 </span>
             ),
         },
-        { id: "librador_nombre", titulo: "LIBRADOR", render: (c) => <div className="flex flex-col"><span className="text-xs text-slate-700 font-medium truncate max-w-[120px]" title={c.librador_nombre}>{c.librador_nombre}</span><span className="text-[10px] font-mono text-slate-500">{c.cuit_librador}</span></div> },
-        { id: "banco_emisor", titulo: "BANCO", render: (c) => <span className="text-sm text-slate-700">{c.banco_emisor}</span> },
-        { id: "monto", titulo: "MONTO", align: "right", render: (c) => <span className="text-sm font-semibold text-slate-800">${formatearMoneda(c.monto)}</span> },
-        { id: "cliente_origen", titulo: "ORIGEN", render: (c) => <span className="text-xs text-slate-700">{c.cliente_origen || "—"}</span> },
-        { id: "estado", titulo: "ESTADO", render: (c) => renderEstado(c.estado) },
-        { id: "destino", titulo: "DESTINO", render: (c) => renderDestino(c) },
-        { id: "fecha_pago", titulo: "F. PAGO", render: (c) => <span className="text-xs font-medium text-slate-700">{formatearFecha(c.fecha_pago)}</span> },
+        {
+            id: "librador_nombre",
+            titulo: "LIBRADOR",
+            render: (c) => (
+                <div className="flex flex-col leading-tight">
+                    <span className="text-xs text-[#1e2d3d] font-medium truncate max-w-[120px]" title={c.librador_nombre}>
+                        {c.librador_nombre}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">{c.cuit_librador}</span>
+                </div>
+            ),
+        },
+        {
+            id: "banco_emisor",
+            titulo: "BANCO",
+            render: (c) => <span className="text-xs text-slate-600 truncate max-w-[90px]" title={c.banco_emisor}>{c.banco_emisor}</span>,
+        },
+        {
+            id: "monto",
+            titulo: "MONTO",
+            align: "right",
+            render: (c) => <span className="text-xs font-semibold tabular-nums text-[#1e2d3d]">${formatearMoneda(c.monto)}</span>,
+        },
+        {
+            id: "cliente_origen",
+            titulo: "ORIGEN",
+            render: (c) => <span className="text-xs text-slate-600">{c.cliente_origen || "—"}</span>,
+        },
+        {
+            id: "estado",
+            titulo: "ESTADO",
+            render: (c) => renderEstado(c.estado),
+        },
+        {
+            id: "destino",
+            titulo: "DESTINO",
+            render: (c) => renderDestino(c),
+        },
+        {
+            id: "fecha_pago",
+            titulo: "F. PAGO",
+            render: (c) => <span className="text-xs tabular-nums text-slate-600">{formatearFecha(c.fecha_pago)}</span>,
+        },
         {
             id: "acciones",
             titulo: "ACCIONES",
             render: (c) => {
                 const estaProcesando = procesandoId === c.id
                 const botones = generarBotonesCheque(c)
-
-                // Agregar botón de reactivar si está rechazado
                 if (c.estado === "RECHAZADO") {
-                    botones.push({
-                        componente: BotonReactivar,
-                        onClick: () => abrirModalReactivar(c),
-                        titulo: "Reactivar",
-                        disabled: estaProcesando,
-                    })
+                    botones.push({ componente: BotonReactivar, onClick: () => abrirModalReactivar(c), titulo: "Reactivar", disabled: estaProcesando })
                 }
-
                 return <AccionesMenu botones={botones} />
             },
         },
     ]
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             {/* Filtros */}
-            <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2.5">
                 <div className="flex items-center gap-2">
-                    <label htmlFor="filtro-estado" className="text-sm font-medium text-slate-700">Estado:</label>
+                    <label htmlFor="filtro-estado" className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                        Estado
+                    </label>
                     <select
                         id="filtro-estado"
-                        className="text-sm border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                        className="rounded border border-slate-200 px-2 py-1 text-xs text-[#1e2d3d] outline-none focus:border-[#e8641a] focus:ring-1 focus:ring-[#e8641a]"
                         value={filtroEstado}
                         onChange={(e) => setFiltroEstado(e.target.value)}
                     >
@@ -308,8 +257,15 @@ const HistorialCheques = () => {
                         ))}
                     </select>
                 </div>
-
-                {/* El buscador de Tabla.js se encarga del filtro por texto en cliente, pero aquí podríamos agregar filtros de fecha si backend lo soportara */}
+                <button
+                    type="button"
+                    onClick={cargar}
+                    disabled={cargando}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    style={{ backgroundColor: NAVY }}
+                >
+                    {cargando ? "Cargando..." : "Actualizar"}
+                </button>
             </div>
 
             <Tabla
@@ -338,12 +294,10 @@ const HistorialCheques = () => {
                 />
             )}
 
-            {/* Modal Detalle */}
             {modalDetalle && (
                 <ModalDetalleCheque cheque={modalDetalle} onCerrar={cerrarDetalle} />
             )}
 
-            {/* Modal Editar */}
             {modalEditar && (
                 <ModalEditarCheque
                     cheque={modalEditar}
@@ -352,7 +306,6 @@ const HistorialCheques = () => {
                 />
             )}
 
-            {/* Modal Acreditar (reutiliza ModalDepositarCheque para selección de banco) */}
             {modalAcreditar && (
                 <ModalDepositarCheque
                     cuentasBanco={cuentasBanco}

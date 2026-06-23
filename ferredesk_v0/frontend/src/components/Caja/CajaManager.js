@@ -1,25 +1,28 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
-import { useSistemaAPI } from "../../utils/useSistemaAPI"
 import { toast } from "react-toastify"
+import { queryKeys } from "../../core/query/queryKeys"
 import CajasHistorialTable from "./CajasHistorialTable"
 import CajaDetalleView from "./CajaDetalleView"
 import CajaActualTab from "./CajaActualTab"
 import ModalAbrirCaja from "./ModalAbrirCaja"
 import MaestroBancos from "./MaestroBancos"
 import ValoresEnCartera from "./ValoresEnCartera"
+import ControlFondosTab from "./ControlFondosTab"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
-  { key: "historial", label: "Historial de Cajas", closable: false },
+  { key: "control-fondos", label: "Control de Fondos", closable: false },
   { key: "bancos", label: "Bancos", closable: false },
   { key: "valores-en-cartera", label: "Cheques", closable: false },
+  { key: "historial", label: "Historial de Cajas", closable: false },
 ]
 
 /**
@@ -34,6 +37,7 @@ const mainTabs = [
  */
 const CajaManager = () => {
   const theme = useFerreDeskTheme()
+  const queryClient = useQueryClient()
   const {
     loading,
     error: _error, // eslint-disable-line no-unused-vars
@@ -45,8 +49,6 @@ const CajaManager = () => {
     obtenerMovimientos,
   } = useCajaAPI()
 
-  const { obtenerEstadoBackup } = useSistemaAPI()
-
   // Estados de tabs
   const [tabs, setTabs] = useState(() => {
     try {
@@ -54,8 +56,9 @@ const CajaManager = () => {
       if (savedTabs) {
         const parsedTabs = JSON.parse(savedTabs)
         // Validar que siempre esté el tab principal
-        let restoredTabs = parsedTabs
-        const otrosTabs = restoredTabs.filter((t) => !mainTabs.some((m) => m.key === t.key))
+        const otrosTabs = parsedTabs.filter(
+          (tab) => tab?.closable && tab?.key && !mainTabs.some((mainTab) => mainTab.key === tab.key)
+        )
         return [...mainTabs, ...otrosTabs]
       }
     } catch (e) {
@@ -65,7 +68,17 @@ const CajaManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("cajaActiveTab") || "historial"
+    const savedActiveTab = localStorage.getItem("cajaActiveTab")
+    let restoredTabs = []
+    try {
+      restoredTabs = JSON.parse(localStorage.getItem("cajaTabs") || "[]")
+    } catch (e) {
+      restoredTabs = []
+    }
+    const tabDisponible = [...mainTabs, ...restoredTabs, { key: "caja-actual" }].some(
+      (tab) => tab?.key === savedActiveTab
+    )
+    return tabDisponible ? savedActiveTab : "control-fondos"
   })
 
   const [draggedTabKey, setDraggedTabKey] = useState(null)
@@ -81,47 +94,17 @@ const CajaManager = () => {
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])
 
-  // Lógica de monitoreo de Backup
-  const pollingRef = useRef(null)
-
-  const detenerMonitoreo = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-  }
-
-  const iniciarMonitoreoBackup = useCallback(() => {
-    detenerMonitoreo()
-
-    pollingRef.current = setInterval(async () => {
-      try {
-        const respuesta = await obtenerEstadoBackup()
-
-        // Notificamos al usuario según el resultado final para que sepa que ya puede apagar el sistema.
-        if (respuesta.estado === "EXITO") {
-          toast.success("RESPALDO COMPLETADO: La copia de seguridad se realizó correctamente.")
-          detenerMonitoreo()
-        } else if (respuesta.estado === "ERROR") {
-          toast.error(`FALLO EL RESPALDO: ${respuesta.error || "Error desconocido"}. Por favor consulte con soporte.`)
-          detenerMonitoreo()
-        }
-      } catch (err) {
-        console.error("Error consultando estado de backup:", err)
-      }
-    }, 5000)
-  }, [obtenerEstadoBackup])
-
-  // Aseguramos que no queden intervalos activos si el usuario sale de la vista de Caja.
-  useEffect(() => {
-    return () => detenerMonitoreo()
-  }, [])
-
   // Estado de la caja abierta
   const [tieneCajaAbierta, setTieneCajaAbierta] = useState(false)
   const [sesionActual, setSesionActual] = useState(null)
   const [resumenCaja, setResumenCaja] = useState(null)
   const [movimientos, setMovimientos] = useState([])
+  const [controlFondosView, setControlFondosView] = useState("resumen")
+  const [chequesDrilldown, setChequesDrilldown] = useState({
+    nonce: 0,
+    vistaInicial: "operativo",
+    filtroEstadoInicial: "EN_CARTERA",
+  })
 
   const { user } = useSessionUserQuery()
   const { logout } = useLogoutMutation()
@@ -131,6 +114,9 @@ const CajaManager = () => {
 
   // Estados de UI
   const [, setCargando] = useState(true) // Estado interno para controlar carga, no se expone
+  const invalidarControlFondos = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: queryKeys.resources.all("caja-control-fondos") })
+  }, [queryClient])
 
   // Cargar estado inicial de la caja
   const cargarEstadoCaja = useCallback(async () => {
@@ -161,7 +147,7 @@ const CajaManager = () => {
   }, [obtenerMiCaja, obtenerEstadoCaja, obtenerMovimientos])
 
   useEffect(() => {
-    document.title = "Caja, Banco y Cheques - FerreDesk"
+    document.title = "Tesorería - FerreDesk"
     cargarEstadoCaja()
   }, [cargarEstadoCaja])
 
@@ -202,6 +188,7 @@ const CajaManager = () => {
 
       // Recargar estado completo
       await cargarEstadoCaja()
+      await invalidarControlFondos()
 
       // Cambiar a tab "Caja Actual"
       setActiveTab("caja-actual")
@@ -213,23 +200,15 @@ const CajaManager = () => {
   // Cerrar caja
   const handleCerrarCaja = async (saldoDeclarado, observaciones) => {
     try {
-      const resultado = await cerrarCaja(saldoDeclarado, observaciones)
+      await cerrarCaja(saldoDeclarado, observaciones)
       setTieneCajaAbierta(false)
       setSesionActual(null)
       setResumenCaja(null)
       setMovimientos([])
 
-      // Mostramos una advertencia persistente para evitar cierres accidentales del servidor.
-      if (resultado.backup_en_progreso) {
-        toast.warning("BACKUP EN CURSO: El sistema se está respaldando de fondo. Por favor, no apague el servidor/computadora principal.", {
-          autoClose: false,
-          toastId: "backup-progress"
-        })
-        iniciarMonitoreoBackup()
-      }
-
       // Recargar estado para actualizar historial
       await cargarEstadoCaja()
+      await invalidarControlFondos()
 
       // Cambiar a tab "Historial"
       setActiveTab("historial")
@@ -246,6 +225,7 @@ const CajaManager = () => {
 
       // Recargar estado
       await cargarEstadoCaja()
+      await invalidarControlFondos()
     } catch (err) {
       toast.error(err.message || "Error al registrar movimiento")
     }
@@ -272,6 +252,40 @@ const CajaManager = () => {
     }
     setActiveTab(tabKey)
   }
+
+  const handleControlFondosDrilldown = useCallback((codigo, metadata) => {
+    if (!metadata) return
+
+    if (metadata.tab === "control_fondos") {
+      setControlFondosView(metadata.vista_inicial || "composicion")
+      setActiveTab("control-fondos")
+      return
+    }
+
+    if (metadata.tab === "cheques") {
+      setChequesDrilldown({
+        nonce: Date.now(),
+        vistaInicial: metadata.vista_inicial || "operativo",
+        filtroEstadoInicial: metadata.filtro_inicial || "",
+      })
+      setActiveTab("valores-en-cartera")
+      return
+    }
+
+    if (metadata.tab === "bancos") {
+      setActiveTab("bancos")
+      return
+    }
+
+    if (metadata.tab === "caja_actual") {
+      setActiveTab(tieneCajaAbierta ? "caja-actual" : "historial")
+      return
+    }
+
+    if (metadata.fallback_tab === "historial_cajas") {
+      setActiveTab("historial")
+    }
+  }, [tieneCajaAbierta])
 
   // Cerrar tab
   const closeTab = (key) => {
@@ -331,7 +345,7 @@ const CajaManager = () => {
           <div className="max-w-[1400px] w-full mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Caja, Banco y Cheques</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Tesorería</h2>
             </div>
 
             {/* Contenedor principal con tabs */}
@@ -391,8 +405,16 @@ const CajaManager = () => {
                   />
                 )}
 
+                {activeTab === "control-fondos" && (
+                  <ControlFondosTab
+                    focusView={controlFondosView}
+                    onDrilldown={handleControlFondosDrilldown}
+                  />
+                )}
                 {activeTab === "bancos" && <MaestroBancos />}
-                {activeTab === "valores-en-cartera" && <ValoresEnCartera />}
+                {activeTab === "valores-en-cartera" && (
+                  <ValoresEnCartera drilldownIntent={chequesDrilldown} />
+                )}
 
                 {activeTab === "caja-actual" && (
                   <CajaActualTab

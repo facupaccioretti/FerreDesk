@@ -233,6 +233,7 @@ def crear_orden_pago(request):
         # Si no hay sesión, validamos que no se intenten pagos físicos más adelante (en registrar_pagos_orden_pago)
         # pero primero determinamos la sucursal para la numeración.
         
+        # La validaciÃ³n del medio contra caja se resuelve en la utilidad central.
         with transaction.atomic():
             # Determinar el punto de venta (sucursal de la caja o fallback)
             # Usamos sucursal 1 si no hay sesión abierta (Pago Nominal)

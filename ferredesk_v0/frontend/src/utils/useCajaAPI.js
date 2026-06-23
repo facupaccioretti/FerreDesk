@@ -201,6 +201,20 @@ export function useCajaAPI() {
         return makeRequest(`${API_BASE}/pagos/?venta=${ventaId}`);
     }, [makeRequest]);
 
+    /**
+     * Obtiene la foto actual consolidada de Tesoreria.
+     * @param {number|string|null} preset - Preset opcional para bloque reciente (7/15/30/60/90)
+     * @returns {Promise<object>} - Payload de /control-fondos/
+     */
+    const obtenerPosicionTesoreria = useCallback(async (preset = null) => {
+        const params = new URLSearchParams();
+        if (preset) params.append('preset', preset);
+
+        const queryString = params.toString();
+        const url = `${API_BASE}/control-fondos/${queryString ? '?' + queryString : ''}`;
+        return makeRequest(url);
+    }, [makeRequest]);
+
     // ========================================
     // CUENTAS BANCO
     // ========================================
@@ -350,8 +364,8 @@ export function useCajaAPI() {
     }, [makeRequest]);
 
     /**
-     * Crea un cheque desde caja (caja general o cambio de cheque).
-     * Requiere caja abierta.
+     * Crea un cheque manual (caja general o cambio de cheque).
+     * Si hay caja abierta se registran movimientos de sesion; si no, queda administrativo.
      * @param {object} datosCheque - numero, banco_emisor, monto, cuit_librador, fecha_emision, fecha_presentacion, origen_tipo (CAJA_GENERAL | CAMBIO_CHEQUE), origen_descripcion (opc), origen_cliente_id (opc), monto_efectivo_entregado (si CAMBIO_CHEQUE), comision_cambio (opc)
      * @returns {Promise<object>} - Cheque creado
      */
@@ -393,6 +407,7 @@ export function useCajaAPI() {
 
         // Pagos
         obtenerPagosVenta,
+        obtenerPosicionTesoreria,
 
         // Cuentas banco
         obtenerCuentasBanco,

@@ -7,7 +7,6 @@ Implementa los ViewSets para:
 - PagoVenta: Consulta de pagos por venta
 """
 
-from django.utils import timezone
 from django.db.models import Sum, Q
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -15,6 +14,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 from decimal import Decimal
 from django.utils import timezone
 from datetime import timedelta
@@ -48,6 +48,10 @@ from .serializers import (
     ChequeUpdateSerializer,
     CrearChequeCajaSerializer,
     MovimientoBancoSerializer,
+)
+from .services import (
+    build_control_fondos_payload,
+    invalidate_control_fondos_cache,
 )
 
 
@@ -108,6 +112,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             saldo_inicial=serializer.validated_data['saldo_inicial'],
             estado=ESTADO_CAJA_ABIERTA,
         )
+        invalidate_control_fondos_cache(reason='abrir_caja')
         
         return Response(
             SesionCajaSerializer(sesion).data,
@@ -152,17 +157,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         sesion.estado = ESTADO_CAJA_CERRADA
         sesion.observaciones_cierre = serializer.validated_data.get('observaciones_cierre', '')
         sesion.save()
-        
-        # >>> INICIO INYECCIÓN DE BACKUP >>>
-        backup_disparado = False
-        try:
-            from ferreapps.sistema.services.backup_service import ejecutar_backup_asincrono
-            ejecutar_backup_asincrono()
-            backup_disparado = True
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"No se pudo disparar el backup post-cierre Z: {e}")
-        # <<< FIN INYECCIÓN DE BACKUP <<<
+        invalidate_control_fondos_cache(reason='cerrar_caja')
         
         # Preparar respuesta con resumen
         resumen = self._generar_resumen_cierre(sesion)
@@ -170,7 +165,6 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         return Response({
             'sesion': SesionCajaSerializer(sesion).data,
             'resumen': resumen,
-            'backup_en_progreso': backup_disparado, # Bandera para el frontend
         })
     
     @action(detail=False, methods=['get'], url_path='estado')
@@ -532,6 +526,7 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
             monto=serializer.validated_data['monto'],
             descripcion=serializer.validated_data['descripcion'],
         )
+        invalidate_control_fondos_cache(reason='movimiento_manual')
         
         return Response(
             MovimientoCajaSerializer(movimiento).data,
@@ -596,6 +591,16 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(activo=True)
         return queryset.order_by('nombre')
 
+    def perform_create(self, serializer):
+        cuenta = serializer.save()
+        invalidate_control_fondos_cache(reason='cuenta_banco_create')
+        return cuenta
+
+    def perform_update(self, serializer):
+        cuenta = serializer.save()
+        invalidate_control_fondos_cache(reason='cuenta_banco_update')
+        return cuenta
+
     def destroy(self, request, *args, **kwargs):
         """Evita la eliminación si hay movimientos bancarios."""
         instance = self.get_object()
@@ -614,7 +619,9 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        return super().destroy(request, *args, **kwargs)
+        response = super().destroy(request, *args, **kwargs)
+        invalidate_control_fondos_cache(reason='cuenta_banco_destroy')
+        return response
 
     @action(detail=True, methods=['get'], url_path='historial')
     def historial(self, request, pk=None):
@@ -780,16 +787,15 @@ class ChequeViewSet(viewsets.ModelViewSet):
         return queryset.order_by('-fecha_hora_registro')
 
     def create(self, request, *args, **kwargs):
-        """Crea un cheque desde caja (caja general o cambio de cheque). Requiere caja abierta."""
+        """Crea un cheque manualmente.
+
+        Si hay caja abierta, registra los movimientos de sesión asociados.
+        Si no la hay, el cheque queda registrado de forma administrativa.
+        """
         sesion_caja = SesionCaja.objects.filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA,
         ).first()
-        if not sesion_caja:
-            return Response(
-                {'detail': 'Debe abrir una caja antes de registrar un cheque.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -801,15 +807,17 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             desc_entrada = data.get('origen_descripcion') or 'Caja general'
-            movimiento_entrada = MovimientoCaja.objects.create(
-                sesion_caja=sesion_caja,
-                usuario=request.user,
-                tipo=TIPO_MOVIMIENTO_ENTRADA,
-                monto=data['monto'],
-                descripcion=f"Cheque recibido - {desc_entrada}",
-            )
+            movimiento_entrada = None
+            if sesion_caja:
+                movimiento_entrada = MovimientoCaja.objects.create(
+                    sesion_caja=sesion_caja,
+                    usuario=request.user,
+                    tipo=TIPO_MOVIMIENTO_ENTRADA,
+                    monto=data['monto'],
+                    descripcion=f"Cheque recibido - {desc_entrada}",
+                )
             movimiento_salida = None
-            if data['origen_tipo'] == Cheque.ORIGEN_CAMBIO_CHEQUE:
+            if data['origen_tipo'] == Cheque.ORIGEN_CAMBIO_CHEQUE and sesion_caja:
                 monto_efectivo = data['monto_efectivo_entregado']
                 desc_salida = data.get('origen_descripcion') or ''
                 movimiento_salida = MovimientoCaja.objects.create(
@@ -837,6 +845,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 comision_cambio=data.get('comision_cambio'),
                 usuario_registro=request.user,
             )
+        invalidate_control_fondos_cache(reason='cheque_create')
         return Response(
             ChequeSerializer(cheque).data,
             status=status.HTTP_201_CREATED,
@@ -914,7 +923,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
             cheque.fecha_presentacion = hoy
             cheque.fecha_deposito_real = timezone.now()
             cheque.save(update_fields=['estado', 'fecha_presentacion', 'fecha_deposito_real'])
-            
+        invalidate_control_fondos_cache(reason='cheque_depositar')
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=True, methods=['post'], url_path='acreditar')
@@ -946,7 +955,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
             
             # No genera movimiento de caja (ya salió de custodia al depositar)
             # No requiere caja abierta (es un registro de tesorería bancaria)
-            
+        invalidate_control_fondos_cache(reason='cheque_acreditar')
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=False, methods=['post'], url_path='endosar')
@@ -995,7 +1004,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 cheque.proveedor = proveedor
                 cheque.movimiento_caja_salida = movimiento
                 cheque.save(update_fields=['estado', 'proveedor', 'movimiento_caja_salida'])
-                
+        invalidate_control_fondos_cache(reason='cheque_endosar')
         return Response({'endosados': len(cheque_ids)})
 
     @action(detail=True, methods=['post'], url_path='marcar-rechazado')
@@ -1048,6 +1057,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 cheque.save(update_fields=['estado', 'nota_debito_venta'])
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        invalidate_control_fondos_cache(reason='cheque_rechazado')
 
         # Re-obtener el cheque
         cheque = self.get_queryset().get(pk=cheque.pk)
@@ -1086,7 +1096,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
             cheque.estado = Cheque.ESTADO_EN_CARTERA
             cheque.save(update_fields=['estado'])
-        
+        invalidate_control_fondos_cache(reason='cheque_reactivar')
         data = ChequeSerializer(cheque).data
         data['mensaje_siguiente_paso'] = (
             "El cheque ha vuelto a estado EN CARTERA y se registró el ingreso a custodia. "
@@ -1146,6 +1156,18 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 setattr(cheque, campo, serializer.validated_data[campo])
         
         cheque.save()
+        invalidate_control_fondos_cache(reason='cheque_editar')
         
         # Retornar cheque actualizado con ChequeSerializer
         return Response(ChequeSerializer(cheque).data)
+
+
+class ControlFondosAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        payload = build_control_fondos_payload(
+            preset=request.query_params.get("preset"),
+            include_bloque_reciente="preset" in request.query_params,
+        )
+        return Response(payload)

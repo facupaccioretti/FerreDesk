@@ -1,8 +1,6 @@
 from decimal import Decimal
-from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from rest_framework import status
 from ..models import (
     SesionCaja, 
@@ -16,9 +14,9 @@ from ..models import (
 )
 from ferreapps.cuenta_corriente.models import OrdenPago
 from ferreapps.productos.models import Proveedor
-from .mixins import CajaTestMixin
+from .mixins import CajaTestMixin, CajaTenantAPITestCase
 
-class OrdenPagoSinCajaTests(APITestCase, CajaTestMixin):
+class OrdenPagoSinCajaTests(CajaTenantAPITestCase, CajaTestMixin):
     """
     Tests de integración para creación de Órdenes de Pago con y sin sesión de caja.
     Validando paridad con modelos PROVEEDORES, ORDEN_PAGO y PAGO_VENTA.
@@ -56,6 +54,7 @@ class OrdenPagoSinCajaTests(APITestCase, CajaTestMixin):
         )
 
     def setUp(self):
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
         # Ruta auditada en cuenta_corriente/urls.py
         self.url = reverse('crear-orden-pago')
@@ -83,12 +82,13 @@ class OrdenPagoSinCajaTests(APITestCase, CajaTestMixin):
         SesionCaja.objects.filter(usuario=self.usuario, fecha_hora_fin__isnull=True).delete()
         
         response = self.client.post(self.url, data, format='json')
+        payload = response.data
         
         # Verificación de estructura de respuesta auditada en views_proveedor.py
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('0001-', response.data['orden_pago']['op_numero']) # Fallback sucursal 1
+        self.assertIn('0001-', payload['orden_pago']['op_numero']) # Fallback sucursal 1
         
-        op = OrdenPago.objects.get(pk=response.data['orden_pago']['op_id'])
+        op = OrdenPago.objects.get(pk=payload['orden_pago']['op_id'])
         self.assertIsNone(op.sesion_caja)
         self.assertEqual(op.op_total, Decimal('1500.00'))
 

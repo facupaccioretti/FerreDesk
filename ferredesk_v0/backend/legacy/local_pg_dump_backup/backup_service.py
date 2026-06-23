@@ -1,7 +1,7 @@
-"""
-Servicio encargado de la gestion de copias de seguridad del sistema.
-Provee funciones para ejecutar dumps de PostgreSQL de forma asincrona,
-monitorear su estado y realizar la limpieza de archivos antiguos.
+"""LEGACY ONLY: referencia histórica de backups locales con ``pg_dump``.
+
+No importar desde aplicaciones Django ni reactivar como parte del Cierre Z. La
+recuperación operativa actual se documenta en ``PLAN_BACKUPS_RENDER_R2.md``.
 """
 
 import logging
@@ -109,12 +109,17 @@ def ejecutar_backup_asincrono():
     """
     if ESTADO_BACKUP['estado'] == 'EN_CURSO':
         logger.warning("Intento de backup ignorado: Ya hay uno en curso.")
-        return
+        return False
 
     schema_name = _obtener_schema_activo()
+    # Publicamos el estado antes de iniciar el hilo para que el frontend no vea
+    # transitoriamente INACTIVO al volver de la solicitud de Cierre Z.
+    ESTADO_BACKUP['estado'] = 'EN_CURSO'
+    ESTADO_BACKUP['error'] = None
     hilo = threading.Thread(target=_proceso_backup_interno, args=(schema_name,))
     hilo.daemon = True
     hilo.start()
+    return True
 
 
 def _obtener_ruta_pg_dump_windows():

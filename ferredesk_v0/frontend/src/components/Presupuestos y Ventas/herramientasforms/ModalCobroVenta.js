@@ -12,6 +12,10 @@ const CLIENTE_CONSUMIDOR_FINAL_ID = "1"
 /** Tolerancia en pesos para considerar "exacto" el pago (consumidor final) */
 const TOLERANCIA_PESOS = 0.01
 const LONGITUD_CUIT = 11
+const CODIGOS_METODOS_BANCARIOS = ["transferencia", "qr", "tarjeta_debito", "tarjeta_credito"]
+const CODIGOS_REQUIEREN_SESION_CAJA = ["efectivo"]
+const normalizarCodigoMetodo = (metodo) => (metodo?.codigo || "").toLowerCase()
+const requiereSesionCaja = (metodo) => CODIGOS_REQUIEREN_SESION_CAJA.includes(normalizarCodigoMetodo(metodo))
 
 
 /**
@@ -36,12 +40,14 @@ const ModalCobroVenta = ({
   onConfirmar,
 }) => {
   const theme = useFerreDeskTheme()
-  const { obtenerMetodosPago, obtenerCuentasBanco, validarCUIT } = useCajaAPI()
+  const { obtenerMetodosPago, obtenerCuentasBanco, obtenerMiCaja, validarCUIT } = useCajaAPI()
 
   const [metodosPago, setMetodosPago] = useState([])
   const [cuentasBanco, setCuentasBanco] = useState([])
   const [cargandoMetodos, setCargandoMetodos] = useState(false)
   const [cargandoCuentasBanco, setCargandoCuentasBanco] = useState(false)
+  const [estadoCaja, setEstadoCaja] = useState(null)
+  const [metodosRestringidosSinCaja, setMetodosRestringidosSinCaja] = useState([])
   const [lineasPago, setLineasPago] = useState([])
   const [excedenteDestino, setExcedenteDestino] = useState("vuelto")
   const [justificacionDiferencia, setJustificacionDiferencia] = useState("")
@@ -54,34 +60,52 @@ const ModalCobroVenta = ({
   const hayFaltante = diferencia < -TOLERANCIA_PESOS
   const esConsumidorFinal = String(clienteId) === CLIENTE_CONSUMIDOR_FINAL_ID
   const esClienteRegular = !esConsumidorFinal
+  const tieneCajaAbierta = Boolean(estadoCaja?.tiene_caja_abierta)
+  const sesionCaja = estadoCaja?.sesion || null
 
   const cargarMetodos = useCallback(async () => {
     setCargandoMetodos(true)
     setCargandoCuentasBanco(true)
     try {
-      const listaMetodos = await obtenerMetodosPago(true)
+      const [listaMetodos, listaCuentas, miCaja] = await Promise.all([
+        obtenerMetodosPago(true),
+        obtenerCuentasBanco(true),
+        obtenerMiCaja(),
+      ])
       const metodosActivos = Array.isArray(listaMetodos) ? listaMetodos : []
-      // En ventas de mostrador no se debe permitir usar fondos propios del dueño
-      const metodosFiltrados = metodosActivos.filter(m => m.codigo !== 'fondos_propios')
+      // En ventas de mostrador no se debe permitir usar fondos propios del dueño ni cuenta corriente
+      const metodosFiltradosBase = metodosActivos.filter(
+        (m) => !["fondos_propios", "cuenta_corriente"].includes(normalizarCodigoMetodo(m))
+      )
+      setMetodosRestringidosSinCaja(
+        miCaja?.tiene_caja_abierta
+          ? []
+          : metodosFiltradosBase.filter((m) => requiereSesionCaja(m)).map((m) => m.nombre || m.codigo)
+      )
+      const metodosFiltrados = miCaja?.tiene_caja_abierta
+        ? metodosFiltradosBase
+        : metodosFiltradosBase.filter((m) => !requiereSesionCaja(m))
       setMetodosPago(metodosFiltrados)
 
-      const listaCuentas = await obtenerCuentasBanco(true)
       const datosCuentas = Array.isArray(listaCuentas)
         ? listaCuentas
         : Array.isArray(listaCuentas?.results)
           ? listaCuentas.results
           : []
       setCuentasBanco(datosCuentas)
+      setEstadoCaja(miCaja)
     } catch (err) {
       console.error("Error al cargar métodos o cuentas banco:", err)
       window.alert(err.message || "Error al cargar métodos de pago")
       setMetodosPago([])
       setCuentasBanco([])
+      setEstadoCaja(null)
+      setMetodosRestringidosSinCaja([])
     } finally {
       setCargandoMetodos(false)
       setCargandoCuentasBanco(false)
     }
-  }, [obtenerMetodosPago, obtenerCuentasBanco])
+  }, [obtenerMetodosPago, obtenerCuentasBanco, obtenerMiCaja])
 
   useEffect(() => {
     if (abierto) {
@@ -93,12 +117,12 @@ const ModalCobroVenta = ({
     if (!abierto) return
     const monto = Number(montoPagoInicial) || 0
     if (monto > 0 && metodosPago.length > 0) {
-      const efectivo = metodosPago.find((m) => (m.codigo || "").toLowerCase() === "efectivo")
-      if (efectivo) {
+      const metodoInicial = metodosPago.find((m) => normalizarCodigoMetodo(m) === "efectivo") || metodosPago[0]
+      if (metodoInicial) {
         setLineasPago([{
-          metodo_pago_id: efectivo.id,
+          metodo_pago_id: metodoInicial.id,
           monto,
-          metodo_nombre: efectivo.nombre,
+          metodo_nombre: metodoInicial.nombre,
           cuenta_banco_id: null,
           referencia_externa: "",
         }])
@@ -109,7 +133,7 @@ const ModalCobroVenta = ({
   }, [abierto, montoPagoInicial, metodosPago])
 
   const agregarLinea = () => {
-    const primerMetodo = metodosPago[0]
+    const primerMetodo = metodosDisponibles[0]
     if (!primerMetodo) return
     setLineasPago((prev) => [
       ...prev,
@@ -165,7 +189,7 @@ const ModalCobroVenta = ({
     const metodo = metodosPago.find((m) => m.id === metodoPagoId)
     if (!metodo) return false
     const codigo = (metodo.codigo || "").toLowerCase()
-    return ["transferencia", "qr", "tarjeta_debito", "tarjeta_credito"].includes(codigo)
+    return CODIGOS_METODOS_BANCARIOS.includes(codigo)
   }
 
   const esMetodoEfectivoPorId = (metodoPagoId) => {
@@ -187,15 +211,15 @@ const ModalCobroVenta = ({
       return
     }
 
-    // Validación específica para transferencias/QR: requieren banco destino
+    // Validación específica para medios bancarios: requieren cuenta destino
     for (const linea of lineasPago) {
       if (esMetodoBancarioPorId(linea.metodo_pago_id)) {
         if (!cuentasBanco.length) {
-          window.alert("No hay cuentas bancarias configuradas. Configure al menos una cuenta en el Maestro de Bancos antes de cobrar por transferencia/QR.")
+          window.alert("No hay cuentas bancarias configuradas. Configure al menos una cuenta en el Maestro de Bancos antes de cobrar por transferencia, QR o tarjeta.")
           return
         }
         if (!linea.cuenta_banco_id) {
-          window.alert("Debe seleccionar el banco/billetera de destino para cada pago bancario (Transferencia, QR, Tarjetas).")
+          window.alert("Debe seleccionar el banco, billetera o cuenta de destino para cada pago bancario (Transferencia, QR, Tarjetas).")
           return
         }
       }
@@ -369,6 +393,15 @@ const ModalCobroVenta = ({
   const CLASES_INPUT =
     "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
   const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-4"
+  const metodosDisponibles = metodosPago.filter((m) => {
+    const codigo = normalizarCodigoMetodo(m)
+    if (codigo === "cuenta_corriente") return false
+    if (esConsumidorFinal) {
+      return codigo !== "cheque"
+    }
+    return true
+  })
+  const metodosBloqueadosSinCaja = tieneCajaAbierta ? [] : metodosRestringidosSinCaja
 
   return (
     <Transition show={abierto} as={Fragment} appear>
@@ -433,6 +466,27 @@ const ModalCobroVenta = ({
                   </p>
                 </div>
 
+                <div className={`${CLASES_TARJETA} ${tieneCajaAbierta ? "border-emerald-200 bg-emerald-50" : "border-sky-200 bg-sky-50"}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 h-2.5 w-2.5 rounded-full ${tieneCajaAbierta ? "bg-emerald-500" : "bg-sky-500"}`} />
+                    <div className="space-y-1">
+                      <p className={`text-sm font-semibold ${tieneCajaAbierta ? "text-emerald-800" : "text-sky-800"}`}>
+                        {tieneCajaAbierta ? "Operación dentro de una sesión de caja" : "Operación fuera de caja"}
+                      </p>
+                      <p className={`text-xs leading-relaxed ${tieneCajaAbierta ? "text-emerald-700" : "text-sky-700"}`}>
+                        {tieneCajaAbierta
+                          ? `Los medios que impactan caja y los que van a cuentas o billeteras quedan disponibles en esta sesión${sesionCaja?.id ? ` (#${sesionCaja.id})` : ""}.`
+                          : ""}
+                      </p>
+                      {!tieneCajaAbierta && metodosBloqueadosSinCaja.length > 0 && (
+                        <p className="text-[11px] text-sky-700">
+                          Para cobrar en {metodosBloqueadosSinCaja}, abra una.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {hayFaltante && !esConsumidorFinal && (
                   <div className={`${CLASES_TARJETA} border-blue-200 bg-blue-50`}>
                     <p className="text-sm text-blue-700 flex items-center gap-2">
@@ -482,12 +536,17 @@ const ModalCobroVenta = ({
                         <button
                           type="button"
                           onClick={agregarLinea}
-                          className="text-xs font-medium text-orange-600 hover:text-orange-700"
+                          disabled={metodosDisponibles.length === 0}
+                          className="text-xs font-medium text-orange-600 hover:text-orange-700 disabled:text-slate-400 disabled:cursor-not-allowed"
                         >
                           + Agregar
                         </button>
                       </div>
-                      {lineasPago.length === 0 ? (
+                      {metodosDisponibles.length === 0 ? (
+                        <div className="w-full border border-dashed border-slate-300 rounded-md py-3 px-4 text-sm text-slate-500">
+                          No hay medios disponibles para este contexto operativo.
+                        </div>
+                      ) : lineasPago.length === 0 ? (
                         <button
                           type="button"
                           onClick={agregarLinea}
@@ -511,18 +570,10 @@ const ModalCobroVenta = ({
                                   if (metodo) actualizarMetodoEnLinea(indice, metodo)
                                 }}
                               >
-                                {metodosPago
-                                  .filter((m) => {
-                                    // Si es Consumidor Final (ID 1), ocultar Cheque y Cuenta Corriente
-                                    if (esConsumidorFinal) {
-                                      const codigo = (m.codigo || "").toLowerCase()
-                                      return codigo !== "cheque" && codigo !== "cuenta_corriente"
-                                    }
-                                    return true
-                                  })
+                                {metodosDisponibles
                                   .map((m) => {
-                                    const codigo = (m.codigo || "").toLowerCase()
-                                    const esBancario = codigo === "transferencia" || codigo === "qr"
+                                    const codigo = normalizarCodigoMetodo(m)
+                                    const esBancario = CODIGOS_METODOS_BANCARIOS.includes(codigo)
                                     const deshabilitarPorBanco = esBancario && cuentasBanco.length === 0
                                     return (
                                       <option

@@ -79,19 +79,19 @@ const Paginador = ({
   const numerosPagina = generarNumerosPagina(currentPage, totalPages);
 
   return (
-    <div className="flex w-full items-center justify-between gap-4 text-sm px-2 py-4">
+    <div className="flex flex-col sm:flex-row w-full items-center justify-between gap-3 text-xs sm:text-sm px-2 py-2 sm:py-4">
       {/* Info de elementos y selector */}
-      <div className="flex items-center gap-4">
-        <span className="text-slate-600 font-medium">
+      <div className="flex items-center justify-center sm:justify-start gap-3 sm:gap-4 w-full sm:w-auto">
+        <span className="text-slate-600 font-medium whitespace-nowrap">
           {(totalItems === 0) ? 0 : ((currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems}
         </span>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-600">Mostrar:</span>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="text-slate-600 whitespace-nowrap">Mostrar:</span>
           <div className="relative">
             <select
               value={itemsPerPage}
               onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-              className="appearance-none h-8 w-16 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200"
+              className="appearance-none h-7 sm:h-8 w-14 sm:w-16 rounded-md border border-slate-200 bg-white pl-2.5 pr-6 py-0.5 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200"
             >
               {opcionesItemsPorPagina.map((option) => (
                 <option key={option} value={option}>
@@ -99,18 +99,18 @@ const Paginador = ({
                 </option>
               ))}
             </select>
-            <span className="pointer-events-none absolute right-1 top-2 flex items-center">
+            <span className="pointer-events-none absolute right-1 top-1.5 sm:top-2 flex items-center">
               <ChevronDown />
             </span>
           </div>
         </div>
       </div>
       {/* Controles de paginación */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center sm:justify-end gap-0.5 sm:gap-1 w-full sm:w-auto">
         <button
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
           aria-label="Ir a la primera página"
         >
           <ChevronsLeft />
@@ -118,19 +118,19 @@ const Paginador = ({
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
           aria-label="Ir a la página anterior"
         >
           <ChevronLeft />
         </button>
-        <div className="flex items-center gap-1 mx-2">
+        <div className="flex items-center gap-0.5 sm:gap-1 mx-1 sm:mx-2">
           {numerosPagina.map((numero, idx) =>
             numero === '...'
-              ? <span key={`ellipsis-${idx}`} className="px-2 py-1 text-slate-400 select-none font-semibold">...</span>
+              ? <span key={`ellipsis-${idx}`} className="px-1.5 py-0.5 text-slate-400 select-none font-semibold text-xs sm:text-sm">...</span>
               : <button
                   key={numero}
                   onClick={() => onPageChange(numero)}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border text-sm font-medium mx-0.5 transition-all duration-200
+                  className={`inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md border text-xs sm:text-sm font-medium mx-0.5 transition-all duration-200
                     ${numero === currentPage
                       ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white border-orange-600 shadow-md'
                       : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:bg-orange-50 hover:text-orange-600 hover:shadow-md'}
@@ -144,7 +144,7 @@ const Paginador = ({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
           aria-label="Ir a la página siguiente"
         >
           <ChevronRight />
@@ -152,7 +152,7 @@ const Paginador = ({
         <button
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:shadow-md focus:z-20 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50"
           aria-label="Ir a la última página"
         >
           <ChevronsRight />

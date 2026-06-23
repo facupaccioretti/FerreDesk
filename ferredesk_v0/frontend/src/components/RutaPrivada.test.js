@@ -91,6 +91,18 @@ describe("RutaPrivada", () => {
         expect(esHostTenantValido("127.0.0.1")).toBe(false);
     });
 
+    test("detecta correctamente dominios con TLD de dos niveles (.com.ar)", () => {
+        // Dominio base (apex) → público, NO es tenant
+        expect(esHostTenantValido("ferredesk.com.ar")).toBe(false);
+        // www → público, NO es tenant
+        expect(esHostTenantValido("www.ferredesk.com.ar")).toBe(false);
+        // Subdominio reservado → público
+        expect(esHostTenantValido("staging.ferredesk.com.ar")).toBe(false);
+        // Subdominio de cliente → SI es tenant
+        expect(esHostTenantValido("miempresa.ferredesk.com.ar")).toBe(true);
+        expect(esHostTenantValido("cliente1.ferredesk.com.ar")).toBe(true);
+    });
+
     test("redirige a /setup cuando el tenant esta autenticado pero incompleto", async () => {
         mockUseSessionUserQuery.mockReturnValue({
             isLoading: false,

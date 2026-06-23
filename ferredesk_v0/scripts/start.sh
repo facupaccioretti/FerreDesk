@@ -12,10 +12,6 @@ while ! nc -z postgres 5432; do
 done
 echo "PostgreSQL local listo."
 
-echo "Preparando directorio local de backups..."
-mkdir -p /app/backups
-chmod 777 /app/backups
-
 echo "Ejecutando migraciones Django para entorno local..."
 python manage.py migrate --noinput
 

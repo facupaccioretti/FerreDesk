@@ -5,6 +5,8 @@ import { Dialog, Transition } from "@headlessui/react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useCuentaCorrienteProveedorAPI from "../../utils/useCuentaCorrienteProveedorAPI"
 
+const CODIGOS_METODOS_BANCARIOS = ['TRANSFERENCIA', 'QR', 'TARJETA_DEBITO', 'TARJETA_CREDITO']
+
 const OrdenPagoModal = ({
     abierto,
     onClose,
@@ -224,8 +226,8 @@ const OrdenPagoModal = ({
                 setError('Debe seleccionar el método de pago para todos los items')
                 return
             }
-            if ((p.codigo || "").toUpperCase() === 'TRANSFERENCIA' && !p.cuenta_banco_id) {
-                setError('Debe seleccionar la cuenta bancaria para las transferencias')
+            if (CODIGOS_METODOS_BANCARIOS.includes((p.codigo || "").toUpperCase()) && !p.cuenta_banco_id) {
+                setError('Debe seleccionar la cuenta bancaria para transferencias, QR y tarjetas')
                 return
             }
             if ((p.codigo || "").toUpperCase() === 'CHEQUE') {
@@ -428,14 +430,21 @@ const OrdenPagoModal = ({
                                                                 onChange={(e) => actualizarPago(idx, 'metodo_pago_id', e.target.value)}
                                                             >
                                                                 <option value="">Seleccione...</option>
-                                                                {metodosPago.map(m => (
-                                                                    <option key={m.id} value={m.id}>{m.nombre}</option>
-                                                                ))}
+                                                                {metodosPago.map(m => {
+                                                                    const codigo = (m.codigo || "").toUpperCase()
+                                                                    const deshabilitarPorBanco =
+                                                                        CODIGOS_METODOS_BANCARIOS.includes(codigo) && cuentasBanco.length === 0
+                                                                    return (
+                                                                        <option key={m.id} value={m.id} disabled={deshabilitarPorBanco}>
+                                                                            {m.nombre}{deshabilitarPorBanco ? ' (configurar bancos primero)' : ''}
+                                                                        </option>
+                                                                    )
+                                                                })}
                                                             </select>
                                                         </div>
 
                                                         {/* Condicionales según tipo */}
-                                                        {(pago.codigo || "").toUpperCase() === 'TRANSFERENCIA' && (
+                                                        {CODIGOS_METODOS_BANCARIOS.includes((pago.codigo || "").toUpperCase()) && (
                                                             <div className="w-full md:w-1/3">
                                                                 <label className={CLASES_ETIQUETA}>Cuenta Origen</label>
                                                                 <select

@@ -21,6 +21,19 @@ const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
     "preview",
 ]);
 
+// TLDs de dos niveles (country-code second-level domains).
+// Necesarios para distinguir correctamente el dominio base del subdominio tenant.
+// Ej: en "ferredesk.com.ar", "com.ar" es el TLD → "ferredesk" es el dominio, no un tenant.
+const TLDS_DOS_NIVELES = new Set([
+    "com.ar", "com.br", "com.mx", "com.co", "com.uy", "com.py", "com.pe",
+    "com.cl", "com.ve", "com.ec", "com.bo",
+    "co.uk", "co.nz", "co.za", "co.jp", "co.kr",
+    "com.au", "com.sg", "com.hk",
+    "org.ar", "org.br", "org.uk",
+    "net.ar", "net.br", "net.au",
+    "gob.ar", "gov.br", "gov.uk", "gov.au",
+]);
+
 export function esHostTenantValido(hostname) {
     if (!hostname) {
         return false;
@@ -39,7 +52,21 @@ export function esHostTenantValido(hostname) {
     }
 
     const partes = hostnameNormalizado.split(".");
-    if (partes.length < 3) {
+
+    // Determinar cuántas partes ocupa el TLD (1 para .com/.xyz, 2 para .com.ar/.co.uk)
+    let partesTld = 1;
+    if (partes.length >= 2) {
+        const ultimosDos = partes.slice(-2).join(".");
+        if (TLDS_DOS_NIVELES.has(ultimosDos)) {
+            partesTld = 2;
+        }
+    }
+
+    // Mínimo de partes para ser tenant: TLD + dominio + subdominio
+    // Ej .xyz:    1 + 1 + 1 = 3 → "tenant.ferredesk.xyz"
+    // Ej .com.ar: 2 + 1 + 1 = 4 → "tenant.ferredesk.com.ar"
+    const minPartes = partesTld + 2;
+    if (partes.length < minPartes) {
         return false;
     }
 

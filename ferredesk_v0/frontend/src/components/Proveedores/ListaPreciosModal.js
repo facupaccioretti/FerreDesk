@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useRef, useState } from "react"
+import React, { Fragment, useEffect, useState } from "react"
 import * as XLSX from "xlsx"
 import { Dialog, Transition } from "@headlessui/react"
 import { toast } from "react-toastify"
@@ -223,6 +223,10 @@ export default function ListaPreciosModal({ open, onClose, proveedor, onImport }
           i += 1
         ) {
           const row = dataRows[i]
+          if (!row) {
+            continue
+          }
+
           const codigo = row[codigoIdx]
           const precio = row[precioIdx]
           const denominacion = row[denominacionIdx]

@@ -1271,7 +1271,7 @@ const ConVentaForm = ({
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Tipo de Comprobante *</label>
                     {!arcaListoParaEmitir && (
                       <p className="mb-2 text-[11px] text-amber-700">
-                        ARCA no esta configurado. Solo se permiten comprobantes internos.
+                        ARCA no esta configurado. No se permite hacer facturas.
                       </p>
                     )}
                     <ComprobanteDropdown

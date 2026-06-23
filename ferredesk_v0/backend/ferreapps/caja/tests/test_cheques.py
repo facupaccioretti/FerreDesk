@@ -311,8 +311,8 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
         self.assertEqual(cheque.movimiento_caja_salida.tipo, TIPO_MOVIMIENTO_SALIDA)
         self.assertEqual(cheque.comision_cambio, Decimal('20.00'))
 
-    def test_crear_cheque_sin_caja_abierta_falla(self):
-        """Sin caja abierta, POST devuelve 400."""
+    def test_crear_cheque_sin_caja_abierta_queda_administrativo(self):
+        """Sin caja abierta, el cheque se registra sin movimientos de sesión."""
         self.sesion.estado = ESTADO_CAJA_CERRADA
         self.sesion.save()
         self.client.force_authenticate(user=self.usuario)
@@ -321,8 +321,32 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
             'origen_tipo': Cheque.ORIGEN_CAJA_GENERAL,
         }
         response = self.client.post(self.url_list, payload, format='json')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('caja', (response.data.get('detail') or '').lower())
+        self.assertEqual(response.status_code, 201)
+        data = response.data
+        self.assertIsNone(data.get('movimiento_caja_entrada_id'))
+        self.assertIsNone(data.get('movimiento_caja_salida_id'))
+
+        cheque = Cheque.objects.get(id=data['id'])
+        self.assertIsNone(cheque.movimiento_caja_entrada_id)
+        self.assertIsNone(cheque.movimiento_caja_salida_id)
+
+    def test_crear_cheque_cambio_sin_caja_abierta_queda_administrativo(self):
+        """Cambio de cheque sin caja abierta conserva el alta pero sin movimientos de sesión."""
+        self.sesion.estado = ESTADO_CAJA_CERRADA
+        self.sesion.save()
+        self.client.force_authenticate(user=self.usuario)
+        payload = {
+            **self._payload_cheque_base(),
+            'origen_tipo': Cheque.ORIGEN_CAMBIO_CHEQUE,
+            'monto_efectivo_entregado': '480.00',
+            'comision_cambio': '20.00',
+        }
+        response = self.client.post(self.url_list, payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        data = response.data
+        self.assertIsNone(data.get('movimiento_caja_entrada_id'))
+        self.assertIsNone(data.get('movimiento_caja_salida_id'))
+        self.assertEqual(str(data['comision_cambio']), '20.00')
 
     def test_crear_cheque_cambio_sin_monto_efectivo_falla(self):
         """Cambio de cheque sin monto_efectivo_entregado devuelve 400."""

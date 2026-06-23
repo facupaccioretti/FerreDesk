@@ -68,7 +68,7 @@ export default function ClienteSelectorModal({
     const timerId = setTimeout(() => {
       // El backend de Django REST Framework puede devolver un objeto con 'results',
       // por eso accedemos a data.results o data.
-      fetch(`/api/clientes/clientes/?search=${encodeURIComponent(termino)}`)
+      fetch(`/api/clientes/clientes/?search=${encodeURIComponent(termino)}&modal_search=true`)
         .then((res) => {
           if (!res.ok) {
             throw new Error("Error en la respuesta de la API")
@@ -158,6 +158,42 @@ export default function ClienteSelectorModal({
     )
   }
 
+  // Función para renderizar tarjetas compactas en móviles
+  const renderCardMobile = (cli) => {
+    const selected = filaSeleccionada?.id === cli.id
+    return (
+      <div
+        key={cli.id}
+        className={`p-3 rounded-lg border cursor-pointer transition-all duration-150 mb-2 flex items-center justify-between ${
+          selected
+            ? "border-orange-500 bg-orange-50/80 shadow-sm ring-1 ring-orange-500"
+            : "border-slate-200 bg-white hover:border-slate-300"
+        }`}
+        onClick={() => setFilaSeleccionada(cli)}
+        onDoubleClick={() => {
+          onSeleccionar(cli)
+          onCerrar()
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-800 text-sm truncate">{cli.razon || cli.nombre}</p>
+          {cli.fantasia && (
+            <p className="text-xs text-slate-500 truncate mt-0.5">{cli.fantasia}</p>
+          )}
+          <div className="flex gap-3 text-[10px] text-slate-500 mt-1">
+            <span>CUIT: <span className="font-mono text-slate-700 font-medium">{cli.cuit || cli.dni || "-"}</span></span>
+            <span>IVA: <span className="text-slate-700 font-medium">{cli.iva_nombre || cli.iva?.nombre || "-"}</span></span>
+          </div>
+        </div>
+        <div className="ml-3 shrink-0 flex items-center">
+          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Transition show={abierto} as={Fragment} appear>
       <Dialog as="div" className="relative z-40" onClose={onCerrar}>
@@ -233,6 +269,7 @@ export default function ClienteSelectorModal({
                        columnas={columnas}
                        datos={resultadosBusqueda}
                        renderFila={renderFila}
+                       renderCardMobile={renderCardMobile}
                        mostrarBuscador={false}
                        mostrarOrdenamiento={false}
                        paginadorVisible={false}

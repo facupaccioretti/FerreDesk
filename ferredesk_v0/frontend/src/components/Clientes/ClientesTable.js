@@ -343,6 +343,182 @@ const ClientesTable = ({
     )
   }
 
+  const renderCardMobile = (cli) => {
+    const isExpanded = expandedClientId === cli.id
+    const estado = cli.activo === "A" ? "Activo" : "Inactivo"
+
+    return (
+      <div key={cli.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-3">
+        {/* Encabezado de la tarjeta clickeable */}
+        <div
+          className="p-3 cursor-pointer hover:bg-slate-50 flex justify-between items-start gap-2"
+          onClick={() => setExpandedClientId(isExpanded ? null : cli.id)}
+        >
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Razón Social</span>
+            <p className="font-semibold text-slate-800 text-sm truncate">{cli.razon || "N/A"}</p>
+            {cli.fantasia && (
+              <p className="text-xs text-slate-500 truncate mt-0.5">{cli.fantasia}</p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <div className="flex items-center gap-2">
+              <span
+                className={`font-medium px-2 py-0.5 rounded-full text-[10px] ${
+                  estado === "Activo" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                }`}
+              >
+                {estado}
+              </span>
+              <svg
+                className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* CUIT y Acciones siempre visibles */}
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100 flex justify-between items-center gap-2 text-xs">
+          <div>
+            <span className="text-slate-500 font-medium">CUIT/DNI:</span>
+            <span className="text-slate-700 ml-1 font-mono">{cli.cuit || cli.dni || "N/A"}</span>
+          </div>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <AccionesMenu botones={generarBotonesCliente(cli)} />
+          </div>
+        </div>
+
+        {/* Bloque expandido */}
+        {isExpanded && (
+          <div className="bg-slate-50 border-t border-slate-200 p-3 space-y-3">
+            {/* Panel de Info Básica */}
+            <div className="bg-white rounded-md p-2 border border-slate-200">
+              <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                Información Impositiva
+              </h5>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">IB:</span>
+                  <span className="font-medium text-slate-700">{cli.ib || "N/A"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tipo IVA:</span>
+                  <span className="font-medium text-slate-700">
+                    {tiposIVA.find((i) => String(i.id) === String(cli.iva))?.nombre || "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel de Contacto */}
+            <div className="bg-white rounded-md p-2 border border-slate-200">
+              <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                Contacto
+              </h5>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Teléfono 1:</span>
+                  <span className="font-medium text-slate-700">{cli.tel1 || "N/A"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Teléfono 2:</span>
+                  <span className="font-medium text-slate-700">{cli.tel2 || "N/A"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Email:</span>
+                  <span className="font-medium text-slate-700 truncate max-w-[180px]" title={cli.email}>
+                    {cli.email || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Contacto:</span>
+                  <span className="font-medium text-slate-700">{cli.contacto || "N/A"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel de Ubicación */}
+            <div className="bg-white rounded-md p-2 border border-slate-200">
+              <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                Ubicación
+              </h5>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Dirección:</span>
+                  <span className="font-medium text-slate-700 truncate max-w-[180px]" title={cli.domicilio}>
+                    {cli.domicilio || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Zona / Barrio:</span>
+                  <span className="font-medium text-slate-700">
+                    {barrios.find((b) => String(b.id) === String(cli.barrio))?.nombre || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Localidad:</span>
+                  <span className="font-medium text-slate-700">
+                    {localidades.find((l) => String(l.id) === String(cli.localidad))?.nombre || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Provincia:</span>
+                  <span className="font-medium text-slate-700">
+                    {provincias.find((p) => String(p.id) === String(cli.provincia))?.nombre || "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel Comercial */}
+            <div className="bg-white rounded-md p-2 border border-slate-200">
+              <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                Condiciones Comerciales
+              </h5>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Saldo Cta. Cte.:</span>
+                  <span className="font-semibold text-slate-700">${cli.saldo_cta_cte || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Vendedor:</span>
+                  <span className="font-medium text-slate-700">
+                    {vendedores.find((v) => String(v.id) === String(cli.vendedor))?.nombre || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Plazo de Pago:</span>
+                  <span className="font-medium text-slate-700">
+                    {plazos.find((p) => String(p.id) === String(cli.plazo))?.nombre || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Descuentos:</span>
+                  <span className="font-medium text-slate-700">
+                    {cli.descu1}% / {cli.descu2}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Comentarios */}
+            {cli.comentario && (
+              <div className="bg-amber-50 rounded-md p-2 border border-amber-200">
+                <h6 className="font-semibold text-amber-800 text-xs mb-1">Comentarios</h6>
+                <p className="text-amber-900 text-[11px] leading-relaxed">{cli.comentario}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ---------------------------------------------------------------------------
   // Filtrado de clientes para pasarlo a Tabla (la búsqueda global la gestiona Tabla)
   // Tabla no filtra por visibilidad de datos nulos; podemos replicar anterior
@@ -372,6 +548,7 @@ const ClientesTable = ({
       onOrdenamientoChange={onOrdenamientoChange}
       ordenamientoControlado={ordenamientoControlado}
       renderFila={renderFila}
+      renderCardMobile={renderCardMobile}
       cargando={cargando}
       mensajeVacio={consultaEjecutada ? "No hay datos para mostrar." : "No hay datos para mostrar"}
       subtituloVacio={consultaEjecutada ? "" : "Ajustá los filtros."}

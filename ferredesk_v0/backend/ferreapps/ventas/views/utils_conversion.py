@@ -87,3 +87,41 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
         'deudor': count_deudor,
         'acreedor': count_acreedor
     }
+
+
+def heredar_contexto_fiscalizacion(factura_interna, nueva_factura):
+    """
+    Hereda sólo el contexto histórico de cobro del comprobante origen.
+
+    Fiscalizar no debe volver a cobrar ni crear PagoVenta nuevo.
+    """
+    logger = logging.getLogger(__name__)
+    campos_a_copiar = [
+        'sesion_caja',
+        'efectivo_recibido_bruto',
+        'vuelto_calculado',
+        'excedente_destino',
+        'justificacion_excedente',
+    ]
+
+    campos_actualizados = []
+    for campo in campos_a_copiar:
+        valor_origen = getattr(factura_interna, campo, None)
+        if getattr(nueva_factura, campo, None) != valor_origen:
+            setattr(nueva_factura, campo, valor_origen)
+            campos_actualizados.append(campo)
+
+    if campos_actualizados:
+        nueva_factura.save(update_fields=campos_actualizados)
+
+    logger.info(
+        "Fiscalización sin recobro: contexto histórico heredado | origen=%s destino=%s sesion_caja=%s",
+        factura_interna.ven_id,
+        nueva_factura.ven_id,
+        getattr(factura_interna, 'sesion_caja_id', None),
+    )
+
+    return {
+        'sesion_caja_id': getattr(factura_interna, 'sesion_caja_id', None),
+        'campos_actualizados': campos_actualizados,
+    }

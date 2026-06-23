@@ -9,7 +9,7 @@ después de que Django los haya guardado correctamente en disco.
 import os
 import shutil
 import logging
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.conf import settings
 from ferreapps.productos.utils.file_paths import (
@@ -172,7 +172,7 @@ def _recalcular_totales_venta(venta_id: int) -> None:
     """
     # Imports tardíos para evitar dependencias circulares al momento de carga del módulo
     from decimal import Decimal
-    from django.db.models import Sum, ExpressionWrapper, F, DecimalField
+    from django.db.models import Sum
     from ferreapps.ventas.models import Venta, VentaDetalleItem
 
     try:
@@ -181,12 +181,7 @@ def _recalcular_totales_venta(venta_id: int) -> None:
             total=Sum('total_item'),
             neto=Sum('subtotal_neto'),
             iva=Sum('iva_monto'),
-            subtotal=Sum(
-                ExpressionWrapper(
-                    F('precio_unitario_bonificado') * F('vdi_cantidad'),
-                    output_field=DecimalField(max_digits=15, decimal_places=2)
-                )
-            )
+            subtotal=Sum('subtotal_bruto_item')
         )
 
         total = (agregados['total'] or Decimal('0')).quantize(Decimal('0.01'))
@@ -216,7 +211,7 @@ def actualizar_totales_al_guardar_item(sender, instance, **kwargs):
         _recalcular_totales_venta(instance.vdi_idve_id)
 
 
-@receiver(post_save, sender='ventas.VentaDetalleItem')
+@receiver(post_delete, sender='ventas.VentaDetalleItem')
 def actualizar_totales_al_eliminar_item(sender, instance, **kwargs):
     """
     Dispara el recálculo de totales de la Venta cuando se elimina un ítem de venta.

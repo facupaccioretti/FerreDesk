@@ -27,6 +27,7 @@
     "react-to-print": "^3.3.0",
     "react-toastify": "^11.0.5",
     "react-window": "^1.8.11",
+    "recharts": "^3.8.1",
     "web-vitals": "^4.2.4",
     "xlsx": "^0.18.5"
   },

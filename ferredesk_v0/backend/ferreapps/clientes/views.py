@@ -156,9 +156,9 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         """
-        Usa el serializer optimizado para búsquedas cuando hay parámetro 'search'.
+        Usa el serializer optimizado para búsquedas cuando hay parámetro 'modal_search'.
         """
-        if self.request.query_params.get('search'):
+        if self.request.query_params.get('modal_search') == 'true':
             return ClienteBusquedaSerializer
         return ClienteSerializer
 

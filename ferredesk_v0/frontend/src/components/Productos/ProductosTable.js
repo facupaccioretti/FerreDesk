@@ -296,6 +296,165 @@ export default function ProductosTable({
             },
           ]
 
+          const renderCardMobile = (p) => {
+            const isExpanded = expandedId === p.id
+            const actiStatus = p.acti === "S" ? "Activo" : p.acti === "N" ? "Inactivo" : "N/A"
+
+            return (
+              <div key={p.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-3">
+                {/* Encabezado de la tarjeta clickeable */}
+                <div
+                  className="p-3 cursor-pointer hover:bg-slate-50 flex justify-between items-start gap-2"
+                  onClick={() => toggleRow(p.id)}
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Producto</span>
+                    <p className="font-semibold text-slate-800 text-sm truncate">{p.deno}</p>
+                    <div className="flex gap-2 text-[10px] text-slate-500 mt-1">
+                      <span>Cód: <span className="font-mono text-slate-700 font-medium">{p.codvta}</span></span>
+                      {p.codigo_barras && (
+                        <span>EAN: <span className="font-mono text-slate-700 font-medium">{p.codigo_barras}</span></span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-medium px-2 py-0.5 rounded-full text-[10px] ${
+                          p.acti === "S"
+                            ? "bg-green-100 text-green-800"
+                            : p.acti === "N"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {actiStatus}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stock y Acciones siempre visibles */}
+                <div className="px-3 pb-3 pt-1 border-t border-slate-100 flex justify-between items-center gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-500 font-medium">Stock Total:</span>
+                    <span className="text-slate-800 ml-1 font-semibold">{Number(p.stock_total ?? 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <AccionesMenu botones={generarBotonesProducto(p)} />
+                  </div>
+                </div>
+
+                {/* Bloque expandido */}
+                {isExpanded && (
+                  <div className="bg-slate-50 border-t border-slate-200 p-3 space-y-3">
+                    {/* Información Básica */}
+                    <div className="bg-white rounded-md p-2 border border-slate-200">
+                      <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                        Información Básica
+                      </h5>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Unidad:</span>
+                          <span className="font-medium text-slate-700">{p.unidad || "N/A"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Margen:</span>
+                          <span className="font-medium text-slate-700">{p.margen ? `${p.margen}%` : "N/A"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Cant. Mínima:</span>
+                          <span className="font-medium text-slate-700">{p.cantmin ?? "N/A"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Categorización */}
+                    <div className="bg-white rounded-md p-2 border border-slate-200">
+                      <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                        Categorización
+                      </h5>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Familia:</span>
+                          <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam1)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Subfamilia:</span>
+                          <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Sub-subfamilia:</span>
+                          <span className="font-medium text-slate-700">{getFamiliaNombre(p.idfam3)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Alícuota IVA:</span>
+                          <span className="font-medium text-slate-700">
+                            {p.idaliiva ? `${p.idaliiva.deno} (${p.idaliiva.porce}%)` : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Prov. Habitual:</span>
+                          <span className="font-medium text-slate-700 truncate max-w-[180px]" title={p.proveedor_habitual?.razon}>
+                            {p.proveedor_habitual?.razon || "N/A"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stock de Proveedores */}
+                    <div className="bg-white rounded-md p-2 border border-slate-200">
+                      <h5 className="font-semibold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+                        Stock por Proveedor
+                      </h5>
+                      <div className="max-h-24 overflow-y-auto">
+                        {(p.stock_proveedores || []).length > 0 ? (
+                          <div className="space-y-1">
+                            {p.stock_proveedores.map((sp, index) => (
+                              <div
+                                key={index}
+                                className="flex justify-between items-center text-[11px] bg-slate-100 rounded px-2 py-1"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div
+                                    className="font-medium text-slate-700 truncate leading-tight"
+                                    title={sp.proveedor?.razon}
+                                  >
+                                    {sp.proveedor?.razon || "N/A"}
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 text-right leading-tight ml-2 shrink-0">
+                                  <span className="text-slate-600">
+                                    Cant: <strong>{sp.cantidad}</strong>
+                                  </span>
+                                  <span className="text-slate-600">
+                                    $<strong>{sp.costo}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 italic text-center py-2">
+                            Sin stock de proveedores
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          }
+
           return (
             <Tabla
               columnas={columnas}
@@ -319,6 +478,7 @@ export default function ProductosTable({
               cargando={cargando}
               mensajeVacio={consultaEjecutada ? "No se encontraron resultados" : "Sin consulta ejecutada"}
               subtituloVacio={consultaEjecutada ? "" : "Usá los filtros y presioná Buscar para consultar productos."}
+              renderCardMobile={renderCardMobile}
               renderFila={(p, idxVis, idxInicio) => {
                 const indiceGlobal = idxInicio + idxVis
 

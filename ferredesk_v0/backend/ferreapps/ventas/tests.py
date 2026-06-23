@@ -1,13 +1,17 @@
 from datetime import date, timedelta
+from decimal import Decimal
+from unittest.mock import patch
 
 from django.urls import clear_url_caches
 from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
-from ferreapps.productos.models import PrecioProveedorExcel, StockProve
+from ferreapps.productos.models import AlicuotaIVA, PrecioProveedorExcel, StockProve
+from ferreapps.ventas.serializers import VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
@@ -94,6 +98,37 @@ class VentasTenantTestCase(TenantTestCase):
                 tipo="presupuesto",
                 activo=True,
             )
+
+        self.alicuota_iva_21 = AlicuotaIVA.objects.filter(porce=Decimal("21.00")).first()
+        if self.alicuota_iva_21 is None:
+            self.alicuota_iva_21 = AlicuotaIVA.objects.order_by("id").first()
+        if self.alicuota_iva_21 is None:
+            self.alicuota_iva_21 = AlicuotaIVA.objects.create(
+                codigo="21",
+                deno="IVA 21%",
+                porce=Decimal("21.00"),
+            )
+
+    def crear_item_generico(
+        self,
+        venta,
+        orden=1,
+        cantidad=Decimal("1"),
+        precio_final=Decimal("121.00"),
+        detalle="Item test",
+    ):
+        return VentaDetalleItem.objects.create(
+            vdi_idve=venta,
+            vdi_orden=orden,
+            vdi_cantidad=cantidad,
+            vdi_costo=Decimal("0"),
+            vdi_margen=Decimal("0"),
+            vdi_precio_unitario_final=precio_final,
+            vdi_bonifica=Decimal("0"),
+            vdi_detalle1=detalle,
+            vdi_detalle2="",
+            vdi_idaliiva=self.alicuota_iva_21,
+        )
 
     def crear_venta(self, comprobante, numero, fecha):
         return Venta.objects.create(
@@ -216,8 +251,6 @@ class TestDenormalizacionTotalesVenta(TestCase):
         - Neto: $100.00
         - IVA: $21.00
         """
-        from decimal import Decimal
-        from unittest.mock import patch
         from ferreapps.ventas.signals import _recalcular_totales_venta
 
         # Simular los resultados que devuelve el aggregate del ORM
@@ -251,8 +284,6 @@ class TestDenormalizacionTotalesVenta(TestCase):
         Al eliminar todos los ítems de una venta, los totales deben ser $0.00.
         Garantiza que no queden valores huérfanos.
         """
-        from decimal import Decimal
-        from unittest.mock import patch
         from ferreapps.ventas.signals import _recalcular_totales_venta
 
         agregados_simulados = {
@@ -280,8 +311,6 @@ class TestDenormalizacionTotalesVenta(TestCase):
         Verifica que los totales se guarden con exactamente 2 decimales,
         cumpliendo la precisión mínima exigida por ARCA (AFIP).
         """
-        from decimal import Decimal
-        from unittest.mock import patch
         from ferreapps.ventas.signals import _recalcular_totales_venta
 
         # Total con muchos decimales por cálculo interno
@@ -313,7 +342,6 @@ class TestDenormalizacionTotalesVenta(TestCase):
         debe registrar el error en el logger pero NO propagar la excepción,
         para no romper el save() original del ítem.
         """
-        from unittest.mock import patch
         from ferreapps.ventas.signals import _recalcular_totales_venta
 
         with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
@@ -329,6 +357,87 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
             # Debe haber loggeado el error
             mock_logger.error.assert_called()
+
+    def test_recalculo_agrega_subtotal_desde_anotacion_segura(self):
+        from django.db.models import Sum
+        from ferreapps.ventas.signals import _recalcular_totales_venta
+
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
+             patch('ferreapps.ventas.models.Venta') as mock_venta_cls:
+            mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
+            mock_qs.aggregate.return_value = {
+                'total': Decimal('0.00'),
+                'neto': Decimal('0.00'),
+                'iva': Decimal('0.00'),
+                'subtotal': Decimal('0.00'),
+            }
+
+            _recalcular_totales_venta(7)
+
+            subtotal_expr = mock_qs.aggregate.call_args.kwargs['subtotal']
+            self.assertIsInstance(subtotal_expr, Sum)
+            self.assertEqual(subtotal_expr.get_source_expressions()[0].name, 'subtotal_bruto_item')
+            mock_venta_cls.objects.filter.return_value.update.assert_called_once()
+
+
+class TestTotalesVentaIntegracion(VentasTenantTestCase):
+    def test_eliminar_item_recalcula_totales_guardados(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=501,
+            fecha=date(2026, 2, 1),
+        )
+        item = self.crear_item_generico(venta=venta, precio_final=Decimal("121.00"))
+
+        venta.refresh_from_db()
+        self.assertEqual(venta.total_guardado, Decimal("121.00"))
+        self.assertEqual(venta.neto_guardado, Decimal("100.00"))
+        self.assertEqual(venta.iva_guardado, Decimal("21.00"))
+
+        item.delete()
+
+        venta.refresh_from_db()
+        self.assertEqual(venta.total_guardado, Decimal("0.00"))
+        self.assertEqual(venta.neto_guardado, Decimal("0.00"))
+        self.assertEqual(venta.iva_guardado, Decimal("0.00"))
+        self.assertEqual(venta.subtotal_bruto_guardado, Decimal("0.00"))
+
+    def test_update_con_items_invalidos_no_persiste_cambios_en_items(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=502,
+            fecha=date(2026, 2, 2),
+        )
+        item = self.crear_item_generico(
+            venta=venta,
+            precio_final=Decimal("121.00"),
+            detalle="Item original",
+        )
+
+        serializer = VentaSerializer(
+            instance=venta,
+            data={
+                'items': [
+                    {
+                        'vdi_orden': 1,
+                        'vdi_cantidad': '1',
+                        'vdi_costo': '10.00',
+                        'vdi_bonifica': '0',
+                    }
+                ]
+            },
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        with patch.object(VentaSerializer, '_actualizar_items_venta_inteligente') as mock_actualizar:
+            with self.assertRaisesMessage(drf_serializers.ValidationError, '"vdi_detalle1"'):
+                serializer.save()
+
+        mock_actualizar.assert_not_called()
+        item.refresh_from_db()
+        self.assertEqual(item.vdi_detalle1, "Item original")
+        self.assertEqual(VentaDetalleItem.objects.filter(vdi_idve=venta).count(), 1)
 
 
 class TestContextoIsListEnSerializer(TestCase):
@@ -382,4 +491,3 @@ class TestContextoIsListEnSerializer(TestCase):
 
         # Con lista vacía de ítems, el resultado es un dict vacío
         self.assertIsInstance(resultado, dict)
-

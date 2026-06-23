@@ -80,6 +80,13 @@ const PlantillaFacturaA = ({ data, ferreteriaConfig }) => {
             <h4 className="text-sm font-semibold text-slate-800">Emisor</h4>
           </div>
           <div className="space-y-1">
+            {ferreteriaConfig?.logo_empresa && (
+              <img
+                src={ferreteriaConfig.logo_empresa}
+                alt={`Logo de ${ferreteriaConfig.nombre || "la empresa"}`}
+                className="max-h-14 max-w-full object-contain object-left mb-2"
+              />
+            )}
             <div className="text-sm font-medium text-slate-800">
               {ferreteriaConfig?.nombre || "Nombre de la Empresa"}
             </div>
