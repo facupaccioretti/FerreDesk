@@ -19,10 +19,10 @@ import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
-  { key: "historial", label: "Historial de Cajas", closable: false },
   { key: "control-fondos", label: "Control de Fondos", closable: false },
   { key: "bancos", label: "Bancos", closable: false },
   { key: "valores-en-cartera", label: "Cheques", closable: false },
+  { key: "historial", label: "Historial de Cajas", closable: false },
 ]
 
 /**
@@ -78,7 +78,7 @@ const CajaManager = () => {
     const tabDisponible = [...mainTabs, ...restoredTabs, { key: "caja-actual" }].some(
       (tab) => tab?.key === savedActiveTab
     )
-    return tabDisponible ? savedActiveTab : "historial"
+    return tabDisponible ? savedActiveTab : "control-fondos"
   })
 
   const [draggedTabKey, setDraggedTabKey] = useState(null)

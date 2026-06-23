@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { PieChart, Pie, Cell, Tooltip } from "recharts"
 import { queryKeys } from "../../core/query/queryKeys"
 import { withQueryProfile } from "../../core/query/queryProfiles"
 import { formatearMoneda } from "../../utils/formatters"
@@ -106,11 +106,22 @@ const KpiCell = ({ codigo, data, accent = false, onClick }) => {
   const esClickable = typeof onClick === "function"
 
   return (
-    <button
-      type="button"
+    <div
+      role={esClickable ? "button" : undefined}
+      tabIndex={esClickable ? 0 : undefined}
       onClick={esClickable ? onClick : undefined}
+      onKeyDown={
+        esClickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
       className={`flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors ${
-        esClickable ? "cursor-pointer" : "cursor-default"
+        esClickable ? "cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-[#e8641a]/30" : "cursor-default"
       } ${
         accent ? "border-[#e8641a] bg-white" : "border-slate-200 bg-white hover:bg-slate-50"
       }`}
@@ -123,10 +134,12 @@ const KpiCell = ({ codigo, data, accent = false, onClick }) => {
         >
           {KPI_LABELS[codigo] || codigo}
         </span>
-        <HelpTooltip label={KPI_LABELS[codigo] || codigo} text={getAyudaKpi(codigo)} placement="bottom" />
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <HelpTooltip label={KPI_LABELS[codigo] || codigo} text={getAyudaKpi(codigo)} placement="bottom" />
+        </span>
       </div>
       <span className="text-base font-bold leading-tight text-[#1e2d3d]">{renderMonto(data?.monto)}</span>
-    </button>
+    </div>
   )
 }
 
@@ -319,25 +332,23 @@ const ControlFondosTab = ({ onDrilldown, focusView = "resumen" }) => {
           </div>
           <div className="flex flex-1 items-center gap-3">
             <div className="h-[120px] w-[120px] shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={32}
-                    outerRadius={52}
-                    paddingAngle={2}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
+              <PieChart width={120} height={120}>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={32}
+                  outerRadius={52}
+                  paddingAngle={2}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
             </div>
             <ul className="min-w-0 flex flex-col gap-1.5">
               {pieData.map((item, i) => (
