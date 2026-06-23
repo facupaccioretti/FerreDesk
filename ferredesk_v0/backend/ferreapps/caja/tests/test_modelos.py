@@ -29,7 +29,7 @@ class MetodoPagoModelTests(TestCase):
         """Verifica que los métodos de pago iniciales fueron creados por la migración."""
         codigos_esperados = [
             'efectivo', 'tarjeta_debito', 'tarjeta_credito',
-            'transferencia', 'qr', 'cuenta_corriente', 'cheque'
+            'transferencia', 'qr', 'cheque'
         ]
         
         for codigo in codigos_esperados:

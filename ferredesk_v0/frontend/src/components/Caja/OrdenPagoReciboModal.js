@@ -150,12 +150,12 @@ const OrdenPagoReciboModal = ({
                 : todosMetodos.filter(m => !CODIGOS_REQUIEREN_SESION_CAJA.includes(normalizarCodigoMetodo(m)))
             
             // Filtrado contextual
+            // Siempre excluir Cuenta Corriente de los medios de pago utilizables en el modal
+            metodosFiltrados = metodosFiltrados.filter(m => normalizarCodigoMetodo(m) !== 'cuenta_corriente')
+
             if (tipo === 'RECIBO') {
-                // En un recibo (cobro a cliente), no se puede pagar con más deuda ni el dueño asume la deuda
-                metodosFiltrados = metodosFiltrados.filter(m => !['cuenta_corriente', 'fondos_propios'].includes(m.codigo))
-            } else if (tipo === 'ORDEN_PAGO') {
-                // En una orden de pago (pago a proveedor), no se puede "pagar" con cuenta corriente
-                metodosFiltrados = metodosFiltrados.filter(m => m.codigo !== 'cuenta_corriente')
+                // En un recibo (cobro a cliente), no se puede pagar con fondos propios (dueño asume deuda)
+                metodosFiltrados = metodosFiltrados.filter(m => normalizarCodigoMetodo(m) !== 'fondos_propios')
             }
 
             setMetodosPago(metodosFiltrados)

@@ -73,16 +73,18 @@ const ModalCobroVenta = ({
         obtenerMiCaja(),
       ])
       const metodosActivos = Array.isArray(listaMetodos) ? listaMetodos : []
-      // En ventas de mostrador no se debe permitir usar fondos propios del dueño
-      const metodosSinFondosPropios = metodosActivos.filter((m) => normalizarCodigoMetodo(m) !== "fondos_propios")
+      // En ventas de mostrador no se debe permitir usar fondos propios del dueño ni cuenta corriente
+      const metodosFiltradosBase = metodosActivos.filter(
+        (m) => !["fondos_propios", "cuenta_corriente"].includes(normalizarCodigoMetodo(m))
+      )
       setMetodosRestringidosSinCaja(
         miCaja?.tiene_caja_abierta
           ? []
-          : metodosSinFondosPropios.filter((m) => requiereSesionCaja(m)).map((m) => m.nombre || m.codigo)
+          : metodosFiltradosBase.filter((m) => requiereSesionCaja(m)).map((m) => m.nombre || m.codigo)
       )
       const metodosFiltrados = miCaja?.tiene_caja_abierta
-        ? metodosSinFondosPropios
-        : metodosSinFondosPropios.filter((m) => !requiereSesionCaja(m))
+        ? metodosFiltradosBase
+        : metodosFiltradosBase.filter((m) => !requiereSesionCaja(m))
       setMetodosPago(metodosFiltrados)
 
       const datosCuentas = Array.isArray(listaCuentas)
@@ -392,9 +394,10 @@ const ModalCobroVenta = ({
     "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
   const CLASES_TARJETA = "bg-white border border-slate-200 rounded-md p-4"
   const metodosDisponibles = metodosPago.filter((m) => {
+    const codigo = normalizarCodigoMetodo(m)
+    if (codigo === "cuenta_corriente") return false
     if (esConsumidorFinal) {
-      const codigo = normalizarCodigoMetodo(m)
-      return codigo !== "cheque" && codigo !== "cuenta_corriente"
+      return codigo !== "cheque"
     }
     return true
   })
@@ -473,11 +476,11 @@ const ModalCobroVenta = ({
                       <p className={`text-xs leading-relaxed ${tieneCajaAbierta ? "text-emerald-700" : "text-sky-700"}`}>
                         {tieneCajaAbierta
                           ? `Los medios que impactan caja y los que van a cuentas o billeteras quedan disponibles en esta sesión${sesionCaja?.id ? ` (#${sesionCaja.id})` : ""}.`
-                          : "Sin caja abierta, este cobro sólo puede registrarse con medios que ya tienen destino representado, como transferencia, QR o tarjeta."}
+                          : ""}
                       </p>
                       {!tieneCajaAbierta && metodosBloqueadosSinCaja.length > 0 && (
                         <p className="text-[11px] text-sky-700">
-                          Quedan ocultos hasta abrir caja: {metodosBloqueadosSinCaja.join(", ")}.
+                          Para cobrar en {metodosBloqueadosSinCaja}, abra una.
                         </p>
                       )}
                     </div>
