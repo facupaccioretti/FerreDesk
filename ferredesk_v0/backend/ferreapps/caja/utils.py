@@ -17,6 +17,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 
 from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
+from .services import invalidate_control_fondos_cache
 
 from .models import (
     PagoVenta,
@@ -526,6 +527,8 @@ def registrar_pagos_venta(
                     descripcion_comprobante=numero_venta,
                 )
 
+    invalidate_control_fondos_cache(reason="registrar_pagos_venta")
+
     return pagos_creados
 
 
@@ -593,6 +596,8 @@ def registrar_pagos_recibo(
                     usuario=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
                     descripcion_comprobante=numero_recibo,
                 )
+
+    invalidate_control_fondos_cache(reason="registrar_pagos_recibo")
 
     return pagos_creados
 
@@ -676,6 +681,8 @@ def registrar_pagos_orden_pago(
                         descripcion_comprobante=f"OP {orden_pago.op_numero}",
                     )
 
+    invalidate_control_fondos_cache(reason="registrar_pagos_orden_pago")
+
     return resultados
 
 
@@ -734,7 +741,8 @@ def registrar_vuelto(
                 descripcion=f"Vuelto {numero_venta}",
             )
             logger.debug(f"Movimiento de caja (vuelto) creado: -{monto_vuelto}")
-    
+
+    invalidate_control_fondos_cache(reason="registrar_vuelto")
     return pago_vuelto
 
 

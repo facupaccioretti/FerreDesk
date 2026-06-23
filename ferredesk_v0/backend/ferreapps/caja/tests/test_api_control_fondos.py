@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.cache import cache
 from rest_framework import status
 
 from ferreapps.caja.models import Cheque, CuentaBanco, MetodoPago, PagoVenta, CODIGO_TRANSFERENCIA
@@ -28,6 +29,7 @@ class ControlFondosAPITests(CajaTenantAPITestCase, CajaTestMixin):
 
     def setUp(self):
         super().setUp()
+        cache.clear()
         self.client.force_authenticate(user=self.usuario)
 
     def _crear_venta(self, numero, *, estado="CO", sesion_caja=None):
@@ -134,3 +136,30 @@ class ControlFondosAPITests(CajaTenantAPITestCase, CajaTestMixin):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["resumen_actual"]["kpis"]["bancos"]["monto"], "0.00")
+
+    def test_contrato_viejo_de_consolidado_ya_no_esta_expuesto(self):
+        response = self.client.get("/api/caja/pagos/consolidado-ingresos/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_control_fondos_se_invalida_al_registrar_movimiento_manual(self):
+        self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("100.00"))
+
+        response_inicial = self.client.get("/api/caja/control-fondos/")
+        self.assertEqual(response_inicial.status_code, status.HTTP_200_OK, response_inicial.data)
+        self.assertEqual(response_inicial.data["resumen_actual"]["kpis"]["caja"]["monto"], "100.00")
+
+        movimiento_response = self.client.post(
+            "/api/caja/movimientos/",
+            {
+                "tipo": "ENTRADA",
+                "monto": "50.00",
+                "descripcion": "Ingreso test cache",
+            },
+            format="json",
+        )
+        self.assertEqual(movimiento_response.status_code, status.HTTP_201_CREATED, movimiento_response.data)
+
+        response_actualizado = self.client.get("/api/caja/control-fondos/")
+        self.assertEqual(response_actualizado.status_code, status.HTTP_200_OK, response_actualizado.data)
+        self.assertEqual(response_actualizado.data["resumen_actual"]["kpis"]["caja"]["monto"], "150.00")

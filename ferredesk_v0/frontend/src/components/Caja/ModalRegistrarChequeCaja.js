@@ -13,7 +13,7 @@ const TIPO_CHEQUE_AL_DIA = "AL_DIA"
 const TIPO_CHEQUE_DIFERIDO = "DIFERIDO"
 
 /**
- * Modal para registrar un cheque desde caja (caja general o cambio de cheque).
+ * Modal para registrar un cheque manualmente.
  * No requiere venta asociada.
  *
  * @param {boolean} abierto - Si el modal está visible
@@ -263,7 +263,7 @@ const ModalRegistrarChequeCaja = ({ abierto, onConfirmar, onCancelar, loading })
                 className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${theme.primario}`}
               >
                 <Dialog.Title className="text-lg font-bold text-white">
-                  Registrar cheque desde caja
+                  Registrar cheque
                 </Dialog.Title>
                 <button
                   type="button"

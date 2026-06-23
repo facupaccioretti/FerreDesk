@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import Navbar from "../Navbar"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { toast } from "react-toastify"
+import { queryKeys } from "../../core/query/queryKeys"
 import CajasHistorialTable from "./CajasHistorialTable"
 import CajaDetalleView from "./CajaDetalleView"
 import CajaActualTab from "./CajaActualTab"
@@ -23,8 +25,6 @@ const mainTabs = [
   { key: "valores-en-cartera", label: "Cheques", closable: false },
 ]
 
-const mapLegacyTabKey = (key) => (key === "consolidado-ingresos" ? "control-fondos" : key)
-
 /**
  * Componente principal del módulo de Caja y Tesorería.
  * 
@@ -37,6 +37,7 @@ const mapLegacyTabKey = (key) => (key === "consolidado-ingresos" ? "control-fond
  */
 const CajaManager = () => {
   const theme = useFerreDeskTheme()
+  const queryClient = useQueryClient()
   const {
     loading,
     error: _error, // eslint-disable-line no-unused-vars
@@ -53,14 +54,11 @@ const CajaManager = () => {
     try {
       const savedTabs = localStorage.getItem("cajaTabs")
       if (savedTabs) {
-        const parsedTabs = JSON.parse(savedTabs).map((tab) => ({
-          ...tab,
-          key: mapLegacyTabKey(tab.key),
-          label: tab.key === "consolidado-ingresos" ? "Control de Fondos" : tab.label,
-        }))
+        const parsedTabs = JSON.parse(savedTabs)
         // Validar que siempre esté el tab principal
-        let restoredTabs = parsedTabs
-        const otrosTabs = restoredTabs.filter((t) => !mainTabs.some((m) => m.key === t.key))
+        const otrosTabs = parsedTabs.filter(
+          (tab) => tab?.closable && tab?.key && !mainTabs.some((mainTab) => mainTab.key === tab.key)
+        )
         return [...mainTabs, ...otrosTabs]
       }
     } catch (e) {
@@ -70,7 +68,17 @@ const CajaManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    return mapLegacyTabKey(localStorage.getItem("cajaActiveTab")) || "historial"
+    const savedActiveTab = localStorage.getItem("cajaActiveTab")
+    let restoredTabs = []
+    try {
+      restoredTabs = JSON.parse(localStorage.getItem("cajaTabs") || "[]")
+    } catch (e) {
+      restoredTabs = []
+    }
+    const tabDisponible = [...mainTabs, ...restoredTabs, { key: "caja-actual" }].some(
+      (tab) => tab?.key === savedActiveTab
+    )
+    return tabDisponible ? savedActiveTab : "historial"
   })
 
   const [draggedTabKey, setDraggedTabKey] = useState(null)
@@ -106,6 +114,9 @@ const CajaManager = () => {
 
   // Estados de UI
   const [, setCargando] = useState(true) // Estado interno para controlar carga, no se expone
+  const invalidarControlFondos = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: queryKeys.resources.all("caja-control-fondos") })
+  }, [queryClient])
 
   // Cargar estado inicial de la caja
   const cargarEstadoCaja = useCallback(async () => {
@@ -177,6 +188,7 @@ const CajaManager = () => {
 
       // Recargar estado completo
       await cargarEstadoCaja()
+      await invalidarControlFondos()
 
       // Cambiar a tab "Caja Actual"
       setActiveTab("caja-actual")
@@ -196,6 +208,7 @@ const CajaManager = () => {
 
       // Recargar estado para actualizar historial
       await cargarEstadoCaja()
+      await invalidarControlFondos()
 
       // Cambiar a tab "Historial"
       setActiveTab("historial")
@@ -212,6 +225,7 @@ const CajaManager = () => {
 
       // Recargar estado
       await cargarEstadoCaja()
+      await invalidarControlFondos()
     } catch (err) {
       toast.error(err.message || "Error al registrar movimiento")
     }

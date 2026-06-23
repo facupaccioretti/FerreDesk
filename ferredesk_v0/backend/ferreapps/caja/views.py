@@ -7,7 +7,6 @@ Implementa los ViewSets para:
 - PagoVenta: Consulta de pagos por venta
 """
 
-from django.utils import timezone
 from django.db.models import Sum, Q
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -51,43 +50,9 @@ from .serializers import (
     MovimientoBancoSerializer,
 )
 from .services import (
-    build_consolidado_ingresos_payload,
     build_control_fondos_payload,
-    resolve_consolidado_ingresos_range,
+    invalidate_control_fondos_cache,
 )
-
-
-# Regla de lectura simple para el consolidado de ingresos.
-# - Fuente canónica de cobranza: PagoVenta vinculado a Venta o Recibo.
-# - Fuente complementaria: MovimientoCaja de ENTRADA cuando representa un ingreso
-#   operativo no modelado como cobranza.
-# - No se suman acreditaciones bancarias ni estados posteriores del cheque porque
-#   son trazabilidad del mismo ingreso y duplican la lectura económica.
-# - Caja vs fuera de caja se deriva de la existencia de sesion_caja en el trámite
-#   origen; no se agrega persistencia nueva para esta fase.
-CONSOLIDADO_INGRESOS_LECTURA_SIMPLE = {
-    'fuentes': [
-        'PagoVenta de ventas activas',
-        'PagoVenta de recibos activos',
-        'MovimientoCaja de entrada no asociado a un cobro canónico',
-    ],
-    'regla_unicidad': (
-        'Cada ingreso se muestra una sola vez en su evento de alta: '
-        'cobro (PagoVenta) o ingreso manual de caja (MovimientoCaja).'
-    ),
-    'lectura_caja_fuera_caja': (
-        'Si el trámite origen tiene sesion_caja, se muestra como CAJA; '
-        'si no la tiene, se muestra como FUERA_CAJA.'
-    ),
-    'columnas_minimas': [
-        'fecha',
-        'origen',
-        'medio_pago',
-        'monto',
-        'canal',
-        'referencias',
-    ],
-}
 
 
 class SesionCajaViewSet(viewsets.ModelViewSet):
@@ -147,6 +112,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             saldo_inicial=serializer.validated_data['saldo_inicial'],
             estado=ESTADO_CAJA_ABIERTA,
         )
+        invalidate_control_fondos_cache(reason='abrir_caja')
         
         return Response(
             SesionCajaSerializer(sesion).data,
@@ -191,6 +157,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         sesion.estado = ESTADO_CAJA_CERRADA
         sesion.observaciones_cierre = serializer.validated_data.get('observaciones_cierre', '')
         sesion.save()
+        invalidate_control_fondos_cache(reason='cerrar_caja')
         
         # Preparar respuesta con resumen
         resumen = self._generar_resumen_cierre(sesion)
@@ -559,6 +526,7 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
             monto=serializer.validated_data['monto'],
             descripcion=serializer.validated_data['descripcion'],
         )
+        invalidate_control_fondos_cache(reason='movimiento_manual')
         
         return Response(
             MovimientoCajaSerializer(movimiento).data,
@@ -607,30 +575,6 @@ class PagoVentaViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset
 
-    def _resolver_rango_fechas(self, request):
-        """Resuelve el rango temporal del consolidado.
-
-        Default: últimos 30 días.
-        """
-        return resolve_consolidado_ingresos_range(
-            fecha_desde=request.query_params.get('fecha_desde'),
-            fecha_hasta=request.query_params.get('fecha_hasta'),
-        )
-
-    @action(detail=False, methods=['get'], url_path='consolidado-ingresos')
-    def consolidado_ingresos(self, request):
-        """Retorna una lectura simple y unificada de ingresos.
-
-        La regla está documentada en CONSOLIDADO_INGRESOS_LECTURA_SIMPLE.
-        """
-        fecha_desde, fecha_hasta = self._resolver_rango_fechas(request)
-        return Response(
-            build_consolidado_ingresos_payload(
-                fecha_desde=fecha_desde,
-                fecha_hasta=fecha_hasta,
-            )
-        )
-
 
 class CuentaBancoViewSet(viewsets.ModelViewSet):
     """ViewSet para CRUD de cuentas bancarias y billeteras virtuales."""
@@ -646,6 +590,16 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
         if solo_activas:
             queryset = queryset.filter(activo=True)
         return queryset.order_by('nombre')
+
+    def perform_create(self, serializer):
+        cuenta = serializer.save()
+        invalidate_control_fondos_cache(reason='cuenta_banco_create')
+        return cuenta
+
+    def perform_update(self, serializer):
+        cuenta = serializer.save()
+        invalidate_control_fondos_cache(reason='cuenta_banco_update')
+        return cuenta
 
     def destroy(self, request, *args, **kwargs):
         """Evita la eliminación si hay movimientos bancarios."""
@@ -665,7 +619,9 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        return super().destroy(request, *args, **kwargs)
+        response = super().destroy(request, *args, **kwargs)
+        invalidate_control_fondos_cache(reason='cuenta_banco_destroy')
+        return response
 
     @action(detail=True, methods=['get'], url_path='historial')
     def historial(self, request, pk=None):
@@ -831,16 +787,15 @@ class ChequeViewSet(viewsets.ModelViewSet):
         return queryset.order_by('-fecha_hora_registro')
 
     def create(self, request, *args, **kwargs):
-        """Crea un cheque desde caja (caja general o cambio de cheque). Requiere caja abierta."""
+        """Crea un cheque manualmente.
+
+        Si hay caja abierta, registra los movimientos de sesión asociados.
+        Si no la hay, el cheque queda registrado de forma administrativa.
+        """
         sesion_caja = SesionCaja.objects.filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA,
         ).first()
-        if not sesion_caja:
-            return Response(
-                {'detail': 'Debe abrir una caja antes de registrar un cheque.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -852,15 +807,17 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             desc_entrada = data.get('origen_descripcion') or 'Caja general'
-            movimiento_entrada = MovimientoCaja.objects.create(
-                sesion_caja=sesion_caja,
-                usuario=request.user,
-                tipo=TIPO_MOVIMIENTO_ENTRADA,
-                monto=data['monto'],
-                descripcion=f"Cheque recibido - {desc_entrada}",
-            )
+            movimiento_entrada = None
+            if sesion_caja:
+                movimiento_entrada = MovimientoCaja.objects.create(
+                    sesion_caja=sesion_caja,
+                    usuario=request.user,
+                    tipo=TIPO_MOVIMIENTO_ENTRADA,
+                    monto=data['monto'],
+                    descripcion=f"Cheque recibido - {desc_entrada}",
+                )
             movimiento_salida = None
-            if data['origen_tipo'] == Cheque.ORIGEN_CAMBIO_CHEQUE:
+            if data['origen_tipo'] == Cheque.ORIGEN_CAMBIO_CHEQUE and sesion_caja:
                 monto_efectivo = data['monto_efectivo_entregado']
                 desc_salida = data.get('origen_descripcion') or ''
                 movimiento_salida = MovimientoCaja.objects.create(
@@ -888,6 +845,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 comision_cambio=data.get('comision_cambio'),
                 usuario_registro=request.user,
             )
+        invalidate_control_fondos_cache(reason='cheque_create')
         return Response(
             ChequeSerializer(cheque).data,
             status=status.HTTP_201_CREATED,
@@ -965,7 +923,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
             cheque.fecha_presentacion = hoy
             cheque.fecha_deposito_real = timezone.now()
             cheque.save(update_fields=['estado', 'fecha_presentacion', 'fecha_deposito_real'])
-            
+        invalidate_control_fondos_cache(reason='cheque_depositar')
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=True, methods=['post'], url_path='acreditar')
@@ -997,7 +955,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
             
             # No genera movimiento de caja (ya salió de custodia al depositar)
             # No requiere caja abierta (es un registro de tesorería bancaria)
-            
+        invalidate_control_fondos_cache(reason='cheque_acreditar')
         return Response(ChequeSerializer(cheque).data)
 
     @action(detail=False, methods=['post'], url_path='endosar')
@@ -1046,7 +1004,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 cheque.proveedor = proveedor
                 cheque.movimiento_caja_salida = movimiento
                 cheque.save(update_fields=['estado', 'proveedor', 'movimiento_caja_salida'])
-                
+        invalidate_control_fondos_cache(reason='cheque_endosar')
         return Response({'endosados': len(cheque_ids)})
 
     @action(detail=True, methods=['post'], url_path='marcar-rechazado')
@@ -1099,6 +1057,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 cheque.save(update_fields=['estado', 'nota_debito_venta'])
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        invalidate_control_fondos_cache(reason='cheque_rechazado')
 
         # Re-obtener el cheque
         cheque = self.get_queryset().get(pk=cheque.pk)
@@ -1137,7 +1096,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
             cheque.estado = Cheque.ESTADO_EN_CARTERA
             cheque.save(update_fields=['estado'])
-        
+        invalidate_control_fondos_cache(reason='cheque_reactivar')
         data = ChequeSerializer(cheque).data
         data['mensaje_siguiente_paso'] = (
             "El cheque ha vuelto a estado EN CARTERA y se registró el ingreso a custodia. "
@@ -1197,6 +1156,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 setattr(cheque, campo, serializer.validated_data[campo])
         
         cheque.save()
+        invalidate_control_fondos_cache(reason='cheque_editar')
         
         # Retornar cheque actualizado con ChequeSerializer
         return Response(ChequeSerializer(cheque).data)

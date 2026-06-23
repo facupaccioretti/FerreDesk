@@ -7,7 +7,6 @@ Rutas disponibles:
 - /api/caja/movimientos/ - CRUD de movimientos
 - /api/caja/metodos-pago/ - Lista de métodos de pago
 - /api/caja/pagos/ - Pagos de ventas (solo lectura)
-- /api/caja/pagos/consolidado-ingresos/ - Lectura simple unificada de ingresos
 - /api/caja/control-fondos/ - Foto consolidada actual de tesorería
 """
 

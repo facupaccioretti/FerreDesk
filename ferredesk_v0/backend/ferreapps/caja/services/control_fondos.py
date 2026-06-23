@@ -1,6 +1,8 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.cache import cache
+from django.db import connection
 from django.db.models import DecimalField, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -19,31 +21,9 @@ from ..models import (
 )
 
 
-CONSOLIDADO_INGRESOS_LECTURA_SIMPLE = {
-    "fuentes": [
-        "PagoVenta de ventas activas",
-        "PagoVenta de recibos activos",
-        "MovimientoCaja de entrada no asociado a un cobro canonico",
-    ],
-    "regla_unicidad": (
-        "Cada ingreso se muestra una sola vez en su evento de alta: "
-        "cobro (PagoVenta) o ingreso manual de caja (MovimientoCaja)."
-    ),
-    "lectura_caja_fuera_caja": (
-        "Si el tramite origen tiene sesion_caja, se muestra como CAJA; "
-        "si no la tiene, se muestra como FUERA_CAJA."
-    ),
-    "columnas_minimas": [
-        "fecha",
-        "origen",
-        "medio_pago",
-        "monto",
-        "canal",
-        "referencias",
-    ],
-}
-
 CONTROL_FONDOS_PRESETS = {7, 15, 30, 60, 90}
+CONTROL_FONDOS_CACHE_TTL_SECONDS = 15
+CONTROL_FONDOS_CACHE_VERSION_DEFAULT = 1
 ZERO = Decimal("0.00")
 
 
@@ -65,7 +45,7 @@ def resolve_control_fondos_preset(preset):
     return preset_int
 
 
-def resolve_consolidado_ingresos_range(*, fecha_desde=None, fecha_hasta=None):
+def resolve_recent_activity_range(*, fecha_desde=None, fecha_hasta=None):
     tz = timezone.get_current_timezone()
     if fecha_hasta:
         fecha_hasta = timezone.datetime.strptime(fecha_hasta, "%Y-%m-%d")
@@ -227,7 +207,29 @@ def _calcular_total_cheques(estado):
     return total, cantidad
 
 
-def build_control_fondos_payload(*, preset=None, include_bloque_reciente=False):
+def _control_fondos_schema_name():
+    return getattr(connection, "schema_name", "default")
+
+
+def _control_fondos_cache_version_key():
+    return f"caja:control-fondos:{_control_fondos_schema_name()}:version"
+
+
+def get_control_fondos_cache_version():
+    version = cache.get(_control_fondos_cache_version_key())
+    if version is None:
+        return CONTROL_FONDOS_CACHE_VERSION_DEFAULT
+    return int(version)
+
+
+def invalidate_control_fondos_cache(*, reason=None):
+    current_version = get_control_fondos_cache_version()
+    next_version = current_version + 1
+    cache.set(_control_fondos_cache_version_key(), next_version, None)
+    return next_version
+
+
+def _build_control_fondos_payload_uncached(*, preset=None, include_bloque_reciente=False):
     preset_resuelto = resolve_control_fondos_preset(preset)
     caja_total, cajas_abiertas = _calcular_caja_actual()
     bancos_total = _calcular_bancos_actual()
@@ -352,16 +354,49 @@ def build_control_fondos_payload(*, preset=None, include_bloque_reciente=False):
                 "desde": fecha_desde.date().isoformat(),
                 "hasta": fecha_hasta.date().isoformat(),
             },
-            "consolidado_ingresos": build_consolidado_ingresos_payload(
+            "metricas_operativas": build_recent_activity_metrics(
                 fecha_desde=fecha_desde,
                 fecha_hasta=fecha_hasta,
-            )["metricas"],
+            ),
         }
 
     return payload
 
 
-def build_consolidado_ingresos_payload(*, fecha_desde, fecha_hasta):
+def _control_fondos_cache_key(*, preset=None, include_bloque_reciente=False):
+    schema_name = _control_fondos_schema_name()
+    preset_resuelto = resolve_control_fondos_preset(preset)
+    cache_version = get_control_fondos_cache_version()
+    return (
+        f"caja:control-fondos:{schema_name}:"
+        f"v:{cache_version}:preset:{preset_resuelto}:bloque:{int(bool(include_bloque_reciente))}"
+    )
+
+
+def build_control_fondos_payload(*, preset=None, include_bloque_reciente=False, use_cache=True):
+    if not use_cache:
+        return _build_control_fondos_payload_uncached(
+            preset=preset,
+            include_bloque_reciente=include_bloque_reciente,
+        )
+
+    cache_key = _control_fondos_cache_key(
+        preset=preset,
+        include_bloque_reciente=include_bloque_reciente,
+    )
+    cached_payload = cache.get(cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
+    payload = _build_control_fondos_payload_uncached(
+        preset=preset,
+        include_bloque_reciente=include_bloque_reciente,
+    )
+    cache.set(cache_key, payload, CONTROL_FONDOS_CACHE_TTL_SECONDS)
+    return payload
+
+
+def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
     pagos = (
         PagoVenta.objects.filter(
             fecha_hora__range=(fecha_desde, fecha_hasta),
@@ -479,23 +514,12 @@ def build_consolidado_ingresos_payload(*, fecha_desde, fecha_hasta):
     items.sort(key=lambda item: item["fecha"], reverse=True)
 
     return {
-        "lectura_simple": CONSOLIDADO_INGRESOS_LECTURA_SIMPLE,
-        "items": [
-            {
-                **item,
-                "fecha": item["fecha"].isoformat() if item.get("fecha") else None,
-                "monto": _money(item["monto"]),
-            }
-            for item in items
-        ],
-        "metricas": {
-            "total_registros": len(items),
-            "total_monto": _money(total_monto),
-            "total_caja": _money(total_caja),
-            "total_fuera_caja": _money(total_fuera_caja),
-            "cantidad_caja": len([item for item in items if item["canal"] == "CAJA"]),
-            "cantidad_fuera_caja": len([item for item in items if item["canal"] == "FUERA_CAJA"]),
-        },
+        "total_registros": len(items),
+        "total_monto": _money(total_monto),
+        "total_caja": _money(total_caja),
+        "total_fuera_caja": _money(total_fuera_caja),
+        "cantidad_caja": len([item for item in items if item["canal"] == "CAJA"]),
+        "cantidad_fuera_caja": len([item for item in items if item["canal"] == "FUERA_CAJA"]),
         "rango": {
             "desde": fecha_desde.strftime("%Y-%m-%d"),
             "hasta": fecha_hasta.strftime("%Y-%m-%d"),

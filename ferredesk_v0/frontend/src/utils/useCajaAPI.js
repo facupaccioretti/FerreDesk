@@ -364,8 +364,8 @@ export function useCajaAPI() {
     }, [makeRequest]);
 
     /**
-     * Crea un cheque desde caja (caja general o cambio de cheque).
-     * Requiere caja abierta.
+     * Crea un cheque manual (caja general o cambio de cheque).
+     * Si hay caja abierta se registran movimientos de sesion; si no, queda administrativo.
      * @param {object} datosCheque - numero, banco_emisor, monto, cuit_librador, fecha_emision, fecha_presentacion, origen_tipo (CAJA_GENERAL | CAMBIO_CHEQUE), origen_descripcion (opc), origen_cliente_id (opc), monto_efectivo_entregado (si CAMBIO_CHEQUE), comision_cambio (opc)
      * @returns {Promise<object>} - Cheque creado
      */

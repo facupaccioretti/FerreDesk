@@ -1,5 +1,7 @@
 from decimal import Decimal
+from unittest.mock import patch
 
+from django.core.cache import cache
 from django.utils import timezone
 
 from ferreapps.caja.models import (
@@ -15,6 +17,7 @@ from ferreapps.caja.models import (
     TIPO_MOVIMIENTO_SALIDA,
 )
 from ferreapps.caja.services import build_control_fondos_payload
+from ferreapps.caja.services.control_fondos import invalidate_control_fondos_cache
 from ferreapps.caja.tests.mixins import CajaTenantTestCase, CajaTestMixin
 from ferreapps.caja.tests.utils_tests import TestDataHelper
 from ferreapps.cuenta_corriente.models import OrdenPago, Recibo
@@ -57,6 +60,10 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             ven_copia=1,
             sesion_caja=sesion_caja,
         )
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
 
     def test_cheque_acreditado_suma_a_bancos_y_depositado_queda_pendiente(self):
         self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("1000.00"))
@@ -255,3 +262,130 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["caja"]["monto"], "1200.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "1200.00")
         self.assertTrue(payload["seniales"]["hay_caja_abierta"])
+
+    def test_control_fondos_reutiliza_cache_corta_por_tenant_y_parametros(self):
+        with patch(
+            "ferreapps.caja.services.control_fondos._build_control_fondos_payload_uncached"
+        ) as build_uncached:
+            build_uncached.return_value = {"resumen_actual": {"kpis": {}}}
+
+            primer_payload = build_control_fondos_payload()
+            segundo_payload = build_control_fondos_payload()
+
+        self.assertEqual(primer_payload, segundo_payload)
+        self.assertEqual(build_uncached.call_count, 1)
+
+    def test_invalidacion_directa_fuerza_recalculo_antes_del_ttl(self):
+        with patch(
+            "ferreapps.caja.services.control_fondos._build_control_fondos_payload_uncached"
+        ) as build_uncached:
+            build_uncached.side_effect = [
+                {"resumen_actual": {"kpis": {"caja": {"monto": "1.00"}}}},
+                {"resumen_actual": {"kpis": {"caja": {"monto": "2.00"}}}},
+            ]
+
+            primer_payload = build_control_fondos_payload()
+            invalidate_control_fondos_cache(reason="test")
+            segundo_payload = build_control_fondos_payload()
+
+        self.assertEqual(primer_payload["resumen_actual"]["kpis"]["caja"]["monto"], "1.00")
+        self.assertEqual(segundo_payload["resumen_actual"]["kpis"]["caja"]["monto"], "2.00")
+        self.assertEqual(build_uncached.call_count, 2)
+
+    def test_payload_con_bloque_reciente_mantiene_shape_y_formulas_principales(self):
+        self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("400.00"))
+
+        venta = self._crear_venta(2005)
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("250.00"),
+        )
+
+        Cheque.objects.create(
+            numero="CHK-CAR-SHAPE",
+            banco_emisor="Banco Test",
+            monto=Decimal("125.00"),
+            cuit_librador="20666666667",
+            fecha_emision=timezone.now().date(),
+            fecha_pago=timezone.now().date(),
+            estado=Cheque.ESTADO_EN_CARTERA,
+        )
+        Cheque.objects.create(
+            numero="CHK-DEP-SHAPE",
+            banco_emisor="Banco Test",
+            monto=Decimal("300.00"),
+            cuit_librador="20777777778",
+            fecha_emision=timezone.now().date(),
+            fecha_pago=timezone.now().date(),
+            estado=Cheque.ESTADO_DEPOSITADO,
+            cuenta_banco_deposito=self.banco,
+        )
+        Cheque.objects.create(
+            numero="CHK-ACR-SHAPE",
+            banco_emisor="Banco Test",
+            monto=Decimal("50.00"),
+            cuit_librador="20888888889",
+            fecha_emision=timezone.now().date(),
+            fecha_pago=timezone.now().date(),
+            estado=Cheque.ESTADO_ACREDITADO,
+            cuenta_banco_deposito=self.banco,
+        )
+
+        payload = build_control_fondos_payload(preset=7, include_bloque_reciente=True)
+        kpis = payload["resumen_actual"]["kpis"]
+        bloque_reciente = payload["bloque_reciente"]
+
+        self.assertEqual(kpis["caja"]["monto"], "400.00")
+        self.assertEqual(kpis["bancos"]["monto"], "300.00")
+        self.assertEqual(kpis["cheques_en_cartera"]["monto"], "125.00")
+        self.assertEqual(kpis["pendiente_acreditacion"]["monto"], "300.00")
+        self.assertEqual(kpis["disponible_hoy"]["monto"], "700.00")
+        self.assertEqual(kpis["total_administrado"]["monto"], "1125.00")
+
+        self.assertEqual(
+            payload["composicion"]["disponible_hoy"]["componentes"],
+            [
+                {"codigo": "caja", "monto": "400.00"},
+                {"codigo": "bancos", "monto": "300.00"},
+            ],
+        )
+        self.assertEqual(
+            payload["composicion"]["total_administrado"]["componentes"],
+            [
+                {"codigo": "caja", "monto": "400.00"},
+                {"codigo": "bancos", "monto": "300.00"},
+                {"codigo": "cheques_en_cartera", "monto": "125.00"},
+                {"codigo": "pendiente_acreditacion", "monto": "300.00"},
+            ],
+        )
+        self.assertEqual(bloque_reciente["preset_aplicado"], 7)
+        self.assertEqual(
+            set(bloque_reciente["metricas_operativas"].keys()),
+            {
+                "total_registros",
+                "total_monto",
+                "total_caja",
+                "total_fuera_caja",
+                "cantidad_caja",
+                "cantidad_fuera_caja",
+                "rango",
+            },
+        )
+
+
+class ControlFondosIndexTests(CajaTenantTestCase):
+    def test_indices_de_control_fondos_quedan_declarados_en_modelos(self):
+        self.assertIn(
+            ("sesion_caja", "tipo"),
+            {tuple(indice.fields) for indice in MovimientoCaja._meta.indexes},
+        )
+        self.assertIn(
+            ("cuenta_banco", "es_vuelto"),
+            {tuple(indice.fields) for indice in PagoVenta._meta.indexes},
+        )
+        self.assertIn(
+            ("estado", "cuenta_banco_deposito"),
+            {tuple(indice.fields) for indice in Cheque._meta.indexes},
+        )

@@ -253,6 +253,7 @@ class MovimientoCaja(models.Model):
             models.Index(fields=['sesion_caja']),
             models.Index(fields=['tipo']),
             models.Index(fields=['fecha_hora']),
+            models.Index(fields=['sesion_caja', 'tipo'], name='caja_mov_sesion_tipo_idx'),
         ]
 
     def __str__(self):
@@ -470,6 +471,7 @@ class PagoVenta(models.Model):
             models.Index(fields=['venta']),
             models.Index(fields=['metodo_pago']),
             models.Index(fields=['fecha_hora']),
+            models.Index(fields=['cuenta_banco', 'es_vuelto'], name='caja_pag_cuenta_vuelto_idx'),
         ]
 
     def clean(self):
@@ -804,6 +806,7 @@ class Cheque(models.Model):
             models.Index(fields=['fecha_presentacion']),
             models.Index(fields=['venta']),
             models.Index(fields=['recibo']),
+            models.Index(fields=['estado', 'cuenta_banco_deposito'], name='caja_che_estado_cuenta_idx'),
         ]
 
     def __str__(self):
