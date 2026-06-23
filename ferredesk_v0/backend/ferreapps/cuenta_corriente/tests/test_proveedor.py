@@ -9,7 +9,6 @@ Verifica:
 """
 
 from decimal import Decimal
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Sum
@@ -23,12 +22,14 @@ from ferreapps.caja.models import (
     SesionCaja,
     MovimientoCaja,
     MetodoPago,
+    Cheque,
     ESTADO_CAJA_ABIERTA,
     TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
 )
 from ferreapps.productos.models import Proveedor
 from ferreapps.compras.models import Compra
+from ferreapps.caja.tests.mixins import CajaTenantTestCase
 
 Usuario = get_user_model()
 
@@ -48,7 +49,7 @@ COMPRA_DEFAULTS = {
 }
 
 
-class OrdenPagoModelTests(TestCase):
+class OrdenPagoModelTests(CajaTenantTestCase):
     """Tests para el modelo OrdenPago."""
 
     @classmethod
@@ -122,7 +123,7 @@ class OrdenPagoModelTests(TestCase):
         self.assertEqual(op.op_estado, OrdenPago.ESTADO_ANULADO)
 
 
-class ImputacionUnificadaCompraTests(TestCase):
+class ImputacionUnificadaCompraTests(CajaTenantTestCase):
     """Tests para el modelo Imputacion unificado aplicado a compras."""
 
     @classmethod
@@ -197,7 +198,7 @@ class ImputacionUnificadaCompraTests(TestCase):
         self.assertEqual(saldo_pendiente, Decimal('7000.00'))
 
 
-class RegistrarPagosOrdenPagoTests(TestCase):
+class RegistrarPagosOrdenPagoTests(CajaTenantTestCase):
     """Tests para la función registrar_pagos_orden_pago de caja/utils.py."""
 
     @classmethod
@@ -323,8 +324,78 @@ class RegistrarPagosOrdenPagoTests(TestCase):
         self.assertEqual(resultados, [])
         self.assertEqual(MovimientoCaja.objects.filter(sesion_caja=self.sesion).count(), 0)
 
+    def test_cheque_propio_nuevo_queda_vinculado_al_pago_orden_pago(self):
+        """Un cheque propio emitido en la OP debe quedar vinculado al PagoVenta creado en ese evento."""
+        from ferreapps.caja.utils import registrar_pagos_orden_pago
+        metodo_cheque, _ = MetodoPago.objects.get_or_create(
+            codigo='cheque',
+            defaults={'nombre': 'Cheque', 'afecta_arqueo': False, 'activo': True}
+        )
 
-class ImputacionServiceComprasTests(TestCase):
+        registrar_pagos_orden_pago(
+            orden_pago=self.orden_pago,
+            sesion_caja=self.sesion,
+            pagos=[{
+                'metodo_pago_id': metodo_cheque.id,
+                'monto': Decimal('1200.00'),
+                'es_propio': True,
+                'numero_cheque': '900001',
+                'banco_emisor': 'Banco OP',
+                'cuit_librador': '20111111112',
+                'fecha_emision': '2024-06-15',
+                'fecha_presentacion': '2024-06-15',
+            }]
+        )
+
+        cheque = Cheque.objects.get(numero='900001')
+        self.assertEqual(cheque.orden_pago, self.orden_pago)
+        self.assertIsNotNone(cheque.pago_venta)
+        self.assertEqual(cheque.pago_venta.orden_pago, self.orden_pago)
+
+    def test_cheque_de_cartera_endosado_queda_vinculado_al_pago_y_movimiento(self):
+        """Un cheque en cartera endosado en la OP debe actualizarse una sola vez y quedar trazable."""
+        from ferreapps.caja.utils import registrar_pagos_orden_pago
+        metodo_cheque, _ = MetodoPago.objects.get_or_create(
+            codigo='cheque',
+            defaults={'nombre': 'Cheque', 'afecta_arqueo': False, 'activo': True}
+        )
+        cheque = Cheque.objects.create(
+            numero='800001',
+            banco_emisor='Banco Cartera',
+            monto=Decimal('900.00'),
+            cuit_librador='20111111112',
+            fecha_emision='2024-06-01',
+            fecha_presentacion='2024-06-20',
+            estado=Cheque.ESTADO_EN_CARTERA,
+            usuario_registro=self.usuario,
+        )
+
+        registrar_pagos_orden_pago(
+            orden_pago=self.orden_pago,
+            sesion_caja=self.sesion,
+            pagos=[{
+                'metodo_pago_id': metodo_cheque.id,
+                'monto': Decimal('900.00'),
+                'cheque_id': cheque.id,
+            }]
+        )
+
+        cheque.refresh_from_db()
+        self.assertEqual(Cheque.objects.filter(numero='800001').count(), 1)
+        self.assertEqual(cheque.estado, Cheque.ESTADO_ENTREGADO)
+        self.assertEqual(cheque.orden_pago, self.orden_pago)
+        self.assertEqual(cheque.proveedor, self.proveedor)
+        self.assertIsNotNone(cheque.pago_venta)
+        self.assertEqual(cheque.pago_venta.orden_pago, self.orden_pago)
+        self.assertIsNotNone(cheque.movimiento_caja_salida)
+        self.assertEqual(cheque.movimiento_caja_salida.tipo, TIPO_MOVIMIENTO_SALIDA)
+        self.assertEqual(cheque.movimiento_caja_salida.monto, Decimal('900.00'))
+
+    def tearDown(self):
+        pass
+
+
+class ImputacionServiceComprasTests(CajaTenantTestCase):
     """Tests para el servicio genérico de imputación aplicado a compras."""
 
     @classmethod

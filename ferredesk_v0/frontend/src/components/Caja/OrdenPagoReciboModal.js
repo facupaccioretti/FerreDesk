@@ -8,6 +8,9 @@ import useCuentaCorrienteProveedorAPI from "../../utils/useCuentaCorrienteProvee
 import useCajaAPI from "../../utils/useCajaAPI"
 import MediosPagoGrid from "./MediosPagoGrid"
 
+const CODIGOS_REQUIEREN_SESION_CAJA = ["efectivo"]
+const normalizarCodigoMetodo = (metodo) => (metodo?.codigo || '').toLowerCase()
+
 /**
  * OrdenPagoReciboModal - Modal unificado para Cobros (Recibos) y Pagos (Ordenes de Pago)
  * 
@@ -53,6 +56,8 @@ const OrdenPagoReciboModal = ({
     const [metodosPago, setMetodosPago] = useState([])
     const [cuentasBanco, setCuentasBanco] = useState([])
     const [chequesCartera, setChequesCartera] = useState([])
+    const [estadoCaja, setEstadoCaja] = useState(null)
+    const [metodosRestringidosSinCaja, setMetodosRestringidosSinCaja] = useState([])
 
 
 
@@ -85,6 +90,8 @@ const OrdenPagoReciboModal = ({
     const [pagos, setPagos] = useState([])
 
     const [loading, setLoading] = useState(false)
+    const tieneCajaAbierta = Boolean(estadoCaja?.tiene_caja_abierta)
+    const sesionCaja = estadoCaja?.sesion || null
 
     // Constantes de estilo
     const CLASES_ETIQUETA = "text-[10px] uppercase tracking-wide text-slate-500"
@@ -124,16 +131,23 @@ const OrdenPagoReciboModal = ({
             ])
 
             const tieneCaja = miCaja?.tiene_caja_abierta || false
+            setEstadoCaja(miCaja)
 
             const docs = tipo === 'RECIBO' ? (pendientes.facturas || []) : (pendientes.compras_pendientes || [])
             setDocumentosPendientes(docs)
 
             // Si la caja NO está abierta, excluir métodos que requieren custodia física.
             const todosMetodos = Array.isArray(metodos) ? metodos : metodos.results || []
-            const CODIGOS_REQUIEREN_CAJA = ['efectivo', 'cheque']
+            setMetodosRestringidosSinCaja(
+                tieneCaja
+                    ? []
+                    : todosMetodos
+                        .filter(m => CODIGOS_REQUIEREN_SESION_CAJA.includes(normalizarCodigoMetodo(m)))
+                        .map(m => m.nombre || m.codigo)
+            )
             let metodosFiltrados = tieneCaja
                 ? todosMetodos
-                : todosMetodos.filter(m => !CODIGOS_REQUIEREN_CAJA.includes(m.codigo))
+                : todosMetodos.filter(m => !CODIGOS_REQUIEREN_SESION_CAJA.includes(normalizarCodigoMetodo(m)))
             
             // Filtrado contextual
             if (tipo === 'RECIBO') {
@@ -162,6 +176,8 @@ const OrdenPagoReciboModal = ({
         } catch (err) {
             console.error('Error al cargar datos:', err)
             window.alert('Error al cargar datos de ' + (tipo === 'RECIBO' ? 'facturas' : 'compras') + ': ' + err.message)
+            setEstadoCaja(null)
+            setMetodosRestringidosSinCaja([])
         } finally {
             setLoading(false)
         }
@@ -200,15 +216,17 @@ const OrdenPagoReciboModal = ({
     }
 
     const handleAvanzarPaso2 = () => {
-        // Al avanzar, si no hay pagos definidos, inicializar con Efectivo por defecto cubriendo el total imputado
+        // Al avanzar, si no hay pagos definidos, usar el primer medio válido para el contexto actual
         if (pagos.length === 0 && montoImputaciones > 0) {
-            const efectivo = metodosPago.find(m => m.codigo?.toUpperCase() === 'EFECTIVO')
-            setPagos([{
-                metodo_pago_id: efectivo?.id || '',
-                codigo: efectivo?.codigo || 'EFECTIVO',
-                monto: montoImputaciones,
-                detalle: ''
-            }])
+            const metodoInicial = metodosPago.find(m => normalizarCodigoMetodo(m) === 'efectivo') || metodosPago[0]
+            if (metodoInicial) {
+                setPagos([{
+                    metodo_pago_id: metodoInicial.id || '',
+                    codigo: metodoInicial.codigo || '',
+                    monto: montoImputaciones,
+                    detalle: ''
+                }])
+            }
         }
         setPaso(2)
     }
@@ -291,6 +309,7 @@ const OrdenPagoReciboModal = ({
     }
 
     const tituloModal = tipo === 'RECIBO' ? 'Ingreso de Cobro (Recibo)' : 'Egreso de Pago (Orden de Pago)'
+    const etiquetaTrazabilidad = tipo === 'RECIBO' ? 'ingreso' : 'egreso'
 
     return (
         <Transition show={abierto} as={Fragment} appear>
@@ -344,6 +363,26 @@ const OrdenPagoReciboModal = ({
 
                             {/* Contenido Principal */}
                             <div className="px-6 py-6 overflow-y-auto flex-1 bg-slate-50/50">
+                                <div className={`mb-6 rounded-lg border p-4 ${tieneCajaAbierta ? 'border-emerald-200 bg-emerald-50' : 'border-sky-200 bg-sky-50'}`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className={`mt-0.5 h-2.5 w-2.5 rounded-full ${tieneCajaAbierta ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                                        <div className="space-y-1">
+                                            <p className={`text-sm font-semibold ${tieneCajaAbierta ? 'text-emerald-800' : 'text-sky-800'}`}>
+                                                {tieneCajaAbierta ? 'Operación dentro de una sesión de caja' : 'Operación fuera de caja'}
+                                            </p>
+                                            <p className={`text-xs leading-relaxed ${tieneCajaAbierta ? 'text-emerald-700' : 'text-sky-700'}`}>
+                                                {tieneCajaAbierta
+                                                    ? `Este ${etiquetaTrazabilidad} se trazará por caja${sesionCaja?.id ? ` en la sesión #${sesionCaja.id}` : ''}, y también puede usar medios con cuentas o billeteras representadas.`
+                                                    : `Sin caja abierta, este ${etiquetaTrazabilidad} sólo puede registrarse con medios que ya tienen origen o destino representado, como transferencia, QR o tarjeta.`}
+                                            </p>
+                                            {!tieneCajaAbierta && metodosRestringidosSinCaja.length > 0 && (
+                                                <p className="text-[11px] text-sky-700">
+                                                    Quedan ocultos hasta abrir caja: {metodosRestringidosSinCaja.join(', ')}.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                                 {/* PASO 1: IMPUTACIONES (DEUDAS) */}
                                 {paso === 1 && (
                                     <div className="space-y-4 animate-in fade-in duration-300">

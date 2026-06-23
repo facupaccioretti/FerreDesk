@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -81,11 +82,6 @@ def crear_recibo_con_imputaciones(request):
         
         from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
         sesion_caja = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
-        if not sesion_caja:
-            return Response({
-                'detail': 'Debe abrir una caja antes de crear un recibo.',
-                'error_code': 'CAJA_NO_ABIERTA'
-            }, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
         cliente = get_object_or_404(Cliente, id=data['cliente_id'])
@@ -124,6 +120,12 @@ def crear_recibo_con_imputaciones(request):
             
             return Response({'mensaje': 'Recibo creado exitosamente', 'rec_id': recibo.rec_id}, status=status.HTTP_201_CREATED)
             
+    except ValidationError as e:
+        detail = str(e.message if hasattr(e, 'message') else e)
+        payload = {'detail': detail}
+        if 'sesi' in detail.lower() and 'caja abierta' in detail.lower():
+            payload['error_code'] = 'CAJA_NO_ABIERTA'
+        return Response(payload, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.exception(f"Error al crear recibo: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -201,6 +201,22 @@ export function useCajaAPI() {
         return makeRequest(`${API_BASE}/pagos/?venta=${ventaId}`);
     }, [makeRequest]);
 
+    /**
+     * Obtiene una lectura simple unificada de ingresos de caja y fuera de caja.
+     * @param {string} fechaDesde - Fecha desde (YYYY-MM-DD)
+     * @param {string} fechaHasta - Fecha hasta (YYYY-MM-DD)
+     * @returns {Promise<object>} - { lectura_simple, items, metricas, rango }
+     */
+    const obtenerConsolidadoIngresos = useCallback(async (fechaDesde = '', fechaHasta = '') => {
+        const params = new URLSearchParams();
+        if (fechaDesde) params.append('fecha_desde', fechaDesde);
+        if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+
+        const queryString = params.toString();
+        const url = `${API_BASE}/pagos/consolidado-ingresos/${queryString ? '?' + queryString : ''}`;
+        return makeRequest(url);
+    }, [makeRequest]);
+
     // ========================================
     // CUENTAS BANCO
     // ========================================
@@ -393,6 +409,7 @@ export function useCajaAPI() {
 
         // Pagos
         obtenerPagosVenta,
+        obtenerConsolidadoIngresos,
 
         // Cuentas banco
         obtenerCuentasBanco,

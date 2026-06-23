@@ -10,8 +10,6 @@ import ImputarOrdenPagoModal from "./ImputarOrdenPagoModal"
 import DetalleComprobanteProveedorModal from "./DetalleComprobanteProveedorModal"
 import AjusteProveedorModal from "./AjusteProveedorModal"
 import ProveedorSelectorModal from "../Compras/ProveedorSelectorModal" // Reutilizamos el existente
-import useCajaAPI from "../../utils/useCajaAPI"
-import { toast } from "react-toastify"
 
 const CuentaCorrienteProveedorList = ({
     proveedorSeleccionado,
@@ -31,8 +29,6 @@ const CuentaCorrienteProveedorList = ({
         anularOrdenPago,
         crearAjusteProveedor,
     } = useCuentaCorrienteProveedorAPI()
-    const { obtenerMiCaja } = useCajaAPI()
-
     const [cuentaCorriente, setCuentaCorriente] = useState(null)
 
     // Modales
@@ -103,20 +99,9 @@ const CuentaCorrienteProveedorList = ({
         handleCerrarSelectorProveedor()
     }
 
-    const handleNuevaOrdenPago = async () => {
+    const handleNuevaOrdenPago = () => {
         if (!proveedorSeleccionado) {
             alert('Debe seleccionar un proveedor primero')
-            return
-        }
-
-        try {
-            const miCaja = await obtenerMiCaja()
-            if (!miCaja?.tiene_caja_abierta) {
-                toast.error('Debe abrir una caja antes de registrar una orden de pago.')
-                return
-            }
-        } catch (err) {
-            toast.error(err.message || 'No se pudo validar el estado de caja.')
             return
         }
 

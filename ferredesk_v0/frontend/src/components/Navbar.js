@@ -71,7 +71,7 @@ const NAV_ITEMS = [
   },
   {
     path: "/home/caja",
-    label: "Caja, Banco y Cheques",
+    label: "Tesorería",
     hoverColor: "hover:bg-cyan-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-cyan-400">

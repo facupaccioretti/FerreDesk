@@ -35,8 +35,6 @@ import VendedoresTab from "./VendedoresTab"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import EliminadorResiduoModal from "./EliminadorResiduoModal"
 import ModalTicketVenta from "./ModalTicketVenta"
-import useCajaAPI from "../../utils/useCajaAPI"
-import { toast } from "react-toastify"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
@@ -77,8 +75,6 @@ const PresupuestosManager = () => {
   }, [])
 
   const { ventas, error: ventasError, pagination: ventasPagination, addVenta, updateVenta, deleteVenta, fetchVentas } = useVentasAPI()
-  const { obtenerMiCaja } = useCajaAPI()
-
   // Ya no necesitamos cargar productos, familias y proveedores porque ItemsGrid hace búsquedas a demanda
   const productos = []
   const loadingProductos = false
@@ -254,21 +250,6 @@ const PresupuestosManager = () => {
 
 
 
-  // Acciones
-  const validarCajaAntesDeOperar = async (mensaje) => {
-    try {
-      const miCaja = await obtenerMiCaja()
-      if (miCaja?.tiene_caja_abierta) {
-        return true
-      }
-      toast.error(mensaje)
-      return false
-    } catch (err) {
-      toast.error(err.message || "No se pudo validar el estado de caja.")
-      return false
-    }
-  }
-
   const handleNuevo = () => {
     const newKey = `nuevo-${Date.now()}`
     openTab(newKey, "Nuevo Presupuesto")
@@ -276,10 +257,7 @@ const PresupuestosManager = () => {
     localStorage.removeItem("presupuestoFormDraft")
   }
 
-  const handleNuevaVenta = async () => {
-    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una venta.")
-    if (!puedeOperar) return
-
+  const handleNuevaVenta = () => {
     const newKey = `nueva-venta-${Date.now()}`
     openTab(newKey, "Nueva Venta")
     setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
@@ -304,10 +282,7 @@ const PresupuestosManager = () => {
     setModalClienteNCAbierto(true)
   }
 
-  const handleNuevaNotaDebito = async () => {
-    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una nota de debito.")
-    if (!puedeOperar) return
-
+  const handleNuevaNotaDebito = () => {
     const tiposND = ['nota_debito', 'nota_debito_interna']
     const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
     if (comprobantesND.length === 0) {
@@ -318,10 +293,7 @@ const PresupuestosManager = () => {
     setModalClienteNDAbierto(true)
   }
 
-  const handleNuevaExtensionContenido = async () => {
-    const puedeOperar = await validarCajaAntesDeOperar("Debe abrir una caja antes de crear una extension de contenido.")
-    if (!puedeOperar) return
-
+  const handleNuevaExtensionContenido = () => {
     const tiposND = ['nota_debito_interna']
     const comprobantesND = (comprobantes || []).filter(c => tiposND.includes(c.tipo))
     if (comprobantesND.length === 0) {

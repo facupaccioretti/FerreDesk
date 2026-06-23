@@ -208,17 +208,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         if not items and tipo_comprobante not in ['nota_debito', 'nota_debito_interna']:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # === VALIDACIÓN DE CAJA ABIERTA ===
-        # Para ventas, cotizaciones y notas de débito se requiere tener una caja abierta
-        sesion_caja = None
-        if tipo_comprobante in COMPROBANTES_QUE_REQUIEREN_CAJA:
-            sesion_caja = obtener_sesion_caja_activa(request.user)
-            if not sesion_caja:
-                return Response({
-                    'detail': 'Debe abrir una caja antes de realizar esta operación.',
-                    'error_code': 'CAJA_NO_ABIERTA',
-                    'tipo_comprobante': tipo_comprobante
-                }, status=status.HTTP_400_BAD_REQUEST)
+        # === OBTENER SESIÓN DE CAJA ===
+        # Obtenemos la sesión para registrar los pagos si existiera.
+        # La validación de caja requerida ocurre transaccionalmente en caja/utils.py 
+        # en base al método de pago elegido.
+        sesion_caja = obtener_sesion_caja_activa(request.user)
 
         # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
         bonif_general = data.get('bonificacionGeneral', 0)
@@ -425,7 +419,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 
                 # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
                 # Flujo unificado: normalizar_cobro (bruto/neto, excedente) → registrar_pagos_venta → metadata en Venta
-                if sesion_caja and comprobante_pagado:
+                if comprobante_pagado:
                     from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta, registrar_vuelto
                     from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
 
@@ -688,14 +682,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         venta = get_object_or_404(Venta, pk=pk)
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
-                # === VALIDACIÓN DE CAJA ABIERTA ===
-                # Al convertir un presupuesto a factura, se requiere caja abierta
+                # === OBTENER SESIÓN DE CAJA ===
                 sesion_caja = obtener_sesion_caja_activa(request.user)
-                if not sesion_caja:
-                    return Response({
-                        'detail': 'Debe abrir una caja antes de convertir el presupuesto a venta.',
-                        'error_code': 'CAJA_NO_ABIERTA'
-                    }, status=status.HTTP_400_BAD_REQUEST)
                 
                 items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
                 # Obtener configuración de la ferretería para determinar política de stock negativo
@@ -740,8 +728,9 @@ class VentaViewSet(viewsets.ModelViewSet):
                 venta.comprobante_id = comprobante_venta["codigo_afip"]
                 venta.ven_estado = 'CE'
                 # === ASIGNAR SESIÓN DE CAJA ===
-                venta.sesion_caja = sesion_caja
-                venta.save()
+                if sesion_caja:
+                    venta.sesion_caja = sesion_caja
+                    venta.save(update_fields=['sesion_caja'])
                 serializer = self.get_serializer(venta)
                 data = serializer.data
                 data['stock_actualizado'] = stock_actualizado

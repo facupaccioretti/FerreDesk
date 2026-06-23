@@ -51,6 +51,39 @@ from .serializers import (
 )
 
 
+# Regla de lectura simple para el consolidado de ingresos.
+# - Fuente canónica de cobranza: PagoVenta vinculado a Venta o Recibo.
+# - Fuente complementaria: MovimientoCaja de ENTRADA cuando representa un ingreso
+#   operativo no modelado como cobranza.
+# - No se suman acreditaciones bancarias ni estados posteriores del cheque porque
+#   son trazabilidad del mismo ingreso y duplican la lectura económica.
+# - Caja vs fuera de caja se deriva de la existencia de sesion_caja en el trámite
+#   origen; no se agrega persistencia nueva para esta fase.
+CONSOLIDADO_INGRESOS_LECTURA_SIMPLE = {
+    'fuentes': [
+        'PagoVenta de ventas activas',
+        'PagoVenta de recibos activos',
+        'MovimientoCaja de entrada no asociado a un cobro canónico',
+    ],
+    'regla_unicidad': (
+        'Cada ingreso se muestra una sola vez en su evento de alta: '
+        'cobro (PagoVenta) o ingreso manual de caja (MovimientoCaja).'
+    ),
+    'lectura_caja_fuera_caja': (
+        'Si el trámite origen tiene sesion_caja, se muestra como CAJA; '
+        'si no la tiene, se muestra como FUERA_CAJA.'
+    ),
+    'columnas_minimas': [
+        'fecha',
+        'origen',
+        'medio_pago',
+        'monto',
+        'canal',
+        'referencias',
+    ],
+}
+
+
 class SesionCajaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sesiones de caja.
     
@@ -567,6 +600,173 @@ class PagoVentaViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(venta_id=venta_id)
 
         return queryset
+
+    def _resolver_rango_fechas(self, request):
+        """Resuelve el rango temporal del consolidado.
+
+        Default: últimos 30 días.
+        """
+        fecha_hasta_str = request.query_params.get('fecha_hasta')
+        fecha_desde_str = request.query_params.get('fecha_desde')
+
+        if fecha_hasta_str:
+            fecha_hasta = timezone.datetime.strptime(fecha_hasta_str, '%Y-%m-%d').replace(
+                hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.get_current_timezone()
+            )
+        else:
+            fecha_hasta = timezone.now()
+
+        if fecha_desde_str:
+            fecha_desde = timezone.datetime.strptime(fecha_desde_str, '%Y-%m-%d').replace(
+                hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.get_current_timezone()
+            )
+        else:
+            fecha_desde = fecha_hasta - timedelta(days=30)
+
+        return fecha_desde, fecha_hasta
+
+    @action(detail=False, methods=['get'], url_path='consolidado-ingresos')
+    def consolidado_ingresos(self, request):
+        """Retorna una lectura simple y unificada de ingresos.
+
+        La regla está documentada en CONSOLIDADO_INGRESOS_LECTURA_SIMPLE.
+        """
+        fecha_desde, fecha_hasta = self._resolver_rango_fechas(request)
+
+        pagos = PagoVenta.objects.filter(
+            fecha_hora__range=(fecha_desde, fecha_hasta),
+            es_vuelto=False,
+        ).filter(
+            Q(venta__isnull=False) | Q(recibo__isnull=False)
+        ).exclude(
+            venta__ven_estado='AN'
+        ).exclude(
+            recibo__rec_estado='N'
+        ).select_related(
+            'metodo_pago',
+            'cuenta_banco',
+            'venta',
+            'venta__ven_idcli',
+            'venta__comprobante',
+            'venta__sesion_caja',
+            'recibo',
+            'recibo__rec_cliente',
+            'recibo__sesion_caja',
+        ).order_by('-fecha_hora', '-id')
+
+        movimientos_entrada = MovimientoCaja.objects.filter(
+            tipo=TIPO_MOVIMIENTO_ENTRADA,
+            fecha_hora__range=(fecha_desde, fecha_hasta),
+        ).select_related(
+            'sesion_caja',
+            'usuario',
+        ).order_by('-fecha_hora', '-id')
+
+        cheques_por_movimiento = {
+            cheque.movimiento_caja_entrada_id: cheque
+            for cheque in Cheque.objects.filter(
+                movimiento_caja_entrada_id__in=movimientos_entrada.values_list('id', flat=True)
+            ).select_related('origen_cliente')
+        }
+
+        items = []
+        total_monto = Decimal('0.00')
+        total_caja = Decimal('0.00')
+        total_fuera_caja = Decimal('0.00')
+
+        for pago in pagos:
+            if pago.recibo_id:
+                tramite = pago.recibo
+                canal = 'CAJA' if pago.recibo.sesion_caja_id else 'FUERA_CAJA'
+                origen = 'Recibo'
+                referencia_principal = pago.recibo.rec_numero
+                tercero = pago.recibo.rec_cliente.razon if pago.recibo.rec_cliente else 'S/C'
+            else:
+                tramite = pago.venta
+                canal = 'CAJA' if pago.venta.sesion_caja_id else 'FUERA_CAJA'
+                origen = pago.venta.comprobante.nombre if pago.venta.comprobante else 'Venta'
+                referencia_principal = f"{pago.venta.ven_punto:04d}-{pago.venta.ven_numero:08d}"
+                tercero = pago.venta.ven_idcli.razon if pago.venta.ven_idcli else 'S/C'
+
+            monto = pago.monto or Decimal('0.00')
+            total_monto += monto
+            if canal == 'CAJA':
+                total_caja += monto
+            else:
+                total_fuera_caja += monto
+
+            referencias = [referencia_principal, tercero]
+            if pago.referencia_externa:
+                referencias.append(f"Ref. ext.: {pago.referencia_externa}")
+            if pago.cuenta_banco_id:
+                referencias.append(f"Cuenta: {pago.cuenta_banco.nombre}")
+            if getattr(tramite, 'sesion_caja_id', None):
+                referencias.append(f"Caja #{tramite.sesion_caja_id}")
+
+            items.append({
+                'id': f"pago-{pago.id}",
+                'fecha': pago.fecha_hora,
+                'origen': origen,
+                'medio_pago': pago.metodo_pago.nombre,
+                'monto': monto,
+                'canal': canal,
+                'referencias': ' | '.join(ref for ref in referencias if ref),
+            })
+
+        for movimiento in movimientos_entrada:
+            cheque = cheques_por_movimiento.get(movimiento.id)
+            medio_pago = 'Cheque' if cheque else 'Efectivo'
+            origen = 'Ingreso manual de caja'
+            referencias = [movimiento.descripcion]
+
+            if cheque:
+                origen = 'Cheque por caja'
+                referencias.append(f"Cheque {cheque.numero}")
+                referencias.append(cheque.banco_emisor)
+                if cheque.origen_cliente:
+                    referencias.append(cheque.origen_cliente.razon)
+
+            monto = movimiento.monto or Decimal('0.00')
+            total_monto += monto
+            total_caja += monto
+
+            referencias.append(f"Caja #{movimiento.sesion_caja_id}")
+
+            items.append({
+                'id': f"movimiento-{movimiento.id}",
+                'fecha': movimiento.fecha_hora,
+                'origen': origen,
+                'medio_pago': medio_pago,
+                'monto': monto,
+                'canal': 'CAJA',
+                'referencias': ' | '.join(ref for ref in referencias if ref),
+            })
+
+        items.sort(key=lambda item: item['fecha'], reverse=True)
+
+        return Response({
+            'lectura_simple': CONSOLIDADO_INGRESOS_LECTURA_SIMPLE,
+            'items': [
+                {
+                    **item,
+                    'fecha': item['fecha'].isoformat() if item.get('fecha') else None,
+                    'monto': str(item['monto']),
+                }
+                for item in items
+            ],
+            'metricas': {
+                'total_registros': len(items),
+                'total_monto': str(total_monto),
+                'total_caja': str(total_caja),
+                'total_fuera_caja': str(total_fuera_caja),
+                'cantidad_caja': len([item for item in items if item['canal'] == 'CAJA']),
+                'cantidad_fuera_caja': len([item for item in items if item['canal'] == 'FUERA_CAJA']),
+            },
+            'rango': {
+                'desde': fecha_desde.strftime('%Y-%m-%d'),
+                'hasta': fecha_hasta.strftime('%Y-%m-%d'),
+            },
+        })
 
 
 class CuentaBancoViewSet(viewsets.ModelViewSet):

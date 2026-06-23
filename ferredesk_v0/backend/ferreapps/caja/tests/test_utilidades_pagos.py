@@ -9,7 +9,7 @@ Verifica:
 """
 
 from decimal import Decimal
-from django.test import TestCase
+from django_tenants.utils import schema_context
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from ..models import (
@@ -17,16 +17,17 @@ from ..models import (
     MovimientoCaja,
     MetodoPago,
     PagoVenta,
+    Cheque,
     ESTADO_CAJA_ABIERTA,
     TIPO_MOVIMIENTO_ENTRADA,
     CODIGO_EFECTIVO,
     CODIGO_CHEQUE,
     CODIGO_CUENTA_CORRIENTE,
 )
-from .mixins import CajaTestMixin
+from .mixins import CajaTestMixin, CajaTenantTestCase
 
 
-class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
+class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
     """
     Tests para las funciones de registro de pagos en ferreapps.caja.utils.
     """
@@ -123,7 +124,8 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
         )
         
         # Crear venta de prueba
-        from ferreapps.ventas.models import Venta
+        with schema_context(self.tenant.schema_name):
+            from ferreapps.ventas.models import Venta
         self.venta = Venta.objects.create(
             ven_sucursal=1,
             ven_fecha='2024-01-15',
@@ -201,6 +203,70 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
         movimientos = MovimientoCaja.objects.filter(sesion_caja=self.sesion)
         self.assertEqual(movimientos.count(), 0)
     
+    def test_registrar_pago_transferencia_sin_caja_funciona(self):
+        """Un medio no efectivo valido debe poder registrarse sin caja."""
+        from ..utils import registrar_pagos_venta
+
+        pagos = registrar_pagos_venta(
+            venta=self.venta,
+            sesion_caja=None,
+            pagos=[{
+                'metodo_pago_id': self.metodo_transferencia.id,
+                'monto': Decimal('500.00')
+            }]
+        )
+
+        self.assertEqual(len(pagos), 1)
+        self.assertEqual(pagos[0].metodo_pago, self.metodo_transferencia)
+        self.assertEqual(MovimientoCaja.objects.count(), 0)
+
+    def test_registrar_pago_cheque_sin_caja_funciona(self):
+        """Un cheque de terceros debe poder registrarse sin caja y no generar movimiento de custodia."""
+        from ..utils import registrar_pagos_venta
+
+        # Usar self.venta (no es de Consumidor Final)
+        pagos = registrar_pagos_venta(
+            venta=self.venta,
+            sesion_caja=None,
+            pagos=[{
+                'metodo_pago_id': self.metodo_cheque.id,
+                'monto': Decimal('400.00'),
+                'numero_cheque': '112233',
+                'banco_emisor': 'Banco Cheque Sin Caja',
+                'cuit_librador': '20222222223',
+                'fecha_emision': '2024-01-01',
+                'fecha_presentacion': '2024-01-15',
+            }]
+        )
+
+        self.assertEqual(len(pagos), 1)
+        self.assertEqual(pagos[0].metodo_pago, self.metodo_cheque)
+        self.assertEqual(pagos[0].monto, Decimal('400.00'))
+
+        # Verificar que se creó el cheque en base de datos
+        cheque = Cheque.objects.filter(numero='112233', venta=self.venta).first()
+        self.assertIsNotNone(cheque)
+        self.assertEqual(cheque.monto, Decimal('400.00'))
+        
+        # Al no haber caja, el cheque no debe tener movimiento de entrada/custodia asociado
+        self.assertIsNone(cheque.movimiento_caja_entrada)
+        self.assertEqual(MovimientoCaja.objects.count(), 0)
+
+
+    def test_registrar_pago_efectivo_sin_caja_falla(self):
+        """Efectivo sin caja debe fallar por validacion central."""
+        from ..utils import registrar_pagos_venta
+
+        with self.assertRaises(ValidationError):
+            registrar_pagos_venta(
+                venta=self.venta,
+                sesion_caja=None,
+                pagos=[{
+                    'metodo_pago_id': self.metodo_efectivo.id,
+                    'monto': Decimal('500.00')
+                }]
+            )
+
     def test_registrar_pagos_mixtos(self):
         """Pagos mixtos deben crear registros correctos."""
         from ..utils import registrar_pagos_venta
@@ -377,11 +443,50 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
         self.assertEqual(pagos[0].monto, Decimal('500.00'))
         
         # Verificar que se creó el cheque asociado
-        from ..models import Cheque
-        cheque = Cheque.objects.filter(venta=self.venta).first()
+        cheque = Cheque.objects.filter(venta=self.venta).get()
         self.assertIsNotNone(cheque)
         self.assertEqual(cheque.numero, '123456')
         self.assertEqual(cheque.banco_emisor, 'Banco Test')
+        self.assertEqual(cheque.pago_venta, pagos[0])
+        self.assertEqual(Cheque.objects.filter(numero='123456', venta=self.venta).count(), 1)
+        self.assertIsNotNone(cheque.movimiento_caja_entrada)
+        self.assertEqual(cheque.movimiento_caja_entrada.tipo, TIPO_MOVIMIENTO_ENTRADA)
+
+    def test_registrar_pago_recibo_con_cheque_vincula_unico_cheque_y_pago(self):
+        """Recibo con cheque debe crear una sola alta y vincularla al PagoVenta del recibo."""
+        from ferreapps.cuenta_corriente.models import Recibo
+        from ..utils import registrar_pagos_recibo
+
+        recibo = Recibo.objects.create(
+            rec_fecha=timezone.now().date(),
+            rec_numero=f"0001-{PagoVenta.objects.count() + 1:08d}",
+            rec_cliente=self.cliente,
+            rec_total=Decimal('500.00'),
+            rec_observacion='Recibo test cheque',
+            rec_usuario=self.usuario,
+            sesion_caja=self.sesion,
+        )
+
+        pagos = registrar_pagos_recibo(
+            recibo=recibo,
+            sesion_caja=self.sesion,
+            pagos=[{
+                'metodo_pago_id': self.metodo_cheque.id,
+                'monto': Decimal('500.00'),
+                'numero_cheque': '654321',
+                'banco_emisor': 'Banco Recibo',
+                'cuit_librador': '20222222223',
+                'fecha_emision': '2024-01-01',
+                'fecha_presentacion': '2024-01-15',
+            }]
+        )
+
+        self.assertEqual(len(pagos), 1)
+        cheque = Cheque.objects.get(numero='654321')
+        self.assertEqual(cheque.recibo, recibo)
+        self.assertEqual(cheque.pago_venta, pagos[0])
+        self.assertEqual(Cheque.objects.filter(numero='654321', recibo=recibo).count(), 1)
+        self.assertIsNotNone(cheque.movimiento_caja_entrada)
     
     def test_cliente_regular_puede_pagar_con_cuenta_corriente(self):
         """Un cliente regular (no Consumidor Final) SÍ puede abonar a cuenta corriente."""
@@ -403,8 +508,11 @@ class RegistrarPagosVentaTests(TestCase, CajaTestMixin):
         self.assertEqual(pagos[0].metodo_pago, self.metodo_cuenta_corriente)
         self.assertEqual(pagos[0].monto, Decimal('500.00'))
 
+    def tearDown(self):
+        pass
 
-class AjustarPagosPorVueltoTests(TestCase, CajaTestMixin):
+
+class AjustarPagosPorVueltoTests(CajaTenantTestCase, CajaTestMixin):
     """Tests para ajustar_pagos_por_vuelto (neteo de efectivo por vuelto)."""
 
     @classmethod
@@ -456,7 +564,7 @@ class AjustarPagosPorVueltoTests(TestCase, CajaTestMixin):
         self.assertIn('no puede ser mayor que el efectivo', str(ctx.exception))
 
 
-class NormalizarCobroTests(TestCase, CajaTestMixin):
+class NormalizarCobroTests(CajaTenantTestCase, CajaTestMixin):
     """Tests para normalizar_cobro (flujo unificado cobro + metadata)."""
 
     @classmethod
@@ -562,7 +670,7 @@ class NormalizarCobroTests(TestCase, CajaTestMixin):
             normalizar_cobro(request_data, total_venta)
 
 
-class ResumenCierreExcedentesTests(TestCase, CajaTestMixin):
+class ResumenCierreExcedentesTests(CajaTenantTestCase, CajaTestMixin):
     """Tests para que el resumen de cierre incluya excedente no facturado y vuelto pendiente."""
 
     @classmethod

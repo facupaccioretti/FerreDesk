@@ -1157,39 +1157,10 @@ def convertir_factura_interna_a_fiscal(request):
                         _crear_auto_imputacion_si_necesario(nueva_factura, venta_data)
                     
                     # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
-                    comprobante_pagado = venta_data.get('comprobante_pagado', False)
-                    monto_pago = Decimal(str(venta_data.get('monto_pago', 0)))
-                    venta_calculada = Venta.objects.con_calculos().filter(ven_id=nueva_factura.ven_id).first()
-                    total_venta = Decimal(str(venta_calculada.ven_total)) if venta_calculada else Decimal('0')
-                    if sesion_caja and comprobante_pagado:
-                        from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
-                        from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
-                        pagos_data = list(data.get('pagos') or [])
-                        if not pagos_data and monto_pago and monto_pago > 0:
-                            metodo_efectivo = MetodoPago.objects.filter(codigo=CODIGO_EFECTIVO).first()
-                            if metodo_efectivo:
-                                pagos_data = [{'metodo_pago_id': metodo_efectivo.id, 'monto': monto_pago}]
-                        request_data = {
-                            'pagos': pagos_data,
-                            'monto_pago': monto_pago,
-                            'excedente_destino': data.get('excedente_destino'),
-                            'justificacion_excedente': data.get('justificacion_excedente'),
-                        }
-                        pagos_normalizados, metadata_cobro = normalizar_cobro(request_data, total_venta)
-                        if pagos_normalizados:
-                            registrar_pagos_venta(
-                                venta=nueva_factura,
-                                sesion_caja=sesion_caja,
-                                pagos=pagos_normalizados,
-                                descripcion_base="Pago de"
-                            )
-                            campos_actualizados = []
-                            for clave, valor in metadata_cobro.items():
-                                if valor is not None and hasattr(nueva_factura, clave):
-                                    setattr(nueva_factura, clave, valor)
-                                    campos_actualizados.append(clave)
-                            if campos_actualizados:
-                                nueva_factura.save(update_fields=campos_actualizados)
+                    # NOTA: En la fiscalización (factura interna a fiscal) NO se crean nuevos 
+                    # PagoVenta ni MovimientoCaja, porque la factura interna origen ya 
+                    # retiene los pagos y la trazabilidad de la caja original.
+                    pass
                     
                     # Crear recibo de excedente usando función auxiliar
                     _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_caja=sesion_caja)
@@ -1227,7 +1198,7 @@ def convertir_factura_interna_a_fiscal(request):
                 'fecha_conversion'
             ])
             
-            print(f"LOG: Cotización {factura_interna.ven_id} marcada como convertida → Factura {nueva_factura.ven_id}")
+            print(f"LOG: Cotización {factura_interna.ven_id} marcada como convertida -> Factura {nueva_factura.ven_id}")
             print(f"LOG: Imputaciones transferidas: {stats_imputaciones}")
             
             # Gestionar emisión ARCA y construir respuesta usando función auxiliar

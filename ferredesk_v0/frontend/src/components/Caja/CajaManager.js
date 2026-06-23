@@ -11,12 +11,14 @@ import CajaActualTab from "./CajaActualTab"
 import ModalAbrirCaja from "./ModalAbrirCaja"
 import MaestroBancos from "./MaestroBancos"
 import ValoresEnCartera from "./ValoresEnCartera"
+import ConsolidadoIngresosTab from "./ConsolidadoIngresosTab"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
   { key: "historial", label: "Historial de Cajas", closable: false },
+  { key: "consolidado-ingresos", label: "Consolidado de Ingresos", closable: false },
   { key: "bancos", label: "Bancos", closable: false },
   { key: "valores-en-cartera", label: "Cheques", closable: false },
 ]
@@ -122,7 +124,7 @@ const CajaManager = () => {
   }, [obtenerMiCaja, obtenerEstadoCaja, obtenerMovimientos])
 
   useEffect(() => {
-    document.title = "Caja, Banco y Cheques - FerreDesk"
+    document.title = "Tesorería - FerreDesk"
     cargarEstadoCaja()
   }, [cargarEstadoCaja])
 
@@ -283,7 +285,7 @@ const CajaManager = () => {
           <div className="max-w-[1400px] w-full mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Caja, Banco y Cheques</h2>
+              <h2 className="text-2xl font-bold text-slate-800">Tesorería</h2>
             </div>
 
             {/* Contenedor principal con tabs */}
@@ -343,6 +345,7 @@ const CajaManager = () => {
                   />
                 )}
 
+                {activeTab === "consolidado-ingresos" && <ConsolidadoIngresosTab />}
                 {activeTab === "bancos" && <MaestroBancos />}
                 {activeTab === "valores-en-cartera" && <ValoresEnCartera />}
 

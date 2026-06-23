@@ -10,8 +10,6 @@ import ModalDetalleComprobante from "./ModalDetalleComprobante"
 import ModalAnularRecibo from "./ModalAnularRecibo"
 import ModalModificarImputaciones from "./ModalModificarImputaciones"
 import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
-import useCajaAPI from "../../utils/useCajaAPI"
-import { toast } from "react-toastify"
 
 const CuentaCorrienteList = ({
   clienteSeleccionado,
@@ -32,8 +30,6 @@ const CuentaCorrienteList = ({
     anularAutoimputacion,
     modificarImputaciones
   } = useCuentaCorrienteAPI()
-  const { obtenerMiCaja } = useCajaAPI()
-
   const [cuentaCorriente, setCuentaCorriente] = useState(null)
   const [detalleModal, setDetalleModal] = useState({ abierto: false, item: null })
   const [clienteSelectorModal, setClienteSelectorModal] = useState({
@@ -97,20 +93,9 @@ const CuentaCorrienteList = ({
     handleCerrarSelectorCliente()
   }
 
-  const handleNuevoRecibo = async () => {
+  const handleNuevoRecibo = () => {
     if (!clienteSeleccionado) {
       alert('Debe seleccionar un cliente primero')
-      return
-    }
-
-    try {
-      const miCaja = await obtenerMiCaja()
-      if (!miCaja?.tiene_caja_abierta) {
-        toast.error('Debe abrir una caja antes de registrar un recibo.')
-        return
-      }
-    } catch (err) {
-      toast.error(err.message || 'No se pudo validar el estado de caja.')
       return
     }
 
