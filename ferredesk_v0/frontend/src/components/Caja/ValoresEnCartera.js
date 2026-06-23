@@ -2,7 +2,6 @@
 
 import { useEffect, useCallback, useState } from "react"
 import { formatearFecha, formatearMoneda } from "../../utils/formatters"
-import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import Tabla from "../Tabla"
 import ModalDepositarCheque from "./ModalDepositarCheque"
@@ -18,7 +17,6 @@ const ORANGE = "#e8641a"
 const ESTADO_EN_CARTERA = "EN_CARTERA"
 
 const ValoresEnCartera = ({ drilldownIntent = null }) => {
-  const theme = useFerreDeskTheme()
   const { obtenerCheques, obtenerCuentasBanco, depositarCheque, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja } = useCajaAPI()
 
   const [mostrarHistorial, setMostrarHistorial] = useState(false)

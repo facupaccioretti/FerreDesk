@@ -12,7 +12,6 @@ import AccionesMenu from "../Presupuestos y Ventas/herramientasforms/AccionesMen
 import { BotonVerDetalle, BotonEditar, BotonMarcarRechazado, BotonReactivar, BotonAcreditar } from "../Botones"
 
 const NAVY = "#1e2d3d"
-const ORANGE = "#e8641a"
 
 const ESTADOS = [
     { value: "", label: "Todos" },

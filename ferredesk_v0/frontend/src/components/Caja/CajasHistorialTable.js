@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useCajaAPI } from "../../utils/useCajaAPI"
 import { formatearFecha, formatearMoneda } from "../../utils/formatters"
-import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { fechaHoyLocal } from "../../utils/fechas"
 import Tabla from "../Tabla"
 
@@ -13,7 +12,6 @@ import Tabla from "../Tabla"
  * Al hacer clic en una fila, abre un tab con los detalles de esa caja.
  */
 const CajasHistorialTable = ({ onCajaClick, onAbrirCaja, tieneCajaAbierta, filtros = {} }) => {
-  const theme = useFerreDeskTheme()
   const { obtenerHistorialSesiones } = useCajaAPI()
 
   const [cajas, setCajas] = useState([])
