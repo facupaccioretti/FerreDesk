@@ -26,11 +26,11 @@ const ESTADOS = [
  */
 const ESTADOS_PUEDEN_MARCAR_RECHAZADO = ["EN_CARTERA", "DEPOSITADO", "ENTREGADO"]
 
-const HistorialCheques = () => {
+const HistorialCheques = ({ filtroEstadoInicial = "" }) => {
     const { obtenerCheques, marcarChequeRechazado, reactivarCheque, acreditarCheque, obtenerCuentasBanco } = useCajaAPI()
     const [cheques, setCheques] = useState([])
     const [cargando, setCargando] = useState(true)
-    const [filtroEstado, setFiltroEstado] = useState("")
+    const [filtroEstado, setFiltroEstado] = useState(filtroEstadoInicial || "")
     const [busqueda, setBusqueda] = useState("")
     const [procesandoId, setProcesandoId] = useState(null)
     const [modalAccion, setModalAccion] = useState({ cheque: null, modo: "rechazar" })
@@ -57,6 +57,10 @@ const HistorialCheques = () => {
     useEffect(() => {
         cargar()
     }, [cargar])
+
+    useEffect(() => {
+        setFiltroEstado(filtroEstadoInicial || "")
+    }, [filtroEstadoInicial])
 
     // Se usan formateadores centralizados de ../../utils/formatters
 

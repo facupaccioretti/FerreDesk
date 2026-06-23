@@ -8,6 +8,7 @@ Rutas disponibles:
 - /api/caja/metodos-pago/ - Lista de métodos de pago
 - /api/caja/pagos/ - Pagos de ventas (solo lectura)
 - /api/caja/pagos/consolidado-ingresos/ - Lectura simple unificada de ingresos
+- /api/caja/control-fondos/ - Foto consolidada actual de tesorería
 """
 
 from django.urls import path, include
@@ -23,5 +24,6 @@ router.register(r'cuentas-banco', views.CuentaBancoViewSet, basename='cuenta-ban
 router.register(r'cheques', views.ChequeViewSet, basename='cheque')
 
 urlpatterns = [
+    path('control-fondos/', views.ControlFondosAPIView.as_view(), name='control-fondos'),
     path('', include(router.urls)),
 ]

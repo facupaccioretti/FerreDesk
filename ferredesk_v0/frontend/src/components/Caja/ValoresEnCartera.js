@@ -21,7 +21,7 @@ const ESTADO_EN_CARTERA = "EN_CARTERA"
  * Listado de cheques en cartera y acceso al Historial.
  * Fase 6+: Muestra cheques operativos por defecto. Toggle para ver Historial completo.
  */
-const ValoresEnCartera = () => {
+const ValoresEnCartera = ({ drilldownIntent = null }) => {
   const theme = useFerreDeskTheme()
   const { obtenerCheques, obtenerCuentasBanco, depositarCheque, marcarChequeRechazado, obtenerAlertasVencimientoCheques, crearChequeCaja, obtenerMiCaja } = useCajaAPI()
 
@@ -43,6 +43,11 @@ const ValoresEnCartera = () => {
 
   // Alertas de vencimiento
   const [alertasVencimiento, setAlertasVencimiento] = useState({ cantidad: 0, dias: 5 })
+
+  useEffect(() => {
+    if (!drilldownIntent?.nonce) return
+    setMostrarHistorial(drilldownIntent.vistaInicial === "historial")
+  }, [drilldownIntent])
 
   const cargar = useCallback(async () => {
     // Si estamos en historial, no cargamos aquí (lo hace el componente hijo)
@@ -87,7 +92,7 @@ const ValoresEnCartera = () => {
             ← Volver a Valores en Cartera
           </button>
         </div>
-        <HistorialCheques />
+        <HistorialCheques filtroEstadoInicial={drilldownIntent?.filtroEstadoInicial || ""} />
       </div>
     )
   }

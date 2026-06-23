@@ -11,17 +11,19 @@ import CajaActualTab from "./CajaActualTab"
 import ModalAbrirCaja from "./ModalAbrirCaja"
 import MaestroBancos from "./MaestroBancos"
 import ValoresEnCartera from "./ValoresEnCartera"
-import ConsolidadoIngresosTab from "./ConsolidadoIngresosTab"
+import ControlFondosTab from "./ControlFondosTab"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
   { key: "historial", label: "Historial de Cajas", closable: false },
-  { key: "consolidado-ingresos", label: "Consolidado de Ingresos", closable: false },
+  { key: "control-fondos", label: "Control de Fondos", closable: false },
   { key: "bancos", label: "Bancos", closable: false },
   { key: "valores-en-cartera", label: "Cheques", closable: false },
 ]
+
+const mapLegacyTabKey = (key) => (key === "consolidado-ingresos" ? "control-fondos" : key)
 
 /**
  * Componente principal del módulo de Caja y Tesorería.
@@ -51,7 +53,11 @@ const CajaManager = () => {
     try {
       const savedTabs = localStorage.getItem("cajaTabs")
       if (savedTabs) {
-        const parsedTabs = JSON.parse(savedTabs)
+        const parsedTabs = JSON.parse(savedTabs).map((tab) => ({
+          ...tab,
+          key: mapLegacyTabKey(tab.key),
+          label: tab.key === "consolidado-ingresos" ? "Control de Fondos" : tab.label,
+        }))
         // Validar que siempre esté el tab principal
         let restoredTabs = parsedTabs
         const otrosTabs = restoredTabs.filter((t) => !mainTabs.some((m) => m.key === t.key))
@@ -64,7 +70,7 @@ const CajaManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("cajaActiveTab") || "historial"
+    return mapLegacyTabKey(localStorage.getItem("cajaActiveTab")) || "historial"
   })
 
   const [draggedTabKey, setDraggedTabKey] = useState(null)
@@ -85,6 +91,12 @@ const CajaManager = () => {
   const [sesionActual, setSesionActual] = useState(null)
   const [resumenCaja, setResumenCaja] = useState(null)
   const [movimientos, setMovimientos] = useState([])
+  const [controlFondosView, setControlFondosView] = useState("resumen")
+  const [chequesDrilldown, setChequesDrilldown] = useState({
+    nonce: 0,
+    vistaInicial: "operativo",
+    filtroEstadoInicial: "EN_CARTERA",
+  })
 
   const { user } = useSessionUserQuery()
   const { logout } = useLogoutMutation()
@@ -227,6 +239,40 @@ const CajaManager = () => {
     setActiveTab(tabKey)
   }
 
+  const handleControlFondosDrilldown = useCallback((codigo, metadata) => {
+    if (!metadata) return
+
+    if (metadata.tab === "control_fondos") {
+      setControlFondosView(metadata.vista_inicial || "composicion")
+      setActiveTab("control-fondos")
+      return
+    }
+
+    if (metadata.tab === "cheques") {
+      setChequesDrilldown({
+        nonce: Date.now(),
+        vistaInicial: metadata.vista_inicial || "operativo",
+        filtroEstadoInicial: metadata.filtro_inicial || "",
+      })
+      setActiveTab("valores-en-cartera")
+      return
+    }
+
+    if (metadata.tab === "bancos") {
+      setActiveTab("bancos")
+      return
+    }
+
+    if (metadata.tab === "caja_actual") {
+      setActiveTab(tieneCajaAbierta ? "caja-actual" : "historial")
+      return
+    }
+
+    if (metadata.fallback_tab === "historial_cajas") {
+      setActiveTab("historial")
+    }
+  }, [tieneCajaAbierta])
+
   // Cerrar tab
   const closeTab = (key) => {
     // No permitir cerrar tabs principales
@@ -345,9 +391,16 @@ const CajaManager = () => {
                   />
                 )}
 
-                {activeTab === "consolidado-ingresos" && <ConsolidadoIngresosTab />}
+                {activeTab === "control-fondos" && (
+                  <ControlFondosTab
+                    focusView={controlFondosView}
+                    onDrilldown={handleControlFondosDrilldown}
+                  />
+                )}
                 {activeTab === "bancos" && <MaestroBancos />}
-                {activeTab === "valores-en-cartera" && <ValoresEnCartera />}
+                {activeTab === "valores-en-cartera" && (
+                  <ValoresEnCartera drilldownIntent={chequesDrilldown} />
+                )}
 
                 {activeTab === "caja-actual" && (
                   <CajaActualTab

@@ -202,18 +202,16 @@ export function useCajaAPI() {
     }, [makeRequest]);
 
     /**
-     * Obtiene una lectura simple unificada de ingresos de caja y fuera de caja.
-     * @param {string} fechaDesde - Fecha desde (YYYY-MM-DD)
-     * @param {string} fechaHasta - Fecha hasta (YYYY-MM-DD)
-     * @returns {Promise<object>} - { lectura_simple, items, metricas, rango }
+     * Obtiene la foto actual consolidada de Tesoreria.
+     * @param {number|string|null} preset - Preset opcional para bloque reciente (7/15/30/60/90)
+     * @returns {Promise<object>} - Payload de /control-fondos/
      */
-    const obtenerConsolidadoIngresos = useCallback(async (fechaDesde = '', fechaHasta = '') => {
+    const obtenerPosicionTesoreria = useCallback(async (preset = null) => {
         const params = new URLSearchParams();
-        if (fechaDesde) params.append('fecha_desde', fechaDesde);
-        if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+        if (preset) params.append('preset', preset);
 
         const queryString = params.toString();
-        const url = `${API_BASE}/pagos/consolidado-ingresos/${queryString ? '?' + queryString : ''}`;
+        const url = `${API_BASE}/control-fondos/${queryString ? '?' + queryString : ''}`;
         return makeRequest(url);
     }, [makeRequest]);
 
@@ -409,7 +407,7 @@ export function useCajaAPI() {
 
         // Pagos
         obtenerPagosVenta,
-        obtenerConsolidadoIngresos,
+        obtenerPosicionTesoreria,
 
         // Cuentas banco
         obtenerCuentasBanco,
