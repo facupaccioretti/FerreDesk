@@ -245,6 +245,7 @@ const LibroIvaTable = ({ libroIva, loading }) => {
 
       {/* Tabla usando componente genérico */}
       <Tabla
+        variant="ferredesk"
         columnas={columnas}
         datos={datosLibroIvaFiltrados}
         valorBusqueda={valorBusqueda}

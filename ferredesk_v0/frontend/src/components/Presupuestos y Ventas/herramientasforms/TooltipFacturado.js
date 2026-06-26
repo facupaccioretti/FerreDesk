@@ -2,6 +2,7 @@
 
 import { formatearMoneda } from "./plantillasComprobantes/helpers"
 import usePortalTooltip from "./usePortalTooltip"
+import Badge from "../../ui/Badge"
 
 const TITULO_TOOLTIP = "Factura relacionada"
 
@@ -43,14 +44,17 @@ const TooltipFacturado = ({ facturaInfo }) => {
   return (
     <>
       <div className="inline-block ml-1 align-middle">
-        <button
+        <Badge
+          as="button"
           {...triggerProps}
           type="button"
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 cursor-pointer"
+          variant="outline"
+          color="accent"
+          className="cursor-pointer hover:bg-orange-50 focus:ring-2 focus:ring-orange-500 focus:ring-offset-1"
           aria-label={`${TITULO_TOOLTIP}: ${numero}`}
         >
           Facturado
-        </button>
+        </Badge>
       </div>
 
       <TooltipPortal

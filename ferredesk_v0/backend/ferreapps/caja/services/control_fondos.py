@@ -18,6 +18,7 @@ from ..models import (
     TIPO_MOVIMIENTO_ENTRADA,
     TIPO_MOVIMIENTO_SALIDA,
     ESTADO_CAJA_ABIERTA,
+    ESTADO_CAJA_CERRADA,
 )
 
 
@@ -117,7 +118,33 @@ def _calcular_caja_actual():
             )
         )["total"]
     )
-    return total, sesiones.count()
+    usuarios_con_caja_abierta = SesionCaja.objects.filter(
+        estado=ESTADO_CAJA_ABIERTA
+    ).values("usuario_id")
+    ultima_caja_cerrada_por_usuario = (
+        SesionCaja.objects.filter(
+            estado=ESTADO_CAJA_CERRADA,
+            usuario_id=OuterRef("usuario_id"),
+        )
+        .order_by("-fecha_hora_fin", "-fecha_hora_inicio", "-pk")
+        .values("pk")[:1]
+    )
+    cajas_cerradas_vigentes = (
+        SesionCaja.objects.filter(estado=ESTADO_CAJA_CERRADA)
+        .exclude(usuario_id__in=usuarios_con_caja_abierta)
+        .filter(pk=Subquery(ultima_caja_cerrada_por_usuario))
+        .annotate(
+            saldo_cierre=Coalesce(
+                "saldo_final_declarado",
+                "saldo_final_sistema",
+                Value(ZERO, output_field=decimal_field),
+            )
+        )
+    )
+    total_cierres = _decimal_or_zero(
+        cajas_cerradas_vigentes.aggregate(total=Sum("saldo_cierre"))["total"]
+    )
+    return total + total_cierres, sesiones.count()
 
 
 def _pagos_bancarios_qs():
@@ -198,7 +225,7 @@ def _build_control_fondos_payload_uncached(*, preset=None, include_bloque_recien
                 },
                 "caja": {
                     "monto": _money(caja_total),
-                    "descripcion": "Efectivo vigente en sesiones abiertas",
+                    "descripcion": "Efectivo vigente en cajas abiertas o ultimo cierre disponible",
                 },
                 "bancos": {
                     "monto": _money(bancos_total),

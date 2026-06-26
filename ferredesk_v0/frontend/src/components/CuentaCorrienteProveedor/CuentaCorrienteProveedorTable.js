@@ -149,7 +149,7 @@ const CuentaCorrienteProveedorTable = ({
             render: (item) => (
                 <span className="text-sm">
                     {item.haber > 0 ? (
-                        <span className="text-green-600 font-medium">
+                        <span className="text-emerald-600 font-medium">
                             ${formatearMonto(item.haber)}
                         </span>
                     ) : (
@@ -163,7 +163,7 @@ const CuentaCorrienteProveedorTable = ({
             titulo: "Saldo",
             align: "right",
             render: (item) => (
-                <span className={`text-sm font-bold ${item.saldo_acumulado > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                <span className={`text-sm font-bold ${item.saldo_acumulado > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                     ${formatearMonto(item.saldo_acumulado)}
                 </span>
             ),

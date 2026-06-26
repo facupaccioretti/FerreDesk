@@ -453,6 +453,7 @@ const ComprobantesList = ({
 
   return (
     <Tabla
+      variant="ferredesk"
       columnas={columnas}
       datos={datosPagina}
       renderFila={renderFila}

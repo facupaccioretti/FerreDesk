@@ -8,6 +8,7 @@ import { withQueryProfile } from "../../core/query/queryProfiles"
 import { formatearMoneda } from "../../utils/formatters"
 import { clienteAPI } from "../../utils/clienteAPI"
 import usePortalTooltip from "../Presupuestos y Ventas/herramientasforms/usePortalTooltip"
+import Badge from "../ui/Badge"
 
 const KPI_LABELS = {
   disponible_hoy: "Disponible hoy",
@@ -53,7 +54,7 @@ function getAyudaKpi(codigo) {
     case "disponible_hoy":
       return "Lo usable ahora: caja abierta y saldos bancarios ya acreditados."
     case "caja":
-      return "Dinero disponible en caja activa del sistema."
+      return "Dinero disponible en cajas abiertas; si no hay una abierta, toma el ultimo cierre registrado."
     case "bancos":
       return "Fondos registrados en cuentas bancarias."
     case "cheques_en_cartera":
@@ -204,13 +205,12 @@ const ComponenteRow = ({ item, index, totalAdministrado, onClick, cajaAbierta = 
         </div>
       </td>
       <td className="px-3 py-2 text-center">
-        <span
-          className={`inline-block rounded-sm px-2 py-0.5 text-[10px] font-semibold ${
-            esLiquido ? "bg-[#1e2d3d] text-white" : "border border-[#e8641a] text-[#e8641a]"
-          }`}
+        <Badge
+          variant={esLiquido ? "solid" : "outline"}
+          color={esLiquido ? "primary" : "accent"}
         >
           {esLiquido ? "Liquido" : "No liquido"}
-        </span>
+        </Badge>
       </td>
     </tr>
   )
