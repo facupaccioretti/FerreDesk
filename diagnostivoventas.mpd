@@ -1,0 +1,539 @@
+# Diagnostico de `ferreapps/ventas`
+
+## Contexto
+
+Este diagnostico compara el estado actual de la app `ventas` contra la estructura objetivo definida en [`ADR-backend-organization.md`](C:\Users\admin\Desktop\FerreDesk\ADR-backend-organization.md).
+
+Alcance revisado:
+
+- [`ferredesk_v0/backend/ferreapps/ventas/views`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views)
+- [`ferredesk_v0/backend/ferreapps/ventas/serializers.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\serializers.py)
+
+## Resumen ejecutivo
+
+La app `ventas` ya tiene un primer intento de modularizacion en `views/`, pero todavia no respeta del todo la separacion de responsabilidades del ADR.
+
+Los principales desalineamientos son:
+
+- `views/` sigue conteniendo mucha logica de negocio.
+- `serializers.py` concentra demasiadas responsabilidades en un solo archivo.
+- hay helpers y reglas de negocio viviendo dentro de `views/` y `serializers.py` que deberian migrar a `services/`, `selectors/` y `validators/`.
+- existen archivos de compatibilidad que ayudan a no romper imports, pero hoy ocultan una arquitectura aun muy acoplada.
+
+---
+
+## Paso 1: diagnostico de `views/`
+
+### Estado actual
+
+Archivos detectados:
+
+- [`views/__init__.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\__init__.py)
+- [`views/views_ventas.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_ventas.py)
+- [`views/views_conversiones.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_conversiones.py)
+- [`views/views_dashboard.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_dashboard.py)
+- [`views/views_comprobantes.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_comprobantes.py)
+- [`views/utils_stock.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\utils_stock.py)
+- [`views/utils_conversion.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\utils_conversion.py)
+- [`views.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views.py) como compatibilidad
+
+### Hallazgos principales
+
+#### 1. `views_ventas.py` sigue siendo un archivo demasiado grande
+
+Archivo:
+
+- [`views/views_ventas.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_ventas.py)
+
+Puntos concretos:
+
+- define filtros, helper local y varios `ViewSet` en el mismo archivo.
+- `VentaViewSet` concentra list, create y parte de la logica transaccional de venta.
+- mezcla decisiones de caja, stock, numeracion, ARCA, auto-imputacion y pagos.
+
+Referencias:
+
+- `obtener_sesion_caja_activa`: linea 63
+- `VentaFilter`: linea 74
+- `VentaCalculadaFilter`: linea 94
+- `VentaViewSet`: linea 132
+- otros viewsets de detalle y lectura: lineas 804, 809, 814, 827, 843, 868
+
+Problema respecto al ADR:
+
+- la view no es thin.
+- la view ejecuta logica operativa que deberia vivir en `services/`.
+- parte de la lectura enriquecida deberia vivir en `selectors/`.
+
+#### 2. `views_conversiones.py` es aun mas claro como candidato a corte por casos de uso
+
+Archivo:
+
+- [`views/views_conversiones.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_conversiones.py)
+
+Puntos concretos:
+
+- tiene muchas funciones auxiliares privadas antes de los endpoints.
+- los endpoints de conversion disparan flujos largos con stock, caja, imputaciones, pagos y emision fiscal.
+- varias funciones privadas son en realidad casos de uso o subcasos de uso.
+
+Referencias:
+
+- `_preparar_items_conversion`: linea 49
+- `_validar_y_procesar_stock`: linea 86
+- `_asignar_comprobante_conversion`: linea 157
+- `_crear_auto_imputacion_si_necesario`: linea 189
+- `_crear_recibo_excedente_si_existe`: linea 217
+- `_crear_recibo_parcial_si_existe`: linea 322
+- `_gestionar_emision_arca`: linea 419
+- `convertir_presupuesto_a_venta`: linea 481
+- `convertir_factura_interna_a_fiscal`: linea 1007
+- `verificar_imputaciones_comprobante`: linea 1222
+- `eliminar_auto_imputaciones_cliente_generico`: linea 1340
+
+Problema respecto al ADR:
+
+- la capa HTTP esta haciendo trabajo de coordinacion de negocio.
+- hay varias funciones que deberian convertirse en archivos dentro de `services/`.
+- la verificacion de imputaciones podria separarse entre `selectors/` y `services/` segun si solo consulta o tambien cambia estado.
+
+#### 3. `views/` contiene `utils_*` con logica que no deberia vivir en esa capa
+
+Archivos:
+
+- [`views/utils_stock.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\utils_stock.py)
+- [`views/utils_conversion.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\utils_conversion.py)
+
+Funciones detectadas:
+
+- stock:
+  - `_obtener_stock_proveedores_bloqueado`
+  - `_total_disponible_en_proveedores`
+  - `_obtener_codigo_venta`
+  - `_obtener_nombre_proveedor`
+  - `_obtener_proveedor_habitual_stock`
+  - `_descontar_distribuyendo`
+- conversion:
+  - `transferir_imputaciones_conversion`
+  - `heredar_contexto_fiscalizacion`
+
+Problema respecto al ADR:
+
+- no son helpers HTTP.
+- varias expresan reglas o coordinacion de dominio.
+- deberian migrar a `services/`, `selectors/` o `validators/`.
+
+#### 4. `views_dashboard.py` esta mejor orientado, pero mezcla HTTP con consultas
+
+Archivo:
+
+- [`views/views_dashboard.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_dashboard.py)
+
+Endpoints:
+
+- `productos_mas_vendidos`: linea 9
+- `ventas_por_dia`: linea 63
+- `clientes_mas_ventas`: linea 125
+
+Problema respecto al ADR:
+
+- aunque son vistas chicas, las queries ORM complejas y la construccion de datasets deberian vivir en `selectors/dashboard_ventas.py`.
+
+#### 5. `views_comprobantes.py` es chico, pero aun mezcla la asignacion de comprobantes en la view
+
+Archivo:
+
+- [`views/views_comprobantes.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\views_comprobantes.py)
+
+Referencia:
+
+- `ComprobanteViewSet`: linea 12
+
+Problema respecto al ADR:
+
+- el action `asignar` deberia delegar la logica de seleccion de comprobante a `validators/` o `services/`.
+
+#### 6. `views/__init__.py` expone demasiados detalles internos
+
+Archivo:
+
+- [`views/__init__.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views\__init__.py)
+
+Problema:
+
+- reexporta viewsets, endpoints y helpers internos.
+- incluso expone funciones privadas con prefijo `_`.
+- esto aumenta el acoplamiento y dificulta mover responsabilidades sin romper imports.
+
+#### 7. `views.py` ayuda a compatibilidad, pero conserva deuda tecnica visible
+
+Archivo:
+
+- [`views.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\views.py)
+
+Problema:
+
+- sirve como fachada legacy, lo cual esta bien de forma transitoria.
+- pero mantiene la app dependiendo de una API interna demasiado ancha.
+
+### Estructura sugerida para `views`
+
+```text
+ventas/
+  views/
+    __init__.py
+    views_abm.py
+    views_detalle.py
+    views_comprobantes.py
+    views_conversiones.py
+    views_dashboard.py
+```
+
+### Movimiento sugerido fuera de `views`
+
+```text
+ventas/
+  services/
+    crear_venta.py
+    actualizar_venta.py
+    convertir_presupuesto.py
+    convertir_factura_interna.py
+    gestionar_pagos_venta.py
+    procesar_stock_venta.py
+    emitir_comprobante_arca.py
+    numeracion_comprobantes.py
+  selectors/
+    listar_ventas.py
+    detalle_venta.py
+    dashboard_ventas.py
+    verificar_imputaciones.py
+  validators/
+    reglas_stock.py
+    reglas_conversiones.py
+    reglas_comprobantes.py
+  utils/
+    formatos_comprobante.py
+```
+
+### Conclusion de `views`
+
+La modularizacion actual es un buen primer paso, pero todavia es una modularizacion por archivo grande, no una modularizacion por responsabilidad. El siguiente salto de calidad es sacar la logica de negocio de las views y cortar por flujo de negocio real.
+
+---
+
+## Paso 2: diagnostico de `serializers`
+
+### Estado actual
+
+Archivo revisado:
+
+- [`ferredesk_v0/backend/ferreapps/ventas/serializers.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\serializers.py)
+
+Tamano aproximado:
+
+- un unico archivo de casi 50 KB
+- mezcla input, output, model serializers, logica de validacion, creacion, actualizacion y armado de respuestas enriquecidas
+
+### Clases detectadas
+
+- `ComprobanteSerializer`: linea 17
+- `VentaAsociadaSerializer`: linea 22
+- `VentaDetalleItemSerializer`: linea 53
+- `VentaDetalleItemCalculadoSerializer`: linea 64
+- `VentaSerializer`: linea 114
+- `VentaDetalleManSerializer`: linea 652
+- `VentaRemPedSerializer`: linea 657
+- `VentaCalculadaSerializer`: linea 663
+- `VentaTicketSerializer`: linea 856
+
+### Hallazgos principales
+
+#### 1. `serializers.py` concentra demasiadas responsabilidades heterogeneas
+
+En el mismo archivo conviven:
+
+- serializers basicos de modelo
+- serializers de salida enriquecida
+- serializer principal de alta y actualizacion
+- serializer de ticket
+- validaciones de dominio
+- logica de escritura en base
+- actualizacion de items
+- queries auxiliares a otros modelos
+
+Problema respecto al ADR:
+
+- el ADR pide separar validacion y transformacion de API, no convertir el serializer en centro del negocio.
+
+#### 2. `VentaSerializer` esta haciendo trabajo de servicio
+
+Archivo:
+
+- [`serializers.py`](C:\Users\admin\Desktop\FerreDesk\ferredesk_v0\backend\ferreapps\ventas\serializers.py)
+
+Referencias clave:
+
+- `validate_items`: linea 225
+- `create`: linea 238
+- `update`: linea 498
+- `_actualizar_items_venta_inteligente`: linea 591
+
+Dentro de `create` y `update` hoy se hace:
+
+- defaults de campos obligatorios
+- validaciones de reglas para notas de credito y debito
+- deteccion y asignacion automatica de comprobante por letra
+- calculo de vencimiento a partir de `dias_validez`
+- generacion de item generico para notas de debito
+- asignacion de bonificacion general
+- normalizacion de items genericos
+- resolucion de alicuota desde `Stock`
+- creacion de venta
+- creacion de items
+- actualizacion inteligente de items en update
+
+Problema respecto al ADR:
+
+- esto ya no es solo serializacion.
+- buena parte deberia vivir en `services/crear_venta.py`, `services/actualizar_venta.py` y `validators/`.
+
+#### 3. El serializer principal consulta demasiados modelos externos
+
+Consultas directas detectadas:
+
+- `Cliente.objects.get(...)`: linea 196
+- `Venta.objects.filter(...)`: lineas 252, 320, 505, 641
+- `Comprobante.objects.get(...)`: lineas 285, 300, 347, 360
+- `Stock.objects.filter(...).only(...)`: lineas 470 y 579
+
+Problema:
+
+- el serializer deja de ser una capa declarativa y pasa a coordinar estado y reglas.
+- esto complica testeo, reutilizacion y trazabilidad de reglas.
+
+#### 4. Hay logica de dominio duplicada o paralela entre `views` y `serializers`
+
+Ejemplos:
+
+- bonificacion general se procesa en `views_ventas.py` y tambien en `VentaSerializer`.
+- validaciones y normalizacion de items aparecen en mas de una capa.
+- asignacion de comprobantes aparece en `views`, `serializers` y utilidades.
+
+Riesgo:
+
+- divergencia de comportamiento.
+- bugs por cambios aplicados en una capa y olvidados en otra.
+
+#### 5. `VentaAsociadaSerializer` y `VentaCalculadaSerializer` hacen trabajo de lectura enriquecida que podria apoyarse mejor en `selectors`
+
+Referencias:
+
+- `VentaAsociadaSerializer.get_ven_total`: linea 33 con fallback a query ORM en lineas 46 a 48
+- `VentaCalculadaSerializer.get_iva_desglose`: inicia en linea 733 aproximadamente, usando query por detalle
+- `VentaCalculadaSerializer.get_factura_fiscal_info`: usa consulta directa en linea 801
+- `VentaCalculadaSerializer.get_pagos_detalle`: usa `PagoVenta.objects.filter(...)` en linea 841
+
+Problema:
+
+- los serializers de salida estan resolviendo datos mediante queries propias.
+- parte de esto deberia venir prearmado desde `selectors/` o desde querysets optimizados.
+
+#### 6. `VentaTicketSerializer` tambien mezcla serializacion con armado de contexto de impresion
+
+Referencias:
+
+- `get_items`: usa `.con_calculos()` sobre items
+- `get_ferreteria`: importa y serializa `Ferreteria` adentro del metodo
+- `get_ven_qr`: vuelve a resolver base64
+
+Problema:
+
+- para tickets o comprobantes conviene tener un serializer de salida dedicado, pero alimentado por un selector o servicio de composicion de datos.
+
+#### 7. Hay varias `SerializerMethodField` que son razonables, pero otras esconden deuda estructural
+
+Casos razonables:
+
+- formateo de numero
+- traduccion de etiquetas simples
+
+Casos que muestran deuda:
+
+- busqueda de cliente legacy
+- busqueda de pagos
+- busqueda de factura fiscal asociada
+- agregacion de IVA
+- fallback a consultas cuando falta anotacion
+
+#### 8. Hay imports y dependencias que muestran exceso de acoplamiento
+
+Imports detectados:
+
+- `PagoVenta` y `PagoVentaSerializer`
+- `Cliente`, `Vendedor`
+- `AlicuotaIVA`
+- imports locales tardios de `Stock`, `Ferreteria`, serializers de productos y hasta `base64`
+
+Problema:
+
+- el archivo no esta especializado.
+- se convierte en una frontera difusa entre varias apps.
+
+### Estructura sugerida para `serializers`
+
+```text
+ventas/
+  serializers/
+    __init__.py
+    model_serializers.py
+    input_serializers.py
+    output_serializers.py
+    ticket_serializers.py
+    filtros_serializers.py
+```
+
+### Reparto sugerido
+
+#### `model_serializers.py`
+
+- `ComprobanteSerializer`
+- `VentaDetalleItemSerializer`
+- `VentaDetalleManSerializer`
+- `VentaRemPedSerializer`
+
+#### `output_serializers.py`
+
+- `VentaAsociadaSerializer`
+- `VentaDetalleItemCalculadoSerializer`
+- `VentaCalculadaSerializer`
+
+#### `ticket_serializers.py`
+
+- `VentaTicketSerializer`
+
+#### `input_serializers.py`
+
+- `CrearVentaSerializer`
+- `ActualizarVentaSerializer`
+- `ItemVentaInputSerializer`
+- `ComprobantesAsociadosInputSerializer`
+- serializers de entrada para conversiones si se quiere sostener consistencia
+
+#### `filtros_serializers.py`
+
+- opcional si se quiere separar estructuras auxiliares de entrada y filtros de API
+
+### Movimiento sugerido fuera de `serializers`
+
+#### A `services/`
+
+- creacion completa de venta
+- actualizacion completa de venta
+- actualizacion inteligente de items
+- generacion automatica de item generico
+- asignacion de vencimiento derivado
+
+#### A `validators/`
+
+- reglas de NC y ND
+- validacion de letras permitidas
+- validacion de comprobantes asociados
+- reglas de item generico
+- reglas de alicuota por default
+- reglas de unicidad funcional
+
+#### A `selectors/`
+
+- total asociado de ventas
+- desglose de IVA
+- pagos detalle
+- factura fiscal asociada
+- datos enriquecidos para ticket e impresion
+
+### Conclusion de `serializers`
+
+El problema principal no es solo el tamano del archivo. El problema es que `serializers.py` hoy funciona como serializer, validator, service, selector y adaptador legacy al mismo tiempo. Mientras siga asi, cualquier cambio en ventas va a ser costoso y fragil.
+
+---
+
+## Propuesta de estructura objetivo para `ventas`
+
+```text
+ventas/
+  __init__.py
+  apps.py
+  admin.py
+  models.py
+  urls.py
+  views.py
+  serializers.py
+
+  views/
+    __init__.py
+    views_abm.py
+    views_detalle.py
+    views_conversiones.py
+    views_dashboard.py
+    views_comprobantes.py
+
+  serializers/
+    __init__.py
+    model_serializers.py
+    input_serializers.py
+    output_serializers.py
+    ticket_serializers.py
+
+  services/
+    __init__.py
+    crear_venta.py
+    actualizar_venta.py
+    convertir_presupuesto.py
+    convertir_factura_interna.py
+    gestionar_pagos_venta.py
+    procesar_stock_venta.py
+    emitir_comprobante_arca.py
+    numeracion_comprobantes.py
+
+  selectors/
+    __init__.py
+    listar_ventas.py
+    detalle_venta.py
+    dashboard_ventas.py
+    pagos_venta.py
+    comprobantes_asociados.py
+
+  validators/
+    __init__.py
+    reglas_stock.py
+    reglas_conversiones.py
+    reglas_comprobantes.py
+    reglas_items.py
+
+  utils/
+    __init__.py
+    formatos_comprobante.py
+```
+
+## Orden sugerido de refactor
+
+1. Crear carpetas `serializers/`, `services/`, `selectors/` y `validators/` sin romper imports actuales.
+2. Mover primero lectura y salida:
+   - dashboard
+   - serializers de salida
+   - ticket
+3. Mover despues helpers de stock y conversion fuera de `views/`.
+4. Extraer `create` y `update` de `VentaSerializer` a servicios.
+5. Reducir `VentaViewSet` para que solo valide request, invoque servicios y responda.
+6. Mantener `views.py` y `serializers.py` como fachadas temporales de compatibilidad hasta terminar el corte.
+
+## Criterio rector
+
+La refactorizacion no deberia cortar por tamano de archivo solamente. Deberia cortar por flujo de negocio y por responsabilidad:
+
+- HTTP en `views/`
+- payload de API en `serializers/`
+- cambios de estado en `services/`
+- lectura compleja en `selectors/`
+- reglas reutilizables en `validators/`
+
+Si una funcion cambia estado del negocio, no deberia quedar en una view ni en un serializer.

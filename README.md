@@ -1,6 +1,33 @@
 
 ## README DESACTUALIZADO
 
+## Documentacion Normativa
+
+Las decisiones de arquitectura y convenciones del backend se documentan en:
+
+- [ADR-backend-organization.md](C:/Users/admin/Desktop/FerreDesk/ADR-backend-organization.md)
+- [CODING_STANDARDS.md](C:/Users/admin/Desktop/FerreDesk/CODING_STANDARDS.md)
+- [ADR-backend-coding-conventions.md](C:/Users/admin/Desktop/FerreDesk/ADR-backend-coding-conventions.md)
+
+## Windows y UTF-8
+
+En Windows con PowerShell 5.1 puede aparecer mojibake al leer archivos UTF-8 si la sesion arranca con `CP437`, `IBM437` o `$OutputEncoding` en ASCII. Eso rompe contexto, matching de parches y verificaciones aunque el archivo en disco este bien.
+
+Antes de trabajar sobre Markdown o archivos con texto no ASCII, ejecutar:
+
+```powershell
+. C:\Users\admin\Desktop\FerreDesk\scripts\enable-utf8-powershell.ps1
+```
+
+Ese script:
+
+- fuerza `InputEncoding`, `OutputEncoding` y `$OutputEncoding` a UTF-8
+- cambia la code page activa a `65001`
+- fija `Out-File`, `Set-Content` y `Add-Content` en UTF-8 para la sesion
+- exporta `PYTHONIOENCODING=utf-8` para procesos hijos
+
+Si despues de eso `Get-Content -Encoding utf8 <archivo>` se ve bien pero otro flujo sigue mostrando mojibake, tratarlo como problema de lectura/contexto de la herramienta, no como corrupcion del archivo.
+
 FerreDesk es una aplicación web para gestionar productos, ventas, clientes, proveedores, cuentas corrientes, compras, reservas e informes. El sistema corre sobre Docker y expone (actualizar para cuando usemos droplets) una única aplicación web en `http://localhost:8000` que sirve el frontend con React y el backend con Django integrados.
 
 - Frontend: React + Tailwind CSS (build servido por Django).

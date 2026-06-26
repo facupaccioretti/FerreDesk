@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import json
 from unittest.mock import patch
 
 from django.urls import clear_url_caches
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from rest_framework import serializers as drf_serializers
@@ -13,11 +14,19 @@ from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
 from ferreapps.productos.models import AlicuotaIVA, PrecioProveedorExcel, StockProve
 from ferreapps.ventas.serializers import VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
+from ferreapps.ventas.views.views_dashboard import (
+    clientes_mas_ventas,
+    productos_mas_vendidos,
+    ventas_por_dia,
+)
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
 
 ENDPOINT_VENTAS = "/api/ventas/"
+ENDPOINT_PRODUCTOS_MAS_VENDIDOS = "/api/ventas/home/productos-mas-vendidos/"
+ENDPOINT_VENTAS_POR_DIA = "/api/ventas/home/ventas-por-dia/"
+ENDPOINT_CLIENTES_MAS_VENTAS = "/api/ventas/home/clientes-mas-ventas/"
 
 
 class VentasTenantTestCase(TenantTestCase):
@@ -210,6 +219,65 @@ class TestVentaViewSetPaginacion(VentasTenantTestCase):
         self.assertTrue(
             all(venta["comprobante"]["tipo"] == "factura" for venta in payload["results"])
         )
+
+
+class TestDashboardVentasEndpoints(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.factory = RequestFactory()
+        venta_uno = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=601,
+            fecha=date(2026, 2, 10),
+        )
+        venta_dos = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=602,
+            fecha=date(2026, 2, 11),
+        )
+        self.crear_item_generico(
+            venta=venta_uno,
+            cantidad=Decimal("2"),
+            precio_final=Decimal("121.00"),
+            detalle="Martillo",
+        )
+        self.crear_item_generico(
+            venta=venta_dos,
+            cantidad=Decimal("1"),
+            precio_final=Decimal("242.00"),
+            detalle="Taladro",
+        )
+
+    def test_productos_mas_vendidos_conserva_payload(self):
+        request = self.factory.get(ENDPOINT_PRODUCTOS_MAS_VENDIDOS, {"tipo": "cantidad"})
+        respuesta = productos_mas_vendidos(request)
+
+        self.assertEqual(respuesta.status_code, 200)
+        payload = json.loads(respuesta.content)
+        self.assertEqual(payload["datasets"][0]["label"], "Cantidad Vendida")
+        self.assertEqual(payload["labels"][:2], ["Martillo", "Taladro"])
+        self.assertEqual(payload["datasets"][0]["data"][:2], [2.0, 1.0])
+
+    def test_ventas_por_dia_conserva_payload(self):
+        request = self.factory.get(ENDPOINT_VENTAS_POR_DIA, {"periodo": "1y"})
+        respuesta = ventas_por_dia(request)
+
+        self.assertEqual(respuesta.status_code, 200)
+        payload = json.loads(respuesta.content)
+        self.assertEqual(payload["datasets"][0]["label"], "Ventas Diarias ($)")
+        self.assertEqual(len(payload["labels"]), 2)
+        self.assertIn("10/02", payload["labels"])
+        self.assertEqual(len(payload["labels"]), len(payload["datasets"][0]["data"]))
+
+    def test_clientes_mas_ventas_conserva_payload(self):
+        request = self.factory.get(ENDPOINT_CLIENTES_MAS_VENTAS, {"tipo": "frecuencia"})
+        respuesta = clientes_mas_ventas(request)
+
+        self.assertEqual(respuesta.status_code, 200)
+        payload = json.loads(respuesta.content)
+        self.assertEqual(payload["datasets"][0]["label"], "Frecuencia de Compras")
+        self.assertEqual(payload["labels"][0], self.cliente.razon)
+        self.assertEqual(payload["datasets"][0]["data"][0], 2.0)
 
 
 class TestIndicesDeAltoImpacto(VentasTenantTestCase):
@@ -491,3 +559,207 @@ class TestContextoIsListEnSerializer(TestCase):
 
         # Con lista vacía de ítems, el resultado es un dict vacío
         self.assertIsInstance(resultado, dict)
+
+
+class TestReglasItemsVenta(TestCase):
+    def test_validador_permite_items_vacios_para_nota_debito(self):
+        from ferreapps.ventas.validators.reglas_items_venta import validar_items_requeridos_para_venta
+
+        self.assertEqual(validar_items_requeridos_para_venta([], "nota_debito"), [])
+
+    def test_validador_exige_items_para_venta_comun(self):
+        from ferreapps.ventas.validators.reglas_items_venta import validar_items_requeridos_para_venta
+
+        with self.assertRaisesMessage(drf_serializers.ValidationError, "Debe agregar al menos un item"):
+            validar_items_requeridos_para_venta([], "factura")
+
+
+class TestReglasComprobantesVenta(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.comprobante_nota_credito_a, _ = Comprobante.objects.get_or_create(
+            codigo_afip="003",
+            defaults={
+                "nombre": "Nota de Credito A",
+                "letra": "A",
+                "tipo": "nota_credito",
+                "activo": True,
+            },
+        )
+        self.comprobante_factura_interna, _ = Comprobante.objects.get_or_create(
+            codigo_afip="9999",
+            defaults={
+                "nombre": "Factura Interna",
+                "letra": "I",
+                "tipo": "factura_interna",
+                "activo": True,
+            },
+        )
+        self.comprobante_nota_debito_interna, _ = Comprobante.objects.get_or_create(
+            codigo_afip="9994",
+            defaults={
+                "nombre": "Nota de Debito Interna",
+                "letra": "I",
+                "tipo": "nota_debito_interna",
+                "activo": True,
+            },
+        )
+        self.comprobante_factura_b, _ = Comprobante.objects.get_or_create(
+            codigo_afip="1009",
+            defaults={
+                "nombre": "Factura B",
+                "letra": "B",
+                "tipo": "factura",
+                "activo": True,
+            },
+        )
+        self.comprobante_recibo_a, _ = Comprobante.objects.get_or_create(
+            codigo_afip="004",
+            defaults={
+                "nombre": "Recibo A",
+                "letra": "A",
+                "tipo": "recibo",
+                "activo": True,
+            },
+        )
+
+    def test_resuelve_comprobante_para_nota_credito_fiscal(self):
+        from ferreapps.ventas.validators.reglas_comprobantes import validar_y_resolver_comprobante_para_nota
+
+        factura = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=601,
+            fecha=date(2026, 3, 1),
+        )
+
+        codigo = validar_y_resolver_comprobante_para_nota(
+            tipo_comprobante="nota_credito",
+            comprobantes_asociados_ids=[factura.ven_id],
+        )
+
+        self.assertEqual(codigo, self.comprobante_nota_credito_a.codigo_afip)
+
+    def test_resuelve_comprobante_para_nota_debito_interna(self):
+        from ferreapps.ventas.validators.reglas_comprobantes import validar_y_resolver_comprobante_para_nota
+
+        factura_interna = self.crear_venta(
+            comprobante=self.comprobante_factura_interna,
+            numero=603,
+            fecha=date(2026, 3, 3),
+        )
+
+        codigo = validar_y_resolver_comprobante_para_nota(
+            tipo_comprobante="nota_debito_interna",
+            comprobantes_asociados_ids=[factura_interna.ven_id],
+        )
+
+        self.assertEqual(codigo, self.comprobante_nota_debito_interna.codigo_afip)
+
+    def test_rechaza_comprobantes_asociados_no_validos_para_notas(self):
+        from ferreapps.ventas.validators.reglas_comprobantes import validar_y_resolver_comprobante_para_nota
+
+        recibo = self.crear_venta(
+            comprobante=self.comprobante_recibo_a,
+            numero=602,
+            fecha=date(2026, 3, 2),
+        )
+
+        with self.assertRaisesMessage(drf_serializers.ValidationError, "Solo se permiten facturas"):
+            validar_y_resolver_comprobante_para_nota(
+                tipo_comprobante="nota_credito",
+                comprobantes_asociados_ids=[recibo.ven_id],
+            )
+
+    def test_rechaza_facturas_con_letras_distintas_para_notas(self):
+        from ferreapps.ventas.validators.reglas_comprobantes import validar_y_resolver_comprobante_para_nota
+
+        factura_a = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=604,
+            fecha=date(2026, 3, 4),
+        )
+        factura_b = self.crear_venta(
+            comprobante=self.comprobante_factura_b,
+            numero=605,
+            fecha=date(2026, 3, 5),
+        )
+
+        with self.assertRaisesMessage(drf_serializers.ValidationError, "misma letra"):
+            validar_y_resolver_comprobante_para_nota(
+                tipo_comprobante="nota_credito",
+                comprobantes_asociados_ids=[factura_a.ven_id, factura_b.ven_id],
+            )
+
+
+class TestPreprocesamientoVentaHelpers(TestCase):
+    def test_asegura_defaults_de_campos_obligatorios(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import asegurar_defaults_campos_venta
+
+        validated_data = {"ven_descu1": None}
+
+        resultado = asegurar_defaults_campos_venta(validated_data)
+
+        self.assertEqual(resultado["ven_descu1"], Decimal("0"))
+        self.assertEqual(resultado["ven_descu2"], Decimal("0"))
+        self.assertEqual(resultado["ven_descu3"], Decimal("0"))
+        self.assertEqual(resultado["ven_vdocomvta"], Decimal("0"))
+        self.assertEqual(resultado["ven_vdocomcob"], Decimal("0"))
+
+    def test_aplica_dias_validez_sobre_fecha_de_venta_o_default(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import aplicar_dias_validez_a_venta
+
+        resultado_con_fecha = aplicar_dias_validez_a_venta(
+            validated_data={"ven_fecha": date(2026, 4, 10)},
+            dias_validez="5",
+            fecha_por_defecto=date(2026, 4, 1),
+        )
+        resultado_sin_fecha = aplicar_dias_validez_a_venta(
+            validated_data={},
+            dias_validez=3,
+            fecha_por_defecto=date(2026, 4, 1),
+        )
+
+        self.assertEqual(resultado_con_fecha["ven_vence"], date(2026, 4, 15))
+        self.assertEqual(resultado_sin_fecha["ven_vence"], date(2026, 4, 4))
+
+    def test_aplica_bonificacion_general_solo_a_items_sin_bonificacion(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import aplicar_bonificacion_general_a_items
+
+        items = [
+            {"vdi_bonifica": "0"},
+            {"vdi_bonifica": "12.5"},
+            {},
+        ]
+
+        resultado = aplicar_bonificacion_general_a_items(items, "7.5")
+
+        self.assertEqual(resultado[0]["vdi_bonifica"], 7.5)
+        self.assertEqual(resultado[1]["vdi_bonifica"], "12.5")
+        self.assertEqual(resultado[2]["vdi_bonifica"], 7.5)
+
+    def test_construye_item_generico_para_nota_debito(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import construir_item_generico_para_nota_debito
+
+        resultado = construir_item_generico_para_nota_debito(
+            tipo_comprobante="nota_debito",
+            initial_data={
+                "detalle_item_generico": "Recargo administrativo",
+                "monto_neto_item_generico": "1000.00",
+                "exento_iva": "false",
+            },
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["vdi_detalle1"], "Recargo administrativo")
+        self.assertEqual(resultado[0]["vdi_costo"], Decimal("1000.00"))
+        self.assertEqual(resultado[0]["vdi_precio_unitario_final"], Decimal("1000.00"))
+        self.assertEqual(resultado[0]["vdi_idaliiva"], 5)
+
+    def test_construir_item_generico_para_nota_debito_exige_monto_positivo(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import construir_item_generico_para_nota_debito
+
+        with self.assertRaisesMessage(drf_serializers.ValidationError, "Debe ser mayor que cero"):
+            construir_item_generico_para_nota_debito(
+                tipo_comprobante="nota_debito",
+                initial_data={"monto_neto_item_generico": "0"},
+            )
