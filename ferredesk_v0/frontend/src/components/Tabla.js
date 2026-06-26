@@ -65,6 +65,8 @@ const Tabla = ({
   customKey = null,
   // Renderizado responsivo para mobile
   renderCardMobile = null,
+  // Variante de diseño
+  variant = "default", // "default" | "ferredesk"
 }) => {
   const [paginaActual, setPaginaActual] = useState(paginaControlada || 1)
   const [filasPorPagina, setFilasPorPagina] = useState(
@@ -126,7 +128,9 @@ const Tabla = ({
   const esSmall = tamañoEncabezado === "pequeño"
   const pyFila = filasCompactas ? "py-1" : "py-2"
   const textSize = esSmall ? "text-xs" : "text-sm"
-  const clasesCeldaBase = `px-3 ${pyFila} ${textSize} text-slate-700 max-w-[200px] truncate`
+  const esFerredesk = variant === "ferredesk"
+  const textBodySize = esFerredesk ? "text-sm" : textSize
+  const clasesCeldaBase = `px-3 ${pyFila} ${textBodySize} ${esFerredesk ? "text-[#1e2d3d]" : "text-slate-700"} max-w-[200px] truncate`
 
   return (
     <div
@@ -239,18 +243,24 @@ const Tabla = ({
 
         <table className={`min-w-full border-collapse ${renderCardMobile ? "hidden md:table" : ""}`}>
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-800 border-b border-slate-700">
-              {columnas.map((col) => (
-                <th
-                  key={col.id}
-                  className={`px-3 ${esSmall ? "py-1.5" : "py-2"} ${textSize} font-semibold text-slate-100 ${
-                    ALIGN_CLASS[col.align || "left"]
-                  } whitespace-nowrap`}
-                  style={col.ancho ? { width: col.ancho } : undefined}
-                >
-                  {col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
-                </th>
-              ))}
+            <tr className={esFerredesk ? "bg-[#1e2d3d] border-b border-slate-700" : "bg-slate-800 border-b border-slate-700"}>
+              {columnas.map((col) => {
+                const thClasses = esFerredesk
+                  ? "px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-300"
+                  : `px-3 ${esSmall ? "py-1.5" : "py-2"} ${textSize} font-semibold text-slate-100`
+                  
+                return (
+                  <th
+                    key={col.id}
+                    className={`${thClasses} ${
+                      ALIGN_CLASS[col.align || "left"]
+                    } whitespace-nowrap`}
+                    style={col.ancho ? { width: col.ancho } : undefined}
+                  >
+                    {esFerredesk ? col.titulo : col.titulo.charAt(0).toUpperCase() + col.titulo.slice(1).toLowerCase()}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
 
@@ -275,10 +285,14 @@ const Tabla = ({
                 ? customKey(fila, idxVisible)
                 : fila.id ?? indiceInicio + idxVisible
 
+              const rowClasses = esFerredesk
+                ? `border-b border-slate-100 last:border-0 transition-colors duration-100 ${idxVisible % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-slate-100/60`
+                : "bg-white hover:bg-orange-50/40 transition-colors duration-100"
+
               return (
                 <tr
                   key={rowKey}
-                  className="bg-white hover:bg-orange-50/40 transition-colors duration-100"
+                  className={rowClasses}
                 >
                   {columnas.map((col) => {
                     const contenido = col.render

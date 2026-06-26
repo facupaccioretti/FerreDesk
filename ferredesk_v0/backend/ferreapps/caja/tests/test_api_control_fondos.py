@@ -1,9 +1,17 @@
 from decimal import Decimal
 
 from django.core.cache import cache
+from django.utils import timezone
 from rest_framework import status
 
-from ferreapps.caja.models import Cheque, CuentaBanco, MetodoPago, PagoVenta, CODIGO_TRANSFERENCIA
+from ferreapps.caja.models import (
+    Cheque,
+    CuentaBanco,
+    MetodoPago,
+    PagoVenta,
+    CODIGO_TRANSFERENCIA,
+    ESTADO_CAJA_CERRADA,
+)
 from ferreapps.caja.tests.mixins import CajaTenantAPITestCase, CajaTestMixin
 from ferreapps.caja.tests.utils_tests import TestDataHelper
 from ferreapps.cuenta_corriente.models import OrdenPago
@@ -136,6 +144,24 @@ class ControlFondosAPITests(CajaTenantAPITestCase, CajaTestMixin):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["resumen_actual"]["kpis"]["bancos"]["monto"], "0.00")
+
+    def test_control_fondos_muestra_caja_desde_ultimo_cierre_si_no_hay_abierta(self):
+        sesion = self.crear_sesion_caja(
+            self.usuario,
+            saldo_inicial=Decimal("100.00"),
+            estado=ESTADO_CAJA_CERRADA,
+        )
+        sesion.saldo_final_declarado = Decimal("640.00")
+        sesion.saldo_final_sistema = Decimal("630.00")
+        sesion.fecha_hora_fin = timezone.now()
+        sesion.save(update_fields=["saldo_final_declarado", "saldo_final_sistema", "fecha_hora_fin"])
+
+        response = self.client.get("/api/caja/control-fondos/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["resumen_actual"]["kpis"]["caja"]["monto"], "640.00")
+        self.assertEqual(response.data["resumen_actual"]["kpis"]["disponible_hoy"]["monto"], "640.00")
+        self.assertFalse(response.data["seniales"]["hay_caja_abierta"])
 
     def test_contrato_viejo_de_consolidado_ya_no_esta_expuesto(self):
         response = self.client.get("/api/caja/pagos/consolidado-ingresos/")

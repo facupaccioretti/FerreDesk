@@ -277,6 +277,24 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["disponible_hoy"]["monto"], "1200.00")
         self.assertTrue(payload["seniales"]["hay_caja_abierta"])
 
+    def test_caja_toma_ultimo_cierre_si_no_hay_sesiones_abiertas(self):
+        sesion_cerrada = self.crear_sesion_caja(
+            self.usuario,
+            saldo_inicial=Decimal("900.00"),
+            estado=ESTADO_CAJA_CERRADA,
+        )
+        sesion_cerrada.saldo_final_declarado = Decimal("1250.00")
+        sesion_cerrada.saldo_final_sistema = Decimal("1200.00")
+        sesion_cerrada.fecha_hora_fin = timezone.now()
+        sesion_cerrada.save(update_fields=["saldo_final_declarado", "saldo_final_sistema", "fecha_hora_fin"])
+
+        payload = build_control_fondos_payload()
+        kpis = payload["resumen_actual"]["kpis"]
+
+        self.assertEqual(kpis["caja"]["monto"], "1250.00")
+        self.assertEqual(kpis["disponible_hoy"]["monto"], "1250.00")
+        self.assertFalse(payload["seniales"]["hay_caja_abierta"])
+
     def test_no_doble_conteo_al_registrar_venta(self):
         from ferreapps.caja.utils import registrar_pagos_venta, registrar_vuelto
 
