@@ -4,7 +4,11 @@ from rest_framework import serializers
 
 from ferreapps.caja.models import PagoVenta
 
-from ..models import ComprobanteAsociacion, Venta, VentaDetalleItem
+from ..models import Venta, VentaDetalleItem
+from ..selectors.venta_relaciones import (
+    serializar_facturas_anuladas,
+    serializar_notas_credito_que_anulan,
+)
 from .model_serializers import ComprobanteSerializer
 
 
@@ -234,14 +238,10 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
             return None
 
     def get_notas_credito_que_la_anulan(self, obj):
-        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
-        ncs = [asc.nota_credito for asc in asociaciones]
-        return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
+        return serializar_notas_credito_que_anulan(obj, VentaAsociadaSerializer, self.context)
 
     def get_facturas_anuladas(self, obj):
-        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
-        facturas = [asc.factura_afectada for asc in asociaciones]
-        return VentaAsociadaSerializer(facturas, many=True, context=self.context).data
+        return serializar_facturas_anuladas(obj, VentaAsociadaSerializer, self.context)
 
     def get_pagos_detalle(self, obj):
         pagos = PagoVenta.objects.filter(venta_id=obj.pk).select_related("metodo_pago", "cuenta_banco")

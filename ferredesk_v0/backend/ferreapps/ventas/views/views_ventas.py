@@ -6,7 +6,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.core.exceptions import ValidationError
-from django.db import transaction, models
+from django.db import transaction
 from django.db import IntegrityError
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
@@ -23,9 +23,9 @@ from ..serializers import (
 )
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
-from ..utils import asignar_comprobante, _construir_respuesta_comprobante
+from ..utils import asignar_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
-from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
+from ..services.preparar_creacion_venta import preparar_datos_venta_para_creacion
 from .utils_stock import (
     _obtener_proveedor_habitual_stock,
     _obtener_codigo_venta,
@@ -39,7 +39,6 @@ from ferredesk_backend.utils.observability import medir_proceso
 logger = logging.getLogger(__name__)
 
 # Constantes
-PUNTO_VENTA_INTERNO = 99
 ALICUOTAS = {
     1: Decimal('0'),  # NO GRAVADO
     2: Decimal('0'),  # EXENTO
@@ -291,65 +290,20 @@ class VentaViewSet(viewsets.ModelViewSet):
                 return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
         cliente_id = data.get('ven_idcli')
         cliente = Cliente.objects.filter(id=cliente_id).first()
-        situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
         
-        # Obtener el comprobante apropiado según el tipo y cliente
-        comprobante_id_enviado = data.get('comprobante_id')
-        
-        # Si el frontend envió un comprobante específico, lo usamos (validando que exista)
-        if comprobante_id_enviado:
-            comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
-            if not comprobante_obj:
-                return Response({
-                    'detail': f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            comprobante = _construir_respuesta_comprobante(comprobante_obj)
-        else:
-            # Si no se envió un comprobante específico, utilizar la función asignar_comprobante
-            try:
-                comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
-            except ValidationError as e:
-                return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not comprobante:
-            return Response({
-                'detail': 'No se encontró comprobante válido para la operación. '
-                          'Verifique la configuración de comprobantes y letras.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        data['comprobante_id'] = comprobante["codigo_afip"]
-
-        # === PUNTO DE VENTA PARA COMPROBANTES INTERNOS ===
-        # Si el tipo de comprobante está listado como interno, usar el PV interno 0099
-        if tipo_comprobante in COMPROBANTES_INTERNOS:
-            data['ven_punto'] = PUNTO_VENTA_INTERNO
-
-        # === ALINEAR PUNTO DE VENTA CON ARCA CUANDO ES COMPROBANTE FISCAL ===
-        # Para evitar desalineación con AFIP y colisiones de numeración, si el comprobante
-        # requiere emisión ARCA, forzar a usar el punto de venta configurado en Ferretería.
-        if debe_emitir_arca(tipo_comprobante):
-            pv_arca = getattr(ferreteria, 'punto_venta_arca', None)
-            if pv_arca:
-                data['ven_punto'] = pv_arca
-        # Si el frontend no envió punto de venta, usar el configurado en ferretería como valor por defecto
-        if not data.get('ven_punto'):
-            pv_defecto = getattr(ferreteria, 'punto_venta_arca', None)
-            if pv_defecto:
-                data['ven_punto'] = pv_defecto
-
-        punto_venta = data.get('ven_punto')
-        if not punto_venta:
-            return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            comprobante = preparar_datos_venta_para_creacion(
+                data=data,
+                tipo_comprobante=tipo_comprobante,
+                tipo_iva_cliente=tipo_iva_cliente,
+                ferreteria=ferreteria,
+            )
+        except ValidationError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         intentos = 0
         max_intentos = 10
         while intentos < max_intentos:
-            ultima_venta = Venta.objects.filter(
-                ven_punto=punto_venta,
-                comprobante_id=comprobante["codigo_afip"]
-            ).order_by('-ven_numero').first()
-            nuevo_numero = 1 if not ultima_venta else ultima_venta.ven_numero + 1
-            data['ven_numero'] = nuevo_numero
             try:
                 # === CREAR VENTA ===
                 response = super().create(request, *args, **kwargs)
@@ -670,6 +624,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             except IntegrityError as e:
                 if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
                     intentos += 1
+                    data['ven_numero'] += 1
                     continue
                 else:
                     raise
@@ -754,38 +709,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 
-        items_data = request.data.get('items', None)
-        if items_data is not None:
-            try:
-                # ATENCIÓN: No calcular totales ni campos calculados aquí.
-                # Solo actualizar los ítems base.
-                # --- NUEVO: Asignar bonificación general a los ítems sin bonificación particular ---
-                bonif_general = request.data.get('bonificacionGeneral', 0)
-                try:
-                    bonif_general = float(bonif_general)
-                except Exception:
-                    bonif_general = 0
-                for item in items_data:
-                    bonif = item.get('vdi_bonifica')
-                    if not bonif or float(bonif) == 0:
-                        item['vdi_bonifica'] = bonif_general
-                # -------------------------------------------------------------------------------
-                instance.items.all().delete()
-                for item_data in items_data:
-                    item_data['vdi_idve'] = instance
-                    for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
-                        item_data.pop(campo_calculado, None)
-                    # Convertir IDs numéricos de FK a la forma _id
-                    # (Django espera instancias o campo_id=valor numérico)
-                    for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
-                        if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
-                            val = item_data.pop(fk_field)
-                            if val is not None:
-                                item_data[f'{fk_field}_id'] = val
-                    VentaDetalleItem.objects.create(**item_data)
-            except Exception as e:
-                logging.error(f"Error actualizando ítems de venta: {e}")
-                raise
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
 
         return Response(serializer.data)
 

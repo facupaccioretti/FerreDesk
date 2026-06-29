@@ -3,48 +3,61 @@ from django.db import models
 from ..models import VentaDetalleItem
 
 
+def preparar_item_venta_para_persistencia(item_data, venta=None, orden=None):
+    campos_calculados = ["vdi_importe", "vdi_importe_total", "vdi_ivaitem"]
+    for campo in campos_calculados:
+        item_data.pop(campo, None)
+
+    if venta is not None:
+        item_data["vdi_idve"] = venta
+    if orden is not None:
+        item_data["vdi_orden"] = orden
+
+    for fk_field in ["vdi_idsto", "vdi_idpro", "vdi_idaliiva"]:
+        if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
+            val = item_data.pop(fk_field)
+            if val is not None:
+                item_data[f"{fk_field}_id"] = val
+
+    return item_data
+
+
+def crear_items_venta(venta, items_data):
+    for orden, item_data in enumerate(items_data, 1):
+        preparar_item_venta_para_persistencia(
+            item_data,
+            venta=venta,
+            orden=orden,
+        )
+        VentaDetalleItem.objects.create(**item_data)
+
+
 def actualizar_items_venta_inteligente(instance, items_data):
-    """Actualizar items de venta de manera inteligente: actualizar existentes, crear nuevos, eliminar removidos"""
-    # Obtener items existentes
+    """Actualiza items existentes, crea nuevos y elimina los removidos."""
+    # Indexa los items existentes por ID para resolver update/delete rapido.
     items_existentes = {item.id: item for item in instance.items.all()}
 
-    # Obtener IDs de items enviados (solo los que tienen ID)
-    ids_enviados = {item.get('id') for item in items_data if item.get('id')}
+    # Solo cuentan los IDs explicitamente enviados en el payload.
+    ids_enviados = {item.get("id") for item in items_data if item.get("id")}
 
-    # Eliminar items que ya no estÃ¡n en la lista enviada
+    # Elimina items ausentes en el payload final.
     for item_id, item in items_existentes.items():
         if item_id not in ids_enviados:
             item.delete()
 
-    # Procesar items enviados
+    # Recorre el payload final y decide create o update por item.
     for i, item_data in enumerate(items_data, 1):
-        # Limpiar campos calculados que no deben guardarse
-        campos_calculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']
-        for campo in campos_calculados:
-            item_data.pop(campo, None)
+        preparar_item_venta_para_persistencia(item_data, venta=instance, orden=i)
 
-        # Establecer relaciÃ³n con la venta y orden
-        item_data['vdi_idve'] = instance
-        item_data['vdi_orden'] = i
-
-        # Determinar si es actualizaciÃ³n o creaciÃ³n
-        item_id = item_data.pop('id', None)
+        item_id = item_data.pop("id", None)
 
         if item_id and item_id in items_existentes:
-            # Actualizar item existente
             item = items_existentes[item_id]
             for field, value in item_data.items():
-                # Para campos FK, usar la forma _id si el valor es numÃ©rico
-                if field in ('vdi_idsto', 'vdi_idpro', 'vdi_idaliiva') and not isinstance(value, models.Model) and value is not None:
-                    setattr(item, f'{field}_id', value)
+                if field in ("vdi_idsto", "vdi_idpro", "vdi_idaliiva") and not isinstance(value, models.Model) and value is not None:
+                    setattr(item, f"{field}_id", value)
                 else:
                     setattr(item, field, value)
-            item.save()
+                item.save()
         else:
-            # Crear nuevo item â€” normalizar FK a forma _id
-            for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
-                if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
-                    val = item_data.pop(fk_field)
-                    if val is not None:
-                        item_data[f'{fk_field}_id'] = val
             VentaDetalleItem.objects.create(**item_data)

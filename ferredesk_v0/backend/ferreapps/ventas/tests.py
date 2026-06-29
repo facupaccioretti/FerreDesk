@@ -449,6 +449,48 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
 
 class TestTotalesVentaIntegracion(VentasTenantTestCase):
+    def test_create_persiste_venta_e_item_desde_serializer(self):
+        serializer = VentaSerializer(
+            data={
+                "ven_sucursal": 1,
+                "ven_fecha": "2026-02-03",
+                "comprobante_id": self.comprobante_factura.codigo_afip,
+                "ven_punto": 1,
+                "ven_numero": 503,
+                "ven_estado": "AB",
+                "ven_idcli": self.cliente.pk,
+                "ven_idpla": self.plazo.pk,
+                "ven_idvdo": self.vendedor.pk,
+                "ven_copia": 1,
+                "ven_bonificacion_general": 0,
+                "items": [
+                    {
+                        "vdi_orden": 1,
+                        "vdi_idsto": None,
+                        "vdi_idpro": None,
+                        "vdi_cantidad": "1",
+                        "vdi_costo": "100.00",
+                        "vdi_margen": "0",
+                        "vdi_bonifica": "0",
+                        "vdi_precio_unitario_final": "121.00",
+                        "vdi_detalle1": "Item nuevo",
+                        "vdi_detalle2": "",
+                        "vdi_idaliiva": self.alicuota_iva_21.pk,
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        venta = serializer.save()
+
+        self.assertEqual(venta.comprobante_id, self.comprobante_factura.codigo_afip)
+        self.assertEqual(VentaDetalleItem.objects.filter(vdi_idve=venta).count(), 1)
+        item = VentaDetalleItem.objects.get(vdi_idve=venta)
+        self.assertEqual(item.vdi_detalle1, "Item nuevo")
+        self.assertEqual(item.vdi_idaliiva_id, self.alicuota_iva_21.pk)
+
     def test_eliminar_item_recalcula_totales_guardados(self):
         venta = self.crear_venta(
             comprobante=self.comprobante_factura,
@@ -506,6 +548,95 @@ class TestTotalesVentaIntegracion(VentasTenantTestCase):
         item.refresh_from_db()
         self.assertEqual(item.vdi_detalle1, "Item original")
         self.assertEqual(VentaDetalleItem.objects.filter(vdi_idve=venta).count(), 1)
+
+    def test_update_endpoint_conserva_item_existente_sin_recrearlo(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=503,
+            fecha=date(2026, 2, 3),
+        )
+        item = self.crear_item_generico(
+            venta=venta,
+            precio_final=Decimal("121.00"),
+            detalle="Item original",
+        )
+
+        respuesta = self.client.patch(
+            f"{ENDPOINT_VENTAS}{venta.pk}/",
+            data=json.dumps(
+                {
+                    "items": [
+                        {
+                            "id": item.id,
+                            "vdi_orden": 1,
+                            "vdi_cantidad": "2",
+                            "vdi_costo": "100.00",
+                            "vdi_margen": "0",
+                            "vdi_bonifica": "0",
+                            "vdi_precio_unitario_final": "121.00",
+                            "vdi_detalle1": "Item actualizado",
+                            "vdi_detalle2": "",
+                            "vdi_idaliiva": self.alicuota_iva_21.pk,
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        self.assertTrue(VentaDetalleItem.objects.filter(pk=item.pk, vdi_idve=venta).exists())
+        item.refresh_from_db()
+        self.assertEqual(item.vdi_detalle1, "Item actualizado")
+        self.assertEqual(item.vdi_cantidad, Decimal("2"))
+        self.assertEqual(VentaDetalleItem.objects.filter(vdi_idve=venta).count(), 1)
+
+    def test_update_actualiza_vencimiento_desde_dias_validez(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=504,
+            fecha=date(2026, 2, 4),
+        )
+
+        serializer = VentaSerializer(
+            instance=venta,
+            data={
+                "ven_fecha": "2026-02-10",
+                "dias_validez": 5,
+            },
+            partial=True,
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        venta_actualizada = serializer.save()
+
+        self.assertEqual(venta_actualizada.ven_fecha, date(2026, 2, 10))
+        self.assertEqual(venta_actualizada.ven_vence, date(2026, 2, 15))
+
+    def test_serializer_rechaza_duplicado_de_punto_numero_y_comprobante(self):
+        self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=506,
+            fecha=date(2026, 2, 6),
+        )
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=507,
+            fecha=date(2026, 2, 7),
+        )
+
+        serializer = VentaSerializer(
+            instance=venta,
+            data={
+                "ven_punto": 1,
+                "ven_numero": 506,
+                "comprobante_id": self.comprobante_factura.codigo_afip,
+            },
+            partial=True,
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("non_field_errors", serializer.errors)
 
 
 class TestContextoIsListEnSerializer(TestCase):
@@ -572,6 +703,105 @@ class TestReglasItemsVenta(TestCase):
 
         with self.assertRaisesMessage(drf_serializers.ValidationError, "Debe agregar al menos un item"):
             validar_items_requeridos_para_venta([], "factura")
+
+
+class TestPreprocesamientoItemsVenta(TestCase):
+    def test_normaliza_item_generico_con_defaults_minimos(self):
+        from ferreapps.ventas.utils_preprocesamiento_venta import normalizar_items_venta_para_persistencia
+
+        items = [
+            {
+                "vdi_detalle1": "Comentario",
+                "vdi_cantidad": "2",
+                "vdi_costo": "10.50",
+                "vdi_margen": None,
+                "vdi_precio_unitario_final": None,
+                "vdi_idaliiva": None,
+            }
+        ]
+
+        normalizar_items_venta_para_persistencia(items)
+
+        self.assertEqual(items[0]["vdi_cantidad"], Decimal("2"))
+        self.assertEqual(items[0]["vdi_costo"], Decimal("10.50"))
+        self.assertEqual(items[0]["vdi_margen"], Decimal("0"))
+        self.assertEqual(items[0]["vdi_precio_unitario_final"], Decimal("0"))
+        self.assertEqual(items[0]["vdi_idaliiva"], 3)
+
+    def test_crear_items_venta_limpia_campos_calculados_y_normaliza_fks(self):
+        from unittest.mock import patch
+
+        from ferreapps.ventas.services.actualizar_items_venta import crear_items_venta
+
+        venta = object()
+        items = [
+            {
+                "vdi_idsto": 10,
+                "vdi_idpro": 20,
+                "vdi_idaliiva": 30,
+                "vdi_importe": "99.00",
+                "vdi_importe_total": "121.00",
+                "vdi_ivaitem": "22.00",
+                "vdi_detalle1": "Item test",
+            }
+        ]
+
+        with patch("ferreapps.ventas.services.actualizar_items_venta.VentaDetalleItem.objects.create") as mock_create:
+            crear_items_venta(venta, items)
+
+        mock_create.assert_called_once()
+        payload = mock_create.call_args.kwargs
+        self.assertEqual(payload["vdi_idve"], venta)
+        self.assertEqual(payload["vdi_orden"], 1)
+        self.assertEqual(payload["vdi_idsto_id"], 10)
+        self.assertEqual(payload["vdi_idpro_id"], 20)
+        self.assertEqual(payload["vdi_idaliiva_id"], 30)
+        self.assertNotIn("vdi_importe", payload)
+        self.assertNotIn("vdi_importe_total", payload)
+        self.assertNotIn("vdi_ivaitem", payload)
+
+
+class TestPreparacionCreacionVenta(TestCase):
+    def test_resolver_punto_venta_interno_prioriza_punto_99(self):
+        from types import SimpleNamespace
+
+        from ferreapps.ventas.services.preparar_creacion_venta import (
+            PUNTO_VENTA_INTERNO,
+            resolver_punto_venta_para_creacion,
+        )
+
+        data = {}
+        ferreteria = SimpleNamespace(punto_venta_arca=7)
+
+        punto_venta = resolver_punto_venta_para_creacion(
+            data=data,
+            tipo_comprobante="factura_interna",
+            ferreteria=ferreteria,
+        )
+
+        self.assertEqual(punto_venta, PUNTO_VENTA_INTERNO)
+        self.assertEqual(data["ven_punto"], PUNTO_VENTA_INTERNO)
+
+    def test_obtener_siguiente_numero_venta_incrementa_desde_ultima(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from ferreapps.ventas.services.preparar_creacion_venta import obtener_siguiente_numero_venta
+
+        ultima_venta = SimpleNamespace(ven_numero=41)
+
+        with patch(
+            "ferreapps.ventas.services.preparar_creacion_venta.Venta.objects.filter"
+        ) as mock_filter:
+            mock_filter.return_value.order_by.return_value.first.return_value = ultima_venta
+
+            siguiente = obtener_siguiente_numero_venta(
+                punto_venta=3,
+                comprobante_codigo_afip="1010",
+            )
+
+        self.assertEqual(siguiente, 42)
+        mock_filter.assert_called_once_with(ven_punto=3, comprobante_id="1010")
 
 
 class TestReglasComprobantesVenta(VentasTenantTestCase):

@@ -96,6 +96,7 @@ Thumbs.db
 
 # Entornos virtuales
 venv/
+ferredesk_v0/backend/venv/
 env/
 ENV/
 .env
@@ -111,6 +112,11 @@ ferredesk_v0/local.env
 .pytest_cache/
 .coverage
 htmlcov/
+ObsidianNotas/
+.agents/
+.codex/
+scripts/
+ponytail/
 .specstory/.gitignore
 .specstory/history/2025-05-08_20-54-cambio-de-rama-a-main.md
 .specstory/history/2025-05-09_19-12-resolviendo-error-de-django-en-el-servidor.md

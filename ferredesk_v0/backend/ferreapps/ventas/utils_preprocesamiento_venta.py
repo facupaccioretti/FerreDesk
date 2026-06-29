@@ -46,6 +46,54 @@ def aplicar_bonificacion_general_a_items(items_data, bonificacion_general):
     return items_data
 
 
+def _a_decimal_seguro(valor, defecto="0"):
+    try:
+        return Decimal(str(valor))
+    except Exception:
+        return Decimal(defecto)
+
+
+def normalizar_items_venta_para_persistencia(items_data):
+    from ferreapps.productos.models import Stock
+
+    for idx, item in enumerate(items_data, start=1):
+        es_generico = not item.get("vdi_idsto")
+        if es_generico:
+            if not item.get("vdi_detalle1"):
+                raise serializers.ValidationError(
+                    {"items": [f'Item {idx}: "vdi_detalle1" (detalle) es obligatorio para items genericos']}
+                )
+
+            precio = _a_decimal_seguro(item.get("vdi_costo", 0))
+            cantidad = _a_decimal_seguro(item.get("vdi_cantidad", 0))
+            if precio > 0 and cantidad == 0:
+                raise serializers.ValidationError(
+                    {"items": [f"Item {idx}: si hay precio, la cantidad debe ser mayor que cero"]}
+                )
+
+            if item.get("vdi_idaliiva") is None:
+                item["vdi_idaliiva"] = 3
+
+            item["vdi_cantidad"] = cantidad
+            item["vdi_costo"] = precio
+            if item.get("vdi_margen") is None:
+                item["vdi_margen"] = Decimal("0")
+            if item.get("vdi_precio_unitario_final") is None:
+                item["vdi_precio_unitario_final"] = Decimal("0")
+            continue
+
+        if item.get("vdi_idaliiva") is not None:
+            continue
+
+        try:
+            stock_obj = Stock.objects.filter(id=item.get("vdi_idsto")).only("idaliiva_id").first()
+            item["vdi_idaliiva"] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
+        except Exception:
+            item["vdi_idaliiva"] = 3
+
+    return items_data
+
+
 def construir_item_generico_para_nota_debito(tipo_comprobante, initial_data):
     if tipo_comprobante not in {"nota_debito", "nota_debito_interna"}:
         return None
