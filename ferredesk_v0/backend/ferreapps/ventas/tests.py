@@ -3,6 +3,7 @@ from decimal import Decimal
 import json
 from unittest.mock import patch
 
+from django.db.models import Max
 from django.urls import clear_url_caches
 from django.test import RequestFactory, TestCase
 from django_tenants.test.cases import TenantTestCase
@@ -11,7 +12,7 @@ from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
-from ferreapps.productos.models import AlicuotaIVA, PrecioProveedorExcel, StockProve
+from ferreapps.productos.models import AlicuotaIVA, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.ventas.serializers import VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
 from ferreapps.ventas.views.views_dashboard import (
@@ -637,6 +638,123 @@ class TestTotalesVentaIntegracion(VentasTenantTestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
+
+
+class TestValidacionProductosVenta(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.proveedor = Proveedor.objects.create(
+            razon="Proveedor Ventas",
+            fantasia="Proveedor Ventas",
+            domicilio="Calle Ventas 123",
+            cuit="20999111444",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PVT",
+        )
+        max_stock_id = Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0
+        self.stock = Stock.objects.create(
+            id=max_stock_id + 1,
+            codvta="VENTA-STOCK-1",
+            codigo_barras="7790000000201",
+            deno="Producto Ventas",
+            unidad="UN",
+            margen=Decimal("20.00"),
+            cantmin=1,
+            idaliiva=self.alicuota_iva_21,
+            proveedor_habitual=self.proveedor,
+            acti="S",
+            precio_lista_0=Decimal("100.00"),
+            precio_lista_0_manual=False,
+        )
+
+    def test_create_con_producto_inexistente_falla_antes_de_persistir(self):
+        serializer = VentaSerializer(
+            data={
+                "ven_sucursal": 1,
+                "ven_fecha": date(2026, 2, 3),
+                "comprobante_id": self.comprobante_presupuesto.codigo_afip,
+                "ven_punto": 1,
+                "ven_numero": 503,
+                "ven_estado": "AB",
+                "ven_idcli": self.cliente.id,
+                "ven_idpla": self.plazo.id,
+                "ven_idvdo": self.vendedor.id,
+                "ven_copia": 1,
+                "tipo_comprobante": "presupuesto",
+                "items": [
+                    {
+                        "vdi_orden": 1,
+                        "vdi_idsto": 999999,
+                        "vdi_idpro": self.proveedor.id,
+                        "vdi_cantidad": "1",
+                        "vdi_costo": "100.00",
+                        "vdi_margen": "0",
+                        "vdi_bonifica": "0",
+                        "vdi_precio_unitario_final": "121.00",
+                        "vdi_detalle1": "Producto inexistente",
+                        "vdi_detalle2": "UN",
+                    }
+                ],
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        with self.assertRaisesMessage(drf_serializers.ValidationError, "producto inexistente"):
+            serializer.save()
+
+        self.assertFalse(Venta.objects.filter(ven_numero=503, ven_punto=1).exists())
+
+    def test_update_con_producto_inexistente_no_toca_items(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_factura,
+            numero=504,
+            fecha=date(2026, 2, 4),
+        )
+        item = VentaDetalleItem.objects.create(
+            vdi_idve=venta,
+            vdi_orden=1,
+            vdi_idsto=self.stock,
+            vdi_idpro=self.proveedor,
+            vdi_cantidad=Decimal("1"),
+            vdi_costo=Decimal("100.00"),
+            vdi_margen=Decimal("0"),
+            vdi_precio_unitario_final=Decimal("121.00"),
+            vdi_bonifica=Decimal("0"),
+            vdi_detalle1="Producto original",
+            vdi_detalle2="UN",
+            vdi_idaliiva=self.alicuota_iva_21,
+        )
+
+        serializer = VentaSerializer(
+            instance=venta,
+            data={
+                "items": [
+                    {
+                        "id": item.id,
+                        "vdi_idsto": 999999,
+                        "vdi_idpro": self.proveedor.id,
+                        "vdi_cantidad": "1",
+                        "vdi_costo": "100.00",
+                        "vdi_bonifica": "0",
+                        "vdi_precio_unitario_final": "121.00",
+                        "vdi_detalle1": "Producto original",
+                        "vdi_detalle2": "UN",
+                    }
+                ]
+            },
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        with patch.object(VentaSerializer, "_actualizar_items_venta_inteligente") as mock_actualizar:
+            with self.assertRaisesMessage(drf_serializers.ValidationError, "producto inexistente"):
+                serializer.save()
+
+        mock_actualizar.assert_not_called()
+        item.refresh_from_db()
+        self.assertEqual(item.vdi_idsto_id, self.stock.id)
+        self.assertEqual(item.vdi_detalle1, "Producto original")
 
 
 class TestContextoIsListEnSerializer(TestCase):

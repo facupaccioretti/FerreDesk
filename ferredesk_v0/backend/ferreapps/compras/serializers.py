@@ -6,6 +6,15 @@ from django.db import transaction
 import re
 
 
+def _resolver_stock_o_error(valor, error_message):
+    if isinstance(valor, Stock):
+        return valor
+    try:
+        return Stock.objects.get(pk=valor)
+    except Stock.DoesNotExist:
+        raise serializers.ValidationError(error_message)
+
+
 class CompraDetalleItemSerializer(serializers.ModelSerializer):
     """Serializer para los items de detalle de compra"""
     producto_denominacion = serializers.SerializerMethodField()
@@ -207,15 +216,10 @@ class CompraCreateSerializer(CompraSerializer):
             stock_obj = None
             if item_data.get('cdi_idsto') is not None:
                 cdi_idsto_val = item_data['cdi_idsto']
-                if isinstance(cdi_idsto_val, Stock):
-                    stock_obj = cdi_idsto_val
-                else:
-                    try:
-                        stock_obj = Stock.objects.get(pk=cdi_idsto_val)
-                    except Stock.DoesNotExist:
-                        raise serializers.ValidationError(
-                            f"El item {i + 1} referencia un producto (stock) inexistente"
-                        )
+                stock_obj = _resolver_stock_o_error(
+                    cdi_idsto_val,
+                    f"El item {i + 1} referencia un producto (stock) inexistente",
+                )
                 # Reasignar la instancia para el create
                 item_data['cdi_idsto'] = stock_obj
 
@@ -337,10 +341,10 @@ class CompraUpdateSerializer(CompraSerializer):
         """Procesar y validar ForeignKeys en los datos del item"""
         # Convertir ID de Stock a instancia
         if 'cdi_idsto' in item_data and item_data['cdi_idsto']:
-            try:
-                item_data['cdi_idsto'] = Stock.objects.get(id=item_data['cdi_idsto'])
-            except Stock.DoesNotExist:
-                item_data['cdi_idsto'] = None
+            item_data['cdi_idsto'] = _resolver_stock_o_error(
+                item_data['cdi_idsto'],
+                "El item referencia un producto (stock) inexistente",
+            )
         
         # Convertir ID de Proveedor a instancia
         if 'cdi_idpro' in item_data and item_data['cdi_idpro']:

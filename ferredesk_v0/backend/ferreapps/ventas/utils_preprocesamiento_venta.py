@@ -53,8 +53,44 @@ def _a_decimal_seguro(valor, defecto="0"):
         return Decimal(defecto)
 
 
-def normalizar_items_venta_para_persistencia(items_data):
+def _stock_id_desde_valor(valor):
+    if hasattr(valor, "pk"):
+        return valor.pk
+    if valor in (None, ""):
+        return None
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return valor
+
+
+def obtener_stocks_validos_por_id(items_data):
     from ferreapps.productos.models import Stock
+
+    stock_ids = {
+        _stock_id_desde_valor(item.get("vdi_idsto"))
+        for item in items_data
+        if item.get("vdi_idsto")
+    }
+    stock_ids.discard(None)
+    if not stock_ids:
+        return {}
+
+    stocks = Stock.objects.filter(id__in=stock_ids).only("id", "idaliiva_id")
+    stock_map = {stock.id: stock for stock in stocks}
+
+    for idx, item in enumerate(items_data, start=1):
+        stock_id = _stock_id_desde_valor(item.get("vdi_idsto"))
+        if stock_id is not None and stock_id not in stock_map:
+            raise serializers.ValidationError(
+                {"items": [f"Item {idx}: producto inexistente"]}
+            )
+
+    return stock_map
+
+
+def normalizar_items_venta_para_persistencia(items_data):
+    stock_map = obtener_stocks_validos_por_id(items_data)
 
     for idx, item in enumerate(items_data, start=1):
         es_generico = not item.get("vdi_idsto")
@@ -85,11 +121,8 @@ def normalizar_items_venta_para_persistencia(items_data):
         if item.get("vdi_idaliiva") is not None:
             continue
 
-        try:
-            stock_obj = Stock.objects.filter(id=item.get("vdi_idsto")).only("idaliiva_id").first()
-            item["vdi_idaliiva"] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
-        except Exception:
-            item["vdi_idaliiva"] = 3
+        stock_obj = stock_map.get(_stock_id_desde_valor(item.get("vdi_idsto")))
+        item["vdi_idaliiva"] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
 
     return items_data
 
