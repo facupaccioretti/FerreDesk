@@ -373,3 +373,4 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
         self.assertEqual(importacion.estado, ImportacionListaPreciosProveedor.ESTADO_ERROR)
         self.assertEqual(importacion.mensaje_error, "fallo-controlado")
         self.assertIsNotNone(importacion.finalizado_en)
+

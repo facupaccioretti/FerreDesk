@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.core.validators import MinValueValidator
 from django.db.models import Sum, F, DecimalField
 from django.db.models.functions import Coalesce
@@ -198,19 +198,18 @@ class Compra(models.Model):
 
     def cerrar_compra(self):
         """Cierra la compra y actualiza el stock"""
-        if self.comp_estado != 'BORRADOR':
-            raise ValueError("Solo se pueden cerrar compras en estado borrador")
-        
-        if not self.verificar_totales():
-            raise ValueError("Los totales no coinciden")
-        
-        # Actualizar estado
-        self.comp_estado = 'CERRADA'
-        self.save()
-        
-        # Actualizar stock de los items
-        for item in self.items.all():
-            item.actualizar_stock()
+        with transaction.atomic():
+            if self.comp_estado != 'BORRADOR':
+                raise ValueError("Solo se pueden cerrar compras en estado borrador")
+            
+            if not self.verificar_totales():
+                raise ValueError("Los totales no coinciden")
+            
+            self.comp_estado = 'CERRADA'
+            self.save()
+            
+            for item in self.items.all():
+                item.actualizar_stock()
 
 
 class CompraDetalleItem(models.Model):
@@ -294,17 +293,31 @@ class CompraDetalleItem(models.Model):
 
     def actualizar_stock(self):
         """Actualiza el stock del producto en STOCKPROVE"""
-        if self.cdi_idsto and self.cdi_idpro:
-            # Buscar o crear el registro en STOCKPROVE
-            stock_prove, created = self.cdi_idpro.proveedor_stocks.get_or_create(
-                stock=self.cdi_idsto,
-                defaults={'cantidad': 0, 'costo': 0}
+        if not self.cdi_idsto or not self.cdi_idpro:
+            return
+
+        with transaction.atomic():
+            stock_qs = self.cdi_idpro.proveedor_stocks.select_for_update().filter(
+                stock=self.cdi_idsto
             )
-            
-            # Sumar la cantidad comprada
-            stock_prove.cantidad += self.cdi_cantidad
-            stock_prove.fecultcan = self.cdi_idca.comp_fecha
-            stock_prove.save()
+            stock_prove = stock_qs.first()
+
+            if stock_prove is None:
+                try:
+                    stock_prove = self.cdi_idpro.proveedor_stocks.create(
+                        stock=self.cdi_idsto,
+                        cantidad=0,
+                        costo=0,
+                    )
+                except IntegrityError:
+                    stock_prove = self.cdi_idpro.proveedor_stocks.select_for_update().get(
+                        stock=self.cdi_idsto
+                    )
+
+            type(stock_prove).objects.filter(pk=stock_prove.pk).update(
+                cantidad=F('cantidad') + self.cdi_cantidad,
+                fecultcan=self.cdi_idca.comp_fecha,
+            )
 
 
 class OrdenCompra(models.Model):
