@@ -21,6 +21,9 @@ def _domain_from_url(url):
 DEBUG = False
 ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", True)
 
+if SECRET_KEY == "dev-key":
+    raise ImproperlyConfigured("SECRET_KEY requerido en produccion")
+
 PRIMARY_DOMAIN = (
     os.environ.get("PRIMARY_DOMAIN", "").strip().lower()
     or _domain_from_url(os.environ.get("PUBLIC_BASE_URL", ""))
