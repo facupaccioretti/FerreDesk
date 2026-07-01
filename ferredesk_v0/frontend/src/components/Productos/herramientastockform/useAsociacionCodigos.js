@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react"
 
+const MINIMO_BUSQUEDA = 2
+const DEBOUNCE_MS = 250
+
 const useAsociacionCodigos = ({
   stock,
   form,
@@ -7,8 +10,8 @@ const useAsociacionCodigos = ({
   updateForm,
   alert
 }) => {
-  // Estados para el componente de asociar código integrado
   const [selectedProveedor, setSelectedProveedor] = useState("")
+  const [terminoBusqueda, setTerminoBusqueda] = useState("")
   const [codigoProveedor, setCodigoProveedor] = useState("")
   const [productosConDenominacion, setProductosConDenominacion] = useState([])
   const [loadingCodigos, setLoadingCodigos] = useState(false)
@@ -20,38 +23,79 @@ const useAsociacionCodigos = ({
   const [showSugeridos, setShowSugeridos] = useState(false)
   const [modoBusqueda, setModoBusqueda] = useState("codigo")
 
-  // useEffect para cargar códigos del proveedor seleccionado
   useEffect(() => {
-    if (selectedProveedor) {
-      setLoadingCodigos(true)
-      fetch(`/api/productos/proveedor/${selectedProveedor}/codigos-lista/`, {
-        credentials: "include",
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setProductosConDenominacion(data.productos || [])
-          setLoadingCodigos(false)
-        })
-        .catch(() => {
-          setLoadingCodigos(false)
-        })
-    } else {
-      setProductosConDenominacion([])
-    }
+    setProductosConDenominacion([])
+    setLoadingCodigos(false)
   }, [selectedProveedor])
 
-  // Limpiar error al cambiar de proveedor
   useEffect(() => {
     setErrorAsociar(null)
+    setTerminoBusqueda("")
+    setCodigoProveedor("")
+    setCostoAsociar("")
+    setDenominacionAsociar("")
+    setShowSugeridos(false)
   }, [selectedProveedor])
 
-  // Limpiar input al cambiar modo de búsqueda
   useEffect(() => {
+    setTerminoBusqueda("")
     setCodigoProveedor("")
+    setProductosConDenominacion([])
     setShowSugeridos(false)
   }, [modoBusqueda])
 
-  // Consultar costo sugerido al cambiar proveedor o código
+  useEffect(() => {
+    if (!selectedProveedor) {
+      setProductosConDenominacion([])
+      setLoadingCodigos(false)
+      return
+    }
+
+    const terminoNormalizado = terminoBusqueda.trim()
+    if (terminoNormalizado.length < MINIMO_BUSQUEDA) {
+      setProductosConDenominacion([])
+      setShowSugeridos(false)
+      setLoadingCodigos(false)
+      return
+    }
+
+    if (codigoProveedor) {
+      setShowSugeridos(false)
+      setLoadingCodigos(false)
+      return
+    }
+
+    let cancelado = false
+    setLoadingCodigos(true)
+
+    const timer = setTimeout(() => {
+      fetch(
+        `/api/productos/proveedor/${selectedProveedor}/codigos-lista/?q=${encodeURIComponent(terminoNormalizado)}&modo=${encodeURIComponent(modoBusqueda)}&limit=8`,
+        { credentials: "include" }
+      )
+        .then((res) => (res.ok ? res.json() : { productos: [] }))
+        .then((data) => {
+          if (cancelado) return
+          const resultados = Array.isArray(data.productos) ? data.productos : []
+          setProductosConDenominacion(resultados)
+          // Activar el dropdown cuando llegan resultados
+          setShowSugeridos(resultados.length > 0)
+          setLoadingCodigos(false)
+        })
+        .catch(() => {
+          if (cancelado) return
+          setProductosConDenominacion([])
+          setShowSugeridos(false)
+          setLoadingCodigos(false)
+        })
+    }, DEBOUNCE_MS)
+
+    return () => {
+      cancelado = true
+      clearTimeout(timer)
+    }
+  }, [selectedProveedor, terminoBusqueda, modoBusqueda, codigoProveedor])
+
   useEffect(() => {
     if (selectedProveedor && codigoProveedor) {
       setCargandoCostoAsociar(true)
@@ -61,7 +105,6 @@ const useAsociacionCodigos = ({
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.precio !== undefined && data.precio !== null) {
-            // --- APLICACIÓN DE IMPUESTO INTERNO ---
             const baseCosto = parseFloat(data.precio) || 0
             const currImpuesto = parseFloat(form.impuesto_interno_porcentaje) || 0
 
@@ -85,18 +128,26 @@ const useAsociacionCodigos = ({
           setCargandoCostoAsociar(false)
         })
     } else {
+      setCargandoCostoAsociar(false)
       setCostoAsociar("")
       setDenominacionAsociar("")
     }
   }, [selectedProveedor, codigoProveedor, form.impuesto_interno_porcentaje])
 
-  // Handler unificado para asociar código
+  useEffect(() => {
+    if (modoBusqueda !== "codigo") return
+    const exacto = productosConDenominacion.find(
+      (producto) => String(producto.codigo || "").trim().toLowerCase() === terminoBusqueda.trim().toLowerCase()
+    )
+    setCodigoProveedor(exacto ? exacto.codigo : "")
+  }, [productosConDenominacion, terminoBusqueda, modoBusqueda])
+
   const handleAsociarCodigoIntegrado = async () => {
     setErrorAsociar(null)
     setMessageAsociar(null)
 
-    if (!selectedProveedor || !codigoProveedor) {
-      setErrorAsociar("Debe seleccionar proveedor y código.")
+    if (!selectedProveedor) {
+      setErrorAsociar("Debe seleccionar un proveedor.")
       return
     }
 
@@ -104,25 +155,28 @@ const useAsociacionCodigos = ({
     const normalizedCodigo = String(codigoProveedor).trim()
     const normalizedCosto = parseFloat(String(costoAsociar).replace(",", ".")) || 0
 
-    // Validar duplicado en el propio formulario (fuente de verdad)
-    const yaAsociadoAotro = (form.stock_proveedores || []).some(sp =>
-      String(sp.codigo_producto_proveedor) === normalizedCodigo && String(sp.proveedor_id) !== String(pId)
+    const yaAsociadoAotro = normalizedCodigo !== "" && (form.stock_proveedores || []).some((sp) =>
+      String(sp.codigo_producto_proveedor || "").trim() === normalizedCodigo && String(sp.proveedor_id) !== String(pId)
     )
 
     if (yaAsociadoAotro) {
-      setErrorAsociar("Este código ya se encuentra asociado a otro proveedor en este producto.")
+      setErrorAsociar("Este codigo ya se encuentra asociado a otro proveedor en este producto.")
       return
     }
 
-    // Actualizar o Agregar en form.stock_proveedores
     const actual = form.stock_proveedores || []
-    const existeIndice = actual.findIndex(sp => String(sp.proveedor_id) === String(pId))
+    const existeIndice = actual.findIndex((sp) => String(sp.proveedor_id) === String(pId))
 
     let nuevaLista
     if (existeIndice !== -1) {
       nuevaLista = actual.map((sp, idx) =>
         idx === existeIndice
-          ? { ...sp, codigo_producto_proveedor: normalizedCodigo, costo: normalizedCosto, pendiente: true }
+          ? {
+              ...sp,
+              codigo_producto_proveedor: normalizedCodigo === "" ? sp.codigo_producto_proveedor || "" : normalizedCodigo,
+              costo: normalizedCodigo === "" ? sp.costo || 0 : normalizedCosto,
+              pendiente: true
+            }
           : sp
       )
     } else {
@@ -140,9 +194,9 @@ const useAsociacionCodigos = ({
 
     updateForm({ stock_proveedores: nuevaLista })
 
-    setMessageAsociar("¡Código asociado correctamente!")
-    // Limpiar formulario local modal
+    setMessageAsociar("Proveedor asociado correctamente.")
     setSelectedProveedor("")
+    setTerminoBusqueda("")
     setCodigoProveedor("")
     setCostoAsociar("")
     setDenominacionAsociar("")
@@ -154,6 +208,7 @@ const useAsociacionCodigos = ({
 
   const handleCancelarAsociarCodigo = () => {
     setSelectedProveedor("")
+    setTerminoBusqueda("")
     setCodigoProveedor("")
     setCostoAsociar("")
     setDenominacionAsociar("")
@@ -162,28 +217,22 @@ const useAsociacionCodigos = ({
   }
 
   const filteredProductos = useMemo(() => {
-    if (productosConDenominacion.length === 0) return []
-    const term = codigoProveedor.trim().toLowerCase()
-    const campo = modoBusqueda === "codigo" ? "codigo" : "denominacion"
-
     return productosConDenominacion
-      .map((producto) => {
-        const texto = String(producto[campo] || "").toLowerCase()
-        let score = 0
-        if (term.length === 0) score = 1
-        else if (texto === term) score = 1000
-        else if (texto.startsWith(term)) score = 200
-        else if (texto.includes(term)) score = 50
-        return { ...producto, score }
-      })
-      .filter((obj) => obj.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-  }, [productosConDenominacion, codigoProveedor, modoBusqueda])
+  }, [productosConDenominacion])
+
+  useEffect(() => {
+    // El showSugeridos ya se activa directamente en el useEffect de busqueda
+    // cuando llegan los resultados, para evitar timing issues entre effects
+    if (terminoBusqueda.trim().length < MINIMO_BUSQUEDA) {
+      setShowSugeridos(false)
+    }
+  }, [terminoBusqueda])
 
   return {
     selectedProveedor,
     setSelectedProveedor,
+    terminoBusqueda,
+    setTerminoBusqueda,
     codigoProveedor,
     setCodigoProveedor,
     productosConDenominacion,

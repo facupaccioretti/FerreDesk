@@ -36,22 +36,6 @@ const MARGEN_MAXIMO = 999.99 // DecimalField(max_digits=5, decimal_places=2)
 const MARGEN_STEP = 0.01
 const CANTIDAD_MINIMA_MINIMO = 0
 
-// Función para obtener el token CSRF de la cookie
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== "") {
-    const cookies = document.cookie.split(";")
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
-
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKey }) => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
@@ -145,6 +129,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   const {
     selectedProveedor,
     setSelectedProveedor,
+    terminoBusqueda,
+    setTerminoBusqueda,
     codigoProveedor,
     setCodigoProveedor,
     productosConDenominacion,
@@ -204,23 +190,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
 
 
-  // Persistencia automática del borrador la maneja useStockForm (clave dinámica)
-
-  useEffect(() => {
-    if (modo === "nuevo" && !form.id) {
-      fetch("/api/productos/obtener-nuevo-id-temporal/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        credentials: "include",
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.id) {
-            setForm((prev) => ({ ...prev, id: data.id }))
-          }
-        })
-    }
-  }, [modo, form.id, setForm])
+  // La obtencion del ID temporal en modo nuevo la maneja useStockForm.js (evitar duplicado)
 
   // Efecto para inicializar precios de listas cuando se carga el producto (modo edición)
   useEffect(() => {
@@ -773,16 +743,20 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                               <input
                                 ref={referenciaCampoBusqueda}
                                 type="text"
-                                value={codigoProveedor}
+                                value={terminoBusqueda}
                                 onChange={(e) => {
-                                  setCodigoProveedor(e.target.value)
+                                  const value = e.target.value
+                                  setTerminoBusqueda(value)
+                                  setCodigoProveedor("")
+                                  setDenominacionAsociar("")
+                                  setCostoAsociar("")
                                   setShowSugeridos(e.target.value.length > 0 && productosConDenominacion.length > 0)
                                 }}
-                                onFocus={() => setShowSugeridos(codigoProveedor.length > 0 && productosConDenominacion.length > 0)}
+                                onFocus={() => setShowSugeridos(terminoBusqueda.length > 0 && productosConDenominacion.length > 0)}
                                 className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 pr-8"
                                 placeholder={modoBusqueda === "codigo" ? "Ingrese el código" : "Ingrese la denominación"}
                                 maxLength={modoBusqueda === "codigo" ? LONGITUD_MAX_CODIGO_PROVEEDOR : undefined}
-                                disabled={loadingCodigos || !selectedProveedor}
+                                disabled={!selectedProveedor}
                               />
                               {productosConDenominacion.length > 0 && (
                                 <button
@@ -810,23 +784,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                                     key={index}
                                     type="button"
                                     onClick={() => {
+                                      setTerminoBusqueda(modoBusqueda === "codigo" ? producto.codigo : producto.denominacion || producto.codigo)
                                       setCodigoProveedor(producto.codigo)
                                       if (producto.denominacion) setDenominacionAsociar(producto.denominacion)
-
-                                      // --- APLICACIÓN DE IMPUESTO INTERNO A NUEVO COSTO ---
-                                      // Si el producto seleccionado tiene un costo y el formulario actual
-                                      // tiene un impuesto interno definido, lo aplicamos de inmediato.
-                                      if (producto.costo_base) {
-                                        const baseCosto = parseFloat(producto.costo_base) || 0;
-                                        const currImpuesto = parseFloat(form.impuesto_interno_porcentaje) || 0;
-
-                                        if (currImpuesto > 0) {
-                                          const costoInflado = Number((baseCosto * (1 + (currImpuesto / 100))).toFixed(2));
-                                          setCostoAsociar(costoInflado);
-                                        } else {
-                                          setCostoAsociar(baseCosto);
-                                        }
-                                      }
 
                                       setShowSugeridos(false)
                                     }}
@@ -894,7 +854,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                             <button
                               type="button"
                               onClick={handleAsociarCodigoIntegrado}
-                              disabled={!selectedProveedor || !codigoProveedor}
+                              disabled={!selectedProveedor}
                               className="flex-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Asociar

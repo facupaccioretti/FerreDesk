@@ -572,7 +572,7 @@ class OrdenCompraCreateSerializer(OrdenCompraSerializer):
             
             # Validar que tenga stock_proveedor (obligatorio)
             if not item.get('odi_stock_proveedor'):
-                raise serializers.ValidationError(f"El item {i} debe tener un código de proveedor válido")
+                raise serializers.ValidationError(f"El item {i} debe tener una relacion proveedor-producto valida")
         
         return data
     

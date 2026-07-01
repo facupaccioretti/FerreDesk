@@ -374,3 +374,91 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
         self.assertEqual(importacion.mensaje_error, "fallo-controlado")
         self.assertIsNotNone(importacion.finalizado_en)
 
+
+    def test_codigos_lista_proveedor_filtra_por_denominacion_con_limite(self):
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="CAS-001",
+            precio=Decimal("10.00"),
+            denominacion="Caja plastica grande",
+            nombre_archivo="lista.csv",
+        )
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="CAS-002",
+            precio=Decimal("11.00"),
+            denominacion="Casquillo metalico",
+            nombre_archivo="lista.csv",
+        )
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="XXX-001",
+            precio=Decimal("12.00"),
+            denominacion="Producto sin match",
+            nombre_archivo="lista.csv",
+        )
+
+        response = self.client.get(
+            f"/api/productos/proveedor/{self.proveedor.id}/codigos-lista/",
+            {"q": "cas", "modo": "denominacion", "limit": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["productos"]), 1)
+        self.assertIn("cas", response.json()["productos"][0]["denominacion"].lower())
+
+    def test_codigos_lista_proveedor_filtra_por_codigo_y_prioriza_exacto(self):
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="ABC-999",
+            precio=Decimal("10.00"),
+            denominacion="Producto viejo",
+            nombre_archivo="lista.csv",
+        )
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="COD-001",
+            precio=Decimal("11.00"),
+            denominacion="Producto exacto",
+            nombre_archivo="lista.csv",
+        )
+        PrecioProveedorExcel.objects.create(
+            proveedor=self.proveedor,
+            codigo_producto_excel="XCOD-001",
+            precio=Decimal("12.00"),
+            denominacion="Producto contiene",
+            nombre_archivo="lista.csv",
+        )
+
+        response = self.client.get(
+            f"/api/productos/proveedor/{self.proveedor.id}/codigos-lista/",
+            {"q": "COD-001", "modo": "codigo", "limit": 5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        productos = response.json()["productos"]
+        self.assertGreaterEqual(len(productos), 1)
+        self.assertEqual(productos[0]["codigo"], "COD-001")
+
+    def test_codigos_lista_proveedor_usa_stockprove_si_no_hay_excel(self):
+        response = self.client.get(
+            f"/api/productos/proveedor/{self.proveedor.id}/codigos-lista/",
+            {"q": "Producto A", "modo": "denominacion", "limit": 5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        productos = response.json()["productos"]
+        self.assertGreaterEqual(len(productos), 1)
+        self.assertEqual(productos[0]["codigo"], "COD-001")
+
+    def test_precio_producto_proveedor_busca_codigo_de_proveedor_manual(self):
+        response = self.client.get(
+            "/api/productos/precio-producto-proveedor/",
+            {"proveedor_id": self.proveedor.id, "codigo_producto": "COD-001"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["origen"], "manual")
+        self.assertEqual(Decimal(str(data["precio"])), Decimal("10.0"))
+        self.assertEqual(data["denominacion"], "Producto A")
