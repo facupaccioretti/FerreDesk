@@ -167,7 +167,7 @@ class PublicOnboardingAPITestCase(TransactionTestCase):
             segunda_response.data,
             {
                 "email_admin": [
-                    "Ya existe una cuenta global con ese email. La beta V1 permite una sola empresa por cuenta."
+                    "Ya existe una cuenta global con ese email. De momento solo se permite una sola empresa por cuenta."
                 ]
             },
         )

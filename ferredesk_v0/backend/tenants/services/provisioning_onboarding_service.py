@@ -111,7 +111,7 @@ def _validar_email_onboarding_disponible(email):
         raise ProvisioningOnboardingError(
             error_codigo="email_global_existente",
             error_detalle=f"Ya existe una cuenta global para {email}.",
-            mensaje_publico="Ya existe una cuenta global con ese email. La beta V1 permite una sola empresa por cuenta.",
+            mensaje_publico="Ya existe una cuenta global con ese email. De momento solo se permite una sola empresa por cuenta.",
             status_code=400,
         )
 
