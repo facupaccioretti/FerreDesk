@@ -152,8 +152,13 @@ const useAsociacionCodigos = ({
     }
 
     const pId = Number(selectedProveedor)
-    const normalizedCodigo = String(codigoProveedor).trim()
+    const normalizedCodigo = String(modoBusqueda === "codigo" ? terminoBusqueda : codigoProveedor).trim()
     const normalizedCosto = parseFloat(String(costoAsociar).replace(",", ".")) || 0
+
+    if (modoBusqueda === "denominacion" && terminoBusqueda.trim() && !normalizedCodigo) {
+      setErrorAsociar("Debe seleccionar una coincidencia de la lista.")
+      return
+    }
 
     const yaAsociadoAotro = normalizedCodigo !== "" && (form.stock_proveedores || []).some((sp) =>
       String(sp.codigo_producto_proveedor || "").trim() === normalizedCodigo && String(sp.proveedor_id) !== String(pId)

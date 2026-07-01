@@ -814,13 +814,13 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                           </div>
 
                           {/* Información del producto */}
-                          {(codigoProveedor || denominacionAsociar || costoAsociar) && (
+                          {((modoBusqueda === "codigo" ? terminoBusqueda : codigoProveedor) || denominacionAsociar || costoAsociar) && (
                             <div className="bg-blue-50 rounded p-2 border border-blue-200">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-medium text-slate-600 w-12">Código:</span>
                                   <span className="text-xs font-mono bg-white px-1 py-0.5 rounded border text-slate-800">
-                                    {codigoProveedor || "—"}
+                                    {(modoBusqueda === "codigo" ? terminoBusqueda : codigoProveedor) || "—"}
                                   </span>
                                 </div>
                                 <div className="flex items-start gap-2">
@@ -854,7 +854,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                             <button
                               type="button"
                               onClick={handleAsociarCodigoIntegrado}
-                              disabled={!selectedProveedor}
+                              disabled={!selectedProveedor || (modoBusqueda === "denominacion" && terminoBusqueda.trim() && !codigoProveedor)}
                               className="flex-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Asociar
