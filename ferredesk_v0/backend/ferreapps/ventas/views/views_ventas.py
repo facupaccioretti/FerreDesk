@@ -231,7 +231,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
         
         es_presupuesto = (tipo_comprobante == 'presupuesto')
-        es_nota_credito = (tipo_comprobante == 'nota_credito')
+        es_nota_credito = tipo_comprobante in ['nota_credito', 'nota_credito_interna']
         es_nota_debito = (tipo_comprobante == 'nota_debito')
         errores_stock = []
         stock_actualizado = []

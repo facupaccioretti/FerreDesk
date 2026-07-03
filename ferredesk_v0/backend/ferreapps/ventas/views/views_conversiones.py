@@ -101,7 +101,7 @@ def _validar_y_procesar_stock(items, venta_data, ferreteria):
     
     tipo_comprobante = venta_data.get('tipo_comprobante')
     es_presupuesto = (tipo_comprobante == 'presupuesto')
-    es_nota_credito = (tipo_comprobante == 'nota_credito')
+    es_nota_credito = tipo_comprobante in ['nota_credito', 'nota_credito_interna']
     errores_stock = []
     stock_actualizado = []
     
