@@ -114,11 +114,18 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
         credentials: "include",
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          return res.json()
+        })
         .then((data) => {
           if (data && data.id) {
             setForm((prev) => ({ ...prev, id: data.id }))
           }
+        })
+        .catch((err) => {
+          // No bloquear al usuario si falla el ID temporal; el guardado atómico maneja IDs reales
+          console.warn("[useStockForm] No se pudo obtener ID temporal:", err.message)
         })
     }
   }, [modo, form.id])

@@ -217,3 +217,5 @@ arca_arg/
 # Curso / Codebase to Course
 codebase_to_course/
 .documentos/
+
+.editorconfig

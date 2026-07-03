@@ -323,9 +323,7 @@ def productos_por_proveedor(request, proveedor_id):
 
             # Buscar productos que tienen relación con este proveedor Y tienen código asignado
             stock_prove_list = StockProve.objects.filter(
-                proveedor_id=proveedor_id,
-                codigo_producto_proveedor__isnull=False,
-                codigo_producto_proveedor__gt=''  # Excluir códigos vacíos
+                proveedor_id=proveedor_id
             ).select_related('stock', 'stock__idaliiva').filter(
                 stock__acti='S'
             )

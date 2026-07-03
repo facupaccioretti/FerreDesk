@@ -166,6 +166,28 @@ class ProductoLookupCompraAPITestCase(TenantTestCase):
             codigo_producto_proveedor="DUPLICADO-001",
         )
 
+        self.producto_sin_codigo_proveedor = Stock.objects.create(
+            id=self.producto_otro_proveedor.id + 1,
+            codvta="SIN-COD-PROV",
+            codigo_barras="7790000000005",
+            deno="Producto Sin Codigo Proveedor",
+            unidad="UN",
+            margen=Decimal("15.00"),
+            cantmin=1,
+            idaliiva=self.alicuota,
+            proveedor_habitual=self.proveedor,
+            acti="S",
+            precio_lista_0=Decimal("333.33"),
+            precio_lista_0_manual=False,
+        )
+        self.stockprove_sin_codigo_proveedor = StockProve.objects.create(
+            stock=self.producto_sin_codigo_proveedor,
+            proveedor=self.proveedor,
+            cantidad=Decimal("3.00"),
+            costo=Decimal("250.00"),
+            codigo_producto_proveedor="",
+        )
+
     def test_lookup_compra_prioriza_codigo_proveedor_sobre_codvta(self):
         response = self.client.get(
             f"/api/compras/productos/lookup/?codigo=DUPLICADO-001&proveedor_id={self.proveedor.id}"
@@ -224,3 +246,33 @@ class ProductoLookupCompraAPITestCase(TenantTestCase):
                 "costo_proveedor",
             },
         )
+
+    def test_lookup_compra_hace_fallback_a_codvta_con_codigo_proveedor_vacio(self):
+        response = self.client.get(
+            f"/api/compras/productos/lookup/?codigo=SIN-COD-PROV&proveedor_id={self.proveedor.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], self.producto_sin_codigo_proveedor.id)
+        self.assertEqual(payload["stockprove_id"], self.stockprove_sin_codigo_proveedor.id)
+        self.assertEqual(payload["codigo_proveedor"], "")
+
+    def test_lookup_compra_hace_fallback_a_codigo_barras_con_codigo_proveedor_vacio(self):
+        response = self.client.get(
+            f"/api/compras/productos/lookup/?codigo=7790000000005&proveedor_id={self.proveedor.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], self.producto_sin_codigo_proveedor.id)
+        self.assertEqual(payload["stockprove_id"], self.stockprove_sin_codigo_proveedor.id)
+
+    def test_productos_por_proveedor_incluye_relaciones_sin_codigo(self):
+        response = self.client.get(
+            f"/api/compras/proveedores/{self.proveedor.id}/productos/?search=SIN-COD"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(any(item["id"] == self.producto_sin_codigo_proveedor.id for item in payload))

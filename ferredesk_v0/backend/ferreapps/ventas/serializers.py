@@ -7,7 +7,7 @@ from .models import (
 from ferreapps.caja.models import PagoVenta
 from ferreapps.caja.serializers import PagoVentaSerializer
 from django.db import models
-from ferreapps.productos.models import AlicuotaIVA
+from ferreapps.productos.models import AlicuotaIVA, Stock
 from decimal import Decimal
 from ferreapps.clientes.models import Cliente
 from ferreapps.clientes.models import Vendedor
@@ -235,6 +235,38 @@ class VentaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Debe agregar al menos un ítem")
         return value
 
+    def _stock_id_desde_valor(self, valor):
+        if isinstance(valor, models.Model):
+            return valor.pk
+        if valor in (None, ""):
+            return None
+        try:
+            return int(valor)
+        except (TypeError, ValueError):
+            return valor
+
+    def _obtener_stocks_por_id(self, items_data):
+        stock_ids = {
+            self._stock_id_desde_valor(item.get('vdi_idsto'))
+            for item in items_data
+            if item.get('vdi_idsto')
+        }
+        stock_ids.discard(None)
+        if not stock_ids:
+            return {}
+
+        stocks = Stock.objects.filter(id__in=stock_ids).only('id', 'idaliiva_id')
+        stock_map = {stock.id: stock for stock in stocks}
+
+        for idx, item in enumerate(items_data, start=1):
+            stock_id = self._stock_id_desde_valor(item.get('vdi_idsto'))
+            if stock_id is not None and stock_id not in stock_map:
+                raise serializers.ValidationError({
+                    'items': [f'Item {idx}: producto inexistente']
+                })
+
+        return stock_map
+
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
@@ -436,7 +468,7 @@ class VentaSerializer(serializers.ModelSerializer):
         # --- NORMALIZACIÓN DE ÍTEMS GENÉRICOS Y COMPLETADO DE ALÍCUOTA ------------
         # Objetivo: que ítems de comentario (genéricos sin cantidad/precio) no rompan los cálculos
         # y que ítems de producto real siempre tengan alícuota definida.
-        from ferreapps.productos.models import Stock  # Import local para evitar dependencias globales
+        stock_map = self._obtener_stocks_por_id(items_data)
         for idx, it in enumerate(items_data, start=1):
             es_generico = not it.get('vdi_idsto')
             if es_generico:
@@ -466,11 +498,8 @@ class VentaSerializer(serializers.ModelSerializer):
             else:
                 # Ítem de producto real: completar alícuota desde Stock si falta
                 if it.get('vdi_idaliiva') is None:
-                    try:
-                        stock_obj = Stock.objects.filter(id=it.get('vdi_idsto')).only('idaliiva_id').first()
-                        it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
-                    except Exception:
-                        it['vdi_idaliiva'] = 3
+                    stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
+                    it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
         # ----------------------------------------------------------------------------
 
         # Solo guardar los campos base de la venta
@@ -548,7 +577,7 @@ class VentaSerializer(serializers.ModelSerializer):
 
         # --- NUEVA VALIDACIÓN PARA ÍTEMS GENÉRICOS + COMPLETADO DE ALÍCUOTA -------
         if items_data is not None:
-            from ferreapps.productos.models import Stock  # Import local
+            stock_map = self._obtener_stocks_por_id(items_data)
             for idx, it in enumerate(items_data, start=1):
                 es_generico = not it.get('vdi_idsto')
                 if es_generico:
@@ -575,11 +604,8 @@ class VentaSerializer(serializers.ModelSerializer):
                 else:
                     # Completar alícuota desde Stock si falta
                     if it.get('vdi_idaliiva') is None:
-                        try:
-                            stock_obj = Stock.objects.filter(id=it.get('vdi_idsto')).only('idaliiva_id').first()
-                            it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
-                        except Exception:
-                            it['vdi_idaliiva'] = 3
+                        stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
+                        it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
         # ----------------------------------------------------------------------------
 
         if items_data:

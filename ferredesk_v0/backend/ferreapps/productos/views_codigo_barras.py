@@ -1,6 +1,6 @@
 """Views para funcionalidades de códigos de barras."""
-from django.http import HttpResponse
-from django.db import transaction
+from django.http import Http404, HttpResponse
+from django.db import connection, transaction
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -28,16 +28,19 @@ from .services.codigo_barras import (
 class CodigoBarrasProductoView(APIView):
     """API para gestionar el código de barras de un producto."""
     permission_classes = [IsAuthenticated]
+
+    def _get_producto_or_404(self, producto_id):
+        if getattr(connection, "schema_name", None) == "public":
+            raise Http404("Producto no encontrado")
+
+        try:
+            return Stock.objects.get(id=producto_id)
+        except Stock.DoesNotExist as exc:
+            raise Http404("Producto no encontrado") from exc
     
     def get(self, request, producto_id):
         """Obtiene el código de barras actual del producto."""
-        try:
-            producto = Stock.objects.get(id=producto_id)
-        except Stock.DoesNotExist:
-            return Response(
-                {'error': 'Producto no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        producto = self._get_producto_or_404(producto_id)
         
         serializer = CodigoBarrasProductoSerializer({
             'codigo_barras': producto.codigo_barras,
@@ -47,13 +50,7 @@ class CodigoBarrasProductoView(APIView):
     
     def post(self, request, producto_id):
         """Asocia o genera un código de barras para el producto."""
-        try:
-            producto = Stock.objects.get(id=producto_id)
-        except Stock.DoesNotExist:
-            return Response(
-                {'error': 'Producto no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        producto = self._get_producto_or_404(producto_id)
         
         accion = request.data.get('accion')
         
@@ -69,13 +66,7 @@ class CodigoBarrasProductoView(APIView):
     
     def delete(self, request, producto_id):
         """Elimina el código de barras del producto."""
-        try:
-            producto = Stock.objects.get(id=producto_id)
-        except Stock.DoesNotExist:
-            return Response(
-                {'error': 'Producto no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        producto = self._get_producto_or_404(producto_id)
         
         producto.codigo_barras = None
         producto.tipo_codigo_barras = None

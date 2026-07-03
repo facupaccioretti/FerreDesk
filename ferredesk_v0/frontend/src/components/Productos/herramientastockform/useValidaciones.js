@@ -27,7 +27,7 @@ const useValidaciones = ({ form, ferreteria }) => {
     const stockProveedores = form.stock_proveedores || []
 
     if (stockProveedores.length === 0) {
-      errores.push("Debe agregar al menos un proveedor con stock")
+      errores.push("Debe asociar al menos un proveedor")
     }
 
     const codigosUsados = new Set()

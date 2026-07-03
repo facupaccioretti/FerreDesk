@@ -746,10 +746,9 @@ class PrecioProductoProveedorAPIView(APIView):
         codigo_normalizado = str(codigo_producto).strip().lstrip('0').lower()
 
         try:
-            # Buscar precio manual (StockProve)
             stockprove = StockProve.objects.filter(
                 proveedor_id=proveedor_id,
-                stock__codvta__iexact=codigo_producto
+                codigo_producto_proveedor__iexact=codigo_producto
             ).order_by('-fecha_actualizacion').first()
 
             # Buscar precio Excel
@@ -877,28 +876,103 @@ def asociar_codigo_proveedor(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def codigos_lista_proveedor(request, proveedor_id):
+    """
+    Busca productos por proveedor y devuelve codigo/denominacion.
+    Usa la ultima lista Excel si existe; si no, cae a StockProve.
+    """
     from .models import PrecioProveedorExcel
 
-    # 1. Encontrar el registro más reciente para obtener el nombre del último archivo cargado
+    termino = (request.GET.get('q') or '').strip()
+    modo = (request.GET.get('modo') or 'codigo').strip().lower()
+    if modo not in {'codigo', 'denominacion'}:
+        modo = 'codigo'
+
+    try:
+        limit = int(request.GET.get('limit', 8))
+    except (TypeError, ValueError):
+        limit = 8
+    limit = max(1, min(limit, 20))
+
     ultimo_registro = PrecioProveedorExcel.objects.filter(proveedor_id=proveedor_id).order_by('-fecha_carga').first()
+    campo_respuesta = 'denominacion' if modo == 'denominacion' else 'codigo_producto_excel'
+    palabras = [p.strip() for p in termino.lower().split() if p.strip()]
 
-    if not ultimo_registro:
-        return Response({'codigos': []})
-
-    # 2. Obtener el nombre del archivo de ese último registro
-    ultimo_nombre_archivo = ultimo_registro.nombre_archivo
-
-    # 3. Devolver todos los códigos y denominaciones asociados a ese nombre de archivo, ignorando la fecha.
-    # Esto soluciona el problema de la zona horaria y respeta la lógica de que
-    # la última lista cargada es la única válida.
-    productos = list(
-        PrecioProveedorExcel.objects.filter(
+    if ultimo_registro:
+        qs = PrecioProveedorExcel.objects.filter(
             proveedor_id=proveedor_id,
-            nombre_archivo=ultimo_nombre_archivo
-        ).values('codigo_producto_excel', 'denominacion')
-    )
-    
-    # Formatear la respuesta para mantener compatibilidad
+            nombre_archivo=ultimo_registro.nombre_archivo,
+        )
+        campo_filtro = campo_respuesta
+        if palabras:
+            query_candidatos = Q()
+            for palabra in palabras:
+                query_candidatos |= Q(**{f'{campo_filtro}__icontains': palabra})
+            qs = qs.filter(query_candidatos)
+
+        productos = list(qs.values('codigo_producto_excel', 'denominacion'))
+    else:
+        qs = (
+            StockProve.objects
+            .select_related('stock')
+            .filter(proveedor_id=proveedor_id)
+            .exclude(codigo_producto_proveedor__isnull=True)
+            .exclude(codigo_producto_proveedor='')
+        )
+        campo_filtro = 'stock__deno' if modo == 'denominacion' else 'codigo_producto_proveedor'
+        if palabras:
+            query_candidatos = Q()
+            for palabra in palabras:
+                query_candidatos |= Q(**{f'{campo_filtro}__icontains': palabra})
+            qs = qs.filter(query_candidatos)
+
+        productos = [
+            {
+                'codigo_producto_excel': item.codigo_producto_proveedor,
+                'denominacion': item.stock.deno if item.stock else '',
+            }
+            for item in qs
+        ]
+
+    if palabras:
+        termino_lower = termino.lower()
+        def calcular_score(item):
+            valor = (item.get(campo_respuesta) or '').lower()
+            score = 0
+
+            if valor == termino_lower:
+                score += 1000
+            elif valor.startswith(termino_lower):
+                score += 500
+
+            palabras_valor = valor.split()
+            for palabra in palabras:
+                if palabra in valor:
+                    score += 100
+                    if valor.startswith(palabra):
+                        score += 50
+                    if palabra in palabras_valor:
+                        score += 30
+
+            palabras_presentes = sum(1 for p in palabras if p in valor)
+            if palabras_presentes == len(palabras):
+                score += 200
+
+            if len(valor) > 0:
+                score += max(0, 50 - len(valor))
+
+            return score
+
+        puntuados = []
+        for item in productos:
+            score = calcular_score(item)
+            if score > 0:
+                puntuados.append((item, score))
+
+        puntuados.sort(key=lambda x: (-x[1], (x[0].get(campo_respuesta) or '').lower()))
+        productos = [item for item, _ in puntuados[:limit]]
+    else:
+        productos.sort(key=lambda item: str(item.get('codigo_producto_excel') or '').lower())
+
     codigos = [item['codigo_producto_excel'] for item in productos]
     productos_con_denominacion = [
         {
@@ -907,214 +981,37 @@ def codigos_lista_proveedor(request, proveedor_id):
         }
         for item in productos
     ]
-    
+
     return Response({
-        'codigos': codigos,  # Mantener compatibilidad con código existente
-        'productos': productos_con_denominacion  # Nueva estructura con denominación
+        'codigos': codigos,
+        'productos': productos_con_denominacion,
     })
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-@transaction.atomic
 def obtener_nuevo_id_temporal(request):
-    ultimo = ProductoTempID.objects.order_by('-id').first()
-    nuevo_id = 1 if not ultimo else ultimo.id + 5
-    ProductoTempID.objects.create(id=nuevo_id)
-    return Response({'id': nuevo_id})
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def crear_producto_con_relaciones(request):
-    from django.db import transaction
+    """
+    Genera y persiste un ID temporal único para productos nuevos.
+    Usa un loop con IntegrityError para garantizar unicidad incluso bajo concurrencia
+    o doble llamada (e.g. React StrictMode double-mount).
+    """
+    max_intentos = 10
+    for intento in range(max_intentos):
+        try:
+            ultimo = ProductoTempID.objects.order_by('-id').first()
+            nuevo_id = 1 if not ultimo else ultimo.id + 5
+            ProductoTempID.objects.create(id=nuevo_id)
+            return Response({'id': nuevo_id})
+        except IntegrityError:
+            # Otro proceso/request creó el mismo ID; reintentar con el siguiente disponible
+            continue
+    # Si se agotaron los intentos, generar un ID basado en timestamp para garantizar unicidad
+    import time
+    nuevo_id = int(time.time() * 1000) % 2147483647  # Cabe en IntegerField
     try:
-        data = request.data
-        producto_data = data.get('producto')
-        stock_proveedores_data = data.get('stock_proveedores', [])
-        if not producto_data:
-            raise Exception('Faltan datos de producto.')
-
-        # Validar unicidad de codvta
-        codvta = producto_data.get('codvta')
-        if Stock.objects.filter(codvta=codvta).exists():
-            raise Exception('Ya existe un producto con ese código de venta (codvta).')
-
-        # PREVALIDAR todas las relaciones antes de crear el producto
-        for rel in stock_proveedores_data:
-            proveedor_id = rel.get('proveedor_id')
-            codigo_prov = rel.get('codigo_producto_proveedor')
-            # Solo validar duplicidad si el código está presente y no vacío
-            if proveedor_id and codigo_prov:
-                existe = StockProve.objects.filter(
-                    proveedor_id=proveedor_id,
-                    codigo_producto_proveedor=codigo_prov
-                ).exists()
-                if existe:
-                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
-                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
-                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
-            # NO lanzar error si falta el código, es opcional
-            # Validación manual de campos relevantes antes de crear el producto
-            # No usamos el serializer aquí porque requiere el campo 'stock', que aún no existe
-            # Solo validamos que los campos necesarios estén presentes y sean válidos
-            if not proveedor_id:
-                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
-            if rel.get('cantidad') is None:
-                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
-            if rel.get('costo') is None:
-                raise Exception('Falta el costo en una relación de stock_proveedores.')
-
-        # Si todo es válido, crear producto y relaciones en bloque atómico
-        with transaction.atomic():
-            stock_serializer = StockSerializer(data=producto_data)
-            if not stock_serializer.is_valid():
-                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
-            stock = stock_serializer.save()
-
-            for rel in stock_proveedores_data:
-                rel_data = rel.copy()
-                rel_data['stock'] = stock.id
-                sp_serializer = StockProveSerializer(data=rel_data)
-                sp_serializer.is_valid(raise_exception=True)
-                sp_serializer.save()
-
-        return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
-    except serializers.ValidationError as ve:
-        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
-    except Exception as e:
-        return Response({'detail': str(e)}, status=400)
-
-@api_view(['PUT'])
-@permission_classes([permissions.IsAuthenticated])
-def editar_producto_con_relaciones(request):
-    from django.db import transaction
-    try:
-        data = request.data
-        producto_data = data.get('producto')
-        stock_proveedores_data = data.get('stock_proveedores', [])
-        if not producto_data or not producto_data.get('id'):
-            raise Exception('Faltan datos de producto o ID.')
-        producto_id = producto_data['id']
-        # Validar unicidad de codvta (excluyendo el propio producto)
-        codvta = producto_data.get('codvta')
-        if Stock.objects.filter(codvta=codvta).exclude(id=producto_id).exists():
-            raise Exception('Ya existe un producto con ese código de venta (codvta).')
-        # PREVALIDAR todas las relaciones antes de editar el producto
-        for rel in stock_proveedores_data:
-            proveedor_id = rel.get('proveedor_id')
-            codigo_prov = rel.get('codigo_producto_proveedor')
-            if proveedor_id and codigo_prov:
-                existe = StockProve.objects.filter(
-                    proveedor_id=proveedor_id,
-                    codigo_producto_proveedor=codigo_prov
-                ).exclude(stock_id=producto_id).exists()
-                if existe:
-                    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
-                    nombre_proveedor = proveedor.razon if proveedor else proveedor_id
-                    raise Exception(f'El código de proveedor {codigo_prov} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
-            if not proveedor_id:
-                raise Exception('Falta el proveedor en una relación de stock_proveedores.')
-            if rel.get('cantidad') is None:
-                raise Exception('Falta la cantidad en una relación de stock_proveedores.')
-            if rel.get('costo') is None:
-                raise Exception('Falta el costo en una relación de stock_proveedores.')
-        # Si todo es válido, editar producto y relaciones en bloque atómico
-        with transaction.atomic():
-            stock = Stock.objects.filter(id=producto_id).first()
-            if not stock:
-                raise Exception('Producto no encontrado.')
-            stock_serializer = StockSerializer(stock, data=producto_data, partial=True)
-            if not stock_serializer.is_valid():
-                raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
-            stock = stock_serializer.save()
-            # Actualización incremental de relaciones (preservar códigos si no se envían)
-            existentes = {sp.proveedor_id: sp for sp in StockProve.objects.filter(stock=stock)}
-            proveedores_enviados = set()
-            for rel in stock_proveedores_data:
-                proveedor_id = rel.get('proveedor_id')
-                if not proveedor_id:
-                    continue
-                proveedores_enviados.add(int(proveedor_id))
-                cantidad = rel.get('cantidad')
-                costo = rel.get('costo')
-                codigo_rel = rel.get('codigo_producto_proveedor')
-
-                sp_existente = existentes.get(int(proveedor_id))
-                if sp_existente:
-                    # Actualizar cantidad y costo
-                    if cantidad is not None:
-                        sp_existente.cantidad = cantidad
-                    if costo is not None:
-                        sp_existente.costo = costo
-                    # Actualizar código solo si viene presente y no vacío
-                    if codigo_rel is not None and str(codigo_rel).strip() != "":
-                        # Validar unicidad del código dentro del proveedor, excluyendo este producto
-                        existe = StockProve.objects.filter(
-                            proveedor_id=proveedor_id,
-                            codigo_producto_proveedor=codigo_rel
-                        ).exclude(stock_id=producto_id).exists()
-                        if existe:
-                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
-                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
-                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
-                        sp_existente.codigo_producto_proveedor = codigo_rel
-                    sp_existente.save()
-                else:
-                    # Crear nueva relación. Solo setear código si viene y no es vacío
-                    create_kwargs = {
-                        'stock': stock,
-                        'proveedor_id': proveedor_id,
-                        'cantidad': cantidad if cantidad is not None else 0,
-                        'costo': costo if costo is not None else 0,
-                    }
-                    if codigo_rel is not None and str(codigo_rel).strip() != "":
-                        # Validar unicidad antes de crear
-                        existe = StockProve.objects.filter(
-                            proveedor_id=proveedor_id,
-                            codigo_producto_proveedor=codigo_rel
-                        ).exclude(stock_id=producto_id).exists()
-                        if existe:
-                            proveedor = Proveedor.objects.filter(id=proveedor_id).first()
-                            nombre_proveedor = proveedor.razon if proveedor else proveedor_id
-                            raise Exception(f'El código de proveedor {codigo_rel} ya está asignado a otro producto para el proveedor {nombre_proveedor}.')
-                        create_kwargs['codigo_producto_proveedor'] = codigo_rel
-                    StockProve.objects.create(**create_kwargs)
-
-            # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
-        return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
-    except serializers.ValidationError as ve:
-        return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
-    except Exception as e:
-        return Response({'detail': str(e)}, status=400)
-
-    productos = list(
-        PrecioProveedorExcel.objects.filter(
-            proveedor_id=proveedor_id,
-            nombre_archivo=ultimo_nombre_archivo
-        ).values('codigo_producto_excel', 'denominacion')
-    )
-    
-    # Formatear la respuesta para mantener compatibilidad
-    codigos = [item['codigo_producto_excel'] for item in productos]
-    productos_con_denominacion = [
-        {
-            'codigo': item['codigo_producto_excel'],
-            'denominacion': item['denominacion'] if item['denominacion'] else None
-        }
-        for item in productos
-    ]
-    
-    return Response({
-        'codigos': codigos,  # Mantener compatibilidad con código existente
-        'productos': productos_con_denominacion  # Nueva estructura con denominación
-    })
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-@transaction.atomic
-def obtener_nuevo_id_temporal(request):
-    ultimo = ProductoTempID.objects.order_by('-id').first()
-    nuevo_id = 1 if not ultimo else ultimo.id + 5
-    ProductoTempID.objects.create(id=nuevo_id)
+        ProductoTempID.objects.get_or_create(id=nuevo_id)
+    except Exception:
+        pass
     return Response({'id': nuevo_id})
 
 @api_view(['POST'])

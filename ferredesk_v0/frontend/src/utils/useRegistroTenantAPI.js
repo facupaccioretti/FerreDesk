@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { getCookie } from './csrf';
+
+function normalizarSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 async function asegurarCsrf() {
   let csrftoken = getCookie('csrftoken');
@@ -46,35 +55,32 @@ export function useRegistroTenantAPI() {
   const [registroError, setRegistroError] = useState('');
   const [solicitudId, setSolicitudId] = useState(null);
   const [localError, setLocalError] = useState('');
+  const slugRequestIdRef = useRef(0);
 
   const handleChange = useCallback((event) => {
     const { name, value } = event.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === 'slug' ? normalizarSlug(value) : value,
     }));
+
+    if (name === 'slug') {
+      setSlugResult(null);
+      setSlugError('');
+      setLocalError('');
+    }
   }, []);
 
-  useEffect(() => {
-    if (!formData.nombre || formData.slug || document.activeElement?.name === 'slug') {
-      return;
-    }
-
-    const sugerenciaSlug = formData.nombre
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    setFormData((prev) => ({ ...prev, slug: sugerenciaSlug }));
-  }, [formData.nombre, formData.slug]);
-
   const validarSlug = useCallback(async (slug) => {
-    if (!slug?.trim()) {
+    const slugNormalizado = normalizarSlug(slug);
+
+    if (!slugNormalizado) {
       setSlugResult(null);
       setSlugError('');
       return null;
     }
+
+    const requestId = ++slugRequestIdRef.current;
 
     setLoadingSlug(true);
     setSlugError('');
@@ -89,9 +95,13 @@ export function useRegistroTenantAPI() {
           'X-CSRFToken': csrftoken,
         },
         credentials: 'include',
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug: slugNormalizado }),
       });
       const data = await response.json();
+
+      if (requestId !== slugRequestIdRef.current) {
+        return null;
+      }
 
       if (!response.ok) {
         const mensaje = normalizarErrorRespuesta(data, 'Error validando el subdominio.');
@@ -102,18 +112,26 @@ export function useRegistroTenantAPI() {
       setSlugResult(data);
       return data;
     } catch (error) {
-      setSlugError('Error de conexión al validar el subdominio.');
+      if (requestId !== slugRequestIdRef.current) {
+        return null;
+      }
+
+      setSlugError('Error de conexion al validar el subdominio.');
       return null;
     } finally {
-      setLoadingSlug(false);
+      if (requestId === slugRequestIdRef.current) {
+        setLoadingSlug(false);
+      }
     }
   }, []);
 
-  const handleValidateSlug = useCallback(() => {
-    if (formData.slug !== slugResult?.slug) {
-      validarSlug(formData.slug);
+  const handleValidateSlug = useCallback(async () => {
+    if (formData.slug !== slugResult?.slug || slugError) {
+      return validarSlug(formData.slug);
     }
-  }, [formData.slug, slugResult?.slug, validarSlug]);
+
+    return slugResult;
+  }, [formData.slug, slugError, slugResult, validarSlug]);
 
   const registrarTenant = useCallback(async (payload) => {
     setLoadingRegistro(true);
@@ -143,7 +161,7 @@ export function useRegistroTenantAPI() {
       setRegistroResult(data);
       return data;
     } catch (error) {
-      setRegistroError('Error de conexión al intentar registrar el negocio.');
+      setRegistroError('Error de conexion al intentar registrar el negocio.');
       return null;
     } finally {
       setLoadingRegistro(false);
@@ -164,8 +182,14 @@ export function useRegistroTenantAPI() {
       return null;
     }
 
-    if (slugError || !slugResult?.disponible || formData.slug !== slugResult.slug) {
-      setLocalError('Validá que el subdominio esté disponible antes de continuar.');
+    let slugValidado = slugResult;
+
+    if (slugError || !slugResult?.disponible || formData.slug !== slugResult?.slug) {
+      slugValidado = await handleValidateSlug();
+    }
+
+    if (!slugValidado?.disponible || formData.slug !== slugValidado.slug) {
+      setLocalError(slugError || 'Revisa el subdominio antes de continuar.');
       return null;
     }
 
@@ -175,7 +199,7 @@ export function useRegistroTenantAPI() {
       email_admin: formData.email_admin,
       password: formData.password,
     });
-  }, [formData, registrarTenant, slugError, slugResult]);
+  }, [formData, handleValidateSlug, registrarTenant, slugError, slugResult]);
 
   return {
     formData,
