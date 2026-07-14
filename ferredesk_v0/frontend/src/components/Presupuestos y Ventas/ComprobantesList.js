@@ -1,6 +1,6 @@
 import React from "react"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonPostventa } from "../Botones"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
 import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
@@ -53,6 +53,7 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
     handleDelete,
     handleConvertirFacturaI,
     handleNotaCredito,
+    handlePostventa,
   } = acciones
 
   // Función para determinar si una factura puede tener NC
@@ -152,7 +153,12 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         titulo: comprobante.comprobante?.tipo === 'factura_interna'
           ? "Crear Modificación de Contenido"
           : "Crear Nota de Crédito"
-      }
+      },
+      {
+        componente: BotonPostventa,
+        onClick: () => handlePostventa(comprobante),
+        titulo: "Cambios o devoluciones"
+      },
     )
 
     // Botón de conversión para facturas internas
@@ -183,7 +189,12 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
-      }
+      },
+      {
+        componente: BotonPostventa,
+        onClick: () => handlePostventa(comprobante),
+        titulo: "Cambios o devoluciones"
+      },
     )
   }
   // Otros casos (solo ver y generar PDF)
@@ -389,7 +400,7 @@ const ComprobantesList = ({
             <span className="text-slate-600">{icon}</span>
             <div>
               <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Comprobante</span>
-              <p className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 leading-tight">
+              <div className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 leading-tight">
                 {label}
                 {tieneNotasCredito && (
                   <ComprobanteAsociadoTooltip
@@ -403,7 +414,7 @@ const ComprobantesList = ({
                     titulo="Comprobantes Asociados"
                   />
                 )}
-              </p>
+              </div>
             </div>
           </div>
           <div className="text-right">
@@ -474,4 +485,4 @@ const ComprobantesList = ({
   )
 }
 
-export default ComprobantesList 
+export default ComprobantesList

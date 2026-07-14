@@ -62,6 +62,50 @@ def calcular_precio_desde_lista_0(precio_lista_0, margen_descuento):
     return precio.quantize(Decimal('0.01'))
 
 
+def obtener_precio_lista_sin_iva(stock, lista_numero=0):
+    """Resuelve el precio vigente de un producto sin IVA."""
+    from .models import ListaPrecio, PrecioProductoLista, StockProve
+
+    precio_base = Decimal(str(getattr(stock, "precio_lista_0", 0) or 0))
+    if precio_base <= 0:
+        costo = (
+            StockProve.objects.filter(
+                stock_id=stock.id,
+                proveedor_id=stock.proveedor_habitual_id,
+            )
+            .values_list("costo", flat=True)
+            .first()
+        )
+        if costo is None:
+            return Decimal("0.00")
+        precio_base = Decimal(str(costo)) * (
+            Decimal("1.00") + Decimal(str(stock.margen or 0)) / Decimal("100")
+        )
+
+    lista_numero = int(lista_numero or 0)
+    if lista_numero <= 0:
+        return precio_base.quantize(Decimal("0.01"))
+
+    precio_manual = (
+        PrecioProductoLista.objects.filter(
+            stock_id=stock.id,
+            lista_numero=lista_numero,
+            precio_manual=True,
+        )
+        .values_list("precio", flat=True)
+        .first()
+    )
+    if precio_manual is not None:
+        return Decimal(str(precio_manual)).quantize(Decimal("0.01"))
+
+    margen_lista = (
+        ListaPrecio.objects.filter(numero=lista_numero, activo=True)
+        .values_list("margen_descuento", flat=True)
+        .first()
+    )
+    return calcular_precio_desde_lista_0(precio_base, margen_lista or 0)
+
+
 def calcular_margen_desde_precios(precio_venta, costo):
     """
     Calcula el margen de ganancia dado un precio de venta y un costo.

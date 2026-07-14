@@ -150,9 +150,8 @@ def _calcular_caja_actual():
 def _pagos_bancarios_qs():
     return PagoVenta.objects.filter(
         cuenta_banco__isnull=False,
-        es_vuelto=False,
     ).filter(
-        Q(venta__isnull=False, venta__ven_estado="CO")
+        Q(venta__isnull=False, venta__ven_estado__in=["CO", "CE"])
         | Q(recibo__isnull=False, recibo__rec_estado=Recibo.ESTADO_ACTIVO)
         | Q(orden_pago__isnull=False, orden_pago__op_estado=OrdenPago.ESTADO_ACTIVO)
     )
@@ -161,10 +160,22 @@ def _pagos_bancarios_qs():
 def _calcular_bancos_actual():
     pagos_bancarios = _pagos_bancarios_qs()
     ingresos = _decimal_or_zero(
-        pagos_bancarios.filter(Q(venta__isnull=False) | Q(recibo__isnull=False)).aggregate(total=Sum("monto"))["total"]
+        pagos_bancarios.filter(
+            tipo_operacion__in=[
+                PagoVenta.TIPO_COBRO_VENTA,
+                PagoVenta.TIPO_COBRO_RECIBO,
+                PagoVenta.TIPO_COBRO_DIFERENCIA_CAMBIO,
+            ]
+        ).aggregate(total=Sum("monto"))["total"]
     )
     egresos = _decimal_or_zero(
-        pagos_bancarios.filter(orden_pago__isnull=False).aggregate(total=Sum("monto"))["total"]
+        pagos_bancarios.filter(
+            tipo_operacion__in=[
+                PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+                PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+                PagoVenta.TIPO_VUELTO_VENTA,
+            ]
+        ).aggregate(total=Sum("monto"))["total"]
     )
     cheques_acreditados = _decimal_or_zero(
         Cheque.objects.filter(

@@ -354,6 +354,13 @@ class PagoVenta(models.Model):
     - referencia_externa: Para guardar ID de transacción de tarjeta/transferencia
     """
     
+    TIPO_COBRO_VENTA = "COBRO_VENTA"
+    TIPO_VUELTO_VENTA = "VUELTO_VENTA"
+    TIPO_DEVOLUCION_CLIENTE = "DEVOLUCION_CLIENTE"
+    TIPO_COBRO_DIFERENCIA_CAMBIO = "COBRO_DIFERENCIA_CAMBIO"
+    TIPO_COBRO_RECIBO = "COBRO_RECIBO"
+    TIPO_PAGO_ORDEN_PAGO = "PAGO_ORDEN_PAGO"
+
     id = models.AutoField(primary_key=True, db_column='PAG_ID')
     
     # Venta a la que pertenece este pago
@@ -387,6 +394,16 @@ class PagoVenta(models.Model):
         null=True,
         blank=True,
         help_text='Orden de Pago a la que corresponde este pago'
+    )
+
+    postventa_operacion = models.ForeignKey(
+        'ventas.PostventaOperacion',
+        on_delete=models.PROTECT,
+        db_column='PAG_POSTVENTA_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Operacion de postventa asociada al pago'
     )
     
     # Método de pago utilizado
@@ -425,6 +442,14 @@ class PagoVenta(models.Model):
         db_column='PAG_ES_VUELTO',
         default=False,
         help_text='True si este registro representa el vuelto dado al cliente'
+    )
+
+    tipo_operacion = models.CharField(
+        max_length=40,
+        db_column='PAG_TIPO_OPERACION',
+        default=TIPO_COBRO_VENTA,
+        db_index=True,
+        help_text='Clasifica el sentido economico del pago'
     )
     
     # Referencia externa (para tarjetas: ID transacción, para transfer: CBU destino, etc.)
@@ -472,6 +497,7 @@ class PagoVenta(models.Model):
             models.Index(fields=['metodo_pago']),
             models.Index(fields=['fecha_hora']),
             models.Index(fields=['cuenta_banco', 'es_vuelto'], name='caja_pag_cuenta_vuelto_idx'),
+            models.Index(fields=['tipo_operacion']),
         ]
 
     def clean(self):

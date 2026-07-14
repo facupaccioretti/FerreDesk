@@ -679,6 +679,27 @@ const useComprobantesCRUD = ({
     updateTabData(newKey, label, data, "nota-credito");
   }
 
+  const handlePostventa = (comprobante) => {
+    if (!comprobante || !comprobante.id) return
+
+    const tipo = comprobante.comprobante?.tipo || comprobante.comprobante_tipo || ""
+    const estaCerrado = comprobante.estado === "Cerrado"
+    const esElegible = ["factura", "factura_interna", "venta"].includes(tipo)
+
+    if (!estaCerrado || !esElegible) {
+      window.alert("Este comprobante no permite cambios ni devoluciones.")
+      return
+    }
+
+    const key = `postventa-${comprobante.id}`
+    const numero = comprobante.numero_formateado || comprobante.numero || comprobante.id
+    const label = `Cambio / devolucion ${numero}`
+
+    openTab(key, label, {
+      comprobanteOrigen: comprobante,
+    })
+  }
+
   return {
     // Estados
     conversionModal,
@@ -703,6 +724,7 @@ const useComprobantesCRUD = ({
     // Funciones de utilidad
     esFacturaInternaConvertible,
     handleNotaCredito,
+    handlePostventa,
 
     // Setters para estados
     setConversionModal,

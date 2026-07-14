@@ -17,7 +17,7 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
   return (
     <>
       {/* Botón trigger */}
-      <div className="inline-block ml-2 align-middle">
+      <span className="inline-flex ml-2 align-middle">
         <button
           {...triggerProps}
           type="button"
@@ -41,7 +41,7 @@ const ComprobanteAsociadoTooltip = ({ documentos, titulo }) => {
             <span className="text-xs font-bold font-mono">{documentos.length}</span>
           </div>
         </button>
-      </div>
+      </span>
 
       {/* Portal del tooltip */}
       <TooltipPortal

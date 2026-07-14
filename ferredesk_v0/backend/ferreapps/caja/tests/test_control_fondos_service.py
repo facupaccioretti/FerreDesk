@@ -208,6 +208,26 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["bancos"]["monto"], "0.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "0.00")
 
+    def test_bancos_incluye_ventas_cerradas_y_excluye_presupuestos_abiertos(self):
+        venta_cerrada = self._crear_venta(2005, estado="CE")
+        PagoVenta.objects.create(
+            venta=venta_cerrada,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("100.00"),
+        )
+        venta_abierta = self._crear_venta(2006, estado="AB")
+        PagoVenta.objects.create(
+            venta=venta_abierta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("200.00"),
+        )
+
+        payload = build_control_fondos_payload()
+
+        self.assertEqual(payload["resumen_actual"]["kpis"]["bancos"]["monto"], "100.00")
+
     def test_caja_usa_solo_sesiones_abiertas_con_saldo_teorico_real(self):
         metodo_efectivo, _ = MetodoPago.objects.get_or_create(
             codigo=CODIGO_EFECTIVO,

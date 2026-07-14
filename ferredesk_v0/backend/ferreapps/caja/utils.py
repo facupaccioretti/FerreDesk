@@ -508,6 +508,7 @@ def registrar_pagos_venta(
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
                 es_vuelto=False,
+                tipo_operacion=PagoVenta.TIPO_COBRO_VENTA,
                 referencia_externa=res['referencia_externa'],
                 observacion=res['observacion'],
             )
@@ -578,6 +579,7 @@ def registrar_pagos_recibo(
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
                 es_vuelto=False,
+                tipo_operacion=PagoVenta.TIPO_COBRO_RECIBO,
                 referencia_externa=res['referencia_externa'],
                 observacion=res['observacion'],
             )
@@ -655,6 +657,7 @@ def registrar_pagos_orden_pago(
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
                 es_vuelto=False,
+                tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
                 referencia_externa=res['referencia_externa'],
                 observacion=res['observacion'],
             )
@@ -726,6 +729,7 @@ def registrar_vuelto(
             metodo_pago=metodo_pago,
             monto=monto_vuelto,
             es_vuelto=True,
+            tipo_operacion=PagoVenta.TIPO_VUELTO_VENTA,
             observacion="Vuelto al cliente",
         )
         
