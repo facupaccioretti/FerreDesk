@@ -1,6 +1,7 @@
 import json
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.test import SimpleTestCase
@@ -157,8 +158,9 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
             "motivo": "Producto defectuoso",
         }
 
-        resultado = confirmar_devolucion(payload=payload, usuario=self.usuario)
-        repetido = confirmar_devolucion(payload=payload, usuario=self.usuario)
+        with patch("ferreapps.ventas.services.crear_venta.emitir_arca_automatico") as emitir_arca:
+            resultado = confirmar_devolucion(payload=payload, usuario=self.usuario)
+            repetido = confirmar_devolucion(payload=payload, usuario=self.usuario)
 
         stock.stock_proveedores.get().refresh_from_db()
         operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
@@ -166,20 +168,22 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(stock.stock_proveedores.get().cantidad, Decimal("6.00"))
         self.assertEqual(operacion.nota_credito.items.get().vdi_cantidad, Decimal("1.00"))
         self.assertEqual(operacion.items.filter(rol=PostventaOperacionItem.ROL_DEVUELTO).count(), 1)
+        emitir_arca.assert_not_called()
 
     def test_confirmar_cambio_crea_documentos_mueve_stock_e_imputa_credito(self):
         stock_origen = self._crear_stock("PV-ORI", cantidad=Decimal("5.00"))
         stock_nuevo = self._crear_stock("PV-NUE", cantidad=Decimal("5.00"))
         venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
 
-        resultado = confirmar_cambio(payload={
-            "venta_id": venta.ven_id,
-            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
-            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "100.00"}],
-            "idempotency_key": uuid4(),
-            "resolucion_diferencia": "SIN_DIFERENCIA",
-            "motivo": "Cambio de modelo",
-        }, usuario=self.usuario)
+        with patch("ferreapps.ventas.services.crear_venta.emitir_arca_automatico") as emitir_arca:
+            resultado = confirmar_cambio(payload={
+                "venta_id": venta.ven_id,
+                "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "100.00"}],
+                "idempotency_key": uuid4(),
+                "resolucion_diferencia": "SIN_DIFERENCIA",
+                "motivo": "Cambio de modelo",
+            }, usuario=self.usuario)
 
         operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
         stock_origen.stock_proveedores.get().refresh_from_db()
@@ -189,6 +193,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(operacion.items.count(), 2)
         self.assertEqual(operacion.nota_credito.comprobante.tipo, "nota_credito_interna")
         self.assertEqual(operacion.nueva_venta.comprobante.tipo, "factura_interna")
+        emitir_arca.assert_not_called()
 
     def test_confirmar_devolucion_revierte_todo_si_no_hay_stock_para_reponer(self):
         stock = self._crear_stock("PV-ROLL", con_stock=False)

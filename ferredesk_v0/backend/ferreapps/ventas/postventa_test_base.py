@@ -22,9 +22,8 @@ class PostventaTenantTestCase(VentasTenantTestCase):
             fecsalcta=date.today(),
             sigla="PVT",
         )
-        self.comprobante_origen = self._comprobante("9995", "Venta interna", "venta")
+        self.comprobante_origen = self._comprobante("9999", "Factura interna", "factura_interna")
         self._comprobante("9998", "Nota de credito interna", "nota_credito_interna")
-        self._comprobante("9999", "Factura interna", "factura_interna")
         ferreteria = Ferreteria.objects.first()
         if ferreteria is None:
             ferreteria = Ferreteria.objects.create()

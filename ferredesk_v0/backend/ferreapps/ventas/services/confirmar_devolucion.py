@@ -8,7 +8,7 @@ from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
 from ferreapps.caja.services.postventa import registrar_devolucion_cliente
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import StockProve
-from ferreapps.ventas.models import Comprobante, ComprobanteAsociacion, PostventaOperacion, PostventaOperacionItem
+from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_devolucion
 from ferreapps.ventas.services.crear_venta import crear_documento_venta_desde_payload
 from ferreapps.ventas.services.snapshots import canonicalizar_snapshot
@@ -26,13 +26,8 @@ def _numero_con_letra(venta):
     return f"{prefijo}{venta.ven_punto:04d}-{venta.ven_numero:08d}"
 
 
-def _resolver_comprobante_nota_credito(venta_origen):
-    tipo_origen = (venta_origen.comprobante.tipo or "").lower()
-    letra = getattr(venta_origen.comprobante, "letra", None)
-    if tipo_origen in {"venta", "factura_interna"} or letra == "I":
-        comprobante = Comprobante.objects.filter(tipo="nota_credito_interna", letra="I", activo=True).first()
-    else:
-        comprobante = Comprobante.objects.filter(tipo="nota_credito", letra=letra, activo=True).first()
+def _resolver_comprobante_nota_credito():
+    comprobante = Comprobante.objects.filter(tipo="nota_credito_interna", letra="I", activo=True).first()
     if comprobante is None:
         raise ValidationError({"comprobante": "No se encontro comprobante de nota de credito compatible"})
     return comprobante
@@ -76,15 +71,10 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
             }
         )
 
-    tipo_origen = (venta_origen.comprobante.tipo or "").lower()
-    comprobantes_asociados_ids = []
-    if tipo_origen in {"factura", "factura_interna"}:
-        comprobantes_asociados_ids = [venta_origen.ven_id]
-
     return {
         "tipo_comprobante": comprobante.tipo,
         "comprobante_id": comprobante.codigo_afip,
-        "comprobantes_asociados_ids": comprobantes_asociados_ids,
+        "comprobantes_asociados_ids": [venta_origen.ven_id],
         "ven_sucursal": venta_origen.ven_sucursal,
         "ven_fecha": venta_origen.ven_fecha,
         "ven_punto": venta_origen.ven_punto,
@@ -144,7 +134,7 @@ def confirmar_devolucion(*, payload, usuario):
                 direccion="salida",
                 monto_objetivo=monto_devolucion_estimado,
             )
-            comprobante = _resolver_comprobante_nota_credito(venta_origen)
+            comprobante = _resolver_comprobante_nota_credito()
 
             operacion = PostventaOperacion.objects.create(
                 operacion_uid=payload["idempotency_key"],
@@ -166,12 +156,6 @@ def confirmar_devolucion(*, payload, usuario):
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
             )
-
-            if (venta_origen.comprobante.tipo or "").lower() == "venta":
-                ComprobanteAsociacion.objects.get_or_create(
-                    nota_credito=nota_credito,
-                    factura_afectada=venta_origen,
-                )
 
             for item in payload["items"]:
                 detalle = detalles[item["venta_detalle_item_id"]]

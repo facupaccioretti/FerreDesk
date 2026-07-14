@@ -16,7 +16,7 @@ from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 
 
-ORIGENES_PERMITIDOS = {"factura", "factura_interna", "venta"}
+ORIGENES_PERMITIDOS = {"factura_interna"}
 METODOS_BANCARIOS = {
     CODIGO_TRANSFERENCIA,
     CODIGO_QR,
@@ -112,6 +112,8 @@ def validar_venta_origen(venta):
         )
     if venta.ven_estado != "CE":
         raise ValidationError({"venta_id": "Solo se admite postventa sobre comprobantes cerrados"})
+    if venta.convertida_a_fiscal:
+        raise ValidationError({"venta_id": "La cotizacion convertida a factura fiscal no admite postventa"})
     return venta
 
 

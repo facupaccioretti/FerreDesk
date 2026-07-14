@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { getCookie } from "../../../utils/csrf"
+import { esElegibleParaPostventa } from "../elegibilidadPostventa"
 
 /**
  * Hook personalizado para gestionar operaciones CRUD de comprobantes
@@ -682,11 +683,7 @@ const useComprobantesCRUD = ({
   const handlePostventa = (comprobante) => {
     if (!comprobante || !comprobante.id) return
 
-    const tipo = comprobante.comprobante?.tipo || comprobante.comprobante_tipo || ""
-    const estaCerrado = comprobante.estado === "Cerrado"
-    const esElegible = ["factura", "factura_interna", "venta"].includes(tipo)
-
-    if (!estaCerrado || !esElegible) {
+    if (!esElegibleParaPostventa(comprobante)) {
       window.alert("Este comprobante no permite cambios ni devoluciones.")
       return
     }

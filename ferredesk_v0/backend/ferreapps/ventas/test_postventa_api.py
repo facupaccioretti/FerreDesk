@@ -1,9 +1,13 @@
+from datetime import date
 import json
 from uuid import uuid4
 
 from rest_framework import status
 
-from ferreapps.ventas.models import PostventaOperacion
+from ferreapps.caja.models import PagoVenta
+from ferreapps.cuenta_corriente.models import Imputacion
+from ferreapps.productos.models import StockProve
+from ferreapps.ventas.models import Comprobante, PostventaOperacion, Venta
 from ferreapps.ventas.postventa_test_base import PostventaTenantTestCase
 
 
@@ -52,6 +56,83 @@ class PostventaAPITests(PostventaTenantTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("idempotency_key", response.json())
+
+    def test_api_rechaza_origenes_fuera_del_contrato_sin_efectos(self):
+        stock = self._crear_stock("PV-API-RECHAZO", cantidad=5)
+        endpoints = [
+            ("/api/postventa/devoluciones/previsualizar/", self._payload_preview_devolucion),
+            ("/api/postventa/devoluciones/confirmar/", self._payload_confirmar_devolucion),
+            ("/api/postventa/cambios/previsualizar/", self._payload_preview_cambio),
+            ("/api/postventa/cambios/confirmar/", self._payload_confirmar_cambio),
+        ]
+        casos = [
+            ("factura", "A", "1001", False, "CE"),
+            ("factura", "B", "1002", False, "CE"),
+            ("factura", "C", "1003", False, "CE"),
+            ("venta", "I", "1004", False, "CE"),
+            ("presupuesto", "", "1005", False, "CE"),
+            ("factura_interna", "I", "1006", True, "CE"),
+            ("factura_interna", "I", "1007", False, "AN"),
+        ]
+
+        for indice, (tipo, letra, codigo, convertida, estado) in enumerate(casos, start=1):
+            comprobante = Comprobante.objects.create(
+                codigo_afip=codigo,
+                nombre=f"Comprobante {codigo}",
+                letra=letra,
+                tipo=tipo,
+                activo=True,
+            )
+            venta = self.crear_venta(comprobante=comprobante, numero=indice, fecha=date(2026, 7, 9))
+            venta.convertida_a_fiscal = convertida
+            venta.ven_estado = estado
+            venta.save(update_fields=["convertida_a_fiscal", "ven_estado"])
+            for endpoint, construir_payload in endpoints:
+                with self.subTest(codigo=codigo, endpoint=endpoint):
+                    antes = self._efectos_postventa()
+                    response = self._post(endpoint, construir_payload(venta.ven_id, stock.id))
+
+                    self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+                    self.assertEqual(self._efectos_postventa(), antes)
+
+    def _payload_preview_devolucion(self, venta_id, _stock_id):
+        return {
+            "venta_id": venta_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": 1, "cantidad": "1.00"}],
+        }
+
+    def _payload_confirmar_devolucion(self, venta_id, stock_id):
+        return {
+            **self._payload_preview_devolucion(venta_id, stock_id),
+            "idempotency_key": str(uuid4()),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Origen fuera de contrato",
+        }
+
+    def _payload_preview_cambio(self, venta_id, stock_id):
+        return {
+            "venta_id": venta_id,
+            "items_devueltos": [{"venta_detalle_item_id": 1, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_id, "cantidad": "1.00", "precio_unitario": "100.00"}],
+        }
+
+    def _payload_confirmar_cambio(self, venta_id, stock_id):
+        return {
+            **self._payload_preview_cambio(venta_id, stock_id),
+            "idempotency_key": str(uuid4()),
+            "resolucion_diferencia": "SIN_DIFERENCIA",
+            "motivo": "Origen fuera de contrato",
+        }
+
+    def _efectos_postventa(self):
+        return {
+            "ventas": Venta.objects.count(),
+            "operaciones": PostventaOperacion.objects.count(),
+            "stock": list(StockProve.objects.order_by("id").values_list("id", "cantidad")),
+            "pagos": PagoVenta.objects.count(),
+            "imputaciones": Imputacion.objects.count(),
+        }
 
     def test_endpoint_requiere_usuario_autenticado(self):
         self.client.logout()

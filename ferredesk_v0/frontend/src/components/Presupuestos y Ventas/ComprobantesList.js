@@ -6,6 +6,7 @@ import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 import Tabla from "../Tabla"
+import { esElegibleParaPostventa } from "./elegibilidadPostventa"
 
 /**
  * Función para obtener el icono y etiqueta de un comprobante
@@ -44,7 +45,7 @@ const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
  * @param {Function} esFacturaInternaConvertible - Función para verificar si es factura interna convertible
  * @returns {Array} - Array de botones para el AccionesMenu
  */
-const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible) => {
+export const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible) => {
   const {
     handleImprimir,
     openVistaTab,
@@ -154,12 +155,15 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
           ? "Crear Modificación de Contenido"
           : "Crear Nota de Crédito"
       },
-      {
+    )
+
+    if (esElegibleParaPostventa(comprobante)) {
+      botones.push({
         componente: BotonPostventa,
         onClick: () => handlePostventa(comprobante),
         titulo: "Cambios o devoluciones"
-      },
-    )
+      })
+    }
 
     // Botón de conversión para facturas internas
     if (esFacturaInternaConvertibleActual) {
@@ -189,11 +193,6 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
-      },
-      {
-        componente: BotonPostventa,
-        onClick: () => handlePostventa(comprobante),
-        titulo: "Cambios o devoluciones"
       },
     )
   }
