@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
@@ -14,7 +15,15 @@ from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import Stock, StockProve
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_cambio
-from ferreapps.ventas.services.crear_venta import crear_documento_venta_desde_payload
+from ferreapps.ventas.services.crear_venta import (
+    crear_documento_venta_desde_payload,
+    obtener_total_documento_persistido,
+)
+from ferreapps.ventas.services.idempotencia_postventa import (
+    ConflictoIdempotencia,
+    crear_o_recuperar_operacion,
+    recuperar_resultado,
+)
 from ferreapps.ventas.services.snapshots import canonicalizar_snapshot
 from ferreapps.ventas.validators.postventa import (
     ZERO,
@@ -24,10 +33,7 @@ from ferreapps.ventas.validators.postventa import (
     validar_medios_postventa,
     validar_resolucion_cambio,
 )
-from ferreapps.ventas.views.utils_stock import (
-    _descontar_distribuyendo,
-    _obtener_proveedor_habitual_stock,
-)
+from ferreapps.ventas.views.utils_stock import ajustar_stock_postventa
 
 
 logger = logging.getLogger(__name__)
@@ -47,41 +53,6 @@ def _resolver_comprobante(tipo_objetivo):
     if comprobante is None:
         raise ValidationError({"comprobante": f"No se encontro comprobante para {tipo_objetivo}"})
     return comprobante
-
-
-def _reponer_stock(items_devueltos, detalles):
-    for item in items_devueltos:
-        detalle = detalles[item["venta_detalle_item_id"]]
-        if not detalle.vdi_idsto_id:
-            continue
-        proveedor_id = _obtener_proveedor_habitual_stock(detalle.vdi_idsto_id)
-        stock_prove = StockProve.objects.select_for_update().filter(
-            stock_id=detalle.vdi_idsto_id,
-            proveedor_id=proveedor_id,
-        ).first()
-        if stock_prove is None:
-            raise ValidationError({"items_devueltos": f"No existe stock para el producto {detalle.vdi_idsto_id}"})
-        stock_prove.cantidad += Decimal(str(item["cantidad"]))
-        stock_prove.save(update_fields=["cantidad"])
-
-
-def _descontar_stock(items_nuevos):
-    errores_stock = []
-    stock_actualizado = []
-    permitir_stock_negativo = permitir_stock_negativo_habilitado()
-    for item in items_nuevos:
-        proveedor_id = _obtener_proveedor_habitual_stock(item["stock_id"])
-        _descontar_distribuyendo(
-            stock_id=item["stock_id"],
-            proveedor_preferido_id=proveedor_id,
-            cantidad=Decimal(str(item["cantidad"])),
-            permitir_stock_negativo=permitir_stock_negativo,
-            errores_stock=errores_stock,
-            stock_actualizado=stock_actualizado,
-        )
-    if errores_stock:
-        raise ValidationError({"items_nuevos": errores_stock[0]})
-    return stock_actualizado
 
 
 def _build_nc_payload(venta_origen, payload, preview, comprobante):
@@ -110,11 +81,11 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
         "comprobante_id": comprobante.codigo_afip,
         "comprobantes_asociados_ids": [venta_origen.ven_id],
         "ven_sucursal": venta_origen.ven_sucursal,
-        "ven_fecha": venta_origen.ven_fecha,
+        "ven_fecha": timezone.localdate(),
         "ven_punto": venta_origen.ven_punto,
-        "ven_descu1": 0,
-        "ven_descu2": 0,
-        "ven_descu3": 0,
+        "ven_descu1": venta_origen.ven_descu1,
+        "ven_descu2": venta_origen.ven_descu2,
+        "ven_descu3": venta_origen.ven_descu3,
         "ven_vdocomvta": 0,
         "ven_vdocomcob": 0,
         "ven_estado": "CE",
@@ -169,7 +140,7 @@ def _build_nueva_venta_payload(venta_origen, payload, comprobante):
         "tipo_comprobante": comprobante.tipo,
         "comprobante_id": comprobante.codigo_afip,
         "ven_sucursal": venta_origen.ven_sucursal,
-        "ven_fecha": venta_origen.ven_fecha,
+        "ven_fecha": timezone.localdate(),
         "ven_punto": venta_origen.ven_punto,
         "ven_descu1": 0,
         "ven_descu2": 0,
@@ -194,13 +165,27 @@ def _build_nueva_venta_payload(venta_origen, payload, comprobante):
 
 def confirmar_cambio(*, payload, usuario):
     try:
+        resultado_existente = recuperar_resultado(
+            payload=payload,
+            tipo=PostventaOperacion.TIPO_CAMBIO,
+            usuario=usuario,
+        )
+        if resultado_existente is not None:
+            return resultado_existente
         with transaction.atomic():
             venta_origen = obtener_venta_origen(payload["venta_id"], for_update=True)
-            operacion_existente = PostventaOperacion.objects.filter(
-                operacion_uid=payload["idempotency_key"]
-            ).first()
-            if operacion_existente:
-                return operacion_existente.resultado_snapshot
+            operacion, resultado_existente = crear_o_recuperar_operacion(
+                payload=payload,
+                venta_origen=venta_origen,
+                tipo=PostventaOperacion.TIPO_CAMBIO,
+                usuario=usuario,
+                resolucion_dinero=payload["resolucion_diferencia"],
+                motivo=payload["motivo"],
+                motivo_forzado=payload.get("motivo_forzado", ""),
+                payload_snapshot=canonicalizar_snapshot(payload),
+            )
+            if resultado_existente is not None:
+                return resultado_existente
 
             preview = previsualizar_cambio(payload)
             validar_items_cambio(venta_origen, payload["items_devueltos"], payload["items_nuevos"])
@@ -229,7 +214,10 @@ def confirmar_cambio(*, payload, usuario):
                 )
             elif payload["resolucion_diferencia"] == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
                 direccion_medios = "salida"
-                monto_medios = abs(diferencia)
+                saldo_pendiente_origen = Decimal(
+                    str(preview["resumen_monetario"].get("saldo_pendiente_venta", "0.00"))
+                )
+                monto_medios = max(abs(diferencia) - saldo_pendiente_origen, ZERO)
             else:
                 direccion_medios = "entrada" if diferencia >= ZERO else "salida"
                 monto_medios = ZERO
@@ -242,22 +230,13 @@ def confirmar_cambio(*, payload, usuario):
             comprobante_nc = _resolver_comprobante("nota_credito")
             comprobante_venta = _resolver_comprobante("factura")
 
-            operacion = PostventaOperacion.objects.create(
-                operacion_uid=payload["idempotency_key"],
-                tipo=PostventaOperacion.TIPO_CAMBIO,
-                venta_origen=venta_origen,
-                usuario=usuario,
-                resolucion_dinero=payload["resolucion_diferencia"],
-                motivo=payload["motivo"],
-                motivo_forzado=payload.get("motivo_forzado", ""),
-                total_credito=total_credito,
-                total_debito=total_debito,
-                payload_snapshot=canonicalizar_snapshot(payload),
-            )
-
             detalles = {detalle.id: detalle for detalle in venta_origen.items.all().select_related("vdi_idaliiva")}
-            _reponer_stock(payload["items_devueltos"], detalles)
-            _descontar_stock(payload["items_nuevos"])
+            proveedores_repuestos = ajustar_stock_postventa(
+                items_devueltos=payload["items_devueltos"],
+                detalles=detalles,
+                items_nuevos=payload["items_nuevos"],
+                permitir_stock_negativo=permitir_stock_negativo_habilitado(),
+            )
 
             nota_credito, _ = crear_documento_venta_desde_payload(
                 payload=_build_nc_payload(venta_origen, payload, preview, comprobante_nc),
@@ -271,6 +250,9 @@ def confirmar_cambio(*, payload, usuario):
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
             )
+            total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
+            total_debito = Decimal(str(obtener_total_documento_persistido(nueva_venta)))
+            diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
 
             for item in payload["items_devueltos"]:
                 detalle = detalles[item["venta_detalle_item_id"]]
@@ -279,6 +261,7 @@ def confirmar_cambio(*, payload, usuario):
                     rol=PostventaOperacionItem.ROL_DEVUELTO,
                     venta_detalle_origen=detalle,
                     stock_id=detalle.vdi_idsto_id,
+                    proveedor_id=proveedores_repuestos.get(detalle.id),
                     cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
                     precio_unitario=Decimal(str(detalle.vdi_precio_unitario_final or 0)).quantize(Decimal("0.01")),
                     detalle=detalle.vdi_detalle1 or "",
@@ -325,19 +308,24 @@ def confirmar_cambio(*, payload, usuario):
                         sesion_caja=sesion_caja,
                         usuario=usuario,
                     )
+                    imputar_deuda(
+                        nueva_venta,
+                        [
+                            {
+                                "factura": nueva_venta,
+                                "monto": monto_cobrado,
+                                "observacion": f"postventa-cobro:{operacion.operacion_uid}",
+                            }
+                        ],
+                        idempotency_key=f"postventa-cobro:{operacion.operacion_uid}",
+                    )
             elif diferencia < ZERO:
                 saldo_favor = abs(diferencia)
                 resolucion = payload["resolucion_diferencia"]
-                if resolucion == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
-                    monto_devuelto = saldo_favor
-                    registrar_devolucion_cliente(
-                        venta_documento=nota_credito,
-                        operacion_postventa=operacion,
-                        medios=medios_diferencia,
-                        sesion_caja=sesion_caja,
-                        usuario=usuario,
-                    )
-                if resolucion == PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA:
+                if resolucion in {
+                    PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+                    PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA,
+                }:
                     saldo_pendiente = Decimal(
                         str(preview["resumen_monetario"].get("saldo_pendiente_venta", "0.00"))
                     )
@@ -353,6 +341,17 @@ def confirmar_cambio(*, payload, usuario):
                                 }
                             ],
                             idempotency_key=f"postventa-extra:{operacion.operacion_uid}",
+                        )
+                        saldo_favor -= monto_extra
+                if resolucion == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
+                    monto_devuelto = saldo_favor
+                    if monto_devuelto > ZERO:
+                        registrar_devolucion_cliente(
+                            venta_documento=nota_credito,
+                            operacion_postventa=operacion,
+                            medios=medios_diferencia,
+                            sesion_caja=sesion_caja,
+                            usuario=usuario,
                         )
             resultado = {
                 "operacion_id": operacion.id,
@@ -372,9 +371,21 @@ def confirmar_cambio(*, payload, usuario):
             }
             operacion.nota_credito = nota_credito
             operacion.nueva_venta = nueva_venta
+            operacion.total_credito = total_credito
+            operacion.total_debito = total_debito
+            operacion.estado = PostventaOperacion.ESTADO_COMPLETADA
             operacion.resultado_snapshot = resultado
-            operacion.save(update_fields=["nota_credito", "nueva_venta", "resultado_snapshot"])
+            operacion.save(update_fields=[
+                "nota_credito",
+                "nueva_venta",
+                "total_credito",
+                "total_debito",
+                "estado",
+                "resultado_snapshot",
+            ])
             return resultado
+    except ConflictoIdempotencia:
+        raise
     except Exception:
         logger.exception(
             "postventa_confirmar_cambio_error",

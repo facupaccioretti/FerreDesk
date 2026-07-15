@@ -24,46 +24,58 @@ def imputar_deuda(
     if not facturas_a_imputar:
         return []
 
-    with transaction.atomic():
-        _bloquear_documentos([comprobante_pago])
-        _bloquear_documentos([item["factura"] for item in facturas_a_imputar])
+    origen_ct = ContentType.objects.get_for_model(comprobante_pago)
+    destinos = {}
+    for item in facturas_a_imputar:
+        factura = item["factura"]
+        monto = Decimal(str(item["monto"]))
+        if monto <= 0:
+            raise ValueError(f"El monto a imputar debe ser mayor a cero, recibido: {monto}")
 
-        origen_ct = ContentType.objects.get_for_model(comprobante_pago)
+        destino_ct = ContentType.objects.get_for_model(factura)
+        clave = (destino_ct.pk, factura.pk)
+        observacion = item.get("observacion", "")
+        destino = destinos.setdefault(
+            clave,
+            {"factura": factura, "monto": Decimal("0.00"), "ct": destino_ct, "observacion": observacion},
+        )
+        if destino["observacion"] != observacion:
+            raise ValueError(f"El documento {factura.pk} esta repetido con observaciones distintas")
+        destino["monto"] += monto
+
+    with transaction.atomic():
+        _bloquear_documentos([comprobante_pago, *(destino["factura"] for destino in destinos.values())])
+        _validar_origen_venta(comprobante_pago, origen_ct, destinos.values())
 
         if validar_cliente:
             entidad_pago = _get_entidad(comprobante_pago)
-            for item in facturas_a_imputar:
-                entidad_factura = _get_entidad(item["factura"])
+            for destino in destinos.values():
+                entidad_factura = _get_entidad(destino["factura"])
                 if entidad_factura.id != entidad_pago.id:
                     raise ValueError(
-                        f"El documento {item['factura'].pk} no pertenece a la misma "
+                        f"El documento {destino['factura'].pk} no pertenece a la misma "
                         f"entidad que el comprobante de pago"
                     )
 
-        pendientes = []
-        for item in facturas_a_imputar:
-            factura = item["factura"]
-            monto = Decimal(str(item["monto"]))
-            destino_ct = ContentType.objects.get_for_model(factura)
-            observacion = item.get("observacion", "")
-            observacion_final = f"{observacion} [{idempotency_key}]".strip() if idempotency_key else observacion
-
-            if idempotency_key:
-                imputacion_existente = Imputacion.objects.filter(
+        if idempotency_key:
+            imputaciones_existentes = list(
+                Imputacion.objects.filter(
                     origen_content_type=origen_ct,
                     origen_id=comprobante_pago.pk,
-                    destino_content_type=destino_ct,
-                    destino_id=factura.pk,
-                    imp_observacion=observacion_final,
-                ).first()
-                if imputacion_existente:
-                    imputaciones_creadas.append(imputacion_existente)
-                    continue
+                    imp_idempotency_key=idempotency_key,
+                )
+            )
+            if imputaciones_existentes:
+                _validar_reintento_idempotente(imputaciones_existentes, destinos)
+                return imputaciones_existentes
 
-            if monto <= 0:
-                raise ValueError(f"El monto a imputar debe ser mayor a cero, recibido: {monto}")
-
-            pendientes.append((factura, monto, destino_ct, observacion_final))
+        pendientes = []
+        for destino in destinos.values():
+            factura = destino["factura"]
+            monto = destino["monto"]
+            destino_ct = destino["ct"]
+            observacion = destino["observacion"]
+            pendientes.append((factura, monto, destino_ct, observacion))
 
         if not pendientes:
             return imputaciones_creadas
@@ -108,6 +120,7 @@ def imputar_deuda(
                 imp_fecha=fecha_imputacion,
                 imp_monto=monto,
                 imp_observacion=observacion_final,
+                imp_idempotency_key=idempotency_key,
             )
             imputaciones_creadas.append(imputacion)
 
@@ -140,8 +153,33 @@ def _bloquear_documentos(documentos: List[Model]):
     modelos = {}
     for documento in documentos:
         modelos.setdefault(documento.__class__, set()).add(documento.pk)
-    for modelo, ids in modelos.items():
-        list(modelo.objects.select_for_update().filter(pk__in=ids))
+    for modelo in sorted(modelos, key=lambda item: item._meta.label_lower):
+        list(modelo.objects.select_for_update().filter(pk__in=sorted(modelos[modelo])).order_by("pk"))
+
+
+def _validar_reintento_idempotente(imputaciones, destinos):
+    esperadas = {
+        (destino["ct"].pk, destino["factura"].pk): destino["monto"]
+        for destino in destinos.values()
+    }
+    existentes = {
+        (imputacion.destino_content_type_id, imputacion.destino_id): imputacion.imp_monto
+        for imputacion in imputaciones
+    }
+    if existentes != esperadas:
+        raise ValueError("La clave de idempotencia ya fue usada con una intencion distinta")
+
+
+def _validar_origen_venta(comprobante_pago: Model, origen_ct, destinos):
+    if not hasattr(comprobante_pago, "comprobante"):
+        return
+    comprobante = comprobante_pago.comprobante
+    if comprobante is None or comprobante.tipo not in {
+        "factura", "factura_interna", "nota_debito", "nota_debito_interna",
+    }:
+        return
+    if any(destino["ct"] != origen_ct or destino["factura"].pk != comprobante_pago.pk for destino in destinos):
+        raise ValueError("Una factura solo puede autoimputarse a si misma")
 
 
 def _get_entidad(obj: Model):

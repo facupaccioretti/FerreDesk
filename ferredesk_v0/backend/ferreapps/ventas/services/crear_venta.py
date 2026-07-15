@@ -1,6 +1,6 @@
 import copy
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta, registrar_vuelto
@@ -14,6 +14,13 @@ from ferreapps.ventas.utils import asignar_comprobante, _construir_respuesta_com
 
 
 PUNTO_VENTA_INTERNO = 99
+
+
+def obtener_total_documento_persistido(venta):
+    venta_calculada = Venta.objects.con_calculos().filter(pk=venta.pk).first()
+    if venta_calculada is None:
+        raise ValidationError({"venta": "No se encontro el documento creado"})
+    return venta_calculada.ven_total
 
 
 def crear_documento_venta_desde_payload(
@@ -68,7 +75,8 @@ def crear_documento_venta_desde_payload(
         serializer = VentaSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         try:
-            venta = serializer.save()
+            with transaction.atomic():
+                venta = serializer.save()
             break
         except IntegrityError as exc:
             if "unique" not in str(exc).lower() and "duplicate" not in str(exc).lower():

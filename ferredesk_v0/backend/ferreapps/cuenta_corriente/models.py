@@ -52,6 +52,12 @@ class Imputacion(models.Model):
         blank=True, 
         default=''
     )
+    imp_idempotency_key = models.CharField(
+        max_length=100,
+        db_column='IMP_IDEMPOTENCY_KEY',
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         db_table = 'IMPUTACION'
@@ -61,6 +67,12 @@ class Imputacion(models.Model):
             models.Index(fields=['origen_content_type', 'origen_id']),
             models.Index(fields=['destino_content_type', 'destino_id']),
             models.Index(fields=['imp_fecha']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['origen_content_type', 'origen_id', 'destino_content_type', 'destino_id', 'imp_idempotency_key'],
+                name='imputacion_origen_destino_idempotency_unique',
+            ),
         ]
 
     def __str__(self):

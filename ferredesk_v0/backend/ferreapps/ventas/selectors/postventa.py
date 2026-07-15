@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from ferreapps.cuenta_corriente.models import Imputacion
 from ferreapps.productos.models import Stock
 from ferreapps.productos.utils_precios import obtener_precio_lista_sin_iva
+from ferreapps.ventas.models import VentaDetalleItem
 from ferreapps.ventas.validators.postventa import (
     ZERO,
     obtener_direccion_diferencia,
@@ -41,6 +42,21 @@ def obtener_precio_actual_stock(stock, lista_numero=0):
     return (base * (Decimal("1.00") + alicuota / Decimal("100"))).quantize(Decimal("0.01"))
 
 
+def _importes_efectivos_origen(venta, cantidades):
+    """Usa el calculo de venta vigente para las lineas que se devuelven."""
+    detalles = {
+        detalle.id: detalle
+        for detalle in VentaDetalleItem.objects.filter(vdi_idve=venta).con_calculos()
+    }
+    importes = {}
+    for detalle_id, cantidad in cantidades.items():
+        detalle = detalles[detalle_id]
+        precio = Decimal(str(detalle.precio_unitario_bonificado_con_iva or ZERO)).quantize(Decimal("0.01"))
+        subtotal = (precio * cantidad).quantize(Decimal("0.01"))
+        importes[detalle_id] = (precio, subtotal)
+    return importes
+
+
 def previsualizar_devolucion(payload):
     venta = obtener_venta_origen(payload["venta_id"])
     detalles, devueltas = validar_items_devolucion(
@@ -51,14 +67,18 @@ def previsualizar_devolucion(payload):
 
     venta_calculada = venta.__class__.objects.con_calculos().filter(pk=venta.pk).first() or venta
     saldo_pendiente = obtener_saldo_pendiente_venta(venta_calculada)
+    cantidades = {
+        item["venta_detalle_item_id"]: Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
+        for item in payload["items"]
+    }
+    importes = _importes_efectivos_origen(venta, cantidades)
 
     items_payload = []
     total_credito = ZERO
     for item in payload["items"]:
         detalle = detalles[item["venta_detalle_item_id"]]
-        cantidad = Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
-        precio = Decimal(str(detalle.vdi_precio_unitario_final or ZERO)).quantize(Decimal("0.01"))
-        subtotal = (cantidad * precio).quantize(Decimal("0.01"))
+        cantidad = cantidades[detalle.id]
+        precio, subtotal = importes[detalle.id]
         total_credito += subtotal
         cantidad_devuelta = devueltas.get(detalle.id, ZERO).quantize(Decimal("0.01"))
         cantidad_original = Decimal(str(detalle.vdi_cantidad)).quantize(Decimal("0.01"))
@@ -117,13 +137,17 @@ def previsualizar_cambio(payload):
     )
 
     venta_calculada = venta.__class__.objects.con_calculos().filter(pk=venta.pk).first() or venta
+    cantidades = {
+        item["venta_detalle_item_id"]: Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
+        for item in payload["items_devueltos"]
+    }
+    importes = _importes_efectivos_origen(venta, cantidades)
     total_credito = ZERO
     items_devueltos = []
     for item in payload["items_devueltos"]:
         detalle = detalles[item["venta_detalle_item_id"]]
-        cantidad = Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
-        precio = Decimal(str(detalle.vdi_precio_unitario_final or ZERO)).quantize(Decimal("0.01"))
-        subtotal = (cantidad * precio).quantize(Decimal("0.01"))
+        cantidad = cantidades[detalle.id]
+        precio, subtotal = importes[detalle.id]
         total_credito += subtotal
         cantidad_devuelta = devueltas.get(detalle.id, ZERO).quantize(Decimal("0.01"))
         cantidad_original = Decimal(str(detalle.vdi_cantidad)).quantize(Decimal("0.01"))

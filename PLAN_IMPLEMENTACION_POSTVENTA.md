@@ -230,6 +230,18 @@ Si existen dos interpretaciones de negocio validas, detenerse y pedir decision a
 
 Cada hecho economico se representa exactamente una vez y las tareas PV-04 y PV-06 quedan implementables sin inventar reglas.
 
+#### Decision PV-03 (aprobada)
+
+- **Fuente de verdad.** El saldo del cliente sale de los hechos persistidos: `Venta` activa de tipo debe, `Venta` activa de tipo haber, `Recibo` activo, autoimputaciones de cobro inmediato y devoluciones de dinero. Una `Imputacion` entre documentos distintos solo asigna un credito a una deuda; no agrega otro debe u haber al saldo acumulado. La unica excepcion es la autoimputacion cuyo origen y destino son la misma venta: representa el cobro inmediato de esa venta.
+- **Modelos y relaciones.** `Venta` con `Comprobante.tipo` define debe (`factura`, `factura_interna`, `nota_debito`, `nota_debito_interna`) o haber (`nota_credito`, `nota_credito_interna`). `Recibo` es un haber de dinero. `FacRecibo` y `CotRecibo` son `Imputacion` con origen y destino en la misma `Venta`; cancelan solo el saldo de esa venta por el importe cobrado en el momento, total o parcial. Una nota de credito es origen de `Imputacion` hacia una deuda distinta. Un `PagoVenta` ligado a un `Recibo` o a una venta cobrada inmediatamente es el detalle de caja/banco y no se vuelve a sumar en cuenta corriente; uno de `DEVOLUCION_CLIENTE` ligado a la nota de credito consume ese credito y representa una salida de dinero.
+- **Formula.** `deuda_cliente = sum(debes activos) - sum(haberes activos) - sum(recibos activos) - sum(autoimputaciones de cobro inmediato) + sum(devoluciones activas)`. Las imputaciones entre documentos distintos no participan en esa formula. El saldo de una deuda es su total menos imputaciones recibidas de un credito valido y menos su propia autoimputacion de cobro inmediato. El saldo de un credito es su total menos imputaciones emitidas y menos devoluciones de dinero vinculadas.
+
+- **Resoluciones.** `SALDO_A_FAVOR` deja el haber de la nota de credito disponible. `IMPUTAR_DEUDA` crea una `Imputacion` desde la nota hacia la deuda, sin pago. `DEVOLVER_DINERO` primero imputa contra deuda y registra el remanente como `PagoVenta` de devolucion ligado a la nota, que consume ese credito. `COBRAR_DIFERENCIA` registra el pago y la autoimputacion de la nueva cotizacion por el importe cobrado. `DEJAR_DEUDA` no crea pago. `SIN_DIFERENCIA` solo imputa nota y nueva cotizacion por el importe comun.
+- **Comportamiento conservado.** En cuenta corriente de clientes se mantienen recibos, conversiones, pagos directos y las autoimputaciones `CotRecibo` y `FacRecibo`. Las ordenes de pago son exclusivamente de proveedores y quedan fuera de este contrato; PV-02 solo las trata al clasificar pagos historicos. Una factura solo puede ser origen de su propia autoimputacion de cobro inmediato; no puede usarse como credito para imputar otra deuda.
+- **Alternativa descartada.** Contar la nota como haber y cada `Imputacion` como otro haber permite que una nota aplicada descuente dos veces. Se descarta tambien crear un ledger nuevo: `Venta`, `Recibo`, `PagoVenta` e `Imputacion` ya contienen los hechos minimos necesarios.
+- **Aceptacion PV-04.** Pruebas de integracion con la base tenant real, sin mocks de ORM ni de cuenta corriente: factura 100 + Modif. de Contenido 100 imputada deja deuda, credito y saldo acumulado en cero; una venta cobrada en el momento crea y conserva su `FacRecibo` o `CotRecibo`; una factura no puede imputar otra deuda; dos destinos repetidos de 60 contra 100 fallan sin filas parciales; recibo y conversion conservan sus saldos; el orden de locks se verifica con transacciones reales. Las regresiones de ordenes de pago pertenecen al flujo de proveedores.
+- **Aceptacion PV-06.** En la misma base real, cada caso debe consultar documentos, `Imputacion`, `PagoVenta` y `obtener_movimientos_cliente`: venta pagada, impaga y parcial; devolucion total y parcial; cambio 100/150 cobrado o adeudado; cambio 150/100 con saldo a favor, devolucion o imputacion; y cambio sin diferencia. Cada caso verifica la formula completa y que el credito pagado no pueda reutilizarse. Solo se permite mockear ARCA, que esta fuera del contrato interno.
+
 ---
 
 ### PV-04. Endurecer las imputaciones compartidas
@@ -273,6 +285,20 @@ No existe sobreimputacion ni doble conteo y los callers historicos conservan su 
 ---
 
 ### PV-05. Unificar importes y creacion segura de documentos
+
+**Estado: completada el 2026-07-15.** La fuente de importes de los items devueltos es
+`VentaDetalleItem.objects.con_calculos()`: conserva bonificacion por linea y los tres
+descuentos generales al crear la nota de credito. Preview toma su precio efectivo de ese
+camino y la confirmacion toma los totales persistidos de los documentos creados antes de
+imputar, mover dinero o guardar el resultado. Los productos nuevos conservan el precio final
+editable; postventa ya no muestra controles de bonificacion o descuentos que no persiste.
+
+Las notas de credito y ventas nuevas usan `timezone.localdate()`. El reintento de numeracion
+ahora encapsula cada `serializer.save()` en un `transaction.atomic()` interno, por lo que una
+colision de constraint no rompe la transaccion exterior. Los impuestos internos no forman parte
+del calculo vigente de ventas y siguen siendo informativos. Cubierto con pruebas de descuentos
+encadenados, cantidad fraccionaria, redondeo, precio nuevo, igualdad preview/documento/efecto,
+fecha actual y reintento de numeracion.
 
 #### Objetivo
 
@@ -334,6 +360,14 @@ No hay dos formulas independientes para decidir cuanto credito o dinero produce 
 ---
 
 ### PV-06. Implementar las resoluciones monetarias
+
+**Estado: completada el 2026-07-15.** Las resoluciones reutilizan documentos,
+imputaciones y pagos existentes: credito sin usar queda en la nota de credito; credito
+aplicable cancela deuda hasta su saldo; y dinero real solo se registra por el remanente.
+En un cambio con cobro, la diferencia tambien se autoimputa a la nueva venta para que no
+quede como deuda. En un cambio a favor, antes de devolver dinero se aplica el remanente a
+la deuda de origen; si no hay deuda, se paga por caja. Cubierto para devoluciones total y
+parcial, ventas impagas, pagadas y parcialmente pagadas, y las seis resoluciones de cambio.
 
 #### Dependencias
 
@@ -570,6 +604,12 @@ Backend focalizado:
 
 Ejecutar desde `ferredesk_v0/backend`.
 
+PV-04 cuenta corriente:
+
+```powershell
+.\venv\Scripts\python.exe manage.py test ferreapps.cuenta_corriente.tests.test_imputacion_cliente ferreapps.cuenta_corriente.tests.test_proveedor --noinput --verbosity 1
+```
+
 Frontend focalizado:
 
 ```powershell
@@ -624,10 +664,10 @@ Al finalizar:
 |---|---|---|---|---|
 | PV-01 | Completada | | backend: 18 OK; frontend: 19 OK | Warning preexistente: falta frontend/build/static en STATICFILES_DIRS. |
 | PV-02 | Pendiente | | | |
-| PV-03 | Pendiente | | | |
-| PV-04 | Bloqueada por PV-03 | | | |
-| PV-05 | Bloqueada por PV-04 | | | |
-| PV-06 | Bloqueada por PV-03/04/05 | | | |
+| PV-03 | Completada | | N/A: checkpoint documental; la aceptacion de PV-04/PV-06 exige base tenant real, sin mocks de ORM o cuenta corriente. | Contrato contable aprobado en esta seccion. |
+| PV-04 | Completada | | cuenta corriente cliente: 11 OK con base tenant real; proveedores: regresion focalizada OK; postventa y conversion fiscal: 22 OK | La idempotencia de imputaciones usa un campo propio con constraint unico. Sin bloqueos de migracion: la suite combinada tambien ejecuta correctamente. |
+| PV-05 | Pendiente | | | Lista despues de PV-04. |
+| PV-06 | Bloqueada por PV-05 | | | |
 | PV-07 | Pendiente despues de PV-06 | | | |
 | PV-08 | Pendiente despues de PV-06 | | | |
 | PV-09 | Bloqueada por PV-08 | | | |

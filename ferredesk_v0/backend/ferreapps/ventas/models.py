@@ -384,6 +384,13 @@ class PostventaOperacion(models.Model):
     RESOLUCION_COBRAR_DIFERENCIA = "COBRAR_DIFERENCIA"
     RESOLUCION_DEJAR_DEUDA = "DEJAR_DEUDA"
 
+    ESTADO_INICIADA = "INICIADA"
+    ESTADO_COMPLETADA = "COMPLETADA"
+    ESTADOS = [
+        (ESTADO_INICIADA, "Iniciada"),
+        (ESTADO_COMPLETADA, "Completada"),
+    ]
+
     id = models.AutoField(primary_key=True)
     operacion_uid = models.UUIDField(unique=True, db_index=True)
     tipo = models.CharField(max_length=20, choices=TIPOS)
@@ -412,6 +419,8 @@ class PostventaOperacion(models.Model):
     motivo_forzado = models.TextField(blank=True, default="")
     total_credito = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     total_debito = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    payload_hash = models.CharField(max_length=64)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default=ESTADO_INICIADA)
     payload_snapshot = models.JSONField(default=dict)
     resultado_snapshot = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -447,6 +456,12 @@ class PostventaOperacionItem(models.Model):
     )
     stock = models.ForeignKey(
         'productos.Stock',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
+    proveedor = models.ForeignKey(
+        'productos.Proveedor',
         null=True,
         blank=True,
         on_delete=models.PROTECT,

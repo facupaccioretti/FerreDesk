@@ -2,18 +2,26 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
 from ferreapps.caja.services.postventa import registrar_devolucion_cliente
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
-from ferreapps.productos.models import StockProve
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_devolucion
-from ferreapps.ventas.services.crear_venta import crear_documento_venta_desde_payload
+from ferreapps.ventas.services.crear_venta import (
+    crear_documento_venta_desde_payload,
+    obtener_total_documento_persistido,
+)
+from ferreapps.ventas.services.idempotencia_postventa import (
+    ConflictoIdempotencia,
+    crear_o_recuperar_operacion,
+    recuperar_resultado,
+)
 from ferreapps.ventas.services.snapshots import canonicalizar_snapshot
 from ferreapps.ventas.validators.postventa import obtener_venta_origen, validar_medios_postventa
-from ferreapps.ventas.views.utils_stock import _obtener_proveedor_habitual_stock
+from ferreapps.ventas.views.utils_stock import ajustar_stock_postventa
 
 
 logger = logging.getLogger(__name__)
@@ -31,22 +39,6 @@ def _resolver_comprobante_nota_credito():
     if comprobante is None:
         raise ValidationError({"comprobante": "No se encontro comprobante de nota de credito compatible"})
     return comprobante
-
-
-def _reponer_stock(items_devueltos, detalles):
-    for item in items_devueltos:
-        detalle = detalles[item["venta_detalle_item_id"]]
-        if not detalle.vdi_idsto_id:
-            continue
-        proveedor_id = _obtener_proveedor_habitual_stock(detalle.vdi_idsto_id)
-        stock_prove = StockProve.objects.select_for_update().filter(
-            stock_id=detalle.vdi_idsto_id,
-            proveedor_id=proveedor_id,
-        ).first()
-        if stock_prove is None:
-            raise ValidationError({"items": f"No existe stock para el producto {detalle.vdi_idsto_id}"})
-        stock_prove.cantidad += Decimal(str(item["cantidad"]))
-        stock_prove.save(update_fields=["cantidad"])
 
 
 def _build_nc_payload(venta_origen, payload, preview, comprobante):
@@ -76,11 +68,11 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
         "comprobante_id": comprobante.codigo_afip,
         "comprobantes_asociados_ids": [venta_origen.ven_id],
         "ven_sucursal": venta_origen.ven_sucursal,
-        "ven_fecha": venta_origen.ven_fecha,
+        "ven_fecha": timezone.localdate(),
         "ven_punto": venta_origen.ven_punto,
-        "ven_descu1": 0,
-        "ven_descu2": 0,
-        "ven_descu3": 0,
+        "ven_descu1": venta_origen.ven_descu1,
+        "ven_descu2": venta_origen.ven_descu2,
+        "ven_descu3": venta_origen.ven_descu3,
         "ven_vdocomvta": 0,
         "ven_vdocomcob": 0,
         "ven_estado": "CE",
@@ -101,13 +93,27 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
 
 def confirmar_devolucion(*, payload, usuario):
     try:
+        resultado_existente = recuperar_resultado(
+            payload=payload,
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            usuario=usuario,
+        )
+        if resultado_existente is not None:
+            return resultado_existente
         with transaction.atomic():
             venta_origen = obtener_venta_origen(payload["venta_id"], for_update=True)
-            operacion_existente = PostventaOperacion.objects.filter(
-                operacion_uid=payload["idempotency_key"]
-            ).first()
-            if operacion_existente:
-                return operacion_existente.resultado_snapshot
+            operacion, resultado_existente = crear_o_recuperar_operacion(
+                payload=payload,
+                venta_origen=venta_origen,
+                tipo=PostventaOperacion.TIPO_DEVOLUCION,
+                usuario=usuario,
+                resolucion_dinero=payload["resolucion_dinero"],
+                motivo=payload["motivo"],
+                motivo_forzado=payload.get("motivo_forzado", ""),
+                payload_snapshot=canonicalizar_snapshot(payload),
+            )
+            if resultado_existente is not None:
+                return resultado_existente
 
             preview = previsualizar_devolucion(payload)
             total_credito = Decimal(str(preview["resumen_monetario"]["total_credito"]))
@@ -136,26 +142,20 @@ def confirmar_devolucion(*, payload, usuario):
             )
             comprobante = _resolver_comprobante_nota_credito()
 
-            operacion = PostventaOperacion.objects.create(
-                operacion_uid=payload["idempotency_key"],
-                tipo=PostventaOperacion.TIPO_DEVOLUCION,
-                venta_origen=venta_origen,
-                usuario=usuario,
-                resolucion_dinero=payload["resolucion_dinero"],
-                motivo=payload["motivo"],
-                motivo_forzado=payload.get("motivo_forzado", ""),
-                total_credito=total_credito,
-                payload_snapshot=canonicalizar_snapshot(payload),
-            )
-
             detalles = {detalle.id: detalle for detalle in venta_origen.items.all().select_related("vdi_idaliiva")}
-            _reponer_stock(payload["items"], detalles)
+            proveedores_repuestos = ajustar_stock_postventa(
+                items_devueltos=payload["items"],
+                detalles=detalles,
+                items_nuevos=[],
+                permitir_stock_negativo=False,
+            )
             nota_credito, _ = crear_documento_venta_desde_payload(
                 payload=_build_nc_payload(venta_origen, payload, preview, comprobante),
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
             )
+            total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
 
             for item in payload["items"]:
                 detalle = detalles[item["venta_detalle_item_id"]]
@@ -164,6 +164,7 @@ def confirmar_devolucion(*, payload, usuario):
                     rol=PostventaOperacionItem.ROL_DEVUELTO,
                     venta_detalle_origen=detalle,
                     stock_id=detalle.vdi_idsto_id,
+                    proveedor_id=proveedores_repuestos.get(detalle.id),
                     cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
                     precio_unitario=Decimal(str(detalle.vdi_precio_unitario_final or 0)).quantize(Decimal("0.01")),
                     detalle=detalle.vdi_detalle1 or "",
@@ -211,14 +212,20 @@ def confirmar_devolucion(*, payload, usuario):
                 "total_devuelto": str(monto_devolucion.quantize(Decimal("0.01"))),
             }
             operacion.nota_credito = nota_credito
+            operacion.total_credito = total_credito
+            operacion.estado = PostventaOperacion.ESTADO_COMPLETADA
             operacion.resultado_snapshot = resultado
             operacion.save(
                 update_fields=[
                     "nota_credito",
+                    "total_credito",
+                    "estado",
                     "resultado_snapshot",
                 ]
             )
             return resultado
+    except ConflictoIdempotencia:
+        raise
     except Exception:
         logger.exception(
             "postventa_confirmar_devolucion_error",

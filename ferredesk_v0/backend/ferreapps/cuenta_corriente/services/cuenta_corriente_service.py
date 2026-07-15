@@ -222,6 +222,11 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
         destino_id=OuterRef('pk')
     ).values('destino_id').annotate(total=Sum('imp_monto')).values('total')
 
+    imp_origen_venta_sq = Imputacion.objects.filter(
+        origen_content_type=venta_ct,
+        origen_id=OuterRef('pk')
+    ).values('origen_id').annotate(total=Sum('imp_monto')).values('total')
+
     # Para Recibos (Origen)
     imp_origen_sq = Imputacion.objects.filter(
         origen_content_type=recibo_ct,
@@ -238,6 +243,7 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
         comprobante__tipo='presupuesto'
     ).annotate(
         total_imputado=Coalesce(Subquery(imp_destino_sq), Value(0, output_field=DecimalField())),
+        total_emitido=Coalesce(Subquery(imp_origen_venta_sq), Value(0, output_field=DecimalField())),
     )
     
     # --- BATCH FETCHING PARA AUTO-IMPUTACIONES ---
@@ -298,7 +304,7 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             'haber': haber,
             'total': item.ven_total,
             'numero_formateado': item.numero_formateado,
-            'saldo_pendiente': item.ven_total - item.total_imputado, # Usamos el valor anotado
+            'saldo_pendiente': item.ven_total - (item.total_imputado if es_deuda else item.total_emitido),
             'orden_auto_imputacion': 0
         })
 
@@ -309,6 +315,8 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
                 # (Ya filtramos por origen_content_type=venta_ct en la query batch)
                 
                 es_auto = (imp.origen_id == item.ven_id)
+                if not es_auto:
+                    continue
                 # Aplicamos los nombres exactos para las auto-imputaciones
                 if es_auto:
                     # Cotización Recibo si viene de cotización; Factura Recibo si viene de factura

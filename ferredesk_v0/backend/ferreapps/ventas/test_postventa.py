@@ -4,7 +4,10 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
+from django.db import IntegrityError, transaction
+from django.db.models import Sum
 from django.test import SimpleTestCase
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.caja.models import (
@@ -16,11 +19,21 @@ from ferreapps.caja.models import (
     SesionCaja,
     TIPO_MOVIMIENTO_SALIDA,
 )
+from ferreapps.cuenta_corriente.models import Imputacion
+from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
+from ferreapps.productos.models import AlicuotaIVA, Ferreteria, Proveedor, StockProve
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
-from ferreapps.ventas.selectors.postventa import previsualizar_devolucion
+from ferreapps.ventas.selectors.postventa import (
+    obtener_saldo_pendiente_venta,
+    previsualizar_cambio,
+    previsualizar_devolucion,
+)
+from ferreapps.ventas.serializers import VentaSerializer
 from ferreapps.ventas.serializers_postventa import ConfirmarCambioInputSerializer
 from ferreapps.ventas.services.confirmar_cambio import confirmar_cambio
-from ferreapps.ventas.services.confirmar_devolucion import confirmar_devolucion
+from ferreapps.ventas.services.confirmar_devolucion import _build_nc_payload, confirmar_devolucion
+from ferreapps.ventas.services.crear_venta import crear_documento_venta_desde_payload
+from ferreapps.ventas.services.idempotencia_postventa import ConflictoIdempotencia, hash_intencion
 from ferreapps.ventas.services.snapshots import canonicalizar_snapshot
 from ferreapps.ventas.postventa_test_base import PostventaTenantTestCase
 from ferreapps.ventas.validators.postventa import (
@@ -33,6 +46,28 @@ from ferreapps.ventas.validators.postventa import (
 
 
 class PostventaPureUnitTests(SimpleTestCase):
+    def test_hash_intencion_incluye_todos_los_datos_de_negocio(self):
+        payload = {
+            "venta_id": 1,
+            "items_devueltos": [{"venta_detalle_item_id": 2, "cantidad": Decimal("1.00")}],
+            "items_nuevos": [{"stock_id": 3, "cantidad": Decimal("1.00"), "precio_unitario": Decimal("100.00")}],
+            "resolucion_diferencia": "COBRAR_DIFERENCIA",
+            "medios_diferencia": [{"metodo_pago_id": 4, "monto": Decimal("100.00")}],
+            "motivo": "Cambio",
+            "idempotency_key": uuid4(),
+        }
+        hashes = {
+            hash_intencion(payload),
+            hash_intencion({**payload, "items_devueltos": [{"venta_detalle_item_id": 2, "cantidad": Decimal("2.00")}] }),
+            hash_intencion({**payload, "items_nuevos": [{"stock_id": 3, "cantidad": Decimal("1.00"), "precio_unitario": Decimal("101.00")}] }),
+            hash_intencion({**payload, "resolucion_diferencia": "DEJAR_DEUDA"}),
+            hash_intencion({**payload, "medios_diferencia": [{"metodo_pago_id": 4, "monto": Decimal("99.00")}] }),
+            hash_intencion({**payload, "motivo": "Otro motivo"}),
+        }
+
+        self.assertEqual(len(hashes), 6)
+        self.assertEqual(hash_intencion(payload), hash_intencion({**payload, "idempotency_key": uuid4()}))
+
     def test_snapshot_canonico_serializa_tipos_drf(self):
         uid = uuid4()
 
@@ -81,6 +116,95 @@ class PostventaPureUnitTests(SimpleTestCase):
 
 class PostventaIntegrationTests(PostventaTenantTestCase):
 
+    def test_idempotencia_reintenta_despues_de_perder_la_respuesta(self):
+        stock = self._crear_stock("PV-IDEM-RETRY")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        payload = {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Reintento tras timeout",
+        }
+
+        def confirmar_y_perder_respuesta():
+            confirmar_devolucion(payload=payload, usuario=self.usuario)
+            raise TimeoutError("Respuesta perdida despues del commit")
+
+        with self.assertRaises(TimeoutError):
+            confirmar_y_perder_respuesta()
+        venta.ven_estado = "AN"
+        venta.save(update_fields=["ven_estado"])
+        resultado_recuperado = confirmar_devolucion(payload=payload, usuario=self.usuario)
+
+        self.assertEqual(PostventaOperacion.objects.count(), 1)
+        self.assertEqual(PostventaOperacion.objects.get().estado, PostventaOperacion.ESTADO_COMPLETADA)
+        self.assertEqual(resultado_recuperado, PostventaOperacion.objects.get().resultado_snapshot)
+
+    def test_idempotencia_rechaza_otra_intencion(self):
+        stock = self._crear_stock("PV-IDEM-CONF")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("2.00"))
+        payload = {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Intento original",
+        }
+        confirmar_devolucion(payload=payload, usuario=self.usuario)
+
+        payload_cantidad = {**payload, "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "2.00"}]}
+        with self.assertRaises(ConflictoIdempotencia):
+            confirmar_devolucion(payload=payload_cantidad, usuario=self.usuario)
+
+        venta_otra = self.crear_venta(
+            comprobante=self.comprobante_origen,
+            numero=2,
+            fecha=date(2026, 7, 9),
+        )
+        with self.assertRaises(ConflictoIdempotencia):
+            confirmar_devolucion(payload={**payload, "venta_id": venta_otra.ven_id}, usuario=self.usuario)
+
+        with self.assertRaises(ConflictoIdempotencia):
+            confirmar_cambio(payload={
+                "venta_id": venta.ven_id,
+                "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "items_nuevos": [{"stock_id": stock.id, "cantidad": "1.00", "precio_unitario": "100.00"}],
+                "idempotency_key": payload["idempotency_key"],
+                "resolucion_diferencia": "SIN_DIFERENCIA",
+                "motivo": "Otro tipo",
+            }, usuario=self.usuario)
+
+        self.assertEqual(PostventaOperacion.objects.count(), 1)
+
+    def test_idempotencia_rechaza_operacion_sin_resultado_final(self):
+        stock = self._crear_stock("PV-IDEM-START")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        payload = {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Operacion iniciada",
+        }
+        PostventaOperacion.objects.create(
+            operacion_uid=payload["idempotency_key"],
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            venta_origen=venta,
+            usuario=self.usuario,
+            resolucion_dinero=payload["resolucion_dinero"],
+            motivo=payload["motivo"],
+            payload_hash=hash_intencion(payload),
+            estado=PostventaOperacion.ESTADO_INICIADA,
+            payload_snapshot=canonicalizar_snapshot(payload),
+        )
+
+        with self.assertRaises(ConflictoIdempotencia):
+            confirmar_devolucion(payload=payload, usuario=self.usuario)
+
     def test_previsualizar_devolucion_calcula_importes_reales(self):
         stock = self._crear_stock("PV-DEV")
         venta, detalle = self._crear_venta_origen(stock)
@@ -95,6 +219,108 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(preview["items_seleccionados"][0]["cantidad_disponible_para_devolver"], "2.00")
         self.assertEqual(preview["nota_credito_sugerida"]["tipo_comprobante"], "nota_credito_interna")
 
+    def test_devolucion_respeta_descuentos_y_total_persistido(self):
+        stock = self._crear_stock("PV-DESC")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("2.00"))
+        venta.ven_descu1 = Decimal("5.00")
+        venta.ven_descu2 = Decimal("2.50")
+        venta.ven_descu3 = Decimal("1.00")
+        venta.save(update_fields=["ven_descu1", "ven_descu2", "ven_descu3"])
+        detalle.vdi_bonifica = Decimal("10.00")
+        detalle.save(update_fields=["vdi_bonifica"])
+        detalle_calculado = VentaDetalleItem.objects.filter(pk=detalle.pk).con_calculos().get()
+        esperado = Decimal(str(detalle_calculado.precio_unitario_bonificado_con_iva))
+
+        payload = {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Devolucion con descuentos",
+        }
+        preview = previsualizar_devolucion(payload)
+        resultado = confirmar_devolucion(payload=payload, usuario=self.usuario)
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        nota_credito = operacion.nota_credito
+
+        self.assertEqual(Decimal(preview["resumen_monetario"]["total_credito"]), esperado)
+        self.assertEqual(Decimal(resultado["total_credito"]), nota_credito.total_guardado)
+        self.assertEqual(operacion.total_credito, nota_credito.total_guardado)
+        self.assertEqual(nota_credito.ven_descu1, venta.ven_descu1)
+        self.assertEqual(nota_credito.ven_descu2, venta.ven_descu2)
+        self.assertEqual(nota_credito.ven_descu3, venta.ven_descu3)
+        self.assertEqual(nota_credito.ven_fecha, timezone.localdate())
+
+    def test_cambio_alinea_preview_documentos_y_precio_nuevo(self):
+        stock_origen = self._crear_stock("PV-PRECIO-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-PRECIO-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        alicuota_reducida = AlicuotaIVA.objects.filter(porce=Decimal("10.50")).first()
+        self.assertIsNotNone(alicuota_reducida)
+        stock_origen.idaliiva = alicuota_reducida
+        stock_origen.save(update_fields=["idaliiva"])
+        stock_nuevo.idaliiva = alicuota_reducida
+        stock_nuevo.save(update_fields=["idaliiva"])
+        venta.ven_descu1 = Decimal("10.00")
+        venta.save(update_fields=["ven_descu1"])
+        detalle.vdi_bonifica = Decimal("5.00")
+        detalle.vdi_idaliiva = alicuota_reducida
+        detalle.save(update_fields=["vdi_bonifica", "vdi_idaliiva"])
+        payload = {
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.50", "precio_unitario": "123.45"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "DEJAR_DEUDA",
+            "motivo": "Cambio con precio final",
+        }
+        preview = previsualizar_cambio(payload)
+        resultado = confirmar_cambio(payload=payload, usuario=self.usuario)
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+
+        self.assertEqual(Decimal(preview["resumen_monetario"]["total_credito"]), operacion.nota_credito.total_guardado)
+        self.assertEqual(Decimal(preview["resumen_monetario"]["total_debito"]), operacion.nueva_venta.total_guardado)
+        self.assertEqual(Decimal(resultado["total_credito"]), operacion.total_credito)
+        self.assertEqual(Decimal(resultado["total_debito"]), operacion.total_debito)
+        self.assertEqual(operacion.nueva_venta.items.get().vdi_precio_unitario_final, Decimal("123.45"))
+        self.assertEqual(operacion.nueva_venta.ven_fecha, timezone.localdate())
+
+    def test_reintento_de_numeracion_no_rompe_la_transaccion_exterior(self):
+        stock = self._crear_stock("PV-NUMERO")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        preview = previsualizar_devolucion({
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+        })
+        comprobante = self._comprobante("9998", "Nota de credito interna", "nota_credito_interna")
+        payload = _build_nc_payload(
+            venta,
+            {"items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}], "motivo": "Colision"},
+            preview,
+            comprobante,
+        )
+        guardar_original = VentaSerializer.save
+        intentos = 0
+
+        def guardar_con_colision(serializer):
+            nonlocal intentos
+            if intentos == 0:
+                intentos += 1
+                raise IntegrityError("duplicate key unique constraint")
+            return guardar_original(serializer)
+
+        with patch.object(VentaSerializer, "save", autospec=True, side_effect=guardar_con_colision):
+            with transaction.atomic():
+                nota_credito, _ = crear_documento_venta_desde_payload(
+                    payload=payload,
+                    usuario=self.usuario,
+                )
+                self.assertTrue(Venta.objects.filter(pk=nota_credito.pk).exists())
+
+        self.assertEqual(intentos, 1)
+
     def test_validar_items_devolucion_respeta_el_remanente_persistido(self):
         stock = self._crear_stock("PV-REM")
         venta, detalle = self._crear_venta_origen(stock)
@@ -106,6 +332,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
             resolucion_dinero=PostventaOperacion.RESOLUCION_SALDO_A_FAVOR,
             motivo="Devolucion anterior",
             total_credito=Decimal("100.00"),
+            payload_hash="test",
         )
         PostventaOperacionItem.objects.create(
             operacion=operacion,
@@ -122,6 +349,46 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
                 [{"venta_detalle_item_id": detalle.id, "cantidad": "1.01"}],
                 modo="DEVOLUCION_PARCIAL",
             )
+
+    def test_devolucion_imputa_solo_el_saldo_pendiente(self):
+        stock = self._crear_stock("PV-PARCIAL")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("2.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("150.00")}])
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "IMPUTAR_DEUDA",
+            "motivo": "Devolucion con pago parcial",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(Decimal(resultado["total_imputado"]), Decimal("50.00"))
+        self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("0.00"))
+        self.assertEqual(
+            Imputacion.objects.filter(origen_id=operacion.nota_credito.ven_id).get().imp_monto,
+            Decimal("50.00"),
+        )
+
+    def test_cancelacion_total_conserva_credito_sin_mover_dinero(self):
+        stock = self._crear_stock("PV-TOTAL")
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "CANCELACION_TOTAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Cancelacion total",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(operacion.total_credito, Decimal("100.00"))
+        self.assertFalse(Imputacion.objects.filter(origen_id=operacion.nota_credito.ven_id).exists())
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
 
     def test_validar_medios_usa_metodos_y_cuentas_reales(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
@@ -274,10 +541,83 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         }, usuario=self.usuario)
 
         pago = PagoVenta.objects.get(postventa_operacion_id=resultado["operacion_id"])
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        imputacion = Imputacion.objects.get(
+            imp_idempotency_key=f"postventa-cobro:{operacion.operacion_uid}"
+        )
         self.assertEqual(pago.tipo_operacion, PagoVenta.TIPO_COBRO_DIFERENCIA_CAMBIO)
         self.assertEqual(pago.monto, Decimal("50.00"))
         self.assertEqual(pago.cuenta_banco, cuenta)
+        self.assertEqual(imputacion.imp_monto, Decimal("50.00"))
+        self.assertEqual(obtener_saldo_pendiente_venta(operacion.nueva_venta), Decimal("0.00"))
         self.assertEqual(MovimientoCaja.objects.count(), 0)
+
+    def test_cambio_dejar_deuda_conserva_saldo_de_nueva_venta(self):
+        stock_origen = self._crear_stock("PV-DEUDA-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-DEUDA-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "150.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "DEJAR_DEUDA",
+            "motivo": "Cambio con deuda",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(obtener_saldo_pendiente_venta(operacion.nueva_venta), Decimal("50.00"))
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
+
+    def test_cambio_saldo_a_favor_conserva_credito_no_utilizado(self):
+        stock_origen = self._crear_stock("PV-FAVOR-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-FAVOR-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(
+            stock_origen,
+            cantidad=Decimal("1.00"),
+            precio=Decimal("150.00"),
+        )
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "100.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "SALDO_A_FAVOR",
+            "motivo": "Cambio con saldo a favor",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(obtener_saldo_pendiente_venta(operacion.nueva_venta), Decimal("0.00"))
+        self.assertEqual(
+            Imputacion.objects.filter(origen_id=operacion.nota_credito.ven_id).aggregate(total=Sum("imp_monto"))["total"],
+            Decimal("100.00"),
+        )
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
+
+    def test_cambio_imputar_deuda_aplica_el_remanente_a_origen(self):
+        stock_origen = self._crear_stock("PV-IMPUTA-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-IMPUTA-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(
+            stock_origen,
+            cantidad=Decimal("1.00"),
+            precio=Decimal("150.00"),
+        )
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "100.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "IMPUTAR_DEUDA",
+            "motivo": "Cambio que compensa deuda",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(obtener_saldo_pendiente_venta(operacion.nueva_venta), Decimal("0.00"))
+        self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("100.00"))
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
 
     def test_cambio_devuelve_efectivo_y_registra_salida_de_caja(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
@@ -293,6 +633,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         stock_origen = self._crear_stock("PV-DEV-ORI", cantidad=Decimal("5.00"))
         stock_nuevo = self._crear_stock("PV-DEV-NUE", cantidad=Decimal("5.00"))
         venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
 
         resultado = confirmar_cambio(payload={
             "venta_id": venta.ven_id,
@@ -324,3 +665,129 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
                 direccion="entrada",
                 monto_objetivo=Decimal("10.00"),
             )
+
+    def test_devolucion_repone_al_proveedor_historico_y_lo_audita(self):
+        proveedor_actual = Proveedor.objects.create(
+            razon="Proveedor Actual",
+            fantasia="Proveedor Actual",
+            domicilio="Calle Actual 1",
+            cuit="20999111445",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PVA",
+        )
+        stock = self._crear_stock("PV-PROV-HIST", cantidad=Decimal("5.00"))
+        StockProve.objects.create(
+            stock=stock,
+            proveedor=proveedor_actual,
+            cantidad=Decimal("8.00"),
+            costo=Decimal("50.00"),
+        )
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        stock.proveedor_habitual = proveedor_actual
+        stock.save(update_fields=["proveedor_habitual"])
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Devolucion con proveedor historico",
+        }, usuario=self.usuario)
+
+        self.assertEqual(
+            StockProve.objects.get(stock=stock, proveedor=self.proveedor).cantidad,
+            Decimal("6.00"),
+        )
+        self.assertEqual(
+            StockProve.objects.get(stock=stock, proveedor=proveedor_actual).cantidad,
+            Decimal("8.00"),
+        )
+        item = PostventaOperacionItem.objects.get(operacion_id=resultado["operacion_id"])
+        self.assertEqual(item.proveedor_id, self.proveedor.id)
+
+    def test_devolucion_rechaza_proveedor_historico_ausente_y_revierte(self):
+        stock = self._crear_stock("PV-PROV-AUS", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        StockProve.objects.filter(stock=stock, proveedor=self.proveedor).delete()
+
+        with self.assertRaises(ValidationError):
+            confirmar_devolucion(payload={
+                "venta_id": venta.ven_id,
+                "modo": "DEVOLUCION_PARCIAL",
+                "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "idempotency_key": uuid4(),
+                "resolucion_dinero": "SALDO_A_FAVOR",
+                "motivo": "Proveedor ausente",
+            }, usuario=self.usuario)
+
+        self.assertFalse(PostventaOperacion.objects.exists())
+        self.assertEqual(Venta.objects.count(), 1)
+
+    def test_devolucion_rechaza_linea_con_stock_sin_proveedor_referencia(self):
+        stock = self._crear_stock("PV-PROV-NULL", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        detalle.vdi_idpro = None
+        detalle.save(update_fields=["vdi_idpro"])
+
+        with self.assertRaises(ValidationError):
+            confirmar_devolucion(payload={
+                "venta_id": venta.ven_id,
+                "modo": "DEVOLUCION_PARCIAL",
+                "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "idempotency_key": uuid4(),
+                "resolucion_dinero": "SALDO_A_FAVOR",
+                "motivo": "Proveedor faltante",
+            }, usuario=self.usuario)
+
+        self.assertEqual(StockProve.objects.get(stock=stock, proveedor=self.proveedor).cantidad, Decimal("5.00"))
+        self.assertFalse(PostventaOperacion.objects.exists())
+
+    def test_devolucion_manual_no_mueve_stock(self):
+        venta = self.crear_venta(
+            comprobante=self.comprobante_origen,
+            numero=9,
+            fecha=date(2026, 7, 9),
+        )
+        detalle = self.crear_item_generico(venta, cantidad=Decimal("1.00"), precio_final=Decimal("100.00"))
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Item manual",
+        }, usuario=self.usuario)
+
+        item = PostventaOperacionItem.objects.get(operacion_id=resultado["operacion_id"])
+        self.assertIsNone(item.stock_id)
+        self.assertIsNone(item.proveedor_id)
+        self.assertFalse(StockProve.objects.exists())
+
+    def test_cambio_revalida_stock_negativo_dentro_del_lock(self):
+        stock_origen = self._crear_stock("PV-NEG-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-NEG-NUE", cantidad=Decimal("1.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        payload = {
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "2.00", "precio_unitario": "100.00"}],
+            "resolucion_diferencia": "DEJAR_DEUDA",
+            "motivo": "Stock negativo",
+        }
+
+        with self.assertRaises(ValidationError):
+            confirmar_cambio(payload={**payload, "idempotency_key": uuid4()}, usuario=self.usuario)
+
+        self.assertEqual(StockProve.objects.get(stock=stock_origen).cantidad, Decimal("5.00"))
+        self.assertEqual(StockProve.objects.get(stock=stock_nuevo).cantidad, Decimal("1.00"))
+        ferreteria = Ferreteria.objects.get()
+        ferreteria.permitir_stock_negativo = True
+        ferreteria.save(update_fields=["permitir_stock_negativo"])
+
+        confirmar_cambio(payload={**payload, "idempotency_key": uuid4()}, usuario=self.usuario)
+
+        self.assertEqual(StockProve.objects.get(stock=stock_origen).cantidad, Decimal("6.00"))
+        self.assertEqual(StockProve.objects.get(stock=stock_nuevo).cantidad, Decimal("-1.00"))

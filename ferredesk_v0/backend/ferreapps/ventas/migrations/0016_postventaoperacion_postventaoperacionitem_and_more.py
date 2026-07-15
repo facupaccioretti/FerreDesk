@@ -25,6 +25,8 @@ class Migration(migrations.Migration):
                 ('motivo_forzado', models.TextField(blank=True, default='')),
                 ('total_credito', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
                 ('total_debito', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
+                ('payload_hash', models.CharField(max_length=64)),
+                ('estado', models.CharField(choices=[('INICIADA', 'Iniciada'), ('COMPLETADA', 'Completada')], default='INICIADA', max_length=20)),
                 ('payload_snapshot', models.JSONField(default=dict)),
                 ('resultado_snapshot', models.JSONField(default=dict)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
@@ -47,6 +49,7 @@ class Migration(migrations.Migration):
                 ('detalle', models.CharField(blank=True, default='', max_length=200)),
                 ('operacion', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='items', to='ventas.postventaoperacion')),
                 ('stock', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, to='productos.stock')),
+                ('proveedor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, to='productos.proveedor')),
                 ('venta_detalle_origen', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, to='ventas.ventadetalleitem')),
             ],
             options={

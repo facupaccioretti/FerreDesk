@@ -57,6 +57,28 @@ class PostventaAPITests(PostventaTenantTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("idempotency_key", response.json())
 
+    def test_api_responde_conflicto_si_la_uuid_cambia_de_intencion(self):
+        stock = self._crear_stock("PV-API-IDEM", cantidad=5)
+        venta, detalle = self._crear_venta_origen(stock, cantidad=2)
+        payload = {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": str(uuid4()),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Intento API",
+        }
+
+        primera = self._post("/api/postventa/devoluciones/confirmar/", payload)
+        conflicto = self._post(
+            "/api/postventa/devoluciones/confirmar/",
+            {**payload, "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "2.00"}]},
+        )
+
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED, primera.content)
+        self.assertEqual(conflicto.status_code, status.HTTP_409_CONFLICT, conflicto.content)
+        self.assertEqual(PostventaOperacion.objects.count(), 1)
+
     def test_api_rechaza_origenes_fuera_del_contrato_sin_efectos(self):
         stock = self._crear_stock("PV-API-RECHAZO", cantidad=5)
         endpoints = [

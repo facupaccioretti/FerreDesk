@@ -3,7 +3,6 @@ import ItemsGrid from "./ItemsGrid"
 import BuscadorProducto from "../BuscadorProducto"
 import { useVentaDetalleAPI } from "../../utils/useVentaDetalleAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
-import { useCalculosFormulario } from "./herramientasforms/useCalculosFormulario"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { normalizarItems } from "./herramientasforms/normalizadorItems"
@@ -226,10 +225,6 @@ const PostventaForm = ({
   const [observacion, setObservacion] = useState("")
   const [itemsOrigen, setItemsOrigen] = useState([])
   const [itemsNuevos, setItemsNuevos] = useState([])
-  const [bonificacionGeneral, setBonificacionGeneral] = useState(0)
-  const [descu1, setDescu1] = useState(0)
-  const [descu2, setDescu2] = useState(0)
-  const [descu3, setDescu3] = useState(0)
   const [ultimoPreviewContext, setUltimoPreviewContext] = useState(null)
   const [resolucionDinero, setResolucionDinero] = useState("SALDO_A_FAVOR")
   const [resolucionDiferencia, setResolucionDiferencia] = useState("SALDO_A_FAVOR")
@@ -259,10 +254,6 @@ const PostventaForm = ({
     setObservacion("")
     setItemsOrigen([])
     setItemsNuevos([])
-    setBonificacionGeneral(0)
-    setDescu1(0)
-    setDescu2(0)
-    setDescu3(0)
     setUltimoPreviewContext(null)
     setResolucionDinero("SALDO_A_FAVOR")
     setResolucionDiferencia("SALDO_A_FAVOR")
@@ -303,14 +294,6 @@ const PostventaForm = ({
       }, {})
       : {}
   ), [alicuotasIVA])
-
-  const { totales } = useCalculosFormulario(itemsNuevos, {
-    bonificacionGeneral,
-    descu1,
-    descu2,
-    descu3,
-    alicuotas: alicuotasMap,
-  })
 
   const limpiarPreview = useCallback(() => {
     resetPreview()
@@ -369,11 +352,6 @@ const PostventaForm = ({
   const origenSeleccionado = useMemo(
     () => itemsOrigen.filter((item) => Number(item.cantidad) > 0),
     [itemsOrigen],
-  )
-
-  const totalDevolucion = useMemo(
-    () => origenSeleccionado.reduce((acc, item) => acc + (Number(item.cantidad) * Number(item.precioUnitario || 0)), 0),
-    [origenSeleccionado],
   )
 
   const buildPreviewPayload = useCallback(() => {
@@ -662,7 +640,9 @@ const PostventaForm = ({
               <div className="text-xs text-slate-600">
                 <div className="font-semibold text-slate-700 mb-1">Resumen</div>
                 <div>Productos seleccionados: {origenSeleccionado.length}</div>
-                <div>Total devuelto: {formatMoney(totalDevolucion)}</div>
+                <div>Total devuelto: {resumenMonetario?.total_credito != null
+                  ? formatMoney(resumenMonetario.total_credito)
+                  : "Revisa el resumen"}</div>
                 {modo === "cambio" && (
                   <div>
                     Total del nuevo pedido: {resumenMonetario?.total_debito != null
@@ -772,27 +752,7 @@ const PostventaForm = ({
                 ref={itemsGridRef}
                 autoSumarDuplicados={autoSumarDuplicados}
                 setAutoSumarDuplicados={setAutoSumarDuplicados}
-                bonificacionGeneral={bonificacionGeneral}
-                setBonificacionGeneral={(value) => {
-                  setBonificacionGeneral(value)
-                  limpiarPreview()
-                }}
-                descu1={descu1}
-                descu2={descu2}
-                descu3={descu3}
-                setDescu1={(value) => {
-                  setDescu1(value)
-                  limpiarPreview()
-                }}
-                setDescu2={(value) => {
-                  setDescu2(value)
-                  limpiarPreview()
-                }}
-                setDescu3={(value) => {
-                  setDescu3(value)
-                  limpiarPreview()
-                }}
-                totales={totales}
+                mostrarControlesFinancieros={false}
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
