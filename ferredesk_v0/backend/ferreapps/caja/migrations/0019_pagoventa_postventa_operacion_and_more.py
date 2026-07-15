@@ -4,6 +4,47 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+TIPO_COBRO_VENTA = "COBRO_VENTA"
+TIPO_VUELTO_VENTA = "VUELTO_VENTA"
+TIPO_COBRO_RECIBO = "COBRO_RECIBO"
+TIPO_PAGO_ORDEN_PAGO = "PAGO_ORDEN_PAGO"
+
+
+def clasificar_pagos_historicos(apps, schema_editor):
+    PagoVenta = apps.get_model("caja", "PagoVenta")
+    ambiguos = []
+
+    for pago in PagoVenta.objects.all().iterator():
+        tiene_venta = pago.venta_id is not None
+        tiene_recibo = pago.recibo_id is not None
+        tiene_orden_pago = pago.orden_pago_id is not None
+
+        if pago.es_vuelto:
+            if tiene_recibo or tiene_orden_pago:
+                ambiguos.append(pago.pk)
+                continue
+            tipo_operacion = TIPO_VUELTO_VENTA
+        elif sum((tiene_venta, tiene_recibo, tiene_orden_pago)) == 1:
+            if tiene_orden_pago:
+                tipo_operacion = TIPO_PAGO_ORDEN_PAGO
+            elif tiene_recibo:
+                tipo_operacion = TIPO_COBRO_RECIBO
+            else:
+                tipo_operacion = TIPO_COBRO_VENTA
+        else:
+            ambiguos.append(pago.pk)
+            continue
+
+        PagoVenta.objects.filter(pk=pago.pk).update(tipo_operacion=tipo_operacion)
+
+    if ambiguos:
+        ids = ", ".join(map(str, ambiguos[:20]))
+        sufijo = "" if len(ambiguos) <= 20 else "..."
+        raise RuntimeError(
+            f"PagoVenta ambiguo para tipo_operacion. IDs: {ids}{sufijo}"
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -19,6 +60,15 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(blank=True, db_column='PAG_POSTVENTA_ID', help_text='Operacion de postventa asociada al pago', null=True, on_delete=django.db.models.deletion.PROTECT, related_name='pagos', to='ventas.postventaoperacion'),
         ),
         migrations.AddField(
+            model_name='pagoventa',
+            name='tipo_operacion',
+            field=models.CharField(blank=True, db_column='PAG_TIPO_OPERACION', help_text='Clasifica el sentido economico del pago', max_length=40, null=True),
+        ),
+        migrations.RunPython(
+            clasificar_pagos_historicos,
+            migrations.RunPython.noop,
+        ),
+        migrations.AlterField(
             model_name='pagoventa',
             name='tipo_operacion',
             field=models.CharField(db_column='PAG_TIPO_OPERACION', db_index=True, default='COBRO_VENTA', help_text='Clasifica el sentido economico del pago', max_length=40),

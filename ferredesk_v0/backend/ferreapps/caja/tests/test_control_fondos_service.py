@@ -74,6 +74,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("300.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_VENTA,
         )
 
         proveedor = TestDataHelper.crear_proveedor(razon="Proveedor Control Fondos")
@@ -90,6 +91,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("120.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
         )
 
         Cheque.objects.create(
@@ -121,6 +123,57 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["pendiente_acreditacion"]["monto"], "700.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "1680.00")
         self.assertEqual(kpis["total_administrado"]["monto"], "2380.00")
+
+    def test_bancos_respeta_signos_de_cobros_vueltos_recibos_y_ordenes_pago(self):
+        venta = self._crear_venta(2007)
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("200.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_VENTA,
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("50.00"),
+            es_vuelto=True,
+            tipo_operacion=PagoVenta.TIPO_VUELTO_VENTA,
+        )
+        recibo = Recibo.objects.create(
+            rec_fecha=timezone.now().date(),
+            rec_numero="REC-CF-001",
+            rec_cliente=self.base_data["cliente"],
+            rec_total=Decimal("70.00"),
+            rec_usuario=self.usuario,
+        )
+        PagoVenta.objects.create(
+            recibo=recibo,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("70.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_RECIBO,
+        )
+        proveedor = TestDataHelper.crear_proveedor(razon="Proveedor Signos Fondos")
+        orden_pago = OrdenPago.objects.create(
+            op_fecha=timezone.now().date(),
+            op_numero="OP-CF-002",
+            op_proveedor=proveedor,
+            op_total=Decimal("20.00"),
+            op_usuario=self.usuario,
+        )
+        PagoVenta.objects.create(
+            orden_pago=orden_pago,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("20.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+        )
+
+        payload = build_control_fondos_payload()
+
+        self.assertEqual(payload["resumen_actual"]["kpis"]["bancos"]["monto"], "200.00")
 
     def test_disponible_hoy_excluye_cheques_en_cartera_y_depositados(self):
         Cheque.objects.create(
