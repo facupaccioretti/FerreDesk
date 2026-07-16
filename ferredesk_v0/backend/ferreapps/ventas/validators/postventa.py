@@ -243,7 +243,7 @@ def validar_medios_postventa(medios, sesion_caja, *, direccion, monto_objetivo):
             raise ValidationError(
                 {"medios": f"{metodo.nombre} no admite movimientos de {direccion} en postventa"}
             )
-        if metodo.afecta_arqueo and sesion_caja is None:
+        if metodo.codigo == CODIGO_EFECTIVO and sesion_caja is None:
             raise ValidationError({"medios": f"{metodo.nombre} requiere una caja abierta"})
 
         monto = _to_decimal(medio.get("monto"), "monto")

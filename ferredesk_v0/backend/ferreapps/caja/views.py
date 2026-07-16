@@ -120,6 +120,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         )
     
     @action(detail=False, methods=['post'], url_path='cerrar')
+    @transaction.atomic
     def cerrar_caja(self, request):
         """Cierra la caja actual del usuario (Cierre Z).
         
@@ -130,7 +131,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         Calcula diferencia y cierra la sesión.
         """
         # Obtener la caja abierta del usuario
-        sesion = SesionCaja.objects.filter(
+        sesion = SesionCaja.objects.select_for_update().filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA
         ).first()
@@ -474,10 +475,11 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         """Crea un nuevo movimiento en la caja abierta del usuario."""
         # Obtener la caja abierta del usuario
-        sesion = SesionCaja.objects.filter(
+        sesion = SesionCaja.objects.select_for_update().filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA
         ).first()

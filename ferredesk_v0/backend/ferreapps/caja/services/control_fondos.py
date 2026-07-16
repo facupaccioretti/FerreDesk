@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.cache import cache
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import DecimalField, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -11,6 +11,7 @@ from ferreapps.cuenta_corriente.models import OrdenPago, Recibo
 
 from ..models import (
     Cheque,
+    CODIGO_EFECTIVO,
     CuentaBanco,
     MovimientoCaja,
     PagoVenta,
@@ -209,10 +210,11 @@ def get_control_fondos_cache_version():
 
 
 def invalidate_control_fondos_cache(*, reason=None):
-    current_version = get_control_fondos_cache_version()
-    next_version = current_version + 1
-    cache.set(_control_fondos_cache_version_key(), next_version, None)
-    return next_version
+    def invalidar():
+        current_version = get_control_fondos_cache_version()
+        cache.set(_control_fondos_cache_version_key(), current_version + 1, None)
+
+    transaction.on_commit(invalidar)
 
 
 def _build_control_fondos_payload_uncached(*, preset=None, include_bloque_reciente=False):
@@ -388,6 +390,7 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
             fecha_hora__range=(fecha_desde, fecha_hasta),
             es_vuelto=False,
         )
+        .exclude(metodo_pago__codigo=CODIGO_EFECTIVO)
         .filter(Q(venta__isnull=False) | Q(recibo__isnull=False))
         .exclude(venta__ven_estado="AN")
         .exclude(recibo__rec_estado=Recibo.ESTADO_ANULADO)
@@ -405,9 +408,8 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
         .order_by("-fecha_hora", "-id")
     )
 
-    movimientos_entrada = (
+    movimientos = (
         MovimientoCaja.objects.filter(
-            tipo=TIPO_MOVIMIENTO_ENTRADA,
             fecha_hora__range=(fecha_desde, fecha_hasta),
         )
         .select_related("sesion_caja", "usuario")
@@ -417,7 +419,7 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
     cheques_por_movimiento = {
         cheque.movimiento_caja_entrada_id: cheque
         for cheque in Cheque.objects.filter(
-            movimiento_caja_entrada_id__in=movimientos_entrada.values_list("id", flat=True)
+            movimiento_caja_entrada_id__in=movimientos.values_list("id", flat=True)
         ).select_related("origen_cliente")
     }
 
@@ -429,18 +431,23 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
     for pago in pagos:
         if pago.recibo_id:
             tramite = pago.recibo
-            canal = "CAJA" if pago.recibo.sesion_caja_id else "FUERA_CAJA"
+            canal = "FUERA_CAJA"
             origen = "Recibo"
             referencia_principal = pago.recibo.rec_numero
             tercero = pago.recibo.rec_cliente.razon if pago.recibo.rec_cliente else "S/C"
         else:
             tramite = pago.venta
-            canal = "CAJA" if pago.venta.sesion_caja_id else "FUERA_CAJA"
+            canal = "FUERA_CAJA"
             origen = pago.venta.comprobante.nombre if pago.venta.comprobante else "Venta"
             referencia_principal = f"{pago.venta.ven_punto:04d}-{pago.venta.ven_numero:08d}"
             tercero = pago.venta.ven_idcli.razon if pago.venta.ven_idcli else "S/C"
 
         monto = pago.monto or ZERO
+        if pago.tipo_operacion in {
+            PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+            PagoVenta.TIPO_VUELTO_VENTA,
+        }:
+            monto = -monto
         total_monto += monto
         if canal == "CAJA":
             total_caja += monto
@@ -467,7 +474,7 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
             }
         )
 
-    for movimiento in movimientos_entrada:
+    for movimiento in movimientos:
         cheque = cheques_por_movimiento.get(movimiento.id)
         medio_pago = "Cheque" if cheque else "Efectivo"
         origen = "Ingreso manual de caja"
@@ -481,6 +488,8 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
                 referencias.append(cheque.origen_cliente.razon)
 
         monto = movimiento.monto or ZERO
+        if movimiento.tipo == TIPO_MOVIMIENTO_SALIDA:
+            monto = -monto
         total_monto += monto
         total_caja += monto
         referencias.append(f"Caja #{movimiento.sesion_caja_id}")

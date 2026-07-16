@@ -14,6 +14,7 @@ import copy
 import re
 
 from django.db import transaction
+from django.db.models import Sum
 from django.core.exceptions import ValidationError
 
 from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
@@ -24,6 +25,7 @@ from .models import (
     MovimientoCaja,
     MetodoPago,
     SesionCaja,
+    CuentaBanco,
     TIPO_MOVIMIENTO_ENTRADA,
     TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
@@ -45,19 +47,34 @@ def validar_metodo_pago_contra_caja(
     metodo_pago: MetodoPago,
     sesion_caja: Optional[SesionCaja] = None,
 ) -> None:
-    """Aplica el contrato canónico entre medio de pago y caja."""
-    if sesion_caja:
-        return
-
-    if metodo_pago.codigo == CODIGO_EFECTIVO:
+    if (metodo_pago.codigo == CODIGO_EFECTIVO or metodo_pago.afecta_arqueo) and (
+        not sesion_caja or not sesion_caja.esta_abierta
+    ):
         raise ValidationError(
-            f'El medio de pago "{metodo_pago.nombre}" requiere una sesión de caja abierta.'
+            f'El medio de pago "{metodo_pago.nombre}" requiere una sesion de caja abierta.'
         )
 
-    if metodo_pago.afecta_arqueo:
-        raise ValidationError(
-            f'El medio de pago "{metodo_pago.nombre}" requiere una sesión de caja abierta.'
-        )
+
+def _bloquear_sesion_caja(sesion_caja, usuario):
+    if sesion_caja is None:
+        return None
+
+    sesion = SesionCaja.objects.select_for_update().filter(pk=sesion_caja.pk).first()
+    if sesion is None or not sesion.esta_abierta:
+        raise ValidationError('La sesion de caja ya no esta abierta.')
+    if usuario is not None and sesion.usuario_id != usuario.pk:
+        raise ValidationError('La sesion de caja pertenece a otro usuario.')
+    return sesion
+
+
+def _saldo_efectivo_sesion(sesion_caja):
+    ingresos = sesion_caja.movimientos.filter(
+        tipo=TIPO_MOVIMIENTO_ENTRADA,
+    ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
+    egresos = sesion_caja.movimientos.filter(
+        tipo=TIPO_MOVIMIENTO_SALIDA,
+    ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
+    return sesion_caja.saldo_inicial + ingresos - egresos
 
 
 def _registrar_cheque_recibido(
@@ -270,6 +287,7 @@ def normalizar_cobro(
     return copy.deepcopy(pagos), metadata_cobro
 
 
+@transaction.atomic
 def registrar_valores_y_movimientos(
     pagos: List[Dict[str, Any]],
     sesion_caja: Optional[SesionCaja] = None,
@@ -306,6 +324,20 @@ def registrar_valores_y_movimientos(
         TIPO_MOVIMIENTO_ENTRADA if direccion == 'entrada'
         else TIPO_MOVIMIENTO_SALIDA
     )
+    sesion_caja = _bloquear_sesion_caja(sesion_caja, usuario)
+    efectivo_salida = sum(
+        Decimal(str(pago.get('monto', 0)))
+        for pago in pagos
+        if MetodoPago.objects.filter(
+            id=pago.get('metodo_pago_id'),
+            codigo=CODIGO_EFECTIVO,
+        ).exists()
+    )
+    if direccion == 'salida' and efectivo_salida:
+        if sesion_caja is None:
+            raise ValidationError('El efectivo requiere una sesion de caja abierta.')
+        if efectivo_salida > _saldo_efectivo_sesion(sesion_caja):
+            raise ValidationError('El saldo de efectivo disponible es insuficiente para esta devolucion.')
     resultados = []
 
     for pago_data in pagos:
@@ -320,10 +352,9 @@ def registrar_valores_y_movimientos(
         except MetodoPago.DoesNotExist:
             raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
 
-        # Validación Crítica: Medios físicos requieren caja abierta
-        if metodo_pago.afecta_arqueo and not sesion_caja:
+        if (metodo_pago.codigo == CODIGO_EFECTIVO or metodo_pago.afecta_arqueo) and not sesion_caja:
             raise ValidationError(
-                f'El medio de pago "{metodo_pago.nombre}" requiere una sesión de caja abierta.'
+                f'El medio de pago "{metodo_pago.nombre}" requiere una sesion de caja abierta.'
             )
 
 
@@ -337,6 +368,8 @@ def registrar_valores_y_movimientos(
                 raise ValidationError(
                     f'Debe indicar cuenta_banco_id para pagos por {metodo_pago.nombre}.'
                 )
+            if not CuentaBanco.objects.filter(id=cuenta_banco_id, activo=True).exists():
+                raise ValidationError('La cuenta bancaria indicada no esta activa.')
         else:
             # Para otros métodos (efectivo, etc.), no asignamos cuenta banco
             cuenta_banco_id = None
@@ -407,19 +440,20 @@ def registrar_valores_y_movimientos(
         if monto_recibido is not None and monto_recibido < monto:
             monto_recibido = None
 
-        # Movimiento de caja (si el método afecta arqueo)
         movimiento_obj = None
-        if metodo_pago.afecta_arqueo:
-            # Aquí ya validamos arriba que existe sesion_caja si afecta_arqueo=True
+        if metodo_pago.codigo == CODIGO_EFECTIVO or metodo_pago.afecta_arqueo:
             observacion = (pago_data.get('observacion') or '').strip()
             descripcion_mov = f"{descripcion_base} {descripcion_comprobante} ({metodo_pago.nombre})"
             if observacion:
                 descripcion_mov = f"{descripcion_mov} - {observacion}"
+            monto_movimiento = monto_recibido if (
+                direccion == 'entrada' and metodo_pago.codigo == CODIGO_EFECTIVO and monto_recibido is not None
+            ) else monto
             movimiento_obj = MovimientoCaja.objects.create(
                 sesion_caja=sesion_caja,
                 usuario=sesion_caja.usuario,
                 tipo=tipo_movimiento,
-                monto=monto,
+                monto=monto_movimiento,
                 descripcion=descripcion_mov,
             )
             signo = '+' if direccion == 'entrada' else '-'
@@ -720,10 +754,15 @@ def registrar_vuelto(
         logger.warning("No se encontró método de pago para registrar vuelto")
         return None
 
+    if metodo_pago.codigo != CODIGO_EFECTIVO:
+        raise ValidationError('El vuelto solo puede entregarse contra efectivo recibido.')
+
     validar_metodo_pago_contra_caja(metodo_pago, sesion_caja)
     
     with transaction.atomic():
-        # Crear PagoVenta con es_vuelto=True
+        sesion_caja = _bloquear_sesion_caja(sesion_caja, sesion_caja.usuario)
+        if monto_vuelto > _saldo_efectivo_sesion(sesion_caja):
+            raise ValidationError('El saldo de efectivo disponible es insuficiente para entregar vuelto.')
         pago_vuelto = PagoVenta.objects.create(
             venta=venta,
             metodo_pago=metodo_pago,
@@ -733,8 +772,7 @@ def registrar_vuelto(
             observacion="Vuelto al cliente",
         )
         
-        # Si afecta arqueo, crear movimiento de SALIDA
-        if metodo_pago.afecta_arqueo:
+        if metodo_pago.codigo == CODIGO_EFECTIVO or metodo_pago.afecta_arqueo:
             from .models import TIPO_MOVIMIENTO_SALIDA
             numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
             MovimientoCaja.objects.create(

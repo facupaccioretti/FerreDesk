@@ -144,6 +144,17 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
             ven_copia=1,
             sesion_caja=self.sesion
         )
+
+    def test_vuelto_rechaza_un_medio_distinto_de_efectivo(self):
+        from ..utils import registrar_vuelto
+
+        with self.assertRaises(ValidationError):
+            registrar_vuelto(
+                venta=self.venta,
+                sesion_caja=self.sesion,
+                monto_vuelto=Decimal('10.00'),
+                metodo_pago_id=self.metodo_transferencia.id,
+            )
     
     def tearDown(self):
         """Limpieza después de cada test."""

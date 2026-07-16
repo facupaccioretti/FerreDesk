@@ -5,6 +5,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.test import SimpleTestCase
 from django.utils import timezone
@@ -624,6 +626,8 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
             codigo="efectivo",
             defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
         )
+        efectivo.afecta_arqueo = False
+        efectivo.save(update_fields=["afecta_arqueo"])
         SesionCaja.objects.create(
             usuario=self.usuario,
             sucursal=1,
@@ -652,6 +656,108 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(movimiento.tipo, TIPO_MOVIMIENTO_SALIDA)
         self.assertEqual(movimiento.monto, Decimal("50.00"))
 
+    def test_cambio_devuelve_por_efectivo_y_transferencia(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
+        )
+        transferencia, _ = MetodoPago.objects.get_or_create(
+            codigo="transferencia",
+            defaults={"nombre": "Transferencia", "afecta_arqueo": False, "activo": True},
+        )
+        cuenta = CuentaBanco.objects.create(nombre="Banco Devolucion Mixta", activo=True)
+        SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("20.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-MIX-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-MIX-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "50.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "DEVOLVER_DINERO",
+            "medios_diferencia": [
+                {"metodo_pago_id": efectivo.id, "monto": "20.00"},
+                {"metodo_pago_id": transferencia.id, "monto": "30.00", "cuenta_banco_id": cuenta.id},
+            ],
+            "motivo": "Cambio con devolucion mixta",
+        }, usuario=self.usuario)
+
+        pagos = PagoVenta.objects.filter(postventa_operacion_id=resultado["operacion_id"])
+        self.assertEqual(pagos.count(), 2)
+        self.assertEqual(MovimientoCaja.objects.get().monto, Decimal("20.00"))
+        self.assertEqual(
+            pagos.get(metodo_pago=transferencia).cuenta_banco_id,
+            cuenta.id,
+        )
+
+    def test_cambio_bloquea_devolucion_efectivo_si_no_alcanza_caja(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
+        )
+        SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("49.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-CASH-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-CASH-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
+
+        with self.assertRaises(DjangoValidationError):
+            confirmar_cambio(payload={
+                "venta_id": venta.ven_id,
+                "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "50.00"}],
+                "idempotency_key": uuid4(),
+                "resolucion_diferencia": "DEVOLVER_DINERO",
+                "medios_diferencia": [{"metodo_pago_id": efectivo.id, "monto": "50.00"}],
+                "motivo": "Caja insuficiente",
+            }, usuario=self.usuario)
+
+        self.assertFalse(PostventaOperacion.objects.exists())
+        self.assertFalse(MovimientoCaja.objects.exists())
+
+    def test_cambio_rechaza_efectivo_con_caja_abierta_de_otro_usuario(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
+        )
+        otro_usuario = get_user_model().objects.create_user(username="pv09_otra_caja")
+        SesionCaja.objects.create(
+            usuario=otro_usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("100.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-OTHER-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-OTHER-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
+
+        with self.assertRaises(ValidationError):
+            confirmar_cambio(payload={
+                "venta_id": venta.ven_id,
+                "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "50.00"}],
+                "idempotency_key": uuid4(),
+                "resolucion_diferencia": "DEVOLVER_DINERO",
+                "medios_diferencia": [{"metodo_pago_id": efectivo.id, "monto": "50.00"}],
+                "motivo": "Caja de otro usuario",
+            }, usuario=self.usuario)
+
+        self.assertFalse(PostventaOperacion.objects.exists())
+
     def test_validar_medios_rechaza_transferencia_sin_cuenta(self):
         transferencia, _ = MetodoPago.objects.get_or_create(
             codigo="transferencia",
@@ -661,6 +767,21 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         with self.assertRaises(ValidationError):
             validar_medios_postventa(
                 [{"metodo_pago_id": transferencia.id, "monto": "10.00"}],
+                sesion_caja=None,
+                direccion="entrada",
+                monto_objetivo=Decimal("10.00"),
+            )
+
+    def test_validar_medios_rechaza_transferencia_a_cuenta_inactiva(self):
+        transferencia, _ = MetodoPago.objects.get_or_create(
+            codigo="transferencia",
+            defaults={"nombre": "Transferencia", "afecta_arqueo": False, "activo": True},
+        )
+        cuenta = CuentaBanco.objects.create(nombre="Banco Inactivo", activo=False)
+
+        with self.assertRaises(ValidationError):
+            validar_medios_postventa(
+                [{"metodo_pago_id": transferencia.id, "monto": "10.00", "cuenta_banco_id": cuenta.id}],
                 sesion_caja=None,
                 direccion="entrada",
                 monto_objetivo=Decimal("10.00"),

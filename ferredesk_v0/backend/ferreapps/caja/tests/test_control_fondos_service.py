@@ -1,7 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
 
 from ferreapps.caja.models import (
@@ -17,7 +19,11 @@ from ferreapps.caja.models import (
     TIPO_MOVIMIENTO_SALIDA,
 )
 from ferreapps.caja.services import build_control_fondos_payload
-from ferreapps.caja.services.control_fondos import invalidate_control_fondos_cache
+from ferreapps.caja.services.control_fondos import (
+    build_recent_activity_metrics,
+    get_control_fondos_cache_version,
+    invalidate_control_fondos_cache,
+)
 from ferreapps.caja.tests.mixins import CajaTenantTestCase, CajaTestMixin
 from ferreapps.caja.tests.utils_tests import TestDataHelper
 from ferreapps.cuenta_corriente.models import OrdenPago, Recibo
@@ -426,6 +432,61 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(primer_payload["resumen_actual"]["kpis"]["caja"]["monto"], "1.00")
         self.assertEqual(segundo_payload["resumen_actual"]["kpis"]["caja"]["monto"], "2.00")
         self.assertEqual(build_uncached.call_count, 2)
+
+    def test_invalidacion_de_cache_solo_ocurre_despues_del_commit(self):
+        version_inicial = get_control_fondos_cache_version()
+
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                invalidate_control_fondos_cache(reason="rollback")
+                raise RuntimeError("forzar rollback")
+
+        self.assertEqual(get_control_fondos_cache_version(), version_inicial)
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with transaction.atomic():
+                invalidate_control_fondos_cache(reason="commit")
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(get_control_fondos_cache_version(), version_inicial + 1)
+
+    def test_actividad_reciente_no_duplica_efectivo_y_signa_devoluciones(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo=CODIGO_EFECTIVO,
+            defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
+        )
+        sesion = self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("100.00"))
+        venta = self._crear_venta(2010, sesion_caja=sesion)
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=efectivo,
+            monto=Decimal("20.00"),
+            tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        )
+        MovimientoCaja.objects.create(
+            sesion_caja=sesion,
+            usuario=self.usuario,
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            monto=Decimal("20.00"),
+            descripcion="Devolucion efectivo",
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("30.00"),
+            tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        )
+
+        metricas = build_recent_activity_metrics(
+            fecha_desde=timezone.now() - timedelta(days=1),
+            fecha_hasta=timezone.now() + timedelta(days=1),
+        )
+
+        self.assertEqual(metricas["total_registros"], 2)
+        self.assertEqual(metricas["total_monto"], "-50.00")
+        self.assertEqual(metricas["total_caja"], "-20.00")
+        self.assertEqual(metricas["total_fuera_caja"], "-30.00")
 
     def test_payload_con_bloque_reciente_mantiene_shape_y_formulas_principales(self):
         self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("400.00"))
