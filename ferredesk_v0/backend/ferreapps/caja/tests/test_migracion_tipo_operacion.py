@@ -45,10 +45,11 @@ class PagoVentaTipoOperacionMigrationTests(TransactionTestCase):
         self.executor.migrate(self.destino_actual)
         super().tearDown()
 
-    def _destino_con_caja(self, migration):
+    def _destino_con_caja(self, migration, executor=None):
+        executor = executor or self.executor
         return [
             (app_label, migration if app_label == "caja" else name)
-            for app_label, name in self.executor.loader.graph.leaf_nodes()
+            for app_label, name in executor.loader.graph.leaf_nodes()
         ]
 
     def _crear_datos_historicos(self):
@@ -66,11 +67,11 @@ class PagoVentaTipoOperacionMigrationTests(TransactionTestCase):
 
         metodo = MetodoPago.objects.create(codigo="migracion", nombre="Migracion")
         usuario = Usuario.objects.create(username="migracion_tipo_operacion", password="x")
-        cliente = Cliente.objects.create(
+        cliente = Cliente.objects.order_by("pk").first() or Cliente.objects.create(
             razon="Cliente migracion",
             domicilio="Calle 1",
         )
-        vendedor = Vendedor.objects.create(
+        vendedor = Vendedor.objects.order_by("pk").first() or Vendedor.objects.create(
             nombre="Vendedor migracion",
             dni="12345678",
             comivta=0,
@@ -79,10 +80,10 @@ class PagoVentaTipoOperacionMigrationTests(TransactionTestCase):
             liquicob="N",
             activo="S",
         )
-        plazo = Plazo.objects.create(nombre="Contado")
-        comprobante = Comprobante.objects.create(
-            codigo_afip="9999",
-            nombre="Cotizacion",
+        plazo = Plazo.objects.order_by("pk").first() or Plazo.objects.create(nombre="Contado")
+        comprobante = (
+            Comprobante.objects.filter(codigo_afip="9999").first()
+            or Comprobante.objects.create(codigo_afip="9999", nombre="Cotizacion")
         )
         venta = Venta.objects.create(
             ven_sucursal=1,
@@ -169,3 +170,48 @@ class PagoVentaTipoOperacionMigrationTests(TransactionTestCase):
             self.executor.migrate(self.destino_actual)
 
         PagoVenta.objects.filter(pk=pago_ambiguo.pk).delete()
+
+    def test_migra_un_segundo_schema_tenant(self):
+        connection.set_schema_to_public()
+        tenant_secundario = EmpresaTenant(
+            schema_name="test_migracion_tipo_operacion_dos",
+            nombre="Tenant migracion tipo operacion dos",
+            slug_subdominio="migracion-tipo-operacion-dos",
+            email_admin="migracion-dos@test.com",
+            estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO,
+        )
+        tenant_secundario.save(verbosity=0)
+        old_apps_principal = self.old_apps
+
+        try:
+            connection.set_tenant(tenant_secundario)
+            executor = MigrationExecutor(connection)
+            destino_actual = self._destino_con_caja(self.migration_actual, executor)
+            destino_anterior = self._destino_con_caja(self.migration_anterior, executor)
+            executor.migrate(destino_anterior)
+            executor = MigrationExecutor(connection)
+            self.old_apps = executor.loader.project_state(destino_anterior).apps
+            pagos = self._crear_datos_historicos()
+
+            executor.migrate(destino_actual)
+            executor = MigrationExecutor(connection)
+            PagoVenta = executor.loader.project_state(destino_actual).apps.get_model(
+                "caja", "PagoVenta"
+            )
+            tipos = dict(
+                PagoVenta.objects.filter(pk__in=pagos.values()).values_list(
+                    "pk", "tipo_operacion"
+                )
+            )
+
+            self.assertEqual(set(tipos.values()), {
+                "COBRO_VENTA",
+                "VUELTO_VENTA",
+                "COBRO_RECIBO",
+                "PAGO_ORDEN_PAGO",
+            })
+        finally:
+            self.old_apps = old_apps_principal
+            connection.set_schema_to_public()
+            tenant_secundario.delete(force_drop=True)
+            connection.set_tenant(self.tenant)

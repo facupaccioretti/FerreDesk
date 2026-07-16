@@ -426,7 +426,8 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             ]
 
             primer_payload = build_control_fondos_payload()
-            invalidate_control_fondos_cache(reason="test")
+            with self.captureOnCommitCallbacks(execute=True):
+                invalidate_control_fondos_cache(reason="test")
             segundo_payload = build_control_fondos_payload()
 
         self.assertEqual(primer_payload["resumen_actual"]["kpis"]["caja"]["monto"], "1.00")

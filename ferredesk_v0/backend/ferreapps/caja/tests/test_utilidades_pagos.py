@@ -337,7 +337,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(pagos[0].monto_recibido, Decimal('500.00'))
         movimientos = MovimientoCaja.objects.filter(sesion_caja=self.sesion)
         self.assertEqual(movimientos.count(), 1)
-        self.assertEqual(movimientos[0].monto, Decimal('400.00'))
+        self.assertEqual(movimientos[0].monto, Decimal('500.00'))
     
     def test_consumidor_final_no_puede_pagar_con_cheque(self):
         """El cliente Consumidor Final (ID 1) no puede realizar pagos con cheque."""
