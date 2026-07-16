@@ -5,7 +5,11 @@ from rest_framework.response import Response
 
 from ferreapps.productos.setup import requerir_setup_completo
 from ferreapps.ventas import serializers_postventa
-from ferreapps.ventas.selectors.postventa import previsualizar_cambio, previsualizar_devolucion
+from ferreapps.ventas.selectors.postventa import (
+    obtener_items_origen_postventa,
+    previsualizar_cambio,
+    previsualizar_devolucion,
+)
 from ferreapps.ventas.services.confirmar_cambio import confirmar_cambio
 from ferreapps.ventas.services.confirmar_devolucion import confirmar_devolucion
 
@@ -50,3 +54,10 @@ def confirmar_cambio_view(request):
         confirmar_cambio(payload=serializer.validated_data, usuario=request.user),
         status=status.HTTP_201_CREATED,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+@requerir_setup_completo
+def items_origen_postventa_view(request, venta_id):
+    return Response(obtener_items_origen_postventa(venta_id))

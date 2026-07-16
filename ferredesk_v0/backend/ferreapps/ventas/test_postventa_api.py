@@ -44,6 +44,27 @@ class PostventaAPITests(PostventaTenantTestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         self.assertTrue(PostventaOperacion.objects.filter(id=response.json()["operacion_id"]).exists())
 
+    def test_endpoint_origen_informa_el_remanente_real_despues_de_una_devolucion(self):
+        stock = self._crear_stock("PV-API-REM", cantidad=5)
+        venta, detalle = self._crear_venta_origen(stock, cantidad=2)
+        confirmado = self._post("/api/postventa/devoluciones/confirmar/", {
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": str(uuid4()),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Devolucion previa",
+        })
+
+        response = self.client.get(f"/api/postventa/origen/{venta.ven_id}/")
+
+        self.assertEqual(confirmado.status_code, status.HTTP_201_CREATED, confirmado.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        item = response.json()["items"][0]
+        self.assertEqual(item["cantidad_original"], "2.00")
+        self.assertEqual(item["cantidad_ya_devuelta"], "1.00")
+        self.assertEqual(item["cantidad_disponible_para_devolver"], "1.00")
+
     def test_confirmar_rechaza_idempotency_key_invalida(self):
         response = self._post("/api/postventa/devoluciones/confirmar/", {
             "venta_id": 1,

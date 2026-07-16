@@ -26,14 +26,20 @@ const clampCantidad = (value, max) => {
   return Math.min(numero, max)
 }
 
-export const crearItemsOrigen = (items = []) =>
+export const crearItemsOrigen = (items = [], remanentes = null) =>
   items.map((item, index) => {
+    const origenItemId = item.id ?? item.vdi_id ?? item.vdi_orden ?? index + 1
     const cantidadOriginal = Number.parseFloat(item.cantidad ?? item.vdi_cantidad ?? 0) || 0
+    const remanente = remanentes?.[origenItemId]
+    const cantidadYaDevuelta = Number.parseFloat(remanente?.cantidad_ya_devuelta) || 0
+    const cantidadDisponible = remanente
+      ? Number.parseFloat(remanente.cantidad_disponible_para_devolver ?? cantidadOriginal - cantidadYaDevuelta) || 0
+      : remanentes === null ? cantidadOriginal : 0
     const precioUnitario = Number.parseFloat(item.precioFinal ?? item.vdi_precio_unitario_final ?? 0) || 0
 
     return {
-      key: item.id ?? item.vdi_id ?? item.vdi_orden ?? index + 1,
-      origenItemId: item.id ?? item.vdi_id ?? item.vdi_orden ?? index + 1,
+      key: origenItemId,
+      origenItemId,
       vdi_id: item.vdi_id ?? item.id ?? null,
       vdi_orden: item.vdi_orden ?? index + 1,
       vdi_idsto: item.vdi_idsto ?? item.producto?.id ?? null,
@@ -41,6 +47,8 @@ export const crearItemsOrigen = (items = []) =>
       detalle: item.vdi_detalle1 ?? item.denominacion ?? item.producto?.deno ?? "",
       unidad: item.vdi_detalle2 ?? item.unidad ?? item.producto?.unidadmedida ?? "-",
       cantidadOriginal,
+      cantidadYaDevuelta,
+      cantidadDisponible: Math.max(cantidadDisponible, 0),
       cantidad: 0,
       precioUnitario,
       subtotal: cantidadOriginal * precioUnitario,
@@ -96,7 +104,7 @@ export const filtrarMetodosPostventa = (metodos, direccion, tieneCajaAbierta, ti
   return metodos.filter((metodo) => {
     const codigo = String(metodo.codigo || "").toLowerCase()
     if (!permitidos.includes(codigo)) return false
-    if (metodo.afecta_arqueo && !tieneCajaAbierta) return false
+    if ((codigo === "efectivo" || metodo.afecta_arqueo) && !tieneCajaAbierta) return false
     if (esMedioBancario(metodo) && !tieneCuentasBanco) return false
     return true
   })
@@ -232,6 +240,12 @@ const PostventaForm = ({
   const [cuentasBanco, setCuentasBanco] = useState([])
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [mediosPago, setMediosPago] = useState([])
+  const [remanentesOrigen, setRemanentesOrigen] = useState({})
+  const [remanentesCargados, setRemanentesCargados] = useState(false)
+  const [remanentesError, setRemanentesError] = useState(null)
+  const [resultadoTerminal, setResultadoTerminal] = useState(null)
+  const [errorActualizacion, setErrorActualizacion] = useState(null)
+  const [actualizandoListado, setActualizandoListado] = useState(false)
 
   const { ventaCalculada, itemsCalculados, cargando, error: detalleError } = useVentaDetalleAPI(comprobanteId)
   const { alicuotas: alicuotasIVA, loading: loadingAlicuotas } = useAlicuotasIVAAPI()
@@ -258,6 +272,36 @@ const PostventaForm = ({
     setResolucionDinero("SALDO_A_FAVOR")
     setResolucionDiferencia("SALDO_A_FAVOR")
     setMediosPago([])
+    setRemanentesOrigen({})
+    setRemanentesCargados(false)
+    setRemanentesError(null)
+    setResultadoTerminal(null)
+    setErrorActualizacion(null)
+  }, [comprobanteId])
+
+  useEffect(() => {
+    let activo = true
+    if (!comprobanteId) return () => { activo = false }
+
+    fetch(`/api/postventa/origen/${comprobanteId}/`, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("No se pudo obtener el remanente de la venta")
+        return response.json()
+      })
+      .then((data) => {
+        if (!activo) return
+        setRemanentesOrigen((data.items || []).reduce((acc, item) => {
+          acc[item.venta_detalle_item_id] = item
+          return acc
+        }, {}))
+        setRemanentesCargados(true)
+      })
+      .catch(() => {
+        if (!activo) return
+        setRemanentesError("No se pudo obtener el remanente real de la venta.")
+      })
+
+    return () => { activo = false }
   }, [comprobanteId])
 
   useEffect(() => {
@@ -277,8 +321,9 @@ const PostventaForm = ({
 
   useEffect(() => {
     if (!Array.isArray(itemsCalculados)) return
-    setItemsOrigen(crearItemsOrigen(itemsCalculados))
-  }, [itemsCalculados])
+    if (!remanentesCargados) return
+    setItemsOrigen(crearItemsOrigen(itemsCalculados, remanentesOrigen))
+  }, [itemsCalculados, remanentesCargados, remanentesOrigen])
 
   useEffect(() => {
     if (!autoSumarDuplicados) {
@@ -295,13 +340,17 @@ const PostventaForm = ({
       : {}
   ), [alicuotasIVA])
 
-  const limpiarPreview = useCallback(() => {
+  const invalidarPreview = useCallback(() => {
     resetPreview()
     setUltimoPreviewContext(null)
+  }, [resetPreview])
+
+  const limpiarPreview = useCallback(() => {
+    invalidarPreview()
     setResolucionDinero("SALDO_A_FAVOR")
     setResolucionDiferencia("SALDO_A_FAVOR")
     setMediosPago([])
-  }, [resetPreview])
+  }, [invalidarPreview])
 
   const handleModoChange = useCallback((nuevoModo) => {
     setModo(nuevoModo)
@@ -315,7 +364,7 @@ const PostventaForm = ({
   const handleCantidadOrigenChange = useCallback((index, value) => {
     setItemsOrigen((prev) => prev.map((item, itemIndex) => (
       itemIndex === index
-        ? { ...item, cantidad: clampCantidad(value, item.cantidadOriginal) }
+        ? { ...item, cantidad: clampCantidad(value, item.cantidadDisponible) }
         : item
     )))
     limpiarPreview()
@@ -324,7 +373,7 @@ const PostventaForm = ({
   const handleSeleccionarTodo = useCallback((index) => {
     setItemsOrigen((prev) => prev.map((item, itemIndex) => (
       itemIndex === index
-        ? { ...item, cantidad: item.cantidadOriginal }
+        ? { ...item, cantidad: item.cantidadDisponible }
         : item
     )))
     limpiarPreview()
@@ -364,7 +413,7 @@ const PostventaForm = ({
     const itemsNuevosMapeados = modo === "cambio" ? buildItemsNuevosPayload(rows) : []
 
     const esCancelacionTotal = itemsOrigen.length > 0 && itemsOrigen.every((item) => (
-      Number(item.cantidad) === Number(item.cantidadOriginal)
+      Number(item.cantidad) === Number(item.cantidadDisponible)
     ))
 
     const previewPayload = modo === "cambio"
@@ -386,6 +435,7 @@ const PostventaForm = ({
   }, [comprobanteId, itemsNuevos, itemsOrigen, modo, origenSeleccionado])
 
   const handlePreview = useCallback(async () => {
+    if (resultadoTerminal || !remanentesCargados) return
     if (origenSeleccionado.length === 0) {
       window.alert("Debe seleccionar al menos un producto.")
       return
@@ -403,19 +453,41 @@ const PostventaForm = ({
     try {
       if (modo === "cambio") {
         const previewData = await previsualizarCambio(previewPayload)
+        if (!previewData) return
         setResolucionDiferencia(resolucionDiferenciaPorDefecto(previewData))
         setUltimoPreviewContext({ previewPayload, previewData })
       } else {
         const previewData = await previsualizarDevolucion(previewPayload)
+        if (!previewData) return
         setResolucionDinero("SALDO_A_FAVOR")
         setUltimoPreviewContext({ previewPayload, previewData })
       }
     } catch {
       return
     }
-  }, [buildPreviewPayload, modo, origenSeleccionado.length, previsualizarCambio, previsualizarDevolucion])
+  }, [buildPreviewPayload, modo, origenSeleccionado.length, previsualizarCambio, previsualizarDevolucion, remanentesCargados, resultadoTerminal])
+
+  const actualizarListadoDespuesDeConfirmar = useCallback(async (resultado) => {
+    if (!onSuccess) return true
+    setActualizandoListado(true)
+    setErrorActualizacion(null)
+    try {
+      await onSuccess(resultado)
+      return true
+    } catch {
+      setErrorActualizacion("La postventa fue confirmada, pero no se pudo actualizar el listado.")
+      return false
+    } finally {
+      setActualizandoListado(false)
+    }
+  }, [onSuccess])
+
+  const reintentarActualizacion = useCallback(async () => {
+    if (await actualizarListadoDespuesDeConfirmar(resultadoTerminal)) renewIdempotencyKey()
+  }, [actualizarListadoDespuesDeConfirmar, renewIdempotencyKey, resultadoTerminal])
 
   const handleConfirm = useCallback(async () => {
+    if (resultadoTerminal) return
     if (!ultimoPreviewContext) {
       window.alert("Primero revisa el resumen.")
       return
@@ -478,13 +550,11 @@ const PostventaForm = ({
     } catch {
       return
     }
-    renewIdempotencyKey()
+    if (!resultado) return
+    setResultadoTerminal(resultado)
     setUltimoPreviewContext(null)
-
-    if (onSuccess) {
-      await onSuccess(resultado)
-    }
-  }, [confirmarCambio, confirmarDevolucion, mediosPago, metodosPago, modo, observacion, onSuccess, renewIdempotencyKey, resolucionDiferencia, resolucionDinero, ultimoPreviewContext])
+    if (await actualizarListadoDespuesDeConfirmar(resultado)) renewIdempotencyKey()
+  }, [actualizarListadoDespuesDeConfirmar, confirmarCambio, confirmarDevolucion, mediosPago, metodosPago, modo, observacion, renewIdempotencyKey, resolucionDiferencia, resolucionDinero, resultadoTerminal, ultimoPreviewContext])
 
   const vistaPrevia = preview || ultimoPreviewContext?.previewData
   const resumenMonetario = vistaPrevia?.resumen_monetario
@@ -521,6 +591,7 @@ const PostventaForm = ({
     ? Math.max(totalMedios - montoObjetivo, 0)
     : 0
   const vueltoEsValido = vuelto <= calcularMontoEfectivo(mediosPago, metodosPago) + 0.009
+  const interaccionBloqueada = confirmLoading || Boolean(resultadoTerminal)
 
   useEffect(() => {
     if (!requiereMedio) {
@@ -550,12 +621,15 @@ const PostventaForm = ({
   }, [metodosDisponibles, montoObjetivo, requiereMedio])
 
   const actualizarLineaMedio = (indice, cambios) => {
+    if (interaccionBloqueada) return
     setMediosPago((prev) => prev.map((medio, actual) => (
       actual === indice ? { ...medio, ...cambios } : medio
     )))
+    invalidarPreview()
   }
 
   const agregarLineaMedio = () => {
+    if (interaccionBloqueada) return
     const metodo = metodosDisponibles[0]
     if (!metodo) return
     const remanente = Math.max(montoObjetivo - totalMedios, 0)
@@ -566,6 +640,7 @@ const PostventaForm = ({
       referencia_externa: "",
       observacion: "",
     }])
+    invalidarPreview()
   }
 
   if (cargando || loadingAlicuotas) {
@@ -600,6 +675,14 @@ const PostventaForm = ({
         </div>
 
         <div className="mb-6">
+          {remanentesError && (
+            <p role="alert" className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {remanentesError}
+            </p>
+          )}
+          {!remanentesCargados && !remanentesError && (
+            <p aria-live="polite" className="mb-3 text-xs text-slate-500">Cargando remanentes de postventa...</p>
+          )}
           <div className={PANEL_CLASS}>
             <div className="grid grid-cols-4 gap-4">
               <div>
@@ -611,6 +694,7 @@ const PostventaForm = ({
                       name="modo-postventa"
                       checked={modo === "devolucion"}
                       onChange={() => handleModoChange("devolucion")}
+                      disabled={interaccionBloqueada}
                     />
                     Devolver productos
                   </label>
@@ -620,6 +704,7 @@ const PostventaForm = ({
                       name="modo-postventa"
                       checked={modo === "cambio"}
                       onChange={() => handleModoChange("cambio")}
+                      disabled={interaccionBloqueada}
                     />
                     Cambiar por otros productos
                   </label>
@@ -632,6 +717,7 @@ const PostventaForm = ({
                   type="text"
                   value={observacion}
                   onChange={handleObservacionChange}
+                  disabled={interaccionBloqueada}
                   className={INPUT_CLASS}
                   placeholder="Ej: producto fallado, error de modelo, cambio por otro articulo"
                 />
@@ -667,7 +753,9 @@ const PostventaForm = ({
                     <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase">Codigo</th>
                     <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase">Detalle</th>
                     <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase">Unidad</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-600 uppercase">Cantidad vendida</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-600 uppercase">Original</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-600 uppercase">Ya devuelta</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-600 uppercase">Disponible</th>
                     <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-600 uppercase">
                       {modo === "cambio" ? "Cantidad a cambiar" : "Cantidad a devolver"}
                     </th>
@@ -681,14 +769,17 @@ const PostventaForm = ({
                       <td className="px-3 py-2 text-xs text-slate-700">{item.detalle || "-"}</td>
                       <td className="px-3 py-2 text-xs text-slate-700">{item.unidad || "-"}</td>
                       <td className="px-3 py-2 text-xs text-right text-slate-700">{item.cantidadOriginal}</td>
+                      <td className="px-3 py-2 text-xs text-right text-slate-700">{item.cantidadYaDevuelta}</td>
+                      <td className="px-3 py-2 text-xs text-right font-semibold text-slate-700">{item.cantidadDisponible}</td>
                       <td className="px-3 py-2 text-xs text-right">
                         <input
                           type="number"
                           min="0"
-                          max={item.cantidadOriginal}
+                          max={item.cantidadDisponible}
                           step="0.01"
                           value={item.cantidad}
                           onChange={(event) => handleCantidadOrigenChange(index, event.target.value)}
+                          disabled={interaccionBloqueada || !remanentesCargados || item.cantidadDisponible <= 0}
                           className={`${INPUT_CLASS} w-24 text-right`}
                         />
                       </td>
@@ -697,6 +788,7 @@ const PostventaForm = ({
                           <button
                             type="button"
                             onClick={() => handleSeleccionarTodo(index)}
+                            disabled={interaccionBloqueada || !remanentesCargados || item.cantidadDisponible <= 0}
                             className="px-2 py-1 text-[11px] rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
                           >
                             Todo
@@ -704,6 +796,7 @@ const PostventaForm = ({
                           <button
                             type="button"
                             onClick={() => handleLimpiarFila(index)}
+                            disabled={interaccionBloqueada}
                             className="px-2 py-1 text-[11px] rounded bg-red-50 text-red-700 hover:bg-red-100"
                           >
                             Limpiar
@@ -714,7 +807,7 @@ const PostventaForm = ({
                   ))}
                   {itemsOrigen.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-4 text-center text-sm text-slate-500">
+                      <td colSpan={8} className="px-3 py-4 text-center text-sm text-slate-500">
                         No se encontraron productos para esta venta. Si deberian aparecer, cierra y vuelve a abrir el comprobante.
                       </td>
                     </tr>
@@ -732,14 +825,14 @@ const PostventaForm = ({
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className={SECTION_TITLE_CLASS}>Producto nuevo</label>
-                    <BuscadorProducto onSelect={handleAddItemToGrid} className="w-full" />
+                    <BuscadorProducto onSelect={handleAddItemToGrid} disabled={interaccionBloqueada} className="w-full" />
                   </div>
                   <div>
                     <label className={SECTION_TITLE_CLASS}>Accion por defecto</label>
                     <SumarDuplicar
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
-                      disabled={false}
+                      disabled={interaccionBloqueada}
                       showLabel={false}
                     />
                   </div>
@@ -756,6 +849,7 @@ const PostventaForm = ({
                 modo="venta"
                 alicuotas={alicuotasMap}
                 onRowsChange={handleRowsChange}
+                readOnly={interaccionBloqueada}
                 initialItems={normalizarItems(itemsNuevos, { modo: "venta", alicuotasMap })}
               />
             </div>
@@ -819,7 +913,11 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDinero}
-                        onChange={(event) => setResolucionDinero(event.target.value)}
+                        onChange={(event) => {
+                          setResolucionDinero(event.target.value)
+                          invalidarPreview()
+                        }}
+                        disabled={interaccionBloqueada}
                       >
                         <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
                         <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
@@ -834,7 +932,11 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDiferencia}
-                        onChange={(event) => setResolucionDiferencia(event.target.value)}
+                        onChange={(event) => {
+                          setResolucionDiferencia(event.target.value)
+                          invalidarPreview()
+                        }}
+                        disabled={interaccionBloqueada}
                       >
                         <option value="COBRAR_DIFERENCIA">Cobrar diferencia</option>
                         <option value="DEJAR_DEUDA">Dejar deuda</option>
@@ -848,7 +950,11 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDiferencia}
-                        onChange={(event) => setResolucionDiferencia(event.target.value)}
+                        onChange={(event) => {
+                          setResolucionDiferencia(event.target.value)
+                          invalidarPreview()
+                        }}
+                        disabled={interaccionBloqueada}
                       >
                         <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
                         <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
@@ -888,6 +994,7 @@ const PostventaForm = ({
                                     cuenta_banco_id: "",
                                     referencia_externa: "",
                                   })}
+                                  disabled={interaccionBloqueada}
                                 >
                                   {metodosDisponibles.map((metodo) => (
                                     <option key={metodo.id} value={metodo.id}>{metodo.nombre}</option>
@@ -900,6 +1007,7 @@ const PostventaForm = ({
                                   className={`${INPUT_CLASS} md:col-span-2 text-right`}
                                   value={medio.monto}
                                   onChange={(event) => actualizarLineaMedio(indice, { monto: event.target.value })}
+                                  disabled={interaccionBloqueada}
                                   placeholder="Monto"
                                 />
                                 {esBancario ? (
@@ -908,6 +1016,7 @@ const PostventaForm = ({
                                       className={`${INPUT_CLASS} md:col-span-3`}
                                       value={medio.cuenta_banco_id}
                                       onChange={(event) => actualizarLineaMedio(indice, { cuenta_banco_id: event.target.value })}
+                                      disabled={interaccionBloqueada}
                                     >
                                       <option value="">Selecciona una cuenta</option>
                                       {cuentasBanco.map((cuenta) => (
@@ -918,13 +1027,19 @@ const PostventaForm = ({
                                       className={`${INPUT_CLASS} md:col-span-2`}
                                       value={medio.referencia_externa}
                                       onChange={(event) => actualizarLineaMedio(indice, { referencia_externa: event.target.value })}
+                                      disabled={interaccionBloqueada}
                                       placeholder="Referencia"
                                     />
                                   </>
                                 ) : <div className="md:col-span-5" />}
                                 <button
                                   type="button"
-                                  onClick={() => setMediosPago((prev) => prev.filter((_, actual) => actual !== indice))}
+                                  onClick={() => {
+                                    if (interaccionBloqueada) return
+                                    setMediosPago((prev) => prev.filter((_, actual) => actual !== indice))
+                                    invalidarPreview()
+                                  }}
+                                  disabled={interaccionBloqueada}
                                   className="text-xs text-red-700 hover:text-red-900 md:col-span-1"
                                 >
                                   Quitar
@@ -936,6 +1051,7 @@ const PostventaForm = ({
                             <button
                               type="button"
                               onClick={agregarLineaMedio}
+                              disabled={interaccionBloqueada}
                               className="text-xs font-semibold text-orange-700 hover:text-orange-900"
                             >
                               + Agregar otro medio
@@ -994,10 +1110,35 @@ const PostventaForm = ({
           </div>
         )}
 
+        {resultadoTerminal && (
+          <section aria-live="polite" role="status" className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+            <div className="font-semibold">La postventa fue confirmada.</div>
+            <div className="mt-1 text-xs">
+              Operacion #{resultadoTerminal.operacion_id || "-"}
+              {resultadoTerminal.nota_credito_id ? ` - Nota de credito #${resultadoTerminal.nota_credito_id}` : ""}
+              {resultadoTerminal.venta_nueva_id ? ` - Venta nueva #${resultadoTerminal.venta_nueva_id}` : ""}
+            </div>
+            {errorActualizacion && (
+              <div className="mt-3 flex items-center gap-3 text-xs text-amber-800">
+                <span>{errorActualizacion}</span>
+                <button
+                  type="button"
+                  onClick={reintentarActualizacion}
+                  disabled={actualizandoListado}
+                  className="font-semibold underline disabled:opacity-60"
+                >
+                  {actualizandoListado ? "Actualizando..." : "Reintentar actualizacion"}
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="mt-8 flex justify-end space-x-4">
           <button
             type="button"
             onClick={onCancel}
+            disabled={confirmLoading}
             className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
           >
             Cancelar
@@ -1005,7 +1146,7 @@ const PostventaForm = ({
           <button
             type="button"
             onClick={handlePreview}
-            disabled={previewLoading || confirmLoading}
+            disabled={previewLoading || interaccionBloqueada || !remanentesCargados}
             className="px-6 py-3 bg-slate-700 text-white rounded-xl hover:bg-slate-800 disabled:opacity-60 transition-all duration-200 font-semibold shadow-lg"
           >
             {previewLoading ? "Preparando..." : "Revisar resumen"}
@@ -1013,7 +1154,7 @@ const PostventaForm = ({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!ultimoPreviewContext || previewLoading || confirmLoading}
+            disabled={!ultimoPreviewContext || previewLoading || interaccionBloqueada}
             className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 disabled:opacity-60 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
           >
             {confirmLoading ? "Confirmando..." : textoBotonConfirmar}

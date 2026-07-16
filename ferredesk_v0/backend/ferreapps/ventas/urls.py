@@ -14,6 +14,7 @@ from . import views
 from .views.views_postventa import (
     confirmar_cambio_view,
     confirmar_devolucion_view,
+    items_origen_postventa_view,
     previsualizar_cambio_view,
     previsualizar_devolucion_view,
 )
@@ -41,6 +42,7 @@ urlpatterns = router.urls + [
     path('postventa/devoluciones/confirmar/', confirmar_devolucion_view, name='postventa_confirmar_devolucion'),
     path('postventa/cambios/previsualizar/', previsualizar_cambio_view, name='postventa_previsualizar_cambio'),
     path('postventa/cambios/confirmar/', confirmar_cambio_view, name='postventa_confirmar_cambio'),
+    path('postventa/origen/<int:venta_id>/', items_origen_postventa_view, name='postventa_items_origen'),
     
     # Endpoints del Libro IVA Ventas
     path('libro-iva-ventas/generar/', libro_iva_views.generar_libro_iva_ventas_endpoint, name='generar_libro_iva_ventas'),

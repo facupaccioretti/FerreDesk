@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { getCookie } from "../../../utils/csrf"
 
 const STORAGE_PREFIX = "postventa:idempotency:"
@@ -93,11 +93,14 @@ const usePostventaAPI = (comprobanteId) => {
   const [error, setError] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const previewVersionRef = useRef(0)
+  const confirmInFlightRef = useRef(false)
 
   useEffect(() => {
     setIdempotencyKey(obtenerIdempotencyKey(comprobanteId))
     setPreview(null)
     setError(null)
+    previewVersionRef.current += 1
   }, [comprobanteId])
 
   const ejecutarRequest = useCallback(async (url, payload, { includeIdempotency = false } = {}) => {
@@ -129,24 +132,38 @@ const usePostventaAPI = (comprobanteId) => {
     return data
   }, [idempotencyKey])
 
-  const previsualizarDevolucion = useCallback(async (payload) => {
+  const ejecutarPreview = useCallback(async (url, payload, mensajeError) => {
+    const version = ++previewVersionRef.current
     setPreviewLoading(true)
     setPreview(null)
     setError(null)
 
     try {
-      const data = await ejecutarRequest("/api/postventa/devoluciones/previsualizar/", payload)
+      const data = await ejecutarRequest(url, payload)
+      if (version !== previewVersionRef.current) return null
       setPreview(data)
       return data
     } catch (err) {
-      setError(extraerMensajeError(err.message) || "No se pudo preparar la devolucion")
+      if (version === previewVersionRef.current) {
+        setError(extraerMensajeError(err.message) || mensajeError)
+      }
       throw err
     } finally {
-      setPreviewLoading(false)
+      if (version === previewVersionRef.current) setPreviewLoading(false)
     }
   }, [ejecutarRequest])
 
+  const previsualizarDevolucion = useCallback((payload) => (
+    ejecutarPreview(
+      "/api/postventa/devoluciones/previsualizar/",
+      payload,
+      "No se pudo preparar la devolucion",
+    )
+  ), [ejecutarPreview])
+
   const confirmarDevolucion = useCallback(async (payload) => {
+    if (confirmInFlightRef.current) return null
+    confirmInFlightRef.current = true
     setConfirmLoading(true)
     setError(null)
 
@@ -160,28 +177,22 @@ const usePostventaAPI = (comprobanteId) => {
       setError(extraerMensajeError(err.message) || "No se pudo confirmar la devolucion")
       throw err
     } finally {
+      confirmInFlightRef.current = false
       setConfirmLoading(false)
     }
   }, [ejecutarRequest])
 
-  const previsualizarCambio = useCallback(async (payload) => {
-    setPreviewLoading(true)
-    setPreview(null)
-    setError(null)
-
-    try {
-      const data = await ejecutarRequest("/api/postventa/cambios/previsualizar/", payload)
-      setPreview(data)
-      return data
-    } catch (err) {
-      setError(extraerMensajeError(err.message) || "No se pudo preparar el cambio")
-      throw err
-    } finally {
-      setPreviewLoading(false)
-    }
-  }, [ejecutarRequest])
+  const previsualizarCambio = useCallback((payload) => (
+    ejecutarPreview(
+      "/api/postventa/cambios/previsualizar/",
+      payload,
+      "No se pudo preparar el cambio",
+    )
+  ), [ejecutarPreview])
 
   const confirmarCambio = useCallback(async (payload) => {
+    if (confirmInFlightRef.current) return null
+    confirmInFlightRef.current = true
     setConfirmLoading(true)
     setError(null)
 
@@ -195,11 +206,13 @@ const usePostventaAPI = (comprobanteId) => {
       setError(extraerMensajeError(err.message) || "No se pudo confirmar el cambio")
       throw err
     } finally {
+      confirmInFlightRef.current = false
       setConfirmLoading(false)
     }
   }, [ejecutarRequest])
 
   const resetPreview = useCallback(() => {
+    previewVersionRef.current += 1
     setPreview(null)
     setError(null)
   }, [])
@@ -207,9 +220,6 @@ const usePostventaAPI = (comprobanteId) => {
   const renewIdempotencyKey = useCallback(() => {
     const nuevo = generarIdempotencyKey()
     guardarIdempotencyKey(comprobanteId, nuevo)
-    setIdempotencyKey(nuevo)
-    setPreview(null)
-    setError(null)
     return nuevo
   }, [comprobanteId])
 

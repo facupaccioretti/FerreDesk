@@ -42,6 +42,25 @@ def obtener_precio_actual_stock(stock, lista_numero=0):
     return (base * (Decimal("1.00") + alicuota / Decimal("100"))).quantize(Decimal("0.01"))
 
 
+def obtener_items_origen_postventa(venta_id):
+    venta = obtener_venta_origen(venta_id)
+    detalles = list(VentaDetalleItem.objects.filter(vdi_idve=venta))
+    devueltas = obtener_cantidades_ya_devueltas([detalle.id for detalle in detalles])
+    items = []
+    for detalle in detalles:
+        cantidad_original = Decimal(str(detalle.vdi_cantidad)).quantize(Decimal("0.01"))
+        cantidad_devuelta = Decimal(str(devueltas.get(detalle.id, ZERO))).quantize(Decimal("0.01"))
+        items.append(
+            {
+                "venta_detalle_item_id": detalle.id,
+                "cantidad_original": _money(cantidad_original),
+                "cantidad_ya_devuelta": _money(cantidad_devuelta),
+                "cantidad_disponible_para_devolver": _money(max(cantidad_original - cantidad_devuelta, ZERO)),
+            }
+        )
+    return {"venta_origen_id": venta.ven_id, "items": items}
+
+
 def _importes_efectivos_origen(venta, cantidades):
     """Usa el calculo de venta vigente para las lineas que se devuelven."""
     detalles = {

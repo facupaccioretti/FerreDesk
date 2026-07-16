@@ -25,6 +25,24 @@ describe("PostventaForm payloads", () => {
     })])
   })
 
+  test("limita la devolucion al remanente real de una postventa anterior", () => {
+    const [item] = crearItemsOrigen([{
+      id: 17,
+      vdi_cantidad: "2.00",
+    }], {
+      17: {
+        cantidad_ya_devuelta: "1.00",
+        cantidad_disponible_para_devolver: "1.00",
+      },
+    })
+
+    expect(item).toEqual(expect.objectContaining({
+      cantidadOriginal: 2,
+      cantidadYaDevuelta: 1,
+      cantidadDisponible: 1,
+    }))
+  })
+
   test("incluye el precio editado en los productos nuevos", () => {
     expect(buildItemsNuevosPayload([{
       producto: { id: 7, idaliiva: 5 },
@@ -115,5 +133,11 @@ describe("PostventaForm payloads", () => {
     expect(filtrarMetodosPostventa(metodos, "salida", true, true).map((m) => m.codigo))
       .toEqual(["efectivo", "transferencia"])
     expect(filtrarMetodosPostventa(metodos, "entrada", false, false)).toEqual([])
+  })
+
+  test("exige caja para efectivo aunque su configuracion no afecte arqueo", () => {
+    expect(filtrarMetodosPostventa([
+      { id: 1, codigo: "efectivo", afecta_arqueo: false },
+    ], "salida", false, true)).toEqual([])
   })
 })
