@@ -4,8 +4,14 @@ from uuid import uuid4
 
 from rest_framework import status
 
-from ferreapps.caja.models import PagoVenta
+from ferreapps.caja.models import (
+    ESTADO_CAJA_ABIERTA,
+    MetodoPago,
+    PagoVenta,
+    SesionCaja,
+)
 from ferreapps.cuenta_corriente.models import Imputacion
+from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import StockProve
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, Venta
 from ferreapps.ventas.postventa_test_base import PostventaTenantTestCase
@@ -187,3 +193,37 @@ class PostventaAPITests(PostventaTenantTestCase):
         })
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_devuelve_400_si_la_caja_no_alcanza_para_el_reintegro(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
+        )
+        SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial="49.00",
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-API-CAJA", cantidad=5)
+        stock_nuevo = self._crear_stock("PV-API-NUEVO", cantidad=5)
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=1)
+        imputar_deuda(venta, [{"factura": venta, "monto": "100.00"}])
+
+        response = self._post("/api/postventa/cambios/confirmar/", {
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{
+                "stock_id": stock_nuevo.id,
+                "cantidad": "1.00",
+                "precio_unitario": "50.00",
+            }],
+            "idempotency_key": str(uuid4()),
+            "resolucion_diferencia": "DEVOLVER_DINERO",
+            "medios_diferencia": [{"metodo_pago_id": efectivo.id, "monto": "50.00"}],
+            "motivo": "Caja insuficiente",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertIn("insuficiente", str(response.json()).lower())
+        self.assertFalse(PostventaOperacion.objects.exists())

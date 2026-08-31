@@ -31,7 +31,9 @@ const CajaEstado = ({ sesion, resumen, theme, onVerObservaciones }) => {
     const mismoSaldoYTeorico = saldoInicial === teorico
     const sinMovimientos = ingresos === 0 && egresos === 0
     const hayVentas = (resumen?.cantidad_ventas ?? 0) > 0 || (parseFloat(resumen?.total_ventas) || 0) > 0
-    const cobrosConMonto = resumen?.totales_por_metodo?.filter((item) => parseFloat(item.total) > 0) || []
+    const cobrosConMonto = resumen?.totales_por_metodo?.filter((item) =>
+        parseFloat(item.total_ingresos) > 0 || parseFloat(item.total_egresos) > 0
+    ) || []
     const cantidadObs = parseInt(resumen?.cantidad_observaciones) || 0
 
     if (!sesion) return null
@@ -78,9 +80,14 @@ const CajaEstado = ({ sesion, resumen, theme, onVerObservaciones }) => {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
                 {cobrosConMonto.length > 0 && (
                     <>
-                        <span className="text-slate-400">Cobros:</span>
+                        <span className="text-slate-400">Pagos:</span>
                         {cobrosConMonto.map((item, index) => (
-                            <span key={index}>{item.metodo_pago__nombre} <strong className="text-slate-700">${formatMoney(item.total)}</strong></span>
+                            <span key={index}>
+                                {item.metodo_pago__nombre}{' '}
+                                <strong className="text-green-700">+${formatMoney(item.total_ingresos)}</strong>{' '}
+                                <strong className="text-red-700">-${formatMoney(item.total_egresos)}</strong>{' '}
+                                <strong className="text-slate-700">Neto ${formatMoney(item.total)}</strong>
+                            </span>
                         ))}
                         <span className="text-slate-300">·</span>
                     </>

@@ -7,8 +7,14 @@ from django.db import connection
 from django.db.models import Count, Q, Sum
 from django_tenants.utils import get_public_schema_name, schema_context
 
-from ferreapps.caja.models import Cheque, MovimientoCaja, PagoVenta
-from ferreapps.caja.services.control_fondos import _calcular_caja_actual
+from ferreapps.caja.models import (
+    Cheque,
+    MovimientoCaja,
+    PagoVenta,
+    SesionCaja,
+    TIPO_MOVIMIENTO_ENTRADA,
+    TIPO_MOVIMIENTO_SALIDA,
+)
 from ferreapps.cuenta_corriente.models import Imputacion, OrdenPago, Recibo
 from ferreapps.productos.models import Stock, StockProve
 from ferreapps.ventas.models import Venta, VentaDetalleItem
@@ -54,10 +60,18 @@ def _saldo_bancos_historico():
         | Q(recibo__isnull=False, recibo__rec_estado=Recibo.ESTADO_ACTIVO)
         | Q(orden_pago__isnull=False, orden_pago__op_estado=OrdenPago.ESTADO_ACTIVO)
     )
-    ingresos = pagos.filter(es_vuelto=False, orden_pago__isnull=True).aggregate(
+    ingresos = pagos.filter(tipo_operacion__in=[
+        PagoVenta.TIPO_COBRO_VENTA,
+        PagoVenta.TIPO_COBRO_RECIBO,
+        PagoVenta.TIPO_COBRO_DIFERENCIA_CAMBIO,
+    ]).aggregate(
         total=Sum("monto")
     )["total"]
-    egresos = pagos.filter(Q(es_vuelto=True) | Q(orden_pago__isnull=False)).aggregate(
+    egresos = pagos.filter(tipo_operacion__in=[
+        PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+        PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        PagoVenta.TIPO_VUELTO_VENTA,
+    ]).aggregate(
         total=Sum("monto")
     )["total"]
     cheques = Cheque.objects.filter(
@@ -69,10 +83,77 @@ def _saldo_bancos_historico():
     )
 
 
+def _tabla_tiene_columna(modelo, columna):
+    with connection.cursor() as cursor:
+        columnas = {
+            descripcion.name.casefold()
+            for descripcion in connection.introspection.get_table_description(
+                cursor, modelo._meta.db_table
+            )
+        }
+    return columna.casefold() in columnas
+
+
+def _saldo_caja_normalizado():
+    tiene_clasificacion = _tabla_tiene_columna(
+        MovimientoCaja,
+        MovimientoCaja._meta.get_field('afecta_efectivo').column,
+    )
+    ids_custodia = set(
+        Cheque.objects.exclude(movimiento_caja_entrada_id=None).values_list(
+            'movimiento_caja_entrada_id', flat=True
+        )
+    )
+    ids_custodia.update(
+        Cheque.objects.exclude(movimiento_caja_salida_id=None)
+        .exclude(origen_tipo=Cheque.ORIGEN_CAMBIO_CHEQUE)
+        .values_list('movimiento_caja_salida_id', flat=True)
+    )
+    ids_custodia.update(
+        MovimientoCaja.objects.filter(
+            descripcion__contains='cheque rechazado'
+        ).values_list('id', flat=True)
+    )
+
+    sesiones_abiertas = list(SesionCaja.objects.filter(estado='ABIERTA'))
+    total = Decimal('0.00')
+    for sesion in sesiones_abiertas:
+        movimientos = MovimientoCaja.objects.filter(sesion_caja=sesion)
+        if tiene_clasificacion:
+            movimientos = movimientos.filter(afecta_efectivo=True)
+        elif ids_custodia:
+            movimientos = movimientos.exclude(pk__in=ids_custodia)
+        ingresos = movimientos.filter(tipo=TIPO_MOVIMIENTO_ENTRADA).aggregate(
+            total=Sum('monto')
+        )['total'] or Decimal('0.00')
+        egresos = movimientos.filter(tipo=TIPO_MOVIMIENTO_SALIDA).aggregate(
+            total=Sum('monto')
+        )['total'] or Decimal('0.00')
+        total += sesion.saldo_inicial + ingresos - egresos
+
+    usuarios_abiertos = {sesion.usuario_id for sesion in sesiones_abiertas}
+    usuarios_cerrados = (
+        SesionCaja.objects.filter(estado='CERRADA')
+        .exclude(usuario_id__in=usuarios_abiertos)
+        .values_list('usuario_id', flat=True)
+        .distinct()
+    )
+    for usuario_id in usuarios_cerrados:
+        sesion = SesionCaja.objects.filter(
+            estado='CERRADA',
+            usuario_id=usuario_id,
+        ).order_by('-fecha_hora_fin', '-fecha_hora_inicio', '-pk').first()
+        total += (
+            sesion.saldo_final_declarado
+            if sesion.saldo_final_declarado is not None
+            else sesion.saldo_final_sistema or Decimal('0.00')
+        )
+    return total
+
+
 def _saldos_control():
-    caja, _ = _calcular_caja_actual()
     return {
-        "caja": _monto(caja),
+        "caja": _monto(_saldo_caja_normalizado()),
         "bancos": _monto(_saldo_bancos_historico()),
         "cheques_en_cartera": _monto(
             Cheque.objects.filter(estado=Cheque.ESTADO_EN_CARTERA).aggregate(

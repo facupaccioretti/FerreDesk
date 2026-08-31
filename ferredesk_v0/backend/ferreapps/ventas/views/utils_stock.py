@@ -12,7 +12,7 @@ def _obtener_stock_proveedores_bloqueado(stock_id):
     """
     Devuelve la lista de StockProve del producto (stock_id) con bloqueo select_for_update.
     """
-    return list(StockProve.objects.select_for_update().filter(stock_id=stock_id))
+    return list(StockProve.objects.select_for_update().filter(stock_id=stock_id).order_by('pk'))
 
 
 def _total_disponible_en_proveedores(stock_id):
@@ -194,6 +194,11 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
         if stock_id not in stocks_nuevos:
             raise ValidationError({"items_nuevos": f"Producto inexistente {stock_id}"})
         total_disponible = sum((proveedor.cantidad for proveedor in proveedores), Decimal("0"))
+        total_disponible += sum(
+            cantidad_repuesta
+            for detalle_repuesto, cantidad_repuesta in reposiciones
+            if detalle_repuesto.vdi_idsto_id == stock_id
+        )
         if not permitir_stock_negativo and total_disponible < cantidad:
             raise ValidationError({"items_nuevos": f"Stock insuficiente para el producto {stock_id}"})
         descuentos.append((stocks_nuevos[stock_id], proveedores, cantidad))

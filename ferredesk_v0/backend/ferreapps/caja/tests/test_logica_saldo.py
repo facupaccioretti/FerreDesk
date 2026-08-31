@@ -8,12 +8,11 @@ Verifica el cálculo correcto del saldo teórico de efectivo considerando:
 """
 
 from decimal import Decimal
-from rest_framework.test import APITestCase, APIClient
 from ..models import MovimientoCaja, SesionCaja
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
-class CalculoSaldoTeoricoTests(APITestCase, CajaTestMixin):
+class CalculoSaldoTeoricoTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para verificar el cálculo del saldo teórico."""
     
     @classmethod
@@ -23,7 +22,7 @@ class CalculoSaldoTeoricoTests(APITestCase, CajaTestMixin):
     
     def setUp(self):
         """Configuración antes de cada test."""
-        self.client = APIClient()
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
     
     def tearDown(self):
@@ -31,6 +30,7 @@ class CalculoSaldoTeoricoTests(APITestCase, CajaTestMixin):
         # Primero borrar movimientos (tienen FK PROTECT a SesionCaja)
         MovimientoCaja.objects.filter(sesion_caja__usuario=self.usuario).delete()
         SesionCaja.objects.filter(usuario=self.usuario).delete()
+        super().tearDown()
     
     def test_saldo_inicial_sin_movimientos(self):
         """Verifica el saldo teórico cuando solo hay saldo inicial."""

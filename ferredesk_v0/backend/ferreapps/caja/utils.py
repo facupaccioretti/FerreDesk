@@ -70,9 +70,11 @@ def _bloquear_sesion_caja(sesion_caja, usuario):
 def _saldo_efectivo_sesion(sesion_caja):
     ingresos = sesion_caja.movimientos.filter(
         tipo=TIPO_MOVIMIENTO_ENTRADA,
+        afecta_efectivo=True,
     ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
     egresos = sesion_caja.movimientos.filter(
         tipo=TIPO_MOVIMIENTO_SALIDA,
+        afecta_efectivo=True,
     ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
     return sesion_caja.saldo_inicial + ingresos - egresos
 
@@ -538,6 +540,7 @@ def registrar_pagos_venta(
         for res in resultados:
             pago_venta = PagoVenta(
                 venta=venta,
+                sesion_caja=sesion_caja,
                 metodo_pago=res['metodo_pago'],
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
@@ -609,6 +612,7 @@ def registrar_pagos_recibo(
         for res in resultados:
             pago_recibo = PagoVenta(
                 recibo=recibo, # Usamos el nuevo FK
+                sesion_caja=sesion_caja,
                 metodo_pago=res['metodo_pago'],
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
@@ -687,6 +691,7 @@ def registrar_pagos_orden_pago(
             # Nota: dirección 'salida' implica un egreso bancario si tiene cuenta_banco
             pago_op = PagoVenta.objects.create(
                 orden_pago=orden_pago,
+                sesion_caja=sesion_caja,
                 metodo_pago=res['metodo_pago'],
                 cuenta_banco_id=res['cuenta_banco_id'],
                 monto=res['monto'],
@@ -727,7 +732,8 @@ def registrar_vuelto(
     venta,
     sesion_caja: Optional[SesionCaja],
     monto_vuelto: Decimal,
-    metodo_pago_id: Optional[int] = None
+    metodo_pago_id: Optional[int] = None,
+    postventa_operacion=None,
 ) -> Optional[PagoVenta]:
     """
     Registra el vuelto dado al cliente.
@@ -765,6 +771,8 @@ def registrar_vuelto(
             raise ValidationError('El saldo de efectivo disponible es insuficiente para entregar vuelto.')
         pago_vuelto = PagoVenta.objects.create(
             venta=venta,
+            sesion_caja=sesion_caja,
+            postventa_operacion=postventa_operacion,
             metodo_pago=metodo_pago,
             monto=monto_vuelto,
             es_vuelto=True,
@@ -855,6 +863,7 @@ def registrar_movimiento_custodia_cheque(
         usuario=usuario,
         tipo=tipo_movimiento,
         monto=cheque.monto,
+        afecta_efectivo=False,
         descripcion=descripcion,
     )
 
@@ -880,5 +889,6 @@ def registrar_contrasiento_cheque_depositado(cheque: 'Cheque', sesion_caja: Sesi
         usuario=usuario,
         tipo=TIPO_MOVIMIENTO_SALIDA,
         monto=cheque.monto,
+        afecta_efectivo=False,
         descripcion=descripcion,
     )

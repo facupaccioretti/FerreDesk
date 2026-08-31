@@ -40,6 +40,7 @@ def _registrar_pago_postventa(
         for resultado in resultados:
             pago_data = {
                 "venta": venta_documento,
+                "sesion_caja": sesion_caja,
                 "postventa_operacion": operacion_postventa,
                 "metodo_pago": resultado["metodo_pago"],
                 "cuenta_banco_id": resultado["cuenta_banco_id"],

@@ -6,13 +6,12 @@ Verifica:
 - Filtrado por estado activo
 """
 
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from ..models import MetodoPago
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
-class MetodoPagoAPITests(APITestCase, CajaTestMixin):
+class MetodoPagoAPITests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para el endpoint de métodos de pago."""
     
     @classmethod
@@ -22,7 +21,7 @@ class MetodoPagoAPITests(APITestCase, CajaTestMixin):
     
     def setUp(self):
         """Configuración antes de cada test."""
-        self.client = APIClient()
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
     
     def test_listar_metodos_pago(self):

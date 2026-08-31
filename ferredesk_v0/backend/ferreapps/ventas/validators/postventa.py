@@ -12,7 +12,7 @@ from ferreapps.caja.models import (
     CuentaBanco,
     MetodoPago,
 )
-from ferreapps.productos.models import Ferreteria, StockProve
+from ferreapps.productos.models import Ferreteria, Stock, StockProve
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 
 
@@ -93,6 +93,7 @@ def obtener_cantidades_ya_devueltas(item_ids):
     rows = (
         PostventaOperacionItem.objects.filter(
             rol=PostventaOperacionItem.ROL_DEVUELTO,
+            operacion__estado=PostventaOperacion.ESTADO_COMPLETADA,
             venta_detalle_origen_id__in=item_ids,
         )
         .values("venta_detalle_origen_id")
@@ -145,7 +146,10 @@ def validar_items_devolucion(venta, items, *, modo):
     if len(detalles) != len(item_ids):
         raise ValidationError({"items": "Hay items que no pertenecen a la venta indicada"})
 
-    devueltas = obtener_cantidades_ya_devueltas(item_ids)
+    ids_para_remanente = item_ids
+    if modo == "CANCELACION_TOTAL":
+        ids_para_remanente = list(venta.items.values_list("id", flat=True))
+    devueltas = obtener_cantidades_ya_devueltas(ids_para_remanente)
     cantidades_solicitadas = {}
     for item in items:
         detalle = detalles[item["venta_detalle_item_id"]]
@@ -186,6 +190,11 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
     if repetidos:
         raise ValidationError({"items_nuevos": "No puede repetir el mismo stock en el cambio"})
 
+    stocks_existentes = set(Stock.objects.filter(id__in=stock_ids).values_list("id", flat=True))
+    faltantes = sorted(set(stock_ids) - stocks_existentes)
+    if faltantes:
+        raise ValidationError({"items_nuevos": f"Producto inexistente {faltantes[0]}"})
+
     cantidades_por_stock = {}
     for item in items_nuevos:
         cantidad = _to_decimal(item["cantidad"], "cantidad")
@@ -196,6 +205,15 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
     if permitir_stock_negativo_habilitado():
         return detalles, devueltas
 
+    reposiciones_por_stock = {}
+    for item in items_devueltos:
+        detalle = detalles[item["venta_detalle_item_id"]]
+        if detalle.vdi_idsto_id:
+            reposiciones_por_stock[detalle.vdi_idsto_id] = (
+                reposiciones_por_stock.get(detalle.vdi_idsto_id, ZERO)
+                + _to_decimal(item["cantidad"], "cantidad")
+            )
+
     disponibles = {
         row["stock_id"]: Decimal(str(row["total"] or ZERO))
         for row in (
@@ -205,7 +223,8 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
         )
     }
     for stock_id, cantidad in cantidades_por_stock.items():
-        if cantidad > disponibles.get(stock_id, ZERO):
+        disponible_neto = disponibles.get(stock_id, ZERO) + reposiciones_por_stock.get(stock_id, ZERO)
+        if cantidad > disponible_neto:
             raise ValidationError(
                 {"items_nuevos": f"Stock insuficiente para el producto {stock_id}"}
             )

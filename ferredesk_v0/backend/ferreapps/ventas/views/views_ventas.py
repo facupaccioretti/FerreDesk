@@ -228,7 +228,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         # Obtener configuración de la ferretería para determinar política de stock negativo
         ferreteria = Ferreteria.objects.first()
         # Usar configuración de la ferretería, con posibilidad de override desde el frontend
-        permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+        permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
         
         es_presupuesto = (tipo_comprobante == 'presupuesto')
         es_nota_credito = tipo_comprobante in ['nota_credito', 'nota_credito_interna']
@@ -236,7 +236,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         errores_stock = []
         stock_actualizado = []
         if not es_presupuesto:
-            for item in items:
+            items_stock = sorted(items, key=lambda item: str(item.get('vdi_idsto') or 0).zfill(20))
+            for item in items_stock:
                 id_stock = item.get('vdi_idsto')
                 cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
 
@@ -288,6 +289,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             if errores_stock:
                 # Imitar exactamente el formato de conversión de presupuesto: detail = str({...})
                 payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                transaction.set_rollback(True)
                 return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
         cliente_id = data.get('ven_idcli')
         cliente = Cliente.objects.filter(id=cliente_id).first()
@@ -301,6 +303,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         if comprobante_id_enviado:
             comprobante_obj = Comprobante.objects.filter(codigo_afip=comprobante_id_enviado, activo=True).first()
             if not comprobante_obj:
+                transaction.set_rollback(True)
                 return Response({
                     'detail': f'No se encontró comprobante con código AFIP {comprobante_id_enviado} o no está activo'
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -310,9 +313,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             try:
                 comprobante = asignar_comprobante(tipo_comprobante, tipo_iva_cliente)
             except ValidationError as e:
+                transaction.set_rollback(True)
                 return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         if not comprobante:
+            transaction.set_rollback(True)
             return Response({
                 'detail': 'No se encontró comprobante válido para la operación. '
                           'Verifique la configuración de comprobantes y letras.'
@@ -340,6 +345,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         punto_venta = data.get('ven_punto')
         if not punto_venta:
+            transaction.set_rollback(True)
             return Response({'detail': 'El punto de venta es requerido'}, status=status.HTTP_400_BAD_REQUEST)
         intentos = 0
         max_intentos = 10
@@ -673,23 +679,24 @@ class VentaViewSet(viewsets.ModelViewSet):
                     continue
                 else:
                     raise
+        transaction.set_rollback(True)
         return Response({'detail': 'No se pudo asignar un número único de venta tras varios intentos.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     @transaction.atomic
     @requerir_setup_completo
     def convertir_a_venta(self, request, pk=None):
-        venta = get_object_or_404(Venta, pk=pk)
+        venta = get_object_or_404(Venta.objects.select_for_update(), pk=pk)
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
                 # === OBTENER SESIÓN DE CAJA ===
                 sesion_caja = obtener_sesion_caja_activa(request.user)
                 
-                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id)
+                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id).order_by('vdi_idsto_id', 'pk')
                 # Obtener configuración de la ferretería para determinar política de stock negativo
                 ferreteria = Ferreteria.objects.first()
                 # Usar configuración de la ferretería, con posibilidad de override desde el frontend
-                permitir_stock_negativo = request.data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+                permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
                 errores_stock = []
                 stock_actualizado = []
                 for item in items:
@@ -718,19 +725,24 @@ class VentaViewSet(viewsets.ModelViewSet):
                     )
                 if errores_stock:
                     payload = {'detail': 'Error de stock', 'errores': errores_stock}
+                    transaction.set_rollback(True)
                     return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
                 cliente = venta.ven_idcli  # Ya es objeto FK
                 situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
                 tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
                 comprobante_venta = asignar_comprobante('factura', tipo_iva_cliente)
                 if not comprobante_venta:
+                    transaction.set_rollback(True)
                     return Response({'detail': 'No se encontró comprobante de tipo factura para la conversión.'}, status=status.HTTP_400_BAD_REQUEST)
                 venta.comprobante_id = comprobante_venta["codigo_afip"]
                 venta.ven_estado = 'CE'
                 # === ASIGNAR SESIÓN DE CAJA ===
                 if sesion_caja:
                     venta.sesion_caja = sesion_caja
-                    venta.save(update_fields=['sesion_caja'])
+                campos_conversion = ['comprobante', 'ven_estado']
+                if sesion_caja:
+                    campos_conversion.append('sesion_caja')
+                venta.save(update_fields=campos_conversion)
                 serializer = self.get_serializer(venta)
                 data = serializer.data
                 data['stock_actualizado'] = stock_actualizado
@@ -741,6 +753,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             else:
                 return Response({'detail': 'Este documento no es un presupuesto o ya fue convertido.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            transaction.set_rollback(True)
             return Response({'detail': f'Error al convertir: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @transaction.atomic

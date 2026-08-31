@@ -22,7 +22,11 @@ from ferreapps.caja.models import (
     TIPO_MOVIMIENTO_SALIDA,
 )
 from ferreapps.cuenta_corriente.models import Imputacion
-from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
+from ferreapps.cuenta_corriente.services.cuenta_corriente_service import obtener_movimientos_cliente
+from ferreapps.cuenta_corriente.services.imputacion_service import (
+    imputar_deuda,
+    validar_saldo_comprobante_pago,
+)
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, Proveedor, StockProve
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 from ferreapps.ventas.selectors.postventa import (
@@ -335,6 +339,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
             motivo="Devolucion anterior",
             total_credito=Decimal("100.00"),
             payload_hash="test",
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
         )
         PostventaOperacionItem.objects.create(
             operacion=operacion,
@@ -391,6 +396,49 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(operacion.total_credito, Decimal("100.00"))
         self.assertFalse(Imputacion.objects.filter(origen_id=operacion.nota_credito.ven_id).exists())
         self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
+
+    def test_cancelacion_total_ignora_lineas_ya_devuelta_por_completo(self):
+        stock_uno = self._crear_stock("PV-TOT-P1")
+        stock_dos = self._crear_stock("PV-TOT-P2")
+        venta, detalle_uno = self._crear_venta_origen(
+            stock_uno,
+            cantidad=Decimal("1.00"),
+            precio=Decimal("40.00"),
+        )
+        detalle_dos = VentaDetalleItem.objects.create(
+            vdi_idve=venta,
+            vdi_orden=2,
+            vdi_idsto=stock_dos,
+            vdi_idpro=self.proveedor,
+            vdi_cantidad=Decimal("1.00"),
+            vdi_costo=Decimal("20.000"),
+            vdi_margen=Decimal("20.00"),
+            vdi_bonifica=Decimal("0.00"),
+            vdi_precio_unitario_final=Decimal("60.00"),
+            vdi_detalle1=stock_dos.deno,
+            vdi_detalle2="UN",
+            vdi_idaliiva=self.alicuota_iva_21,
+        )
+
+        confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "DEVOLUCION_PARCIAL",
+            "items": [{"venta_detalle_item_id": detalle_uno.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Primera linea",
+        }, usuario=self.usuario)
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "CANCELACION_TOTAL",
+            "items": [{"venta_detalle_item_id": detalle_dos.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "SALDO_A_FAVOR",
+            "motivo": "Resto de la venta",
+        }, usuario=self.usuario)
+
+        self.assertEqual(resultado["total_credito"], "60.00")
 
     def test_validar_medios_usa_metodos_y_cuentas_reales(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
@@ -619,6 +667,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
         self.assertEqual(obtener_saldo_pendiente_venta(operacion.nueva_venta), Decimal("0.00"))
         self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("100.00"))
+        self.assertEqual(Decimal(resultado["total_imputado"]), Decimal("150.00"))
         self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
 
     def test_cambio_devuelve_efectivo_y_registra_salida_de_caja(self):
@@ -655,6 +704,96 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(pago.monto, Decimal("50.00"))
         self.assertEqual(movimiento.tipo, TIPO_MOVIMIENTO_SALIDA)
         self.assertEqual(movimiento.monto, Decimal("50.00"))
+
+    def test_devolucion_de_dinero_consume_credito_y_compensa_cuenta_corriente(self):
+        transferencia, _ = MetodoPago.objects.get_or_create(
+            codigo="transferencia",
+            defaults={"nombre": "Transferencia", "afecta_arqueo": False, "activo": True},
+        )
+        cuenta = CuentaBanco.objects.create(nombre="Banco Credito Consumido", activo=True)
+        stock = self._crear_stock("PV-CRED-C", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
+
+        resultado = confirmar_devolucion(payload={
+            "venta_id": venta.ven_id,
+            "modo": "CANCELACION_TOTAL",
+            "items": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_dinero": "DEVOLVER_DINERO",
+            "medios": [{
+                "metodo_pago_id": transferencia.id,
+                "monto": "100.00",
+                "cuenta_banco_id": cuenta.id,
+            }],
+            "motivo": "Devolucion pagada",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        with self.assertRaisesMessage(ValueError, "saldo disponible"):
+            validar_saldo_comprobante_pago(operacion.nota_credito, Decimal("0.01"))
+
+        movimientos = obtener_movimientos_cliente(self.cliente.id, completo=True)
+        self.assertEqual(movimientos[-1]["saldo_acumulado"], Decimal("0.00"))
+        self.assertTrue(any(
+            movimiento["comprobante_tipo"] == "devolucion_cliente"
+            and movimiento["debe"] == Decimal("100.00")
+            for movimiento in movimientos
+        ))
+
+    def test_cobro_diferencia_con_efectivo_registra_el_vuelto(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
+        )
+        sesion = SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("0.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-VUELTO-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-VUELTO-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{
+                "stock_id": stock_nuevo.id,
+                "cantidad": "1.00",
+                "precio_unitario": "150.00",
+            }],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "COBRAR_DIFERENCIA",
+            "medios_diferencia": [{"metodo_pago_id": efectivo.id, "monto": "60.00"}],
+            "motivo": "Cambio con vuelto",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        pagos = PagoVenta.objects.filter(venta=operacion.nueva_venta).order_by("id")
+        self.assertEqual(pagos.count(), 2)
+        self.assertEqual(pagos.get(tipo_operacion=PagoVenta.TIPO_COBRO_DIFERENCIA_CAMBIO).monto, Decimal("50.00"))
+        self.assertEqual(pagos.get(tipo_operacion=PagoVenta.TIPO_VUELTO_VENTA).monto, Decimal("10.00"))
+        self.assertEqual(
+            sesion.movimientos.filter(tipo="ENTRADA").aggregate(total=Sum("monto"))["total"],
+            Decimal("60.00"),
+        )
+        self.assertEqual(
+            sesion.movimientos.filter(tipo="SALIDA").aggregate(total=Sum("monto"))["total"],
+            Decimal("10.00"),
+        )
+        self.assertTrue(all(pago.sesion_caja_id == sesion.id for pago in pagos))
+
+        from ferreapps.caja.views import SesionCajaViewSet
+        resumen = SesionCajaViewSet()._generar_resumen_cierre(sesion)
+        efectivo_resumen = next(
+            item for item in resumen["totales_por_metodo"]
+            if item["metodo_pago__codigo"] == "efectivo"
+        )
+        self.assertEqual(efectivo_resumen["total_ingresos"], Decimal("60.00"))
+        self.assertEqual(efectivo_resumen["total_egresos"], Decimal("10.00"))
+        self.assertEqual(efectivo_resumen["total"], Decimal("50.00"))
 
     def test_cambio_devuelve_por_efectivo_y_transferencia(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
@@ -912,3 +1051,41 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
 
         self.assertEqual(StockProve.objects.get(stock=stock_origen).cantidad, Decimal("6.00"))
         self.assertEqual(StockProve.objects.get(stock=stock_nuevo).cantidad, Decimal("-1.00"))
+
+    def test_cambio_del_mismo_producto_usa_la_reposicion_en_el_stock_neto(self):
+        stock = self._crear_stock("PV-NETO", cantidad=Decimal("0.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{
+                "stock_id": stock.id,
+                "cantidad": "1.00",
+                "precio_unitario": "100.00",
+            }],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "SIN_DIFERENCIA",
+            "motivo": "Cambio del mismo producto",
+        }, usuario=self.usuario)
+
+        self.assertEqual(resultado["total_cobrado"], "0.00")
+        self.assertEqual(StockProve.objects.get(stock=stock).cantidad, Decimal("0.00"))
+
+    def test_preview_cambio_rechaza_stock_inexistente_aunque_permita_negativo(self):
+        stock = self._crear_stock("PV-FALTA", cantidad=Decimal("1.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
+        ferreteria = Ferreteria.objects.get()
+        ferreteria.permitir_stock_negativo = True
+        ferreteria.save(update_fields=["permitir_stock_negativo"])
+
+        with self.assertRaisesMessage(ValidationError, "Producto inexistente"):
+            previsualizar_cambio({
+                "venta_id": venta.ven_id,
+                "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+                "items_nuevos": [{
+                    "stock_id": 999999,
+                    "cantidad": "1.00",
+                    "precio_unitario": "100.00",
+                }],
+            })

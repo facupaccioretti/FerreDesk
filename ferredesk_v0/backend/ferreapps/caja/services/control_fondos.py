@@ -72,10 +72,16 @@ def resolve_recent_activity_range(*, fecha_desde=None, fecha_hasta=None):
 
 def _calcular_saldo_teorico_sesion(sesion):
     ingresos = _decimal_or_zero(
-        sesion.movimientos.filter(tipo=TIPO_MOVIMIENTO_ENTRADA).aggregate(total=Sum("monto"))["total"]
+        sesion.movimientos.filter(
+            tipo=TIPO_MOVIMIENTO_ENTRADA,
+            afecta_efectivo=True,
+        ).aggregate(total=Sum("monto"))["total"]
     )
     egresos = _decimal_or_zero(
-        sesion.movimientos.filter(tipo=TIPO_MOVIMIENTO_SALIDA).aggregate(total=Sum("monto"))["total"]
+        sesion.movimientos.filter(
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            afecta_efectivo=True,
+        ).aggregate(total=Sum("monto"))["total"]
     )
     return sesion.saldo_inicial + ingresos - egresos
 
@@ -86,6 +92,7 @@ def _calcular_caja_actual():
         MovimientoCaja.objects.filter(
             sesion_caja=OuterRef("pk"),
             tipo=TIPO_MOVIMIENTO_ENTRADA,
+            afecta_efectivo=True,
         )
         .values("sesion_caja")
         .annotate(total=Sum("monto"))
@@ -95,6 +102,7 @@ def _calcular_caja_actual():
         MovimientoCaja.objects.filter(
             sesion_caja=OuterRef("pk"),
             tipo=TIPO_MOVIMIENTO_SALIDA,
+            afecta_efectivo=True,
         )
         .values("sesion_caja")
         .annotate(total=Sum("monto"))
@@ -411,6 +419,7 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
     movimientos = (
         MovimientoCaja.objects.filter(
             fecha_hora__range=(fecha_desde, fecha_hasta),
+            afecta_efectivo=True,
         )
         .select_related("sesion_caja", "usuario")
         .order_by("-fecha_hora", "-id")

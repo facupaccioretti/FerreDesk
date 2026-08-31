@@ -9,13 +9,12 @@ Verifica:
 """
 
 from decimal import Decimal
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from ..models import SesionCaja
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
-class CierreCajaTests(APITestCase, CajaTestMixin):
+class CierreCajaTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para el proceso de cierre de caja."""
     
     @classmethod
@@ -25,12 +24,13 @@ class CierreCajaTests(APITestCase, CajaTestMixin):
     
     def setUp(self):
         """Configuración antes de cada test."""
-        self.client = APIClient()
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
     
     def tearDown(self):
         """Limpieza después de cada test."""
         SesionCaja.objects.filter(usuario=self.usuario).delete()
+        super().tearDown()
     
     def test_cierre_con_diferencia_positiva(self):
         """Verifica cierre cuando hay sobrante."""

@@ -8,7 +8,6 @@ Verifica el comportamiento de los modelos:
 """
 
 from decimal import Decimal
-from django.test import TestCase
 from ..models import (
     MetodoPago,
     SesionCaja,
@@ -19,10 +18,10 @@ from ..models import (
     TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
 )
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantTestCase, CajaTestMixin
 
 
-class MetodoPagoModelTests(TestCase):
+class MetodoPagoModelTests(CajaTenantTestCase):
     """Tests para el modelo MetodoPago."""
     
     def test_metodos_pago_iniciales_existen(self):
@@ -59,7 +58,7 @@ class MetodoPagoModelTests(TestCase):
         self.assertEqual(str(efectivo), 'Efectivo')
 
 
-class SesionCajaModelTests(TestCase, CajaTestMixin):
+class SesionCajaModelTests(CajaTenantTestCase, CajaTestMixin):
     """Tests para el modelo SesionCaja."""
     
     @classmethod
@@ -97,7 +96,7 @@ class SesionCajaModelTests(TestCase, CajaTestMixin):
         self.assertIn(str(sesion.id), str_repr)
 
 
-class MovimientoCajaModelTests(TestCase, CajaTestMixin):
+class MovimientoCajaModelTests(CajaTenantTestCase, CajaTestMixin):
     """Tests para el modelo MovimientoCaja."""
     
     @classmethod

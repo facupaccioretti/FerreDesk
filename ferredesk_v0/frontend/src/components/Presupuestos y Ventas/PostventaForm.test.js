@@ -3,6 +3,7 @@ import {
   buildItemsNuevosPayload,
   crearItemsOrigen,
   filtrarMetodosPostventa,
+  obtenerMontoObjetivo,
 } from "./PostventaForm"
 
 describe("PostventaForm payloads", () => {
@@ -139,5 +140,17 @@ describe("PostventaForm payloads", () => {
     expect(filtrarMetodosPostventa([
       { id: 1, codigo: "efectivo", afecta_arqueo: false },
     ], "salida", false, true)).toEqual([])
+  })
+
+  test("devuelve solo el saldo restante despues de imputar la deuda de origen", () => {
+    expect(obtenerMontoObjetivo("cambio", {
+      diferencia: "50.00",
+      saldo_pendiente_venta: "30.00",
+    }, "DEVOLVER_DINERO")).toBe(20)
+
+    expect(obtenerMontoObjetivo("cambio", {
+      diferencia: "50.00",
+      saldo_pendiente_venta: "80.00",
+    }, "DEVOLVER_DINERO")).toBe(0)
   })
 })

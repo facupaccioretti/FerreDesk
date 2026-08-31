@@ -156,6 +156,10 @@ def confirmar_devolucion(*, payload, usuario):
                 permitir_registrar_pagos=False,
             )
             total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
+            precios_audit = {
+                item["venta_detalle_item_id"]: item["precio_unitario_origen"]
+                for item in preview["items_seleccionados"]
+            }
 
             for item in payload["items"]:
                 detalle = detalles[item["venta_detalle_item_id"]]
@@ -166,7 +170,7 @@ def confirmar_devolucion(*, payload, usuario):
                     stock_id=detalle.vdi_idsto_id,
                     proveedor_id=proveedores_repuestos.get(detalle.id),
                     cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
-                    precio_unitario=Decimal(str(detalle.vdi_precio_unitario_final or 0)).quantize(Decimal("0.01")),
+                    precio_unitario=Decimal(str(precios_audit[detalle.id])).quantize(Decimal("0.01")),
                     detalle=detalle.vdi_detalle1 or "",
                 )
 

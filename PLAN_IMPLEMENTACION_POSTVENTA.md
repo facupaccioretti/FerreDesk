@@ -554,6 +554,19 @@ La UI no puede confirmar datos diferentes del resumen visible ni iniciar otra op
 
 ### PV-11. Regresion integral y preparacion de deploy
 
+**Estado: completada el 2026-07-15.** La regresion focalizada de backend termino
+con 119 pruebas verdes y la regresion de ventas, listados e inicializacion tenant
+con 26 pruebas verdes. La migracion historica se probo tambien en un segundo schema
+tenant y el frontend termino con 24 pruebas verdes y build productivo correcto.
+
+El ensayo sobre una copia aislada de la base local existente retrocedio las migraciones
+de postventa, capturo el estado previo, migro los 30 schemas y comparo el estado final:
+17 pagos antes y despues, cero ambiguos, clasificacion completa y saldos de caja,
+bancos y cheques sin diferencias. El commit base
+`710b1a0` arranco y leyo los 31 tenants contra el schema nuevo, validando el rollback
+de codigo sin rollback destructivo de schema. El procedimiento reproducible queda en
+`ENSAYO_DESPLIEGUE_POSTVENTA.md`.
+
 #### Objetivo
 
 Demostrar que la postventa interna puede desplegarse sobre datos existentes.
@@ -663,13 +676,13 @@ Al finalizar:
 | Tarea | Estado | Commit | Tests | Observaciones |
 |---|---|---|---|---|
 | PV-01 | Completada | | backend: 18 OK; frontend: 19 OK | Warning preexistente: falta frontend/build/static en STATICFILES_DIRS. |
-| PV-02 | Pendiente | | | |
+| PV-02 | Completada | `fb2ffad` | migration y control de fondos cubiertos por la suite de regresion PV-11 | Clasifica datos historicos y aborta pagos ambiguos. |
 | PV-03 | Completada | | N/A: checkpoint documental; la aceptacion de PV-04/PV-06 exige base tenant real, sin mocks de ORM o cuenta corriente. | Contrato contable aprobado en esta seccion. |
 | PV-04 | Completada | | cuenta corriente cliente: 11 OK con base tenant real; proveedores: regresion focalizada OK; postventa y conversion fiscal: 22 OK | La idempotencia de imputaciones usa un campo propio con constraint unico. Sin bloqueos de migracion: la suite combinada tambien ejecuta correctamente. |
-| PV-05 | Pendiente | | | Lista despues de PV-04. |
-| PV-06 | Bloqueada por PV-05 | | | |
-| PV-07 | Pendiente despues de PV-06 | | | |
-| PV-08 | Pendiente despues de PV-06 | | | |
-| PV-09 | Bloqueada por PV-08 | | | |
-| PV-10 | Bloqueada por contrato backend | | | |
-| PV-11 | Bloqueada por PV-01 a PV-10 | | | |
+| PV-05 | Completada | `cdfa86d` | cubierto por regresiones postventa | Importes, fecha y numeracion segura. |
+| PV-06 | Completada | `cdfa86d` | cubierto por regresiones postventa | Resoluciones monetarias internas. |
+| PV-07 | Completada | `cdfa86d` | concurrencia y stock cubiertos por regresiones postventa | Reposicion por proveedor historico. |
+| PV-08 | Completada | `cdfa86d` | concurrencia e idempotencia cubiertas por regresiones postventa | Reintentos recuperables sin duplicados. |
+| PV-09 | Completada | `c3e9e4c` | caja y control de fondos cubiertos por regresiones PV-11 | Caja, bancos, vuelto y cache. |
+| PV-10 | Completada | `9d8c4f8` | frontend: 24 OK | Estado terminal, refresh separado y elegibilidad. |
+| PV-11 | Completada | | backend: 119 OK; ventas/tenant: 26 OK; migracion multi-schema: 3 OK; frontend: 24 OK y build OK | Ensayo: 30 schemas, 17 pagos y saldos preservados, cero ambiguos y rollback de codigo validado. |

@@ -212,6 +212,8 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
     Unifica Facturas (Venta) y Recibos (Modelo Independiente).
     Optimizado para evitar consultas N+1 y corregir problemas de ordenamiento y zona horaria.
     """
+    from ferreapps.caja.models import PagoVenta
+
     # ContentTypes
     venta_ct = ContentType.objects.get_for_model(Venta)
     recibo_ct = ContentType.objects.get_for_model(Recibo)
@@ -251,6 +253,8 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
     ids_ventas = [v.ven_id for v in qs_calc]
     
     imputaciones_batch = {}
+    devoluciones = []
+    devoluciones_por_venta = {}
     if ids_ventas:
         imputaciones_db = Imputacion.objects.filter(
             destino_content_type=venta_ct,
@@ -262,6 +266,18 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             if imp.destino_id not in imputaciones_batch:
                 imputaciones_batch[imp.destino_id] = []
             imputaciones_batch[imp.destino_id].append(imp)
+
+        devoluciones = list(
+            PagoVenta.objects.filter(
+                venta_id__in=ids_ventas,
+                tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+            ).select_related("venta", "venta__comprobante")
+        )
+        for pago in devoluciones:
+            devoluciones_por_venta[pago.venta_id] = (
+                devoluciones_por_venta.get(pago.venta_id, Decimal("0.00"))
+                + pago.monto
+            )
 
     movimientos = []
     
@@ -291,6 +307,7 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
                 hora_str = item.hora_creacion.strftime('%H:%M:%S')
 
         # Agregamos el movimiento base
+        total_devuelto = devoluciones_por_venta.get(item.ven_id, Decimal("0.00"))
         movimientos.append({
             'ct_id': venta_ct.id,
             'id': item.ven_id,
@@ -304,7 +321,9 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
             'haber': haber,
             'total': item.ven_total,
             'numero_formateado': item.numero_formateado,
-            'saldo_pendiente': item.ven_total - (item.total_imputado if es_deuda else item.total_emitido),
+            'saldo_pendiente': item.ven_total - (
+                item.total_imputado if es_deuda else item.total_emitido + total_devuelto
+            ),
             'orden_auto_imputacion': 0
         })
 
@@ -352,6 +371,36 @@ def obtener_movimientos_cliente(cliente_id, fecha_desde=None, fecha_hasta=None, 
                     'saldo_pendiente': Decimal('0.00'), # Los cobros no tienen saldo pendiente propio
                     'orden_auto_imputacion': 1
                 })
+
+    for pago in devoluciones:
+        hora_pago = '23:59:59'
+        if pago.fecha_hora:
+            fecha_hora = (
+                timezone.localtime(pago.fecha_hora)
+                if timezone.is_aware(pago.fecha_hora)
+                else pago.fecha_hora
+            )
+            hora_pago = fecha_hora.strftime('%H:%M:%S')
+            fecha_pago = fecha_hora.date()
+        else:
+            fecha_pago = pago.venta.ven_fecha
+
+        movimientos.append({
+            'ct_id': venta_ct.id,
+            'id': f"DEV-{pago.pk}",
+            'fecha': fecha_pago,
+            'hora': hora_pago,
+            'prioridad': 2,
+            'proveedor_id': pago.venta.ven_idcli,
+            'comprobante_nombre': 'Devolucion al cliente',
+            'comprobante_tipo': 'devolucion_cliente',
+            'debe': pago.monto,
+            'haber': Decimal('0.00'),
+            'total': pago.monto,
+            'numero_formateado': pago.venta.numero_formateado,
+            'saldo_pendiente': Decimal('0.00'),
+            'orden_auto_imputacion': 1,
+        })
 
     # 2. Nuevos Recibos (Pagos)
     recibos_qs = Recibo.objects.filter(

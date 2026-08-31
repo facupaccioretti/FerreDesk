@@ -167,6 +167,13 @@ class SesionCaja(models.Model):
             models.Index(fields=['fecha_hora_inicio']),
             models.Index(fields=['sucursal', 'estado']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario'],
+                condition=models.Q(estado=ESTADO_CAJA_ABIERTA),
+                name='caja_una_sesion_abierta_por_usuario',
+            ),
+        ]
 
     def __str__(self):
         estado_str = 'Abierta' if self.estado == ESTADO_CAJA_ABIERTA else 'Cerrada'
@@ -229,6 +236,12 @@ class MovimientoCaja(models.Model):
         validators=[MinValueValidator(Decimal('0.01'))],
         help_text='Monto del movimiento (siempre positivo)'
     )
+
+    afecta_efectivo = models.BooleanField(
+        db_column='MOV_AFECTA_EFECTIVO',
+        default=True,
+        help_text='Indica si el movimiento modifica el efectivo del arqueo'
+    )
     
     # Descripción del movimiento
     descripcion = models.CharField(
@@ -254,6 +267,17 @@ class MovimientoCaja(models.Model):
             models.Index(fields=['tipo']),
             models.Index(fields=['fecha_hora']),
             models.Index(fields=['sesion_caja', 'tipo'], name='caja_mov_sesion_tipo_idx'),
+            models.Index(fields=['sesion_caja', 'afecta_efectivo'], name='caja_mov_sesion_efe_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(monto__gt=0),
+                name='caja_mov_monto_positivo',
+            ),
+            models.CheckConstraint(
+                check=models.Q(tipo__in=[TIPO_MOVIMIENTO_ENTRADA, TIPO_MOVIMIENTO_SALIDA]),
+                name='caja_mov_tipo_valido',
+            ),
         ]
 
     def __str__(self):
@@ -362,6 +386,16 @@ class PagoVenta(models.Model):
     TIPO_PAGO_ORDEN_PAGO = "PAGO_ORDEN_PAGO"
 
     id = models.AutoField(primary_key=True, db_column='PAG_ID')
+
+    sesion_caja = models.ForeignKey(
+        SesionCaja,
+        on_delete=models.PROTECT,
+        db_column='PAG_SESION_CAJA_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Sesion de caja que registro el evento de pago'
+    )
     
     # Venta a la que pertenece este pago
     venta = models.ForeignKey(
@@ -498,6 +532,28 @@ class PagoVenta(models.Model):
             models.Index(fields=['fecha_hora']),
             models.Index(fields=['cuenta_banco', 'es_vuelto'], name='caja_pag_cuenta_vuelto_idx'),
             models.Index(fields=['tipo_operacion']),
+            models.Index(fields=['sesion_caja', 'tipo_operacion'], name='caja_pag_sesion_tipo_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(monto__gt=0),
+                name='caja_pago_monto_positivo',
+            ),
+            models.CheckConstraint(
+                check=models.Q(monto_recibido__isnull=True) | models.Q(monto_recibido__gte=models.F('monto')),
+                name='caja_pago_bruto_mayor_neto',
+            ),
+            models.CheckConstraint(
+                check=models.Q(tipo_operacion__in=[
+                    'COBRO_VENTA',
+                    'VUELTO_VENTA',
+                    'DEVOLUCION_CLIENTE',
+                    'COBRO_DIFERENCIA_CAMBIO',
+                    'COBRO_RECIBO',
+                    'PAGO_ORDEN_PAGO',
+                ]),
+                name='caja_pago_tipo_valido',
+            ),
         ]
 
     def clean(self):

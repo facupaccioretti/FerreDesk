@@ -110,12 +110,15 @@ export const filtrarMetodosPostventa = (metodos, direccion, tieneCajaAbierta, ti
   })
 }
 
-const obtenerMontoObjetivo = (modo, resumen, resolucion) => {
+export const obtenerMontoObjetivo = (modo, resumen, resolucion) => {
   if (resolucion === "COBRAR_DIFERENCIA") return Number(resumen?.diferencia || 0)
   if (resolucion !== "DEVOLVER_DINERO") return 0
   return modo === "devolucion"
     ? Number(resumen?.maximo_saldo_a_favor_o_devolucion || 0)
-    : Number(resumen?.diferencia || 0)
+    : Math.max(
+      Number(resumen?.diferencia || 0) - Number(resumen?.saldo_pendiente_venta || 0),
+      0,
+    )
 }
 
 const esMedioBancario = (metodo) => [
@@ -610,7 +613,6 @@ const PostventaForm = ({
     setMediosPago((prev) => prev.map((medio, actual) => (
       actual === indice ? { ...medio, ...cambios } : medio
     )))
-    invalidarPreview()
   }
 
   const agregarLineaMedio = () => {
@@ -625,7 +627,6 @@ const PostventaForm = ({
       referencia_externa: "",
       observacion: "",
     }])
-    invalidarPreview()
   }
 
   if (cargando || loadingAlicuotas) {
@@ -898,10 +899,7 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDinero}
-                        onChange={(event) => {
-                          setResolucionDinero(event.target.value)
-                          invalidarPreview()
-                        }}
+                        onChange={(event) => setResolucionDinero(event.target.value)}
                         disabled={interaccionBloqueada}
                       >
                         <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
@@ -917,10 +915,7 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDiferencia}
-                        onChange={(event) => {
-                          setResolucionDiferencia(event.target.value)
-                          invalidarPreview()
-                        }}
+                        onChange={(event) => setResolucionDiferencia(event.target.value)}
                         disabled={interaccionBloqueada}
                       >
                         <option value="COBRAR_DIFERENCIA">Cobrar diferencia</option>
@@ -935,10 +930,7 @@ const PostventaForm = ({
                       <select
                         className={INPUT_CLASS}
                         value={resolucionDiferencia}
-                        onChange={(event) => {
-                          setResolucionDiferencia(event.target.value)
-                          invalidarPreview()
-                        }}
+                        onChange={(event) => setResolucionDiferencia(event.target.value)}
                         disabled={interaccionBloqueada}
                       >
                         <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
@@ -1022,7 +1014,6 @@ const PostventaForm = ({
                                   onClick={() => {
                                     if (interaccionBloqueada) return
                                     setMediosPago((prev) => prev.filter((_, actual) => actual !== indice))
-                                    invalidarPreview()
                                   }}
                                   disabled={interaccionBloqueada}
                                   className="text-xs text-red-700 hover:text-red-900 md:col-span-1"
@@ -1101,7 +1092,9 @@ const PostventaForm = ({
             <div className="mt-1 text-xs">
               Operacion #{resultadoTerminal.operacion_id || "-"}
               {resultadoTerminal.nota_credito_id ? ` - Nota de credito #${resultadoTerminal.nota_credito_id}` : ""}
-              {resultadoTerminal.venta_nueva_id ? ` - Venta nueva #${resultadoTerminal.venta_nueva_id}` : ""}
+              {resultadoTerminal.nueva_venta_id ? ` - Venta nueva #${resultadoTerminal.nueva_venta_id}` : ""}
+              {resultadoTerminal.nota_credito_numero ? ` - ${resultadoTerminal.nota_credito_numero}` : ""}
+              {resultadoTerminal.nueva_venta_numero ? ` - ${resultadoTerminal.nueva_venta_numero}` : ""}
             </div>
             {errorActualizacion && (
               <div className="mt-3 flex items-center gap-3 text-xs text-amber-800">

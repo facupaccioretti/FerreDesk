@@ -20,7 +20,7 @@ def clasificar_pagos_historicos(apps, schema_editor):
         tiene_orden_pago = pago.orden_pago_id is not None
 
         if pago.es_vuelto:
-            if tiene_recibo or tiene_orden_pago:
+            if not tiene_venta or tiene_recibo or tiene_orden_pago:
                 ambiguos.append(pago.pk)
                 continue
             tipo_operacion = TIPO_VUELTO_VENTA

@@ -1,4 +1,4 @@
-# Auditoria del modelo de acceso multi-negocio
+w# Auditoria del modelo de acceso multi-negocio
 
 Fecha de lectura: 2026-07-14. Este documento describe el codigo observado; no presupone el estado de produccion. No se modifico codigo de la aplicacion.
 

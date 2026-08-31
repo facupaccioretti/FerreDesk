@@ -138,7 +138,18 @@ def validar_saldo_comprobante_pago(
         origen_id=comprobante_pago.pk,
     ).aggregate(total=Sum("imp_monto"))
     total_imputado = imputaciones_existentes["total"] or Decimal("0.00")
-    saldo_disponible = total_comprobante - total_imputado
+    total_devuelto = Decimal("0.00")
+    if hasattr(comprobante_pago, "comprobante"):
+        from ferreapps.caja.models import PagoVenta
+
+        total_devuelto = (
+            PagoVenta.objects.filter(
+                venta_id=comprobante_pago.pk,
+                tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+            ).aggregate(total=Sum("monto"))["total"]
+            or Decimal("0.00")
+        )
+    saldo_disponible = total_comprobante - total_imputado - total_devuelto
 
     if monto_a_imputar > saldo_disponible:
         raise ValueError(

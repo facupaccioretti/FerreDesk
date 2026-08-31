@@ -10,7 +10,7 @@ from ferreapps.caja.services.postventa import (
     registrar_cobro_diferencia,
     registrar_devolucion_cliente,
 )
-from ferreapps.caja.utils import normalizar_cobro
+from ferreapps.caja.utils import normalizar_cobro, registrar_vuelto
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import Stock, StockProve
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
@@ -198,6 +198,7 @@ def confirmar_cambio(*, payload, usuario):
             )
             diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
             medios_diferencia = payload.get("medios_diferencia", [])
+            monto_vuelto = ZERO
             sesion_caja = SesionCaja.objects.filter(
                 usuario=usuario,
                 estado=ESTADO_CAJA_ABIERTA,
@@ -205,13 +206,14 @@ def confirmar_cambio(*, payload, usuario):
             if payload["resolucion_diferencia"] == PostventaOperacion.RESOLUCION_COBRAR_DIFERENCIA:
                 direccion_medios = "entrada"
                 monto_medios = diferencia
-                medios_diferencia, _ = normalizar_cobro(
+                medios_diferencia, metadata_cobro = normalizar_cobro(
                     {
                         "pagos": medios_diferencia,
                         "excedente_destino": "vuelto",
                     },
                     monto_medios,
                 )
+                monto_vuelto = metadata_cobro.get("vuelto_calculado") or ZERO
             elif payload["resolucion_diferencia"] == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
                 direccion_medios = "salida"
                 saldo_pendiente_origen = Decimal(
@@ -253,6 +255,10 @@ def confirmar_cambio(*, payload, usuario):
             total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
             total_debito = Decimal(str(obtener_total_documento_persistido(nueva_venta)))
             diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
+            precios_audit = {
+                item["venta_detalle_item_id"]: item["precio_unitario_origen"]
+                for item in preview["items_devueltos"]
+            }
 
             for item in payload["items_devueltos"]:
                 detalle = detalles[item["venta_detalle_item_id"]]
@@ -263,7 +269,7 @@ def confirmar_cambio(*, payload, usuario):
                     stock_id=detalle.vdi_idsto_id,
                     proveedor_id=proveedores_repuestos.get(detalle.id),
                     cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
-                    precio_unitario=Decimal(str(detalle.vdi_precio_unitario_final or 0)).quantize(Decimal("0.01")),
+                    precio_unitario=Decimal(str(precios_audit[detalle.id])).quantize(Decimal("0.01")),
                     detalle=detalle.vdi_detalle1 or "",
                 )
 
@@ -280,6 +286,7 @@ def confirmar_cambio(*, payload, usuario):
                 )
 
             monto_imputado = min(total_credito, total_debito)
+            monto_imputado_total = monto_imputado
             if monto_imputado > ZERO:
                 imputar_deuda(
                     nota_credito,
@@ -319,6 +326,13 @@ def confirmar_cambio(*, payload, usuario):
                         ],
                         idempotency_key=f"postventa-cobro:{operacion.operacion_uid}",
                     )
+                    if monto_vuelto > ZERO:
+                        registrar_vuelto(
+                            venta=nueva_venta,
+                            sesion_caja=sesion_caja,
+                            monto_vuelto=monto_vuelto,
+                            postventa_operacion=operacion,
+                        )
             elif diferencia < ZERO:
                 saldo_favor = abs(diferencia)
                 resolucion = payload["resolucion_diferencia"]
@@ -342,6 +356,7 @@ def confirmar_cambio(*, payload, usuario):
                             ],
                             idempotency_key=f"postventa-extra:{operacion.operacion_uid}",
                         )
+                        monto_imputado_total += monto_extra
                         saldo_favor -= monto_extra
                 if resolucion == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
                     monto_devuelto = saldo_favor
@@ -365,8 +380,9 @@ def confirmar_cambio(*, payload, usuario):
                 "resolucion_diferencia": operacion.resolucion_dinero,
                 "total_credito": str(total_credito.quantize(Decimal("0.01"))),
                 "total_debito": str(total_debito.quantize(Decimal("0.01"))),
-                "total_imputado": str(monto_imputado.quantize(Decimal("0.01"))),
+                "total_imputado": str(monto_imputado_total.quantize(Decimal("0.01"))),
                 "total_cobrado": str(monto_cobrado.quantize(Decimal("0.01"))),
+                "total_vuelto": str(monto_vuelto.quantize(Decimal("0.01"))),
                 "total_devuelto": str(monto_devuelto.quantize(Decimal("0.01"))),
             }
             operacion.nota_credito = nota_credito

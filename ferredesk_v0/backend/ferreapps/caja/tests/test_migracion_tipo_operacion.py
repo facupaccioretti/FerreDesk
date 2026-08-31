@@ -171,6 +171,21 @@ class PagoVentaTipoOperacionMigrationTests(TransactionTestCase):
 
         PagoVenta.objects.filter(pk=pago_ambiguo.pk).delete()
 
+    def test_aborta_si_un_vuelto_historico_no_tiene_venta(self):
+        PagoVenta = self.old_apps.get_model("caja", "PagoVenta")
+        MetodoPago = self.old_apps.get_model("caja", "MetodoPago")
+        metodo = MetodoPago.objects.create(codigo="vuelto_ambiguo", nombre="Vuelto ambiguo")
+        pago_ambiguo = PagoVenta.objects.create(
+            metodo_pago=metodo,
+            monto=Decimal("10.00"),
+            es_vuelto=True,
+        )
+
+        with self.assertRaisesMessage(RuntimeError, f"IDs: {pago_ambiguo.pk}"):
+            self.executor.migrate(self.destino_actual)
+
+        PagoVenta.objects.filter(pk=pago_ambiguo.pk).delete()
+
     def test_migra_un_segundo_schema_tenant(self):
         connection.set_schema_to_public()
         tenant_secundario = EmpresaTenant(

@@ -7,13 +7,12 @@ Verifica:
 - Validación de caja abierta requerida
 """
 
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from ..models import MovimientoCaja
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
-class MovimientoCajaAPITests(APITestCase, CajaTestMixin):
+class MovimientoCajaAPITests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para los endpoints de movimientos de caja."""
     
     @classmethod
@@ -23,7 +22,7 @@ class MovimientoCajaAPITests(APITestCase, CajaTestMixin):
     
     def setUp(self):
         """Configuración antes de cada test."""
-        self.client = APIClient()
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
     
     def tearDown(self):
@@ -32,6 +31,7 @@ class MovimientoCajaAPITests(APITestCase, CajaTestMixin):
         MovimientoCaja.objects.filter(sesion_caja__usuario=self.usuario).delete()
         from ..models import SesionCaja
         SesionCaja.objects.filter(usuario=self.usuario).delete()
+        super().tearDown()
     
     def test_crear_movimiento_entrada(self):
         """Verifica que se puede crear un movimiento de entrada."""
@@ -80,3 +80,19 @@ class MovimientoCajaAPITests(APITestCase, CajaTestMixin):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('Debe abrir una caja', str(response.data))
+
+    def test_movimiento_no_se_puede_editar_ni_eliminar_por_api(self):
+        self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '1000.00'}, format='json')
+        creado = self.client.post('/api/caja/movimientos/', {
+            'tipo': 'ENTRADA',
+            'monto': '10.00',
+            'descripcion': 'Movimiento inmutable',
+        }, format='json')
+        url = f"/api/caja/movimientos/{creado.data['id']}/"
+
+        respuesta_patch = self.client.patch(url, {'monto': '999.00'}, format='json')
+        respuesta_delete = self.client.delete(url)
+
+        self.assertEqual(respuesta_patch.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(respuesta_delete.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(MovimientoCaja.objects.get(pk=creado.data['id']).monto, 10)
