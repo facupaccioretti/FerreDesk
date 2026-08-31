@@ -91,3 +91,4 @@ class CalculoSaldoTeoricoTests(APITestCase, CajaTestMixin):
         
         # 1000 + 500 - 200 + 300 = 1600
         self.assertEqual(response.data['resumen']['saldo_teorico_efectivo'], '1600.00')
+

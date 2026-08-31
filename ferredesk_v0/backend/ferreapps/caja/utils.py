@@ -415,15 +415,37 @@ def registrar_valores_y_movimientos(
             descripcion_mov = f"{descripcion_base} {descripcion_comprobante} ({metodo_pago.nombre})"
             if observacion:
                 descripcion_mov = f"{descripcion_mov} - {observacion}"
+
+            # Para entradas de efectivo con vuelto, el MovimientoCaja debe registrar
+            # el dinero físico recibido (bruto), no el neto aplicado a la venta.
+            # El neto (monto) vive en PagoVenta.monto.
+            # El bruto (monto_recibido) es lo que físicamente entró en caja.
+            # El vuelto se descuenta luego vía registrar_vuelto() como SALIDA separada.
+            # Para SALIDAS (pagos a proveedores) y pagos sin vuelto, siempre usa monto.
+            monto_recibido_bruto = pago_data.get('monto_recibido')
+            monto_para_movimiento = (
+                Decimal(str(monto_recibido_bruto))
+                if (
+                    tipo_movimiento == TIPO_MOVIMIENTO_ENTRADA
+                    and monto_recibido_bruto is not None
+                    and Decimal(str(monto_recibido_bruto)) > monto
+                )
+                else monto
+            )
+
             movimiento_obj = MovimientoCaja.objects.create(
                 sesion_caja=sesion_caja,
                 usuario=sesion_caja.usuario,
                 tipo=tipo_movimiento,
-                monto=monto,
+                monto=monto_para_movimiento,
                 descripcion=descripcion_mov,
             )
             signo = '+' if direccion == 'entrada' else '-'
-            logger.debug(f"Movimiento de caja creado: {signo}{monto} por pago en {metodo_pago.nombre}")
+            logger.debug(
+                f"Movimiento de caja creado: {signo}{monto_para_movimiento} "
+                f"por pago en {metodo_pago.nombre}"
+                + (f" (bruto recibido; neto venta: {monto})" if monto_para_movimiento != monto else "")
+            )
 
         resultados.append({
             'metodo_pago': metodo_pago,

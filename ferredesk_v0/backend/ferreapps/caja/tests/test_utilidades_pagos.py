@@ -20,6 +20,7 @@ from ..models import (
     Cheque,
     ESTADO_CAJA_ABIERTA,
     TIPO_MOVIMIENTO_ENTRADA,
+    TIPO_MOVIMIENTO_SALIDA,
     CODIGO_EFECTIVO,
     CODIGO_CHEQUE,
     CODIGO_CUENTA_CORRIENTE,
@@ -309,7 +310,15 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(movimientos.count(), 1)
 
     def test_registrar_pago_efectivo_con_monto_recibido_persiste_bruto(self):
-        """Cuando se pasa monto_recibido en el dict, se persiste en PagoVenta (auditoría bruto/neto)."""
+        """
+        Cuando se pasa monto_recibido > monto en efectivo:
+        - PagoVenta.monto = neto (lo acreditado a la venta)
+        - MovimientoCaja.monto = bruto (lo físicamente recibido en caja)
+
+        Escenario: venta de $400, el cliente paga $500 (vuelto $100).
+        El PagoVenta acredita $400 a la venta; la caja registra +$500 de entrada.
+        El vuelto ($100) se registraría luego como SALIDA separada via registrar_vuelto().
+        """
         from ..utils import registrar_pagos_venta
 
         pagos = registrar_pagos_venta(
@@ -317,16 +326,22 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
             sesion_caja=self.sesion,
             pagos=[{
                 'metodo_pago_id': self.metodo_efectivo.id,
-                'monto': Decimal('400.00'),
-                'monto_recibido': Decimal('500.00'),
+                'monto': Decimal('400.00'),          # neto: lo que se aplica a la venta
+                'monto_recibido': Decimal('500.00'),  # bruto: lo que entró físicamente en caja
             }]
         )
         self.assertEqual(len(pagos), 1)
+        # PagoVenta.monto debe ser el neto (lo acreditado a la venta)
         self.assertEqual(pagos[0].monto, Decimal('400.00'))
+        # PagoVenta.monto_recibido conserva el bruto para auditoría
         self.assertEqual(pagos[0].monto_recibido, Decimal('500.00'))
+
         movimientos = MovimientoCaja.objects.filter(sesion_caja=self.sesion)
         self.assertEqual(movimientos.count(), 1)
-        self.assertEqual(movimientos[0].monto, Decimal('400.00'))
+        # FIX: el MovimientoCaja ENTRADA debe ser el BRUTO recibido (500), no el neto (400).
+        # El vuelto ($100) se registraría como SALIDA separada. 500 - 100 = 400 en caja = correcto.
+        self.assertEqual(movimientos[0].monto, Decimal('500.00'))
+
     
     def test_consumidor_final_no_puede_pagar_con_cheque(self):
         """El cliente Consumidor Final (ID 1) no puede realizar pagos con cheque."""
@@ -507,6 +522,166 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(len(pagos), 1)
         self.assertEqual(pagos[0].metodo_pago, self.metodo_cuenta_corriente)
         self.assertEqual(pagos[0].monto, Decimal('500.00'))
+
+    def test_movimiento_caja_usa_monto_bruto_cuando_hay_vuelto(self):
+        """
+        REGRESIÓN — Bug: saldo teórico erróneo con ventas en efectivo con vuelto.
+
+        Cuando el cliente paga más de lo que vale la venta y hay vuelto:
+        - PagoVenta.monto = neto (lo aplicado a la venta, ej: $14.500)
+        - MovimientoCaja ENTRADA = BRUTO (lo que físicamente entró, ej: $20.500)
+        - MovimientoCaja SALIDA (via registrar_vuelto) = vuelto (ej: $6.000)
+        - Saldo neto en caja de esa venta: 20.500 - 6.000 = 14.500 ✓
+
+        Sin el fix, el MovimientoCaja ENTRADA era 14.500 (el neto), y luego
+        se restaba el vuelto (6.000), dando 8.500 en vez de 14.500.
+        """
+        from ..utils import registrar_pagos_venta, registrar_vuelto
+
+        # Pago ya neteado por ajustar_pagos_por_vuelto:
+        # monto = neto acreditado a la venta, monto_recibido = bruto físico recibido
+        pagos_normalizados = [{
+            'metodo_pago_id': self.metodo_efectivo.id,
+            'monto': Decimal('14500.00'),
+            'monto_recibido': Decimal('20500.00'),
+        }]
+        pagos_creados = registrar_pagos_venta(
+            venta=self.venta,
+            sesion_caja=self.sesion,
+            pagos=pagos_normalizados,
+        )
+        registrar_vuelto(
+            venta=self.venta,
+            sesion_caja=self.sesion,
+            monto_vuelto=Decimal('6000.00'),
+        )
+
+        # PagoVenta.monto = neto (correcto para la venta)
+        self.assertEqual(pagos_creados[0].monto, Decimal('14500.00'))
+        self.assertEqual(pagos_creados[0].monto_recibido, Decimal('20500.00'))
+
+        movimientos = MovimientoCaja.objects.filter(sesion_caja=self.sesion).order_by('id')
+        self.assertEqual(movimientos.count(), 2)
+
+        entrada = movimientos.get(tipo=TIPO_MOVIMIENTO_ENTRADA)
+        salida = movimientos.get(tipo=TIPO_MOVIMIENTO_SALIDA)
+
+        # La ENTRADA debe ser el BRUTO recibido físicamente en caja
+        self.assertEqual(
+            entrada.monto, Decimal('20500.00'),
+            "REGRESIÓN: el MovimientoCaja ENTRADA debe ser el dinero BRUTO recibido "
+            "(20500), no el neto aplicado a la venta (14500)."
+        )
+        # La SALIDA debe ser el vuelto exacto
+        self.assertEqual(salida.monto, Decimal('6000.00'))
+
+        # El saldo neto de esta venta en caja es correcto: 20500 - 6000 = 14500
+        saldo_neto_venta = entrada.monto - salida.monto
+        self.assertEqual(
+            saldo_neto_venta, Decimal('14500.00'),
+            "El saldo neto en caja de la venta debe ser igual al total de la venta."
+        )
+
+    def test_saldo_teorico_tres_ventas_efectivo_con_vuelto(self):
+        """
+        REGRESIÓN — Escenario exacto del bug reportado en producción.
+
+        Caja inicial: $16.500
+        Venta 1: $14.500 → pagaron $20.500 → vuelto $6.000
+        Venta 2: $5.000 exacto
+        Venta 3: $42.000 exacto
+
+        Cálculo esperado:
+          16.500 (inicial) + 20.500 (bruto venta 1) - 6.000 (vuelto) + 5.000 (venta 2) + 42.000 (venta 3) = 78.000
+
+        Bug anterior:
+          16.500 + 14.500 - 6.000 + 5.000 + 42.000 = 72.000
+        """
+        from ..utils import registrar_pagos_venta, registrar_vuelto
+        from ferreapps.caja.services.control_fondos import _calcular_saldo_teorico_sesion
+        from ferreapps.ventas.models import Venta
+
+        # Configurar sesión de caja con saldo inicial de $16.500
+        sesion = SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal('16500.00'),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+
+        def _crear_venta(numero):
+            return Venta.objects.create(
+                ven_sucursal=1,
+                ven_fecha='2024-01-15',
+                comprobante=self.comprobante,
+                ven_punto=1,
+                ven_numero=numero,
+                ven_descu1=0,
+                ven_descu2=0,
+                ven_descu3=0,
+                ven_vdocomvta=0,
+                ven_vdocomcob=0,
+                ven_estado='CO',
+                ven_idcli=self.cliente,
+                ven_idpla=self.plazo,
+                ven_idvdo=self.vendedor,
+                ven_copia=1,
+                sesion_caja=sesion,
+            )
+
+        # Venta 1: $14.500, pagaron $20.500 con $6.000 de vuelto
+        v1 = _crear_venta(101)
+        registrar_pagos_venta(
+            venta=v1,
+            sesion_caja=sesion,
+            pagos=[{
+                'metodo_pago_id': self.metodo_efectivo.id,
+                'monto': Decimal('14500.00'),
+                'monto_recibido': Decimal('20500.00'),
+            }],
+        )
+        registrar_vuelto(
+            venta=v1,
+            sesion_caja=sesion,
+            monto_vuelto=Decimal('6000.00'),
+        )
+
+        # Venta 2: $5.000 exacto
+        v2 = _crear_venta(102)
+        registrar_pagos_venta(
+            venta=v2,
+            sesion_caja=sesion,
+            pagos=[{
+                'metodo_pago_id': self.metodo_efectivo.id,
+                'monto': Decimal('5000.00'),
+            }],
+        )
+
+        # Venta 3: $42.000 exacto
+        v3 = _crear_venta(103)
+        registrar_pagos_venta(
+            venta=v3,
+            sesion_caja=sesion,
+            pagos=[{
+                'metodo_pago_id': self.metodo_efectivo.id,
+                'monto': Decimal('42000.00'),
+            }],
+        )
+
+        # Verificar saldo teórico
+        saldo_teorico = _calcular_saldo_teorico_sesion(sesion)
+        self.assertEqual(
+            saldo_teorico, Decimal('78000.00'),
+            f"REGRESIÓN: el saldo teórico debe ser 78000.00, pero dio {saldo_teorico}"
+        )
+
+        # Verificar los movimientos individuales
+        movimientos = MovimientoCaja.objects.filter(sesion_caja=sesion).order_by('id')
+        entradas = movimientos.filter(tipo=TIPO_MOVIMIENTO_ENTRADA)
+        salidas = movimientos.filter(tipo=TIPO_MOVIMIENTO_SALIDA)
+
+        self.assertEqual(sum(m.monto for m in entradas), Decimal('67500.00'))  # 20500 + 5000 + 42000
+        self.assertEqual(sum(m.monto for m in salidas), Decimal('6000.00'))    # 6000 (vuelto)
 
     def tearDown(self):
         pass
