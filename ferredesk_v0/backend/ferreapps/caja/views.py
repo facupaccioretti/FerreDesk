@@ -311,15 +311,13 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         # Cantidad y total de ventas de esta sesión (usando con_calculos() del manager)
         from ferreapps.ventas.models import Venta, Comprobante
 
-        ventas_ids = list(Venta.objects.filter(sesion_caja=sesion).values_list('ven_id', flat=True))
-        cantidad_ventas = len(ventas_ids)
-
-        if ventas_ids:
-            total_ventas = Venta.objects.con_calculos().filter(
-                ven_id__in=ventas_ids
-            ).aggregate(total=Sum('_ven_total'))['total'] or Decimal('0.00')
-        else:
-            total_ventas = Decimal('0.00')
+        montos_ventas = dict(
+            Venta.objects.con_calculos()
+            .filter(sesion_caja=sesion)
+            .values_list('ven_id', '_ven_total')
+        )
+        cantidad_ventas = len(montos_ventas)
+        total_ventas = sum(montos_ventas.values(), Decimal('0.00'))
 
         # Excedentes no facturados (propina/redondeo) y vuelto pendiente por ventas de esta sesión
         excedentes = Venta.objects.filter(
@@ -390,7 +388,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
                 'numero': numero,
                 'cliente': v.ven_idcli.razon if v.ven_idcli else 'S/C',
                 'observaciones': obs_list,
-                'monto': str(v.ven_total) if hasattr(v, 'ven_total') else '0.00'
+                'monto': str(montos_ventas.get(v.ven_id, Decimal('0.00')))
             })
             vistos_ids['venta'].add(v.ven_id)
 
@@ -413,7 +411,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
                 'numero': numero,
                 'cliente': v.ven_idcli.razon if v.ven_idcli else 'S/C',
                 'observaciones': [f"Pago: {p.observacion}"],
-                'monto': str(v.ven_total) if hasattr(v, 'ven_total') else '0.00'
+                'monto': str(montos_ventas.get(v.ven_id, Decimal('0.00')))
             })
             vistos_ids['venta'].add(v.ven_id)
 

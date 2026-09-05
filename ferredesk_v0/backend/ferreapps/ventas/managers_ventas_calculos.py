@@ -20,8 +20,12 @@ class VentaDetalleItemQuerySet(models.QuerySet):
         )
         
         # precio_unitario_sin_iva_base = ROUND((vdi_precio_unitario_final / divisor_iva), 4)
+        # Coalesce: precio NULL histórico se interpreta como 0.00 en lectura (no modifica la base)
         precio_unitario_sin_iva_base = Round(
-            Cast(F('vdi_precio_unitario_final'), DecimalField(max_digits=15, decimal_places=4)) / divisor_iva, 
+            Cast(
+                Coalesce(F('vdi_precio_unitario_final'), Value(0, output_field=DecimalField(max_digits=15, decimal_places=4))),
+                DecimalField(max_digits=15, decimal_places=4)
+            ) / divisor_iva,
             4
         )
         
