@@ -8,7 +8,7 @@ from ferreapps.caja.models import (
     SesionCaja, MetodoPago, MovimientoCaja, PagoVenta, CuentaBanco,
     CODIGO_EFECTIVO, CODIGO_TRANSFERENCIA
 )
-from ferreapps.ventas.models import Venta, Comprobante
+from ferreapps.ventas.models import Venta, Comprobante, VentaDetalleItem
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
 from django.urls import reverse
 from ferreapps.productos.models import Ferreteria
@@ -387,4 +387,93 @@ class VentasPagosIntegracionTests(CajaTenantAPITestCase, CajaTestMixin):
 
         finally:
             # Restaurar comprobantes desactivados
+            otros_internos.update(activo=True)
+
+    def test_resumen_tolera_precio_null_historico_con_vuelto(self):
+        otros_internos = Comprobante.objects.filter(
+            tipo='factura_interna', activo=True
+        ).exclude(id=self.comprobante_interna.id)
+        otros_internos.update(activo=False)
+
+        try:
+            apertura = self.client.post(
+                '/api/caja/sesiones/abrir/',
+                {'saldo_inicial': '22500.00'},
+                format='json',
+            )
+            self.assertEqual(apertura.status_code, status.HTTP_201_CREATED, apertura.data)
+
+            venta_response = self.client.post('/api/ventas/', {
+                'tipo_comprobante': 'factura_interna',
+                'ven_sucursal': 1,
+                'ven_fecha': '2026-09-05',
+                'ven_copia': 1,
+                'ven_idcli': self.cliente.id,
+                'ven_idpla': self.plazo.id,
+                'ven_idvdo': self.vendedor.id,
+                'comprobante_pagado': True,
+                'excedente_destino': 'vuelto',
+                'pagos': [{
+                    'metodo_pago_id': self.metodo_efectivo.id,
+                    'monto': '40000.00',
+                }],
+                'items': [
+                    {
+                        'vdi_orden': 1,
+                        'vdi_cantidad': 2,
+                        'vdi_precio_unitario_final': '14100.00',
+                        'vdi_detalle1': 'Sky',
+                    },
+                    {
+                        'vdi_orden': 2,
+                        'vdi_cantidad': 4,
+                        'vdi_detalle1': 'Speed XL',
+                    },
+                ],
+            }, format='json')
+            self.assertEqual(venta_response.status_code, status.HTTP_201_CREATED, venta_response.data)
+
+            venta = Venta.objects.get(ven_id=venta_response.data['ven_id'])
+            item_sin_cargo = venta.items.get(vdi_detalle1='Speed XL')
+            self.assertEqual(item_sin_cargo.vdi_precio_unitario_final, Decimal('0.00'))
+
+            VentaDetalleItem.objects.filter(pk=item_sin_cargo.pk).update(
+                vdi_precio_unitario_final=None
+            )
+            self.assertTrue(
+                PagoVenta.objects.filter(
+                    venta=venta,
+                    observacion='Vuelto al cliente',
+                ).exists()
+            )
+
+            estado = self.client.get('/api/caja/sesiones/estado/')
+            self.assertEqual(estado.status_code, status.HTTP_200_OK, estado.data)
+            self.assertEqual(estado.data['resumen']['total_ventas'], '28200.00')
+
+            tramite = next(
+                item for item in estado.data['resumen']['tramites_con_observaciones']
+                if item['tipo'] == 'VENTA' and item['id'] == venta.ven_id
+            )
+            self.assertEqual(tramite['monto'], '28200.00')
+            self.assertIn('Pago: Vuelto al cliente', tramite['observaciones'])
+
+            cierre = self.client.post(
+                '/api/caja/sesiones/cerrar/',
+                {'saldo_final_declarado': '50700.00'},
+                format='json',
+            )
+            self.assertEqual(cierre.status_code, status.HTTP_200_OK, cierre.data)
+            self.assertEqual(cierre.data['sesion']['estado'], 'CERRADA')
+            self.assertEqual(cierre.data['sesion']['saldo_final_sistema'], '50700.00')
+
+            detalle = self.client.get(
+                f"/api/caja/sesiones/{apertura.data['id']}/resumen/"
+            )
+            self.assertEqual(detalle.status_code, status.HTTP_200_OK, detalle.data)
+            self.assertEqual(detalle.data['resumen']['total_ventas'], '28200.00')
+
+            item_sin_cargo.refresh_from_db()
+            self.assertIsNone(item_sin_cargo.vdi_precio_unitario_final)
+        finally:
             otros_internos.update(activo=True)

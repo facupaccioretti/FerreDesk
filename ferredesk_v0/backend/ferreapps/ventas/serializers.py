@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.fields import empty
 from .models import (
     Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed,
     VentaDetalleItemCalculado, VentaIVAAlicuota, VentaCalculada, ComprobanteAsociacion
@@ -13,6 +14,28 @@ from ferreapps.clientes.models import Cliente
 from ferreapps.clientes.models import Vendedor
 from datetime import timedelta
 from django.utils import timezone
+
+
+class PrecioUnitarioField(serializers.DecimalField):
+    def run_validation(self, data=empty):
+        if data is None or (isinstance(data, str) and not data.strip()):
+            data = '0'
+        return super().run_validation(data)
+
+
+def _normalizar_precios_items(items_data, crear):
+    campo = PrecioUnitarioField(max_digits=15, decimal_places=2)
+    clave = 'vdi_precio_unitario_final'
+
+    for idx, item in enumerate(items_data, start=1):
+        if clave not in item and not crear and item.get('id'):
+            continue
+        try:
+            item[clave] = campo.run_validation(item.get(clave, '0'))
+        except serializers.ValidationError:
+            raise serializers.ValidationError({
+                'items': [f'Item {idx}: precio unitario invalido']
+            })
 
 class ComprobanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -51,6 +74,13 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
             return None
 
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
+    vdi_precio_unitario_final = PrecioUnitarioField(
+        max_digits=15,
+        decimal_places=2,
+        required=False,
+        default=Decimal('0.00'),
+    )
+
     class Meta:
         model = VentaDetalleItem
         # Solo los campos base de la tabla física
@@ -451,6 +481,8 @@ class VentaSerializer(serializers.ModelSerializer):
         
         if not items_data:
             raise serializers.ValidationError("Debe agregar al menos un ítem")
+
+        _normalizar_precios_items(items_data, crear=True)
         
         # Obtener el código AFIP del comprobante
         comprobante_id = validated_data.pop('comprobante_id', None)
@@ -552,6 +584,7 @@ class VentaSerializer(serializers.ModelSerializer):
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
         items_data = self.initial_data.get('items', [])
+        _normalizar_precios_items(items_data, crear=False)
         # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
         if dias_validez is not None:
