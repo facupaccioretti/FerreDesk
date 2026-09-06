@@ -453,7 +453,7 @@ class PagoVenta(models.Model):
     # Se usa string para evitar dependencia de orden de declaración de modelos.
     cuenta_banco = models.ForeignKey(
         'CuentaBanco',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         db_column='cuenta_banco_id',
@@ -553,6 +553,50 @@ class PagoVenta(models.Model):
                     'PAGO_ORDEN_PAGO',
                 ]),
                 name='caja_pago_tipo_valido',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(venta__isnull=False, recibo__isnull=True, orden_pago__isnull=True)
+                    | models.Q(venta__isnull=True, recibo__isnull=False, orden_pago__isnull=True)
+                    | models.Q(venta__isnull=True, recibo__isnull=True, orden_pago__isnull=False)
+                ),
+                name='caja_pago_origen_unico',
+            ),
+            models.CheckConstraint(
+                check=models.Q(postventa_operacion__isnull=True) | models.Q(venta__isnull=False),
+                name='caja_pago_postventa_con_venta',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        tipo_operacion__in=['COBRO_VENTA', 'VUELTO_VENTA'],
+                        venta__isnull=False,
+                        recibo__isnull=True,
+                        orden_pago__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_operacion__in=['DEVOLUCION_CLIENTE', 'COBRO_DIFERENCIA_CAMBIO'],
+                        venta__isnull=False,
+                        recibo__isnull=True,
+                        orden_pago__isnull=True,
+                        postventa_operacion__isnull=False,
+                    )
+                    | models.Q(
+                        tipo_operacion='COBRO_RECIBO',
+                        venta__isnull=True,
+                        recibo__isnull=False,
+                        orden_pago__isnull=True,
+                        postventa_operacion__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_operacion='PAGO_ORDEN_PAGO',
+                        venta__isnull=True,
+                        recibo__isnull=True,
+                        orden_pago__isnull=False,
+                        postventa_operacion__isnull=True,
+                    )
+                ),
+                name='caja_pago_tipo_origen_coherente',
             ),
         ]
 

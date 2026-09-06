@@ -26,7 +26,16 @@ class SesionCajaAdmin(admin.ModelAdmin):
     list_filter = ['estado', 'sucursal', 'fecha_hora_inicio']
     search_fields = ['usuario__username', 'id']
     ordering = ['-fecha_hora_inicio']
-    readonly_fields = ['fecha_hora_inicio', 'saldo_final_sistema', 'diferencia']
+    readonly_fields = [field.name for field in SesionCaja._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
     
     fieldsets = (
         ('Información General', {
@@ -53,7 +62,16 @@ class MovimientoCajaAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'fecha_hora', 'sesion_caja__estado']
     search_fields = ['descripcion', 'usuario__username']
     ordering = ['-fecha_hora']
-    readonly_fields = ['fecha_hora']
+    readonly_fields = [field.name for field in MovimientoCaja._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('sesion_caja', 'usuario')
@@ -78,7 +96,16 @@ class PagoVentaAdmin(admin.ModelAdmin):
     list_filter = ['metodo_pago', 'es_vuelto', 'fecha_hora']
     search_fields = ['venta__ven_id', 'referencia_externa']
     ordering = ['-fecha_hora']
-    readonly_fields = ['fecha_hora']
+    readonly_fields = [field.name for field in PagoVenta._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('venta', 'metodo_pago')

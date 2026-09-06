@@ -71,6 +71,24 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
     queryset = SesionCaja.objects.all()
     serializer_class = SesionCajaSerializer
     permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Use la accion abrir para crear una sesion de caja.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Las sesiones de caja no se pueden editar.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Las sesiones de caja no se pueden eliminar.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
     
     def get_queryset(self):
         """Filtra por usuario y estado si se solicita."""

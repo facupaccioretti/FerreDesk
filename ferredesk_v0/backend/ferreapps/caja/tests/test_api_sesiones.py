@@ -127,3 +127,26 @@ class SesionCajaAPITests(CajaTenantAPITestCase, CajaTestMixin):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('No tiene ninguna caja abierta', str(response.data))
+
+    def test_sesion_no_admite_edicion_generica(self):
+        self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '1000.00'}, format='json')
+        sesion = SesionCaja.objects.get(usuario=self.usuario, estado=ESTADO_CAJA_ABIERTA)
+
+        response = self.client.patch(
+            f'/api/caja/sesiones/{sesion.pk}/',
+            {'saldo_inicial': '999999.00'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        sesion.refresh_from_db()
+        self.assertEqual(sesion.saldo_inicial, 1000)
+
+    def test_sesion_no_admite_borrado_generico(self):
+        self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '1000.00'}, format='json')
+        sesion = SesionCaja.objects.get(usuario=self.usuario, estado=ESTADO_CAJA_ABIERTA)
+
+        response = self.client.delete(f'/api/caja/sesiones/{sesion.pk}/')
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(SesionCaja.objects.filter(pk=sesion.pk).exists())

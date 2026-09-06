@@ -298,6 +298,7 @@ def registrar_valores_y_movimientos(
     descripcion_base: str = "Pago",
     orden_pago=None,
     usuario=None,
+    permitir_efectivo_insuficiente=False,
 ) -> List[Dict[str, Any]]:
     """
     Procesa una lista de medios de pago y genera los movimientos de caja y cheques
@@ -327,6 +328,7 @@ def registrar_valores_y_movimientos(
         else TIPO_MOVIMIENTO_SALIDA
     )
     sesion_caja = _bloquear_sesion_caja(sesion_caja, usuario)
+    advertencias = []
     efectivo_salida = sum(
         Decimal(str(pago.get('monto', 0)))
         for pago in pagos
@@ -338,8 +340,13 @@ def registrar_valores_y_movimientos(
     if direccion == 'salida' and efectivo_salida:
         if sesion_caja is None:
             raise ValidationError('El efectivo requiere una sesion de caja abierta.')
-        if efectivo_salida > _saldo_efectivo_sesion(sesion_caja):
-            raise ValidationError('El saldo de efectivo disponible es insuficiente para esta devolucion.')
+        saldo_efectivo = _saldo_efectivo_sesion(sesion_caja)
+        if efectivo_salida > saldo_efectivo:
+            if not permitir_efectivo_insuficiente:
+                raise ValidationError('El saldo de efectivo disponible es insuficiente para esta devolucion.')
+            advertencias.append(
+                'La devolucion se registro aunque el saldo de efectivo de la caja era insuficiente.'
+            )
     resultados = []
 
     for pago_data in pagos:
@@ -472,6 +479,7 @@ def registrar_valores_y_movimientos(
             'referencia_externa': pago_data.get('referencia_externa', ''),
             'observacion': pago_data.get('observacion', ''),
             'monto_recibido': monto_recibido,
+            'advertencias': advertencias,
         })
 
     return resultados

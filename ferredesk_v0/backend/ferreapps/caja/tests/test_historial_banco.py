@@ -216,8 +216,20 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
             ven_idvdo=base_data['vendedor'],
             ven_copia=1,
         )
+        import uuid
+        from ferreapps.ventas.models import PostventaOperacion
+        operacion = PostventaOperacion.objects.create(
+            operacion_uid=uuid.uuid4(),
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            venta_origen=venta,
+            usuario=self.usuario,
+            motivo="Auditoria test",
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+            resolucion_dinero=PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+        )
         PagoVenta.objects.create(
             venta=venta,
+            postventa_operacion=operacion,
             metodo_pago=self.metodo_transfer,
             cuenta_banco=self.banco,
             monto=Decimal('125.00'),

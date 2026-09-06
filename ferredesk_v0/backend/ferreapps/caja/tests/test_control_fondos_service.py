@@ -457,9 +457,21 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
         )
         sesion = self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("100.00"))
+        import uuid
+        from ferreapps.ventas.models import PostventaOperacion
         venta = self._crear_venta(2010, sesion_caja=sesion)
+        operacion = PostventaOperacion.objects.create(
+            operacion_uid=uuid.uuid4(),
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            venta_origen=venta,
+            usuario=self.usuario,
+            motivo="Auditoria test",
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+            resolucion_dinero=PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+        )
         PagoVenta.objects.create(
             venta=venta,
+            postventa_operacion=operacion,
             metodo_pago=efectivo,
             monto=Decimal("20.00"),
             tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
@@ -473,6 +485,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         )
         PagoVenta.objects.create(
             venta=venta,
+            postventa_operacion=operacion,
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("30.00"),

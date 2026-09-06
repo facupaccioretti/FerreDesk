@@ -16,6 +16,7 @@ def _registrar_pago_postventa(
     direccion,
     descripcion_base,
     tipo_operacion,
+    permitir_efectivo_insuficiente=False,
 ):
     if not medios:
         raise ValidationError({"medios": "Debe indicar al menos un medio"})
@@ -32,6 +33,7 @@ def _registrar_pago_postventa(
             descripcion_comprobante=descripcion,
             descripcion_base=descripcion_base,
             usuario=usuario,
+            permitir_efectivo_insuficiente=permitir_efectivo_insuficiente,
         )
         if not resultados:
             raise ValidationError({"medios": "No se pudo registrar el movimiento"})
@@ -54,7 +56,12 @@ def _registrar_pago_postventa(
                 pago_data["monto_recibido"] = resultado["monto_recibido"]
             pagos.append(PagoVenta.objects.create(**pago_data))
     invalidate_control_fondos_cache(reason=f"postventa:{tipo_operacion}")
-    return pagos
+    advertencias = list(dict.fromkeys(
+        advertencia
+        for resultado in resultados
+        for advertencia in resultado.get("advertencias", [])
+    ))
+    return pagos, advertencias
 
 
 def registrar_devolucion_cliente(
@@ -74,6 +81,7 @@ def registrar_devolucion_cliente(
         direccion="salida",
         descripcion_base="Devolucion de",
         tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        permitir_efectivo_insuficiente=True,
     )
 
 
@@ -85,7 +93,7 @@ def registrar_cobro_diferencia(
     sesion_caja,
     usuario,
 ):
-    return _registrar_pago_postventa(
+    pagos, _ = _registrar_pago_postventa(
         venta_documento=venta_documento,
         operacion_postventa=operacion_postventa,
         medios=medios,
@@ -95,3 +103,4 @@ def registrar_cobro_diferencia(
         descripcion_base="Cobro diferencia de",
         tipo_operacion=PagoVenta.TIPO_COBRO_DIFERENCIA_CAMBIO,
     )
+    return pagos
