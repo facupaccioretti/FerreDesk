@@ -46,6 +46,8 @@ describe("useAuthAPI", () => {
       root.unmount();
     });
     document.body.removeChild(container);
+    document.querySelectorAll('form[action*="/api/login-bridge/"]').forEach((form) => form.remove());
+    jest.restoreAllMocks();
     jest.resetAllMocks();
   });
 
@@ -54,6 +56,7 @@ describe("useAuthAPI", () => {
     getCookie.mockReturnValue("csrf-local");
     global.fetch.mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => "application/json" },
       json: async () => ({ status: "success" }),
     });
 
@@ -86,22 +89,15 @@ describe("useAuthAPI", () => {
   test("loginPublicoConBridge consume el token puente por POST y nunca en query string", async () => {
     setWindowLocation("http://localhost:3000/login");
     getCookie.mockReturnValue("csrf-publico");
-    global.fetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tenant: { url: "http://ferretest.lvh.me" },
-          token_puente: { token: "token-puente-123" },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ csrfToken: "csrf-tenant" }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ redirect_to: "/setup" }),
-      });
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => "application/json" },
+      json: async () => ({
+        tenant: { url: "http://ferretest.lvh.me" },
+        token_puente: { token: "token-puente-123" },
+      }),
+    });
+    const submit = jest.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
     let resultado;
     await act(async () => {
@@ -123,31 +119,11 @@ describe("useAuthAPI", () => {
         }),
       })
     );
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      2,
-      "http://ferretest.lvh.me:3000/api/csrf/",
-      expect.objectContaining({
-        method: "GET",
-        credentials: "include",
-      })
-    );
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      3,
-      "http://ferretest.lvh.me:3000/api/login-bridge/",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: expect.objectContaining({
-          "Content-Type": "application/json",
-          "X-CSRFToken": "csrf-tenant",
-        }),
-        body: JSON.stringify({
-          token: "token-puente-123",
-        }),
-      })
-    );
-    expect(resultado).toEqual({
-      redirectTo: "http://ferretest.lvh.me:3000/setup",
-    });
+    const form = document.querySelector('form[action="http://ferretest.lvh.me:3000/api/login-bridge/"]');
+    expect(form).not.toBeNull();
+    expect(form.method).toBe("post");
+    expect(form.querySelector('input[name="token"]').value).toBe("token-puente-123");
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(resultado).toEqual({ redirectTo: "http://ferretest.lvh.me:3000/" });
   });
 });
