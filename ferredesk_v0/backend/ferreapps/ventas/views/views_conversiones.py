@@ -14,9 +14,7 @@ from decimal import Decimal
 from django.utils import timezone
 import logging
 
-from ..models import (
-    Comprobante, Venta, VentaDetalleItem
-)
+from ..models import Comprobante, PostventaOperacion, Venta, VentaDetalleItem
 from ..serializers import VentaSerializer
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
@@ -1059,6 +1057,15 @@ def convertir_factura_interna_a_fiscal(request):
                 'error_code': 'YA_CONVERTIDA',
                 'factura_fiscal_id': factura_interna.factura_fiscal_convertida.ven_id if factura_interna.factura_fiscal_convertida else None
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        if PostventaOperacion.objects.filter(
+            venta_origen=factura_interna,
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+        ).exists():
+            return Response({
+                'detail': 'Una cotizacion con postventas no se puede convertir a comprobante fiscal.',
+                'error_code': 'POSTVENTA_EXISTENTE',
+            }, status=status.HTTP_409_CONFLICT)
         
         # Preparar datos de la nueva factura fiscal
         venta_data = data.copy()

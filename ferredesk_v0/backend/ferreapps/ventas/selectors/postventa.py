@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Sum
 from rest_framework.exceptions import ValidationError
@@ -12,6 +12,7 @@ from ferreapps.ventas.validators.postventa import (
     obtener_direccion_diferencia,
     obtener_cantidades_ya_devueltas,
     obtener_resoluciones_cambio,
+    obtener_resoluciones_devolucion,
     obtener_venta_origen,
     validar_items_cambio,
     validar_items_devolucion,
@@ -19,7 +20,7 @@ from ferreapps.ventas.validators.postventa import (
 
 
 def _money(value):
-    return str(Decimal(str(value or ZERO)).quantize(Decimal("0.01")))
+    return str(Decimal(str(value or ZERO)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def obtener_saldo_pendiente_venta(venta):
@@ -29,9 +30,7 @@ def obtener_saldo_pendiente_venta(venta):
         .get("total")
         or ZERO
     )
-    total_venta = getattr(venta, "ven_total", None)
-    if total_venta is None:
-        total_venta = venta.ven_total
+    total_venta = venta.__class__.objects.filter(pk=venta.pk).values_list("total_guardado", flat=True).get()
     saldo = Decimal(str(total_venta)) - Decimal(str(total_imputado))
     return max(saldo, ZERO)
 
@@ -40,6 +39,15 @@ def obtener_precio_actual_stock(stock, lista_numero=0):
     base = obtener_precio_lista_sin_iva(stock, lista_numero)
     alicuota = Decimal(str(getattr(stock.idaliiva, "porce", 0) or 0))
     return (base * (Decimal("1.00") + alicuota / Decimal("100"))).quantize(Decimal("0.01"))
+
+
+def calcular_credito_incremental(*, precio, total_original, cantidad_original, cantidad_anterior, cantidad):
+    def credito_acumulado(cantidad_devuelta):
+        if cantidad_devuelta >= cantidad_original:
+            return total_original
+        return (precio * cantidad_devuelta).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    return credito_acumulado(cantidad_anterior + cantidad) - credito_acumulado(cantidad_anterior)
 
 
 def obtener_items_origen_postventa(venta_id):
@@ -61,17 +69,32 @@ def obtener_items_origen_postventa(venta_id):
     return {"venta_origen_id": venta.ven_id, "items": items}
 
 
-def _importes_efectivos_origen(venta, cantidades):
-    """Usa el calculo de venta vigente para las lineas que se devuelven."""
+def _importes_efectivos_origen(venta, cantidades, devueltas=None):
+    """Asigna centavos por acumulado para que una linea nunca genere credito extra."""
     detalles = {
         detalle.id: detalle
         for detalle in VentaDetalleItem.objects.filter(vdi_idve=venta).con_calculos()
     }
+    devueltas = devueltas or {}
     importes = {}
     for detalle_id, cantidad in cantidades.items():
         detalle = detalles[detalle_id]
-        precio = Decimal(str(detalle.precio_unitario_bonificado_con_iva or ZERO)).quantize(Decimal("0.01"))
-        subtotal = (precio * cantidad).quantize(Decimal("0.01"))
+        precio = Decimal(str(detalle.precio_unitario_bonificado_con_iva or ZERO)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        cantidad_original = Decimal(str(detalle.vdi_cantidad)).quantize(Decimal("0.01"))
+        cantidad_anterior = Decimal(str(devueltas.get(detalle_id, ZERO))).quantize(Decimal("0.01"))
+        total_original = Decimal(str(detalle.total_item or ZERO)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+        subtotal = calcular_credito_incremental(
+            precio=precio,
+            total_original=total_original,
+            cantidad_original=cantidad_original,
+            cantidad_anterior=cantidad_anterior,
+            cantidad=cantidad,
+        )
         importes[detalle_id] = (precio, subtotal)
     return importes
 
@@ -90,7 +113,7 @@ def previsualizar_devolucion(payload):
         item["venta_detalle_item_id"]: Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
         for item in payload["items"]
     }
-    importes = _importes_efectivos_origen(venta, cantidades)
+    importes = _importes_efectivos_origen(venta, cantidades, devueltas)
 
     items_payload = []
     total_credito = ZERO
@@ -116,7 +139,6 @@ def previsualizar_devolucion(payload):
             }
         )
 
-    saldo_a_favor = max(total_credito - saldo_pendiente, ZERO)
     return {
         "venta_origen": {
             "ven_id": venta.ven_id,
@@ -136,13 +158,9 @@ def previsualizar_devolucion(payload):
             "total_credito": _money(total_credito),
             "saldo_pendiente_venta": _money(saldo_pendiente),
             "maximo_a_imputar_deuda": _money(min(total_credito, saldo_pendiente)),
-            "maximo_saldo_a_favor_o_devolucion": _money(saldo_a_favor),
+            "maximo_saldo_a_favor_o_devolucion": _money(total_credito),
         },
-        "opciones_resolucion": [
-            "SALDO_A_FAVOR",
-            "IMPUTAR_DEUDA",
-            "DEVOLVER_DINERO",
-        ],
+        "opciones_resolucion": obtener_resoluciones_devolucion(venta),
         "advertencias": [],
     }
 
@@ -160,7 +178,7 @@ def previsualizar_cambio(payload):
         item["venta_detalle_item_id"]: Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
         for item in payload["items_devueltos"]
     }
-    importes = _importes_efectivos_origen(venta, cantidades)
+    importes = _importes_efectivos_origen(venta, cantidades, devueltas)
     total_credito = ZERO
     items_devueltos = []
     for item in payload["items_devueltos"]:
@@ -195,7 +213,7 @@ def previsualizar_cambio(payload):
         stock = stock_map[item["stock_id"]]
         cantidad = Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
         precio = Decimal(str(item["precio_unitario"])).quantize(Decimal("0.01"))
-        subtotal = (cantidad * precio).quantize(Decimal("0.01"))
+        subtotal = (cantidad * precio).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total_debito += subtotal
         items_nuevos.append(
             {
@@ -225,6 +243,6 @@ def previsualizar_cambio(payload):
             "saldo_pendiente_venta": _money(obtener_saldo_pendiente_venta(venta_calculada)),
             "direccion_diferencia": direccion_diferencia,
         },
-        "opciones_resolucion": obtener_resoluciones_cambio(direccion_diferencia),
+        "opciones_resolucion": obtener_resoluciones_cambio(direccion_diferencia, venta),
         "advertencias": [],
     }

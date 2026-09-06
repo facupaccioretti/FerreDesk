@@ -282,6 +282,15 @@ class VentaSerializer(serializers.ModelSerializer):
         # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
         if tipo_comprobante in ['nota_credito', 'nota_credito_interna'] and comprobantes_asociados_ids:
             facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
+
+            if (
+                tipo_comprobante == 'nota_credito_interna'
+                and facturas_asociadas.filter(comprobante__tipo='factura_interna').exists()
+                and not self.context.get('origen_postventa')
+            ):
+                raise serializers.ValidationError({
+                    'tipo_comprobante': ['Use el flujo de postventa para devolver una cotizacion cerrada.']
+                })
             
             if facturas_asociadas.exists():
                 # NUEVA VALIDACIÓN: Verificar que solo se asocien facturas válidas

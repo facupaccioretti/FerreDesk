@@ -322,6 +322,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
                 nota_credito, _ = crear_documento_venta_desde_payload(
                     payload=payload,
                     usuario=self.usuario,
+                    origen_postventa=True,
                 )
                 self.assertTrue(Venta.objects.filter(pk=nota_credito.pk).exists())
 
@@ -705,6 +706,73 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         self.assertEqual(movimiento.tipo, TIPO_MOVIMIENTO_SALIDA)
         self.assertEqual(movimiento.monto, Decimal("50.00"))
 
+    def test_cambio_devuelve_solo_el_remanente_despues_de_imputar_deuda_origen(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo",
+            defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
+        )
+        SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("1000.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        stock_origen = self._crear_stock("PV-REM-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-REM-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("75.00")}])
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "40.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "DEVOLVER_DINERO",
+            "medios_diferencia": [{"metodo_pago_id": efectivo.id, "monto": "35.00"}],
+            "motivo": "Cambio con remanente",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(Decimal(resultado["total_imputado"]), Decimal("65.00"))
+        self.assertEqual(Decimal(resultado["total_devuelto"]), Decimal("35.00"))
+        self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("0.00"))
+        self.assertEqual(
+            Imputacion.objects.get(
+                imp_idempotency_key=f"postventa-extra:{operacion.operacion_uid}"
+            ).imp_monto,
+            Decimal("25.00"),
+        )
+        self.assertEqual(
+            PagoVenta.objects.get(postventa_operacion=operacion).monto,
+            Decimal("35.00"),
+        )
+
+    def test_cambio_no_crea_medios_si_la_deuda_cubre_todo_el_saldo_a_favor(self):
+        stock_origen = self._crear_stock("PV-SMED-ORI", cantidad=Decimal("5.00"))
+        stock_nuevo = self._crear_stock("PV-SMED-NUE", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "40.00"}],
+            "idempotency_key": uuid4(),
+            "resolucion_diferencia": "DEVOLVER_DINERO",
+            "motivo": "Cambio sin reintegro",
+        }, usuario=self.usuario)
+
+        operacion = PostventaOperacion.objects.get(id=resultado["operacion_id"])
+        self.assertEqual(Decimal(resultado["total_imputado"]), Decimal("100.00"))
+        self.assertEqual(Decimal(resultado["total_devuelto"]), Decimal("0.00"))
+        self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("40.00"))
+        self.assertEqual(
+            Imputacion.objects.get(
+                imp_idempotency_key=f"postventa-extra:{operacion.operacion_uid}"
+            ).imp_monto,
+            Decimal("60.00"),
+        )
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion=operacion).exists())
+
     def test_devolucion_de_dinero_consume_credito_y_compensa_cuenta_corriente(self):
         transferencia, _ = MetodoPago.objects.get_or_create(
             codigo="transferencia",
@@ -837,7 +905,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
             cuenta.id,
         )
 
-    def test_cambio_bloquea_devolucion_efectivo_si_no_alcanza_caja(self):
+    def test_cambio_advierte_devolucion_efectivo_si_no_alcanza_caja(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
             codigo="efectivo",
             defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
@@ -853,8 +921,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
         imputar_deuda(venta, [{"factura": venta, "monto": Decimal("100.00")}])
 
-        with self.assertRaises(DjangoValidationError):
-            confirmar_cambio(payload={
+        resultado = confirmar_cambio(payload={
                 "venta_id": venta.ven_id,
                 "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
                 "items_nuevos": [{"stock_id": stock_nuevo.id, "cantidad": "1.00", "precio_unitario": "50.00"}],
@@ -864,8 +931,9 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
                 "motivo": "Caja insuficiente",
             }, usuario=self.usuario)
 
-        self.assertFalse(PostventaOperacion.objects.exists())
-        self.assertFalse(MovimientoCaja.objects.exists())
+        self.assertTrue(resultado["advertencias"])
+        self.assertTrue(PostventaOperacion.objects.exists())
+        self.assertEqual(MovimientoCaja.objects.get().monto, Decimal("50.00"))
 
     def test_cambio_rechaza_efectivo_con_caja_abierta_de_otro_usuario(self):
         efectivo, _ = MetodoPago.objects.get_or_create(

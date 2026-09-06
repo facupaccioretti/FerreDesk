@@ -268,6 +268,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
             # Configurar el mock del QuerySet
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             # Ejecutar la función bajo test
             _recalcular_totales_venta(1)
@@ -299,6 +300,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             _recalcular_totales_venta(99)
 
@@ -327,6 +329,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             _recalcular_totales_venta(42)
 

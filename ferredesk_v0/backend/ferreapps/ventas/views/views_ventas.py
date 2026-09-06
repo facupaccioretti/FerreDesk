@@ -174,6 +174,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             return VentaCalculadaFilter
         return super().get_filterset_class()
 
+    def _rechazar_mutacion_historica(self, instance):
+        if instance.ven_estado != 'AB':
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({'detail': 'Los comprobantes cerrados no se pueden modificar ni eliminar.'})
+
     def list(self, request, *args, **kwargs):
         with medir_proceso(
             "ventas_listado",
@@ -760,6 +765,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+        self._rechazar_mutacion_historica(instance)
         
         # ATENCIÓN: Ya no se calculan ni manipulan campos calculados (ven_impneto, ven_total, etc.) aquí.
         # Toda la lógica de totales y cálculos se delega a la vista SQL.
@@ -802,6 +808,11 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self._rechazar_mutacion_historica(instance)
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=['get'])
     def ticket(self, request, pk=None):
         # Utilizamos con_calculos() para asegurarnos de traer los subtotales anotados
@@ -817,6 +828,25 @@ class VentaViewSet(viewsets.ModelViewSet):
 class VentaDetalleItemViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleItem.objects.all()
     serializer_class = VentaDetalleItemSerializer
+
+    def perform_create(self, serializer):
+        venta = serializer.validated_data['vdi_idve']
+        if venta.ven_estado != 'AB':
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({'detail': 'No se pueden agregar items a un comprobante cerrado.'})
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if serializer.instance.vdi_idve.ven_estado != 'AB':
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({'detail': 'No se pueden modificar items de un comprobante cerrado.'})
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.vdi_idve.ven_estado != 'AB':
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({'detail': 'No se pueden eliminar items de un comprobante cerrado.'})
+        instance.delete()
 
 
 class VentaDetalleManViewSet(viewsets.ModelViewSet):

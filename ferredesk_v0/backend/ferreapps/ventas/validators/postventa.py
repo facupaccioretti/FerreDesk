@@ -41,6 +41,12 @@ DIRECCION_CLIENTE_PAGA = "CLIENTE_PAGA"
 DIRECCION_CLIENTE_RECIBE = "CLIENTE_RECIBE"
 DIRECCION_SIN_DIFERENCIA = "SIN_DIFERENCIA"
 RESOLUCION_SIN_DIFERENCIA = "SIN_DIFERENCIA"
+CONSUMIDOR_FINAL_ID = 1
+RESOLUCIONES_DEVOLUCION = (
+    PostventaOperacion.RESOLUCION_SALDO_A_FAVOR,
+    PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA,
+    PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+)
 RESOLUCIONES_CAMBIO_POR_DIRECCION = {
     DIRECCION_CLIENTE_PAGA: (
         PostventaOperacion.RESOLUCION_COBRAR_DIFERENCIA,
@@ -64,14 +70,37 @@ def obtener_direccion_diferencia(diferencia):
     return DIRECCION_SIN_DIFERENCIA
 
 
-def obtener_resoluciones_cambio(direccion):
+def obtener_resoluciones_cambio(direccion, venta=None):
+    if venta is not None and es_consumidor_final(venta):
+        if direccion == DIRECCION_CLIENTE_PAGA:
+            return [PostventaOperacion.RESOLUCION_COBRAR_DIFERENCIA]
+        if direccion == DIRECCION_CLIENTE_RECIBE:
+            return [PostventaOperacion.RESOLUCION_DEVOLVER_DINERO]
     return list(RESOLUCIONES_CAMBIO_POR_DIRECCION.get(direccion, ()))
 
 
-def validar_resolucion_cambio(direccion, resolucion):
-    if resolucion not in RESOLUCIONES_CAMBIO_POR_DIRECCION.get(direccion, ()):
+def validar_resolucion_cambio(direccion, resolucion, venta=None):
+    if resolucion not in obtener_resoluciones_cambio(direccion, venta):
         raise ValidationError(
             {"resolucion_diferencia": f"La resolucion {resolucion} no es valida para {direccion}"}
+        )
+    return resolucion
+
+
+def es_consumidor_final(venta):
+    return venta.ven_idcli_id == CONSUMIDOR_FINAL_ID
+
+
+def obtener_resoluciones_devolucion(venta):
+    if es_consumidor_final(venta):
+        return [PostventaOperacion.RESOLUCION_DEVOLVER_DINERO]
+    return list(RESOLUCIONES_DEVOLUCION)
+
+
+def validar_resolucion_devolucion(venta, resolucion):
+    if resolucion not in obtener_resoluciones_devolucion(venta):
+        raise ValidationError(
+            {"resolucion_dinero": "Consumidor Final solo admite devolucion de dinero"}
         )
     return resolucion
 

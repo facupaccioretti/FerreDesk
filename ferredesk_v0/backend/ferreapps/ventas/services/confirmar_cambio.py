@@ -18,6 +18,7 @@ from ferreapps.ventas.selectors.postventa import previsualizar_cambio
 from ferreapps.ventas.services.crear_venta import (
     crear_documento_venta_desde_payload,
     obtener_total_documento_persistido,
+    calcular_ajuste_nota_credito,
 )
 from ferreapps.ventas.services.idempotencia_postventa import (
     ConflictoIdempotencia,
@@ -76,6 +77,11 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
                 "vdi_idaliiva": detalle.vdi_idaliiva_id,
             }
         )
+    ajuste_redondeo = calcular_ajuste_nota_credito(
+        items,
+        preview["items_devueltos"],
+        preview["resumen_monetario"]["total_credito"],
+    )
     return {
         "tipo_comprobante": comprobante.tipo,
         "comprobante_id": comprobante.codigo_afip,
@@ -86,6 +92,7 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
         "ven_descu1": venta_origen.ven_descu1,
         "ven_descu2": venta_origen.ven_descu2,
         "ven_descu3": venta_origen.ven_descu3,
+        "ajuste_redondeo": ajuste_redondeo,
         "ven_vdocomvta": 0,
         "ven_vdocomcob": 0,
         "ven_estado": "CE",
@@ -195,6 +202,7 @@ def confirmar_cambio(*, payload, usuario):
             validar_resolucion_cambio(
                 preview["resumen_monetario"]["direccion_diferencia"],
                 payload["resolucion_diferencia"],
+                venta_origen,
             )
             diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
             medios_diferencia = payload.get("medios_diferencia", [])
@@ -245,15 +253,19 @@ def confirmar_cambio(*, payload, usuario):
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
+                origen_postventa=True,
             )
             nueva_venta, _ = crear_documento_venta_desde_payload(
                 payload=_build_nueva_venta_payload(venta_origen, payload, comprobante_venta),
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
+                origen_postventa=True,
             )
-            total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
-            total_debito = Decimal(str(obtener_total_documento_persistido(nueva_venta)))
+            total_credito_documento = Decimal(str(obtener_total_documento_persistido(nota_credito)))
+            total_debito_documento = Decimal(str(obtener_total_documento_persistido(nueva_venta)))
+            if total_credito_documento != total_credito or total_debito_documento != total_debito:
+                raise ValidationError({"totales": "Los documentos no coinciden con la previsualizacion"})
             diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
             precios_audit = {
                 item["venta_detalle_item_id"]: item["precio_unitario_origen"]
@@ -302,19 +314,22 @@ def confirmar_cambio(*, payload, usuario):
 
             monto_cobrado = ZERO
             monto_devuelto = ZERO
+            advertencias = []
 
             if diferencia > ZERO:
                 if payload["resolucion_diferencia"] == PostventaOperacion.RESOLUCION_DEJAR_DEUDA:
                     pass
                 else:
                     monto_cobrado = diferencia
-                    registrar_cobro_diferencia(
+                    pagos_cobro = registrar_cobro_diferencia(
                         venta_documento=nueva_venta,
                         operacion_postventa=operacion,
                         medios=medios_diferencia,
                         sesion_caja=sesion_caja,
                         usuario=usuario,
                     )
+                    if sum((pago.monto for pago in pagos_cobro), ZERO) != monto_cobrado:
+                        raise ValidationError({"medios_diferencia": "Los pagos no coinciden con la diferencia"})
                     imputar_deuda(
                         nueva_venta,
                         [
@@ -361,13 +376,15 @@ def confirmar_cambio(*, payload, usuario):
                 if resolucion == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
                     monto_devuelto = saldo_favor
                     if monto_devuelto > ZERO:
-                        registrar_devolucion_cliente(
+                        pagos_devolucion, advertencias = registrar_devolucion_cliente(
                             venta_documento=nota_credito,
                             operacion_postventa=operacion,
                             medios=medios_diferencia,
                             sesion_caja=sesion_caja,
                             usuario=usuario,
                         )
+                        if sum((pago.monto for pago in pagos_devolucion), ZERO) != monto_devuelto:
+                            raise ValidationError({"medios_diferencia": "Los pagos no coinciden con el reintegro"})
             resultado = {
                 "operacion_id": operacion.id,
                 "operacion_uid": str(operacion.operacion_uid),
@@ -384,6 +401,7 @@ def confirmar_cambio(*, payload, usuario):
                 "total_cobrado": str(monto_cobrado.quantize(Decimal("0.01"))),
                 "total_vuelto": str(monto_vuelto.quantize(Decimal("0.01"))),
                 "total_devuelto": str(monto_devuelto.quantize(Decimal("0.01"))),
+                "advertencias": advertencias,
             }
             operacion.nota_credito = nota_credito
             operacion.nueva_venta = nueva_venta

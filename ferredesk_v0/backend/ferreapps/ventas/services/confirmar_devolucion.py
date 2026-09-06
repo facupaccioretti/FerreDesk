@@ -13,6 +13,7 @@ from ferreapps.ventas.selectors.postventa import previsualizar_devolucion
 from ferreapps.ventas.services.crear_venta import (
     crear_documento_venta_desde_payload,
     obtener_total_documento_persistido,
+    calcular_ajuste_nota_credito,
 )
 from ferreapps.ventas.services.idempotencia_postventa import (
     ConflictoIdempotencia,
@@ -20,7 +21,11 @@ from ferreapps.ventas.services.idempotencia_postventa import (
     recuperar_resultado,
 )
 from ferreapps.ventas.services.snapshots import canonicalizar_snapshot
-from ferreapps.ventas.validators.postventa import obtener_venta_origen, validar_medios_postventa
+from ferreapps.ventas.validators.postventa import (
+    obtener_venta_origen,
+    validar_medios_postventa,
+    validar_resolucion_devolucion,
+)
 from ferreapps.ventas.views.utils_stock import ajustar_stock_postventa
 
 
@@ -63,6 +68,11 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
             }
         )
 
+    ajuste_redondeo = calcular_ajuste_nota_credito(
+        items,
+        preview["items_seleccionados"],
+        preview["resumen_monetario"]["total_credito"],
+    )
     return {
         "tipo_comprobante": comprobante.tipo,
         "comprobante_id": comprobante.codigo_afip,
@@ -73,6 +83,7 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
         "ven_descu1": venta_origen.ven_descu1,
         "ven_descu2": venta_origen.ven_descu2,
         "ven_descu3": venta_origen.ven_descu3,
+        "ajuste_redondeo": ajuste_redondeo,
         "ven_vdocomvta": 0,
         "ven_vdocomcob": 0,
         "ven_estado": "CE",
@@ -102,6 +113,7 @@ def confirmar_devolucion(*, payload, usuario):
             return resultado_existente
         with transaction.atomic():
             venta_origen = obtener_venta_origen(payload["venta_id"], for_update=True)
+            validar_resolucion_devolucion(venta_origen, payload["resolucion_dinero"])
             operacion, resultado_existente = crear_o_recuperar_operacion(
                 payload=payload,
                 venta_origen=venta_origen,
@@ -120,10 +132,7 @@ def confirmar_devolucion(*, payload, usuario):
             saldo_pendiente = Decimal(str(preview["resumen_monetario"]["saldo_pendiente_venta"]))
             medios = payload.get("medios", [])
             monto_imputado_estimado = ZERO
-            if payload["resolucion_dinero"] in {
-                PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA,
-                PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
-            }:
+            if payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA:
                 monto_imputado_estimado = min(total_credito, saldo_pendiente)
             monto_devolucion_estimado = (
                 total_credito - monto_imputado_estimado
@@ -154,8 +163,11 @@ def confirmar_devolucion(*, payload, usuario):
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
+                origen_postventa=True,
             )
-            total_credito = Decimal(str(obtener_total_documento_persistido(nota_credito)))
+            total_documento = Decimal(str(obtener_total_documento_persistido(nota_credito)))
+            if total_documento != total_credito:
+                raise ValidationError({"total_credito": "El documento no coincide con el credito previsualizado"})
             precios_audit = {
                 item["venta_detalle_item_id"]: item["precio_unitario_origen"]
                 for item in preview["items_seleccionados"]
@@ -175,10 +187,10 @@ def confirmar_devolucion(*, payload, usuario):
                 )
 
             monto_imputado = ZERO
-            if payload["resolucion_dinero"] in {
-                PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA,
-                PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
-            } and saldo_pendiente > ZERO:
+            if (
+                payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA
+                and saldo_pendiente > ZERO
+            ):
                 monto_imputado = min(total_credito, saldo_pendiente)
                 imputar_deuda(
                     nota_credito,
@@ -193,16 +205,19 @@ def confirmar_devolucion(*, payload, usuario):
                 )
 
             monto_devolucion = ZERO
+            advertencias = []
             if payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
-                monto_devolucion = total_credito - monto_imputado
+                monto_devolucion = total_credito
                 if monto_devolucion > ZERO:
-                    registrar_devolucion_cliente(
+                    pagos, advertencias = registrar_devolucion_cliente(
                         venta_documento=nota_credito,
                         operacion_postventa=operacion,
                         medios=medios,
                         sesion_caja=sesion_caja,
                         usuario=usuario,
                     )
+                    if sum((pago.monto for pago in pagos), ZERO) != monto_devolucion:
+                        raise ValidationError({"medios": "Los pagos registrados no coinciden con el reintegro"})
             resultado = {
                 "operacion_id": operacion.id,
                 "operacion_uid": str(operacion.operacion_uid),
@@ -214,6 +229,7 @@ def confirmar_devolucion(*, payload, usuario):
                 "total_credito": str(total_credito.quantize(Decimal("0.01"))),
                 "total_imputado": str(monto_imputado.quantize(Decimal("0.01"))),
                 "total_devuelto": str(monto_devolucion.quantize(Decimal("0.01"))),
+                "advertencias": advertencias,
             }
             operacion.nota_credito = nota_credito
             operacion.total_credito = total_credito

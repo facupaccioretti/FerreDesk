@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.db.models import Max
 
+from ferreapps.clientes.models import Cliente
 from ferreapps.productos.models import Ferreteria, Proveedor, Stock, StockProve
 from ferreapps.ventas.models import Comprobante, VentaDetalleItem
 from ferreapps.ventas.tests import VentasTenantTestCase
@@ -12,6 +13,17 @@ from ferreapps.ventas.tests import VentasTenantTestCase
 class PostventaTenantTestCase(VentasTenantTestCase):
     def setUp(self):
         super().setUp()
+        self.consumidor_final = Cliente.objects.get(pk=1)
+        self.cliente = Cliente.objects.create(
+            id=(Cliente.objects.aggregate(max_id=Max("id"))["max_id"] or 0) + 1,
+            razon="Cliente Identificado Postventa",
+            domicilio="Calle Identificada 123",
+            cuit="20123456786",
+            iva=self.tipo_iva,
+            vendedor=self.vendedor,
+            plazo=self.plazo,
+            activo="S",
+        )
         self.usuario = get_user_model().objects.order_by("id").first()
         self.proveedor = Proveedor.objects.create(
             razon="Proveedor Postventa",

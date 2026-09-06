@@ -194,7 +194,7 @@ class PostventaAPITests(PostventaTenantTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_api_devuelve_400_si_la_caja_no_alcanza_para_el_reintegro(self):
+    def test_api_registra_y_advierte_si_la_caja_no_alcanza_para_el_reintegro(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
             codigo="efectivo",
             defaults={"nombre": "Efectivo", "afecta_arqueo": True, "activo": True},
@@ -224,6 +224,7 @@ class PostventaAPITests(PostventaTenantTestCase):
             "motivo": "Caja insuficiente",
         })
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
-        self.assertIn("insuficiente", str(response.json()).lower())
-        self.assertFalse(PostventaOperacion.objects.exists())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        self.assertIn("insuficiente", str(response.json()["advertencias"]).lower())
+        self.assertTrue(PostventaOperacion.objects.exists())
+        self.assertTrue(PagoVenta.objects.exists())

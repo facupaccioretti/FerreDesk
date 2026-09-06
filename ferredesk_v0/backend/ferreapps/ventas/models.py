@@ -217,12 +217,19 @@ class Venta(models.Model):
         db_column='VEN_SUBTOTAL_BRUTO_GUARDADO',
         help_text='Subtotal bruto antes de descuentos. Se actualiza via signals al cambiar ítems.'
     )
+    ajuste_redondeo = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        db_column='VEN_AJUSTE_REDONDEO',
+        help_text='Residuo explicito para conservar centavos en documentos parciales.'
+    )
 
     @property
     def ven_total(self):
         """Total venta (annotated o calculado en vivo)"""
         if hasattr(self, '_ven_total'): return self._ven_total
-        return sum(
+        return self.ajuste_redondeo + sum(
             (Decimal(str(i.vdi_precio_unitario_final)) * Decimal(str(i.vdi_cantidad))).quantize(Decimal('0.01'))
             for i in self.items.all()
         )

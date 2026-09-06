@@ -1,4 +1,5 @@
 import copy
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
@@ -16,6 +17,16 @@ from ferreapps.ventas.utils import asignar_comprobante, _construir_respuesta_com
 PUNTO_VENTA_INTERNO = 99
 
 
+def calcular_ajuste_nota_credito(items, items_preview, total_objetivo):
+    """Calcula el residuo necesario para conservar centavos entre devoluciones."""
+    total_lineas = Decimal("0.00")
+    for item, item_preview in zip(items, items_preview):
+        cantidad = Decimal(str(item["vdi_cantidad"]))
+        precio = Decimal(str(item_preview["precio_unitario_origen"]))
+        total_lineas += (cantidad * precio).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return Decimal(str(total_objetivo)) - total_lineas
+
+
 def obtener_total_documento_persistido(venta):
     venta_calculada = Venta.objects.con_calculos().filter(pk=venta.pk).first()
     if venta_calculada is None:
@@ -29,6 +40,7 @@ def crear_documento_venta_desde_payload(
     usuario,
     sesion_caja=None,
     permitir_registrar_pagos=False,
+    origen_postventa=False,
 ):
     data = copy.deepcopy(payload)
     tipo_comprobante = data.get("tipo_comprobante")
@@ -72,7 +84,7 @@ def crear_documento_venta_desde_payload(
             .first()
         )
         data["ven_numero"] = 1 if ultima_venta is None else ultima_venta.ven_numero + 1
-        serializer = VentaSerializer(data=data)
+        serializer = VentaSerializer(data=data, context={"origen_postventa": origen_postventa})
         serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
