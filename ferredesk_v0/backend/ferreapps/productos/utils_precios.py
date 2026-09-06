@@ -6,6 +6,34 @@ from decimal import Decimal
 
 
 @transaction.atomic
+def recalcular_precios_lista(lista_numero, margen_descuento):
+    from .models import PrecioProductoLista, Stock
+
+    lista_numero = int(lista_numero)
+    if lista_numero not in range(1, 5):
+        raise ValueError('La lista debe estar entre 1 y 4')
+
+    recalculados = 0
+    manuales = 0
+    for stock in Stock.objects.exclude(precio_lista_0=None).iterator():
+        precio_existente = PrecioProductoLista.objects.filter(
+            stock=stock,
+            lista_numero=lista_numero,
+        ).first()
+        if precio_existente and precio_existente.precio_manual:
+            manuales += 1
+            continue
+        precio = calcular_precio_desde_lista_0(stock.precio_lista_0, margen_descuento)
+        PrecioProductoLista.objects.update_or_create(
+            stock=stock,
+            lista_numero=lista_numero,
+            defaults={'precio': precio, 'precio_manual': False},
+        )
+        recalculados += 1
+    return recalculados, manuales
+
+
+@transaction.atomic
 def recalcular_precio_lista_0(stock_id):
     """Recalcula precio_lista_0 de un producto desde costo+margen si no es manual."""
     from .models import Stock, StockProve
