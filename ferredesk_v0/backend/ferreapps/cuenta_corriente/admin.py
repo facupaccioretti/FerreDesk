@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from .models import Imputacion
 
 
@@ -48,3 +49,18 @@ class ImputacionAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related(
             'origen_content_type', 'destino_content_type'
         )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.es_postventa:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.es_postventa:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(imp_idempotency_key__startswith='postventa').exists():
+            raise PermissionDenied('Las imputaciones de postventa no se pueden eliminar.')
+        super().delete_queryset(request, queryset)

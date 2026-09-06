@@ -208,8 +208,9 @@ def _get_entidad(obj: Model):
 
 
 def _get_total_documento(obj: Model) -> Decimal:
-    if hasattr(obj, "ven_total"):
-        return Decimal(str(obj.ven_total))
+    if hasattr(obj, "total_guardado"):
+        total = obj.__class__.objects.filter(pk=obj.pk).values_list("total_guardado", flat=True).get()
+        return Decimal(str(total))
     if hasattr(obj, "rec_total"):
         return Decimal(str(obj.rec_total))
     if hasattr(obj, "op_total"):

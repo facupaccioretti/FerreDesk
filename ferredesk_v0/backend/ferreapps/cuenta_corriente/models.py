@@ -78,6 +78,10 @@ class Imputacion(models.Model):
     def __str__(self):
         return f"Imputación {self.imp_id}: {self.origen} -> {self.destino} (${self.imp_monto})"
 
+    @property
+    def es_postventa(self):
+        return bool(self.imp_idempotency_key and self.imp_idempotency_key.startswith("postventa"))
+
 
 
 
