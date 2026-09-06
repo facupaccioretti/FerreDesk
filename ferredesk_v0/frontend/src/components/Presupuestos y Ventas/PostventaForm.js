@@ -131,8 +131,19 @@ const esMedioBancario = (metodo) => [
 const resolucionDiferenciaPorDefecto = (previewData) => {
   const direccion = previewData?.resumen_monetario?.direccion_diferencia
   if (direccion === "CLIENTE_PAGA") return "COBRAR_DIFERENCIA"
-  if (direccion === "CLIENTE_RECIBE") return "SALDO_A_FAVOR"
+  if (direccion === "CLIENTE_RECIBE") {
+    return esConsumidorFinal(previewData) ? "DEVOLVER_DINERO" : "SALDO_A_FAVOR"
+  }
   return "SIN_DIFERENCIA"
+}
+
+export const esConsumidorFinal = (previewData) => (
+  String(previewData?.venta_origen?.cliente_id) === "1"
+)
+
+export const tieneEfectivoInsuficiente = (saldoDisponible, montoEfectivo) => {
+  const saldo = Number.parseFloat(saldoDisponible)
+  return Number.isFinite(saldo) && Number(montoEfectivo) > saldo + 0.009
 }
 
 export const buildItemsNuevosPayload = (rows = []) => (
@@ -163,30 +174,42 @@ export const buildConfirmPayload = ({
   mediosPago = [],
 }) => {
   const motivo = observacion.trim()
+  const consumidorFinal = esConsumidorFinal(previewData)
 
   if (modo === "cambio") {
     const direccion = previewData?.resumen_monetario?.direccion_diferencia
-    const resolucionFinal = direccion === "SIN_DIFERENCIA"
+    let resolucionFinal = direccion === "SIN_DIFERENCIA"
       ? "SIN_DIFERENCIA"
       : resolucionDiferencia || resolucionDiferenciaPorDefecto(previewData)
+
+    if (consumidorFinal) {
+      if (direccion === "CLIENTE_PAGA") resolucionFinal = "COBRAR_DIFERENCIA"
+      if (direccion === "CLIENTE_RECIBE") resolucionFinal = "DEVOLVER_DINERO"
+    }
 
     return {
       ...previewPayload,
       motivo,
       motivo_forzado: "",
       resolucion_diferencia: resolucionFinal,
-      ...(direccionMediosPostventa(resolucionFinal)
+      ...(direccionMediosPostventa(resolucionFinal) && obtenerMontoObjetivo(
+        modo,
+        previewData?.resumen_monetario,
+        resolucionFinal,
+      ) > 0
         ? { medios_diferencia: mediosPago.map(normalizarMedioPago) }
         : {}),
     }
   }
 
+  const resolucionDineroFinal = consumidorFinal ? "DEVOLVER_DINERO" : resolucionDinero
+
   return {
     ...previewPayload,
     motivo,
     motivo_forzado: "",
-    resolucion_dinero: resolucionDinero,
-    ...(direccionMediosPostventa(resolucionDinero)
+    resolucion_dinero: resolucionDineroFinal,
+    ...(direccionMediosPostventa(resolucionDineroFinal)
       ? { medios: mediosPago.map(normalizarMedioPago) }
       : {}),
   }
@@ -950,6 +973,11 @@ const PostventaForm = ({
                           Objetivo: {formatMoney(montoObjetivo)}
                         </span>
                       </div>
+                      {direccionMedios === "salida" && !cuentasBanco.length && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-1.5 mb-2">
+                          Para habilitar devoluciones por Transferencia Bancaria, configure al menos una cuenta activa en la sección de Bancos.
+                        </p>
+                      )}
                       {metodosDisponibles.length === 0 ? (
                         <p className="text-xs text-red-700">
                           No hay medios habilitados para esta operacion. Verifica la caja abierta y las cuentas bancarias.

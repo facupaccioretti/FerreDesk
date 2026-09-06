@@ -159,6 +159,7 @@ const PresupuestosManager = () => {
     handleConvertirFacturaI,
     esFacturaInternaConvertible,
     handleNotaCredito,
+    handleNotaDebito,
     handlePostventa,
     setConversionModal,
     setVistaModal,
@@ -557,6 +558,7 @@ const PresupuestosManager = () => {
                         handleDelete,
                         handleConvertirFacturaI,
                         handleNotaCredito,
+                        handleNotaDebito,
                         handlePostventa,
                         handleVerTicket: (comprobante) => {
                           setSelectedTicketId(comprobante.id)

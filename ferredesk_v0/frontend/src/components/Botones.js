@@ -122,6 +122,21 @@ export const BotonNotaCredito = ({ onClick, title = 'Nota de Crédito', ...props
   </button>
 );
 
+export const BotonNotaDebito = ({ onClick, title = 'Nota de Débito', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-emerald-600 hover:text-emerald-800"
+    {...props}
+  >
+    <svg width="20" height="20" viewBox="0 0 48 48" className="w-5 h-5">
+      <rect x="6" y="6" width="36" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <text x="24" y="30" textAnchor="middle" className="fill-current font-bold text-lg">ND</text>
+    </svg>
+  </button>
+);
+
 export const BotonPostventa = ({ onClick, title = 'Cambios o devoluciones', ...props }) => (
   <button
     type="button"

@@ -5,7 +5,7 @@ jest.mock("./herramientasforms/plantillasComprobantes/helpers", () => ({
 }))
 
 import { esElegibleParaPostventa } from "./elegibilidadPostventa"
-import { BotonPostventa } from "../Botones"
+import { BotonPostventa, BotonNotaDebito } from "../Botones"
 import { generarBotonesComprobante } from "./ComprobantesList"
 
 describe("esElegibleParaPostventa", () => {
@@ -39,6 +39,7 @@ describe("generarBotonesComprobante", () => {
     handleDelete: jest.fn(),
     handleConvertirFacturaI: jest.fn(),
     handleNotaCredito: jest.fn(),
+    handleNotaDebito: jest.fn(),
     handlePostventa: jest.fn(),
   }
   const cotizacionCerrada = {
@@ -57,6 +58,16 @@ describe("generarBotonesComprobante", () => {
     expect(postventa).toBeDefined()
     postventa.onClick()
     expect(acciones.handlePostventa).toHaveBeenCalledWith(cotizacionCerrada)
+  })
+
+  it("incluye y ejecuta la accion de extension de contenido para cotizaciones cerradas", () => {
+    const botones = generarBotonesComprobante(cotizacionCerrada, acciones, false, null, () => false)
+    const extension = botones.find(({ componente }) => componente === BotonNotaDebito)
+
+    expect(extension).toBeDefined()
+    expect(extension.titulo).toBe("Crear Extensión de Contenido")
+    extension.onClick()
+    expect(acciones.handleNotaDebito).toHaveBeenCalledWith(cotizacionCerrada)
   })
 
   it.each([

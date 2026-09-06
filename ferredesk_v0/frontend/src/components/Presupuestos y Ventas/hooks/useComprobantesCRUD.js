@@ -680,6 +680,52 @@ const useComprobantesCRUD = ({
     updateTabData(newKey, label, data, "nota-credito");
   }
 
+  /**
+   * Crea una nota de débito / extensión de contenido a partir de una factura seleccionada
+   * @param {Object} factura - Datos de la factura para crear ND
+   */
+  const handleNotaDebito = async (factura) => {
+    if (!factura || !factura.id) return;
+
+    // Validar que sea una factura o cotización válida para ND
+    const esFacturaValida = factura.comprobante?.tipo === 'factura' ||
+      factura.comprobante?.tipo === 'venta' ||
+      factura.comprobante?.tipo === 'factura_interna';
+    const letraValida = ['A', 'B', 'C', 'I'].includes(factura.comprobante?.letra);
+    const estaCerrada = factura.estado === 'Cerrado';
+
+    if (!esFacturaValida || !letraValida) {
+      alert('Esta factura no puede tener una nota de débito asociada.');
+      return;
+    }
+
+    if (!estaCerrada) {
+      alert('Solo se pueden crear notas de débito para facturas cerradas.');
+      return;
+    }
+
+    // Obtener datos del cliente
+    const cliente = {
+      id: factura.ven_idcli || factura.cliente_id || factura.idcli,
+      razon: factura.cliente || factura.cliente_nombre || factura.cliente_razon || factura.nombre_cliente || '',
+      nombre: factura.cliente || factura.cliente_nombre || factura.cliente_razon || factura.nombre_cliente || '',
+      cuit: factura.cuit || factura.ven_cuit || factura.cliente_cuit || '',
+      domicilio: factura.domicilio || factura.ven_domicilio || factura.cliente_domicilio || '',
+      plazo_id: factura.ven_idpla || factura.plazo_id
+    };
+
+    // Crear tab de nota de débito con datos pre-seleccionados
+    const newKey = `nota-debito-${Date.now()}`;
+    const esInterna = factura.comprobante?.tipo === 'factura_interna' || factura.comprobante?.letra === 'I';
+    const label = esInterna ? `Extensión Contenido - ${factura.numero_formateado}` : `N. Débito - ${factura.numero_formateado}`;
+    const data = {
+      cliente: cliente,
+      facturas: [factura]
+    };
+
+    updateTabData(newKey, label, data, "nota-debito");
+  }
+
   const handlePostventa = (comprobante) => {
     if (!comprobante || !comprobante.id) return
 
@@ -721,6 +767,7 @@ const useComprobantesCRUD = ({
     // Funciones de utilidad
     esFacturaInternaConvertible,
     handleNotaCredito,
+    handleNotaDebito,
     handlePostventa,
 
     // Setters para estados

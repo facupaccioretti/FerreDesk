@@ -1,6 +1,6 @@
 import React from "react"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonPostventa } from "../Botones"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonNotaDebito, BotonPostventa } from "../Botones"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
 import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
@@ -54,6 +54,7 @@ export const generarBotonesComprobante = (comprobante, acciones, isFetchingForCo
     handleDelete,
     handleConvertirFacturaI,
     handleNotaCredito,
+    handleNotaDebito,
     handlePostventa,
   } = acciones
 
@@ -154,6 +155,13 @@ export const generarBotonesComprobante = (comprobante, acciones, isFetchingForCo
         titulo: comprobante.comprobante?.tipo === 'factura_interna'
           ? "Crear Modificación de Contenido"
           : "Crear Nota de Crédito"
+      },
+      {
+        componente: BotonNotaDebito,
+        onClick: () => handleNotaDebito && handleNotaDebito(comprobante),
+        titulo: comprobante.comprobante?.tipo === 'factura_interna'
+          ? "Crear Extensión de Contenido"
+          : "Crear Nota de Débito"
       },
     )
 

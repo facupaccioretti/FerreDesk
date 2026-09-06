@@ -2,8 +2,10 @@ import {
   buildConfirmPayload,
   buildItemsNuevosPayload,
   crearItemsOrigen,
+  esConsumidorFinal,
   filtrarMetodosPostventa,
   obtenerMontoObjetivo,
+  tieneEfectivoInsuficiente,
 } from "./PostventaForm"
 
 describe("PostventaForm payloads", () => {
@@ -99,6 +101,45 @@ describe("PostventaForm payloads", () => {
     expect(payload.medios_diferencia).toBeUndefined()
   })
 
+  test("obliga a consumidor final a devolver dinero", () => {
+    const previewData = {
+      venta_origen: { cliente_id: 1 },
+      resumen_monetario: {
+        direccion_diferencia: "CLIENTE_RECIBE",
+      },
+    }
+
+    expect(esConsumidorFinal(previewData)).toBe(true)
+    expect(buildConfirmPayload({
+      modo: "devolucion",
+      observacion: "Devolucion",
+      previewPayload: { venta_id: 10, items: [] },
+      previewData,
+      resolucionDinero: "SALDO_A_FAVOR",
+      mediosPago: [{ metodo_pago_id: 1, monto: "100.00" }],
+    })).toEqual(expect.objectContaining({
+      resolucion_dinero: "DEVOLVER_DINERO",
+      medios: [{ metodo_pago_id: 1, monto: "100.00" }],
+    }))
+  })
+
+  test("consumidor final no puede dejar deuda en un cambio", () => {
+    const payload = buildConfirmPayload({
+      modo: "cambio",
+      observacion: "Cambio",
+      previewPayload: { venta_id: 10, items_devueltos: [], items_nuevos: [] },
+      previewData: {
+        venta_origen: { cliente_id: "1" },
+        resumen_monetario: { direccion_diferencia: "CLIENTE_PAGA" },
+      },
+      resolucionDiferencia: "DEJAR_DEUDA",
+      mediosPago: [{ metodo_pago_id: 1, monto: "10.00" }],
+    })
+
+    expect(payload.resolucion_diferencia).toBe("COBRAR_DIFERENCIA")
+    expect(payload.medios_diferencia).toEqual([{ metodo_pago_id: 1, monto: "10.00" }])
+  })
+
   test("marca explicitamente un cambio sin diferencia", () => {
     const payload = buildConfirmPayload({
       modo: "cambio",
@@ -142,15 +183,40 @@ describe("PostventaForm payloads", () => {
     ], "salida", false, true)).toEqual([])
   })
 
-  test("devuelve solo el saldo restante despues de imputar la deuda de origen", () => {
+  test("advierte efectivo insuficiente sin tratar un saldo desconocido como cero", () => {
+    expect(tieneEfectivoInsuficiente("50.00", 50.01)).toBe(true)
+    expect(tieneEfectivoInsuficiente("50.00", 50)).toBe(false)
+    expect(tieneEfectivoInsuficiente(null, 50)).toBe(false)
+  })
+
+  test("devuelve solo el remanente despues de imputar la deuda de origen", () => {
     expect(obtenerMontoObjetivo("cambio", {
-      diferencia: "50.00",
-      saldo_pendiente_venta: "30.00",
-    }, "DEVOLVER_DINERO")).toBe(20)
+      diferencia: "60.00",
+      saldo_pendiente_venta: "25.00",
+    }, "DEVOLVER_DINERO")).toBe(35)
 
     expect(obtenerMontoObjetivo("cambio", {
-      diferencia: "50.00",
-      saldo_pendiente_venta: "80.00",
+      diferencia: "60.00",
+      saldo_pendiente_venta: "60.00",
     }, "DEVOLVER_DINERO")).toBe(0)
+  })
+
+  test("no envia medios cuando la deuda cubre todo el saldo a favor", () => {
+    const payload = buildConfirmPayload({
+      modo: "cambio",
+      observacion: "Cambio sin reintegro",
+      previewPayload: { venta_id: 10, items_devueltos: [], items_nuevos: [] },
+      previewData: {
+        resumen_monetario: {
+          diferencia: "60.00",
+          saldo_pendiente_venta: "60.00",
+          direccion_diferencia: "CLIENTE_RECIBE",
+        },
+      },
+      resolucionDiferencia: "DEVOLVER_DINERO",
+      mediosPago: [{ metodo_pago_id: 1, monto: "60.00" }],
+    })
+
+    expect(payload.medios_diferencia).toBeUndefined()
   })
 })
