@@ -285,7 +285,9 @@ class VentaSerializer(serializers.ModelSerializer):
         if not stock_ids:
             return {}
 
-        stocks = Stock.objects.filter(id__in=stock_ids).only('id', 'idaliiva_id')
+        stocks = Stock.objects.filter(id__in=stock_ids).only(
+            'id', 'idaliiva_id', 'proveedor_habitual_id'
+        )
         stock_map = {stock.id: stock for stock in stocks}
 
         for idx, item in enumerate(items_data, start=1):
@@ -312,6 +314,15 @@ class VentaSerializer(serializers.ModelSerializer):
         # VALIDACIÓN PARA NOTAS DE CRÉDITO: Verificar consistencia de letras
         if tipo_comprobante in ['nota_credito', 'nota_credito_interna'] and comprobantes_asociados_ids:
             facturas_asociadas = Venta.objects.filter(ven_id__in=comprobantes_asociados_ids)
+
+            if (
+                tipo_comprobante == 'nota_credito_interna'
+                and facturas_asociadas.filter(comprobante__tipo='factura_interna').exists()
+                and not self.context.get('origen_postventa')
+            ):
+                raise serializers.ValidationError({
+                    'tipo_comprobante': ['Use el flujo de postventa para devolver una cotizacion cerrada.']
+                })
             
             if facturas_asociadas.exists():
                 # NUEVA VALIDACIÓN: Verificar que solo se asocien facturas válidas
@@ -529,9 +540,11 @@ class VentaSerializer(serializers.ModelSerializer):
                     it['vdi_precio_unitario_final'] = Decimal('0')
             else:
                 # Ítem de producto real: completar alícuota desde Stock si falta
+                stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
                 if it.get('vdi_idaliiva') is None:
-                    stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
                     it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
+                if it.get('vdi_idpro') is None:
+                    it['vdi_idpro'] = stock_obj.proveedor_habitual_id
         # ----------------------------------------------------------------------------
 
         # Solo guardar los campos base de la venta
@@ -636,9 +649,11 @@ class VentaSerializer(serializers.ModelSerializer):
                         it['vdi_precio_unitario_final'] = Decimal('0')
                 else:
                     # Completar alícuota desde Stock si falta
+                    stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
                     if it.get('vdi_idaliiva') is None:
-                        stock_obj = stock_map.get(self._stock_id_desde_valor(it.get('vdi_idsto')))
                         it['vdi_idaliiva'] = stock_obj.idaliiva_id if stock_obj and stock_obj.idaliiva_id else 3
+                    if not it.get('id') and it.get('vdi_idpro') is None:
+                        it['vdi_idpro'] = stock_obj.proveedor_habitual_id
         # ----------------------------------------------------------------------------
 
         if items_data:

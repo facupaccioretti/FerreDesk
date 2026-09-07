@@ -75,6 +75,8 @@ services:
       BOOTSTRAP_AUTO_ACTIVATE: "true"
       GUNICORN_WORKERS: "2"
       GUNICORN_TIMEOUT: "120"
+      SESSION_COOKIE_DOMAIN: .lvh.me
+      CSRF_COOKIE_DOMAIN: .lvh.me
     command: ["/app/start.prod-local.sh"]
     volumes:
       - ./media:/app/media
@@ -109,6 +111,8 @@ services:
       RESEND_API_KEY: prod-local-dummy
       RESEND_API_URL: https://api.resend.com/emails
       RESEND_TIMEOUT: "3"
+      SESSION_COOKIE_DOMAIN: .lvh.me
+      CSRF_COOKIE_DOMAIN: .lvh.me
     command: ["python", "manage.py", "worker_tareas_pendientes"]
     volumes:
       - ./media:/app/media

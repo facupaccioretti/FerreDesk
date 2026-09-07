@@ -8,13 +8,12 @@ Verifica:
 - Endpoint mi-caja
 """
 
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from ..models import SesionCaja, ESTADO_CAJA_ABIERTA, ESTADO_CAJA_CERRADA
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
-class SesionCajaAPITests(APITestCase, CajaTestMixin):
+class SesionCajaAPITests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para los endpoints de la API de sesiones de caja."""
     
     @classmethod
@@ -24,13 +23,14 @@ class SesionCajaAPITests(APITestCase, CajaTestMixin):
     
     def setUp(self):
         """Configuración antes de cada test."""
-        self.client = APIClient()
+        super().setUp()
         self.client.force_authenticate(user=self.usuario)
     
     def tearDown(self):
         """Limpieza después de cada test."""
         # Limpiar sesiones creadas durante el test
         SesionCaja.objects.filter(usuario=self.usuario).delete()
+        super().tearDown()
     
     def test_abrir_caja(self):
         """Verifica que se puede abrir una caja via API."""
@@ -127,3 +127,26 @@ class SesionCajaAPITests(APITestCase, CajaTestMixin):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('No tiene ninguna caja abierta', str(response.data))
+
+    def test_sesion_no_admite_edicion_generica(self):
+        self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '1000.00'}, format='json')
+        sesion = SesionCaja.objects.get(usuario=self.usuario, estado=ESTADO_CAJA_ABIERTA)
+
+        response = self.client.patch(
+            f'/api/caja/sesiones/{sesion.pk}/',
+            {'saldo_inicial': '999999.00'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        sesion.refresh_from_db()
+        self.assertEqual(sesion.saldo_inicial, 1000)
+
+    def test_sesion_no_admite_borrado_generico(self):
+        self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '1000.00'}, format='json')
+        sesion = SesionCaja.objects.get(usuario=self.usuario, estado=ESTADO_CAJA_ABIERTA)
+
+        response = self.client.delete(f'/api/caja/sesiones/{sesion.pk}/')
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(SesionCaja.objects.filter(pk=sesion.pk).exists())

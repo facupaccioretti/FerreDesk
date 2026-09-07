@@ -3,10 +3,11 @@
 set -eu
 
 echo "Iniciando FerreDesk en modo productivo."
-echo "El arranque productivo no ejecuta migraciones ni bootstrap local."
 echo "Ejecutando collectstatic para publicar assets del build React."
-
 python manage.py collectstatic --noinput
+
+echo "Ejecutando migraciones de base de datos..."
+python manage.py migrate_schemas --noinput
 
 if [ "${ENABLE_EMBEDDED_WORKER:-false}" = "true" ]; then
   echo "Iniciando Worker Centralizado en segundo plano..."

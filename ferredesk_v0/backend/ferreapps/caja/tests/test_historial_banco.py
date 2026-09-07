@@ -1,9 +1,8 @@
 from decimal import Decimal
-from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework import status
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 from .utils_tests import TestDataHelper
 from ..models import (
     CuentaBanco,
@@ -13,7 +12,7 @@ from ..models import (
     CODIGO_TRANSFERENCIA,
 )
 
-class HistorialBancoTests(TestCase, CajaTestMixin):
+class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para la protección de eliminación e historial de bancos."""
 
     @classmethod
@@ -194,3 +193,54 @@ class HistorialBancoTests(TestCase, CajaTestMixin):
         url = f'/api/caja/cuentas-banco/{self.banco.id}/historial/?fecha_desde={desde_viejisimo}'
         response = self.client.get(url)
         self.assertEqual(len(response.data['movimientos']), 2)
+
+    def test_historial_clasifica_devolucion_postventa_como_egreso(self):
+        from ferreapps.ventas.models import Venta
+
+        ahora = timezone.now()
+        base_data = TestDataHelper.setup_base_venta_data()
+        venta = Venta.objects.create(
+            ven_sucursal=1,
+            ven_fecha=ahora.date(),
+            comprobante=base_data['comprobante'],
+            ven_punto=1,
+            ven_numero=2,
+            ven_descu1=0,
+            ven_descu2=0,
+            ven_descu3=0,
+            ven_vdocomvta=0,
+            ven_vdocomcob=0,
+            ven_estado='CO',
+            ven_idcli=base_data['cliente'],
+            ven_idpla=base_data['plazo'],
+            ven_idvdo=base_data['vendedor'],
+            ven_copia=1,
+        )
+        import uuid
+        from ferreapps.ventas.models import PostventaOperacion
+        operacion = PostventaOperacion.objects.create(
+            operacion_uid=uuid.uuid4(),
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            venta_origen=venta,
+            usuario=self.usuario,
+            motivo="Auditoria test",
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+            resolucion_dinero=PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            postventa_operacion=operacion,
+            metodo_pago=self.metodo_transfer,
+            cuenta_banco=self.banco,
+            monto=Decimal('125.00'),
+            tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        )
+
+        self.client.force_login(self.usuario)
+        response = self.client.get(f'/api/caja/cuentas-banco/{self.banco.id}/historial/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['movimientos'][0]['tipo'], 'EGRESO')
+        self.assertEqual(response.data['movimientos'][0]['origen'], 'Devolucion a cliente')
+        self.assertEqual(Decimal(response.data['total_ingresos']), Decimal('0.00'))
+        self.assertEqual(Decimal(response.data['total_egresos']), Decimal('125.00'))

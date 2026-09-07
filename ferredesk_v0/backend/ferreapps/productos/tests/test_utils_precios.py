@@ -1,7 +1,8 @@
 """
 Tests para las funciones utilitarias de cálculo de precios.
 """
-from django.test import TestCase
+from django.db.models import Max
+from django.test import SimpleTestCase
 from decimal import Decimal
 from datetime import date
 
@@ -15,9 +16,10 @@ from ferreapps.productos.utils_precios import (
     calcular_precio_desde_lista_0,
     calcular_margen_desde_precios
 )
+from ferreapps.ventas.tests import VentasTenantTestCase
 
 
-class CalculosPreciosTest(TestCase):
+class CalculosPreciosTest(SimpleTestCase):
     """Tests para funciones de cálculo puro (sin base de datos)."""
     
     def test_calcular_precio_desde_lista_0_con_recargo(self):
@@ -55,11 +57,12 @@ class CalculosPreciosTest(TestCase):
         self.assertEqual(margen, Decimal('-20.00'))
 
 
-class RecalculoPrecioLista0Test(TestCase):
+class RecalculoPrecioLista0Test(VentasTenantTestCase):
     """Tests para la función recalcular_precio_lista_0."""
     
     def setUp(self):
         """Configura datos de prueba."""
+        super().setUp()
         self.proveedor = Proveedor.objects.create(
             razon='Proveedor Utils Test',
             fantasia='Utils Test',
@@ -70,12 +73,9 @@ class RecalculoPrecioLista0Test(TestCase):
             sigla='UTL'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
+        self.alicuota = self.alicuota_iva_21
         
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        max_id = Stock.objects.aggregate(max_id=Max('id'))['max_id'] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='UTILS001',
@@ -115,10 +115,9 @@ class RecalculoPrecioLista0Test(TestCase):
         self.producto.refresh_from_db()
         self.assertEqual(self.producto.precio_lista_0, Decimal('1500.00'))
     
-    def test_recalcular_precio_lista_0_sin_proveedor_habitual(self):
-        """Verifica que retorna False si no hay proveedor habitual."""
-        self.producto.proveedor_habitual = None
-        self.producto.save()
+    def test_recalcular_precio_lista_0_sin_costo_del_proveedor(self):
+        """Verifica que retorna False si falta el costo del proveedor habitual."""
+        self.stock_prove.delete()
         
         resultado = recalcular_precio_lista_0(self.producto.id)
         self.assertFalse(resultado)
@@ -129,11 +128,12 @@ class RecalculoPrecioLista0Test(TestCase):
         self.assertFalse(resultado)
 
 
-class RecalculoPreciosListaTest(TestCase):
+class RecalculoPreciosListaTest(VentasTenantTestCase):
     """Tests para la función recalcular_precios_lista."""
     
     def setUp(self):
         """Configura datos de prueba."""
+        super().setUp()
         self.proveedor = Proveedor.objects.create(
             razon='Proveedor Recalculo Test',
             fantasia='Recalculo Test',
@@ -144,12 +144,9 @@ class RecalculoPreciosListaTest(TestCase):
             sigla='RCL'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
+        self.alicuota = self.alicuota_iva_21
         
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        max_id = Stock.objects.aggregate(max_id=Max('id'))['max_id'] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='RECALC001',

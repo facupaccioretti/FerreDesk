@@ -1,7 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
 
 from ferreapps.caja.models import (
@@ -17,7 +19,11 @@ from ferreapps.caja.models import (
     TIPO_MOVIMIENTO_SALIDA,
 )
 from ferreapps.caja.services import build_control_fondos_payload
-from ferreapps.caja.services.control_fondos import invalidate_control_fondos_cache
+from ferreapps.caja.services.control_fondos import (
+    build_recent_activity_metrics,
+    get_control_fondos_cache_version,
+    invalidate_control_fondos_cache,
+)
 from ferreapps.caja.tests.mixins import CajaTenantTestCase, CajaTestMixin
 from ferreapps.caja.tests.utils_tests import TestDataHelper
 from ferreapps.cuenta_corriente.models import OrdenPago, Recibo
@@ -74,6 +80,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("300.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_VENTA,
         )
 
         proveedor = TestDataHelper.crear_proveedor(razon="Proveedor Control Fondos")
@@ -90,6 +97,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("120.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
         )
 
         Cheque.objects.create(
@@ -121,6 +129,57 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(kpis["pendiente_acreditacion"]["monto"], "700.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "1680.00")
         self.assertEqual(kpis["total_administrado"]["monto"], "2380.00")
+
+    def test_bancos_respeta_signos_de_cobros_vueltos_recibos_y_ordenes_pago(self):
+        venta = self._crear_venta(2007)
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("200.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_VENTA,
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("50.00"),
+            es_vuelto=True,
+            tipo_operacion=PagoVenta.TIPO_VUELTO_VENTA,
+        )
+        recibo = Recibo.objects.create(
+            rec_fecha=timezone.now().date(),
+            rec_numero="REC-CF-001",
+            rec_cliente=self.base_data["cliente"],
+            rec_total=Decimal("70.00"),
+            rec_usuario=self.usuario,
+        )
+        PagoVenta.objects.create(
+            recibo=recibo,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("70.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_RECIBO,
+        )
+        proveedor = TestDataHelper.crear_proveedor(razon="Proveedor Signos Fondos")
+        orden_pago = OrdenPago.objects.create(
+            op_fecha=timezone.now().date(),
+            op_numero="OP-CF-002",
+            op_proveedor=proveedor,
+            op_total=Decimal("20.00"),
+            op_usuario=self.usuario,
+        )
+        PagoVenta.objects.create(
+            orden_pago=orden_pago,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("20.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+        )
+
+        payload = build_control_fondos_payload()
+
+        self.assertEqual(payload["resumen_actual"]["kpis"]["bancos"]["monto"], "200.00")
 
     def test_disponible_hoy_excluye_cheques_en_cartera_y_depositados(self):
         Cheque.objects.create(
@@ -207,6 +266,26 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
 
         self.assertEqual(kpis["bancos"]["monto"], "0.00")
         self.assertEqual(kpis["disponible_hoy"]["monto"], "0.00")
+
+    def test_bancos_incluye_ventas_cerradas_y_excluye_presupuestos_abiertos(self):
+        venta_cerrada = self._crear_venta(2005, estado="CE")
+        PagoVenta.objects.create(
+            venta=venta_cerrada,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("100.00"),
+        )
+        venta_abierta = self._crear_venta(2006, estado="AB")
+        PagoVenta.objects.create(
+            venta=venta_abierta,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("200.00"),
+        )
+
+        payload = build_control_fondos_payload()
+
+        self.assertEqual(payload["resumen_actual"]["kpis"]["bancos"]["monto"], "100.00")
 
     def test_caja_usa_solo_sesiones_abiertas_con_saldo_teorico_real(self):
         metodo_efectivo, _ = MetodoPago.objects.get_or_create(
@@ -347,12 +426,81 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             ]
 
             primer_payload = build_control_fondos_payload()
-            invalidate_control_fondos_cache(reason="test")
+            with self.captureOnCommitCallbacks(execute=True):
+                invalidate_control_fondos_cache(reason="test")
             segundo_payload = build_control_fondos_payload()
 
         self.assertEqual(primer_payload["resumen_actual"]["kpis"]["caja"]["monto"], "1.00")
         self.assertEqual(segundo_payload["resumen_actual"]["kpis"]["caja"]["monto"], "2.00")
         self.assertEqual(build_uncached.call_count, 2)
+
+    def test_invalidacion_de_cache_solo_ocurre_despues_del_commit(self):
+        version_inicial = get_control_fondos_cache_version()
+
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                invalidate_control_fondos_cache(reason="rollback")
+                raise RuntimeError("forzar rollback")
+
+        self.assertEqual(get_control_fondos_cache_version(), version_inicial)
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with transaction.atomic():
+                invalidate_control_fondos_cache(reason="commit")
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(get_control_fondos_cache_version(), version_inicial + 1)
+
+    def test_actividad_reciente_no_duplica_efectivo_y_signa_devoluciones(self):
+        efectivo, _ = MetodoPago.objects.get_or_create(
+            codigo=CODIGO_EFECTIVO,
+            defaults={"nombre": "Efectivo", "afecta_arqueo": False, "activo": True},
+        )
+        sesion = self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("100.00"))
+        import uuid
+        from ferreapps.ventas.models import PostventaOperacion
+        venta = self._crear_venta(2010, sesion_caja=sesion)
+        operacion = PostventaOperacion.objects.create(
+            operacion_uid=uuid.uuid4(),
+            tipo=PostventaOperacion.TIPO_DEVOLUCION,
+            venta_origen=venta,
+            usuario=self.usuario,
+            motivo="Auditoria test",
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+            resolucion_dinero=PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            postventa_operacion=operacion,
+            metodo_pago=efectivo,
+            monto=Decimal("20.00"),
+            tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        )
+        MovimientoCaja.objects.create(
+            sesion_caja=sesion,
+            usuario=self.usuario,
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            monto=Decimal("20.00"),
+            descripcion="Devolucion efectivo",
+        )
+        PagoVenta.objects.create(
+            venta=venta,
+            postventa_operacion=operacion,
+            metodo_pago=self.metodo_transferencia,
+            cuenta_banco=self.banco,
+            monto=Decimal("30.00"),
+            tipo_operacion=PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+        )
+
+        metricas = build_recent_activity_metrics(
+            fecha_desde=timezone.now() - timedelta(days=1),
+            fecha_hasta=timezone.now() + timedelta(days=1),
+        )
+
+        self.assertEqual(metricas["total_registros"], 2)
+        self.assertEqual(metricas["total_monto"], "-50.00")
+        self.assertEqual(metricas["total_caja"], "-20.00")
+        self.assertEqual(metricas["total_fuera_caja"], "-30.00")
 
     def test_payload_con_bloque_reciente_mantiene_shape_y_formulas_principales(self):
         self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal("400.00"))

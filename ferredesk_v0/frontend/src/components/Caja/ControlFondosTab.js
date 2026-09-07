@@ -308,6 +308,7 @@ const ControlFondosTab = ({ onDrilldown, focusView = "resumen" }) => {
 
   return (
     <div className="space-y-3">
+      <h2 className="sr-only">Control de Fondos</h2>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {resumenKpis.map(({ codigo, data }) => (
           <KpiCell

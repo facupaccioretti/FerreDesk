@@ -113,8 +113,7 @@ export function useAuthAPI() {
     document.body.appendChild(form);
     form.submit();
 
-    // Promesa pendiente; la recarga navegara hacia el tenant
-    return new Promise(() => {});
+    return { redirectTo: new URL("/", tenantUrl).toString() };
   }, []);
 
   return {

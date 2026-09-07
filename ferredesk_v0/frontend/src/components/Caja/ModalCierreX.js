@@ -85,12 +85,16 @@ const ModalCierreX = ({ sesion, resumen, onCerrar }) => {
 
           {resumen?.totales_por_metodo?.length > 0 && (
             <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-              <h4 className="text-xs font-semibold text-slate-600 mb-2">Cobros por método</h4>
+              <h4 className="text-xs font-semibold text-slate-600 mb-2">Pagos por metodo</h4>
               <ul className="space-y-1 text-xs">
                 {resumen.totales_por_metodo.map((item, index) => (
                   <li key={index} className="flex justify-between">
                     <span className="text-slate-600">{item.metodo_pago__nombre}</span>
-                    <span className="font-medium text-slate-800">${formatMoney(item.total)}</span>
+                    <span className="font-medium text-slate-800">
+                      <span className="text-green-700">+${formatMoney(item.total_ingresos)}</span>{" "}
+                      <span className="text-red-700">-${formatMoney(item.total_egresos)}</span>{" "}
+                      Neto ${formatMoney(item.total)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -107,7 +111,11 @@ const ModalCierreX = ({ sesion, resumen, onCerrar }) => {
                       {item.cuenta_banco__nombre || "Sin banco"}{" "}
                       <span className="text-slate-400">({item.metodo_pago__nombre})</span>
                     </span>
-                    <span className="font-medium text-slate-800">${formatMoney(item.total)}</span>
+                    <span className="font-medium text-slate-800">
+                      <span className="text-green-700">+${formatMoney(item.total_ingresos)}</span>{" "}
+                      <span className="text-red-700">-${formatMoney(item.total_egresos)}</span>{" "}
+                      Neto ${formatMoney(item.total)}
+                    </span>
                   </li>
                 ))}
               </ul>

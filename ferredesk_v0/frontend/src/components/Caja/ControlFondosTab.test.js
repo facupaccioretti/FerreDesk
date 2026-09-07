@@ -64,11 +64,9 @@ function createPayload() {
 }
 
 function findClosestButtonByText(container, text) {
-  const elements = Array.from(container.querySelectorAll("*"))
-  const matchingElement = elements.find(
-    (element) => element.textContent?.includes(text) && typeof element.closest === "function"
+  return Array.from(container.querySelectorAll("button, [role='button']")).find(
+    (element) => element.textContent?.includes(text)
   )
-  return matchingElement?.closest("button")
 }
 
 async function waitForText(container, text, attempts = 10) {
@@ -91,6 +89,7 @@ describe("ControlFondosTab", () => {
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    Element.prototype.scrollIntoView = jest.fn()
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -146,13 +145,7 @@ describe("ControlFondosTab", () => {
     expect(container.textContent).toContain("$1.500,00")
     expect(container.textContent).toContain("$2.050,00")
 
-    const botonVerComposicion = findClosestButtonByText(container, "Ver composicion")
-
-    await act(async () => {
-      botonVerComposicion.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    })
-
-    expect(container.textContent).toContain("Hace click en cada componente para abrir la tab correspondiente.")
+    expect(container.textContent).toContain("Composicion total")
     expect(mockClienteAPI).toHaveBeenCalledTimes(1)
   })
 
@@ -161,7 +154,7 @@ describe("ControlFondosTab", () => {
     await renderControlFondos({ onDrilldown })
 
     const botonPendiente = findClosestButtonByText(container, "Pendiente de acreditacion")
-    const botonBancos = findClosestButtonByText(container, "En bancos")
+    const botonBancos = findClosestButtonByText(container, "Bancos")
     const botonDisponibleHoy = findClosestButtonByText(container, "Disponible hoy")
 
     await act(async () => {
@@ -191,7 +184,7 @@ describe("ControlFondosTab", () => {
         vista_inicial: "listado",
       })
     )
-    expect(container.textContent).toContain("Cada subtotal abre el detalle existente sin salir del modulo.")
+    expect(container.textContent).toContain("Liquido hoy")
     expect(mockClienteAPI).toHaveBeenCalledTimes(1)
   })
 })

@@ -145,6 +145,17 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
             ven_copia=1,
             sesion_caja=self.sesion
         )
+
+    def test_vuelto_rechaza_un_medio_distinto_de_efectivo(self):
+        from ..utils import registrar_vuelto
+
+        with self.assertRaises(ValidationError):
+            registrar_vuelto(
+                venta=self.venta,
+                sesion_caja=self.sesion,
+                monto_vuelto=Decimal('10.00'),
+                metodo_pago_id=self.metodo_transferencia.id,
+            )
     
     def tearDown(self):
         """Limpieza después de cada test."""
@@ -338,8 +349,6 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
 
         movimientos = MovimientoCaja.objects.filter(sesion_caja=self.sesion)
         self.assertEqual(movimientos.count(), 1)
-        # FIX: el MovimientoCaja ENTRADA debe ser el BRUTO recibido (500), no el neto (400).
-        # El vuelto ($100) se registraría como SALIDA separada. 500 - 100 = 400 en caja = correcto.
         self.assertEqual(movimientos[0].monto, Decimal('500.00'))
 
     

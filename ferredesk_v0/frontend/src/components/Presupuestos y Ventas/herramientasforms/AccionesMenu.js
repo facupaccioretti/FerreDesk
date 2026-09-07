@@ -1,6 +1,6 @@
 "use client"
 
-import { BotonEditar, BotonEliminar, BotonDesactivar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonImprimir, BotonMarcarRechazado, BotonEndosar, BotonDepositar, BotonReactivar, BotonAcreditar } from "../../Botones"
+import { BotonEditar, BotonEliminar, BotonDesactivar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonNotaDebito, BotonImprimir, BotonMarcarRechazado, BotonEndosar, BotonDepositar, BotonReactivar, BotonAcreditar } from "../../Botones"
 import usePortalTooltip from "./usePortalTooltip"
 
 /**
@@ -78,14 +78,15 @@ const AccionesMenu = ({
                                 boton.componente === BotonGenerarPDF ? 'text-red-500' :
                                   boton.componente === BotonVerDetalle ? 'text-slate-600' :
                                     boton.componente === BotonNotaCredito ? 'text-orange-500' :
-                                      boton.componente === BotonImprimir ? 'text-slate-600' :
-                                        boton.componente === BotonDesactivar ? 'text-slate-500' :
-                                          boton.componente === BotonMarcarRechazado ? 'text-red-500' :
-                                            boton.componente === BotonEndosar ? 'text-indigo-500' :
-                                              boton.componente === BotonDepositar ? 'text-orange-500' :
-                                                boton.componente === BotonReactivar ? 'text-green-500' :
-                                                  boton.componente === BotonAcreditar ? 'text-emerald-500' :
-                                                    'text-slate-600'
+                                      boton.componente === BotonNotaDebito ? 'text-emerald-600' :
+                                        boton.componente === BotonImprimir ? 'text-slate-600' :
+                                          boton.componente === BotonDesactivar ? 'text-slate-500' :
+                                            boton.componente === BotonMarcarRechazado ? 'text-red-500' :
+                                              boton.componente === BotonEndosar ? 'text-indigo-500' :
+                                                boton.componente === BotonDepositar ? 'text-orange-500' :
+                                                  boton.componente === BotonReactivar ? 'text-green-500' :
+                                                    boton.componente === BotonAcreditar ? 'text-emerald-500' :
+                                                      'text-slate-600'
                           }`}
                       />
                     </div>

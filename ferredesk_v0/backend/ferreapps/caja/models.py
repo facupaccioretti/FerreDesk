@@ -167,6 +167,13 @@ class SesionCaja(models.Model):
             models.Index(fields=['fecha_hora_inicio']),
             models.Index(fields=['sucursal', 'estado']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario'],
+                condition=models.Q(estado=ESTADO_CAJA_ABIERTA),
+                name='caja_una_sesion_abierta_por_usuario',
+            ),
+        ]
 
     def __str__(self):
         estado_str = 'Abierta' if self.estado == ESTADO_CAJA_ABIERTA else 'Cerrada'
@@ -229,6 +236,12 @@ class MovimientoCaja(models.Model):
         validators=[MinValueValidator(Decimal('0.01'))],
         help_text='Monto del movimiento (siempre positivo)'
     )
+
+    afecta_efectivo = models.BooleanField(
+        db_column='MOV_AFECTA_EFECTIVO',
+        default=True,
+        help_text='Indica si el movimiento modifica el efectivo del arqueo'
+    )
     
     # Descripción del movimiento
     descripcion = models.CharField(
@@ -254,6 +267,17 @@ class MovimientoCaja(models.Model):
             models.Index(fields=['tipo']),
             models.Index(fields=['fecha_hora']),
             models.Index(fields=['sesion_caja', 'tipo'], name='caja_mov_sesion_tipo_idx'),
+            models.Index(fields=['sesion_caja', 'afecta_efectivo'], name='caja_mov_sesion_efe_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(monto__gt=0),
+                name='caja_mov_monto_positivo',
+            ),
+            models.CheckConstraint(
+                check=models.Q(tipo__in=[TIPO_MOVIMIENTO_ENTRADA, TIPO_MOVIMIENTO_SALIDA]),
+                name='caja_mov_tipo_valido',
+            ),
         ]
 
     def __str__(self):
@@ -354,7 +378,24 @@ class PagoVenta(models.Model):
     - referencia_externa: Para guardar ID de transacción de tarjeta/transferencia
     """
     
+    TIPO_COBRO_VENTA = "COBRO_VENTA"
+    TIPO_VUELTO_VENTA = "VUELTO_VENTA"
+    TIPO_DEVOLUCION_CLIENTE = "DEVOLUCION_CLIENTE"
+    TIPO_COBRO_DIFERENCIA_CAMBIO = "COBRO_DIFERENCIA_CAMBIO"
+    TIPO_COBRO_RECIBO = "COBRO_RECIBO"
+    TIPO_PAGO_ORDEN_PAGO = "PAGO_ORDEN_PAGO"
+
     id = models.AutoField(primary_key=True, db_column='PAG_ID')
+
+    sesion_caja = models.ForeignKey(
+        SesionCaja,
+        on_delete=models.PROTECT,
+        db_column='PAG_SESION_CAJA_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Sesion de caja que registro el evento de pago'
+    )
     
     # Venta a la que pertenece este pago
     venta = models.ForeignKey(
@@ -388,6 +429,16 @@ class PagoVenta(models.Model):
         blank=True,
         help_text='Orden de Pago a la que corresponde este pago'
     )
+
+    postventa_operacion = models.ForeignKey(
+        'ventas.PostventaOperacion',
+        on_delete=models.PROTECT,
+        db_column='PAG_POSTVENTA_ID',
+        related_name='pagos',
+        null=True,
+        blank=True,
+        help_text='Operacion de postventa asociada al pago'
+    )
     
     # Método de pago utilizado
     metodo_pago = models.ForeignKey(
@@ -402,7 +453,7 @@ class PagoVenta(models.Model):
     # Se usa string para evitar dependencia de orden de declaración de modelos.
     cuenta_banco = models.ForeignKey(
         'CuentaBanco',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         db_column='cuenta_banco_id',
@@ -425,6 +476,13 @@ class PagoVenta(models.Model):
         db_column='PAG_ES_VUELTO',
         default=False,
         help_text='True si este registro representa el vuelto dado al cliente'
+    )
+
+    tipo_operacion = models.CharField(
+        max_length=40,
+        db_column='PAG_TIPO_OPERACION',
+        default=TIPO_COBRO_VENTA,
+        help_text='Clasifica el sentido economico del pago'
     )
     
     # Referencia externa (para tarjetas: ID transacción, para transfer: CBU destino, etc.)
@@ -472,6 +530,73 @@ class PagoVenta(models.Model):
             models.Index(fields=['metodo_pago']),
             models.Index(fields=['fecha_hora']),
             models.Index(fields=['cuenta_banco', 'es_vuelto'], name='caja_pag_cuenta_vuelto_idx'),
+            models.Index(fields=['tipo_operacion']),
+            models.Index(fields=['sesion_caja', 'tipo_operacion'], name='caja_pag_sesion_tipo_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(monto__gt=0),
+                name='caja_pago_monto_positivo',
+            ),
+            models.CheckConstraint(
+                check=models.Q(monto_recibido__isnull=True) | models.Q(monto_recibido__gte=models.F('monto')),
+                name='caja_pago_bruto_mayor_neto',
+            ),
+            models.CheckConstraint(
+                check=models.Q(tipo_operacion__in=[
+                    'COBRO_VENTA',
+                    'VUELTO_VENTA',
+                    'DEVOLUCION_CLIENTE',
+                    'COBRO_DIFERENCIA_CAMBIO',
+                    'COBRO_RECIBO',
+                    'PAGO_ORDEN_PAGO',
+                ]),
+                name='caja_pago_tipo_valido',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(venta__isnull=False, recibo__isnull=True, orden_pago__isnull=True)
+                    | models.Q(venta__isnull=True, recibo__isnull=False, orden_pago__isnull=True)
+                    | models.Q(venta__isnull=True, recibo__isnull=True, orden_pago__isnull=False)
+                ),
+                name='caja_pago_origen_unico',
+            ),
+            models.CheckConstraint(
+                check=models.Q(postventa_operacion__isnull=True) | models.Q(venta__isnull=False),
+                name='caja_pago_postventa_con_venta',
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        tipo_operacion__in=['COBRO_VENTA', 'VUELTO_VENTA'],
+                        venta__isnull=False,
+                        recibo__isnull=True,
+                        orden_pago__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_operacion__in=['DEVOLUCION_CLIENTE', 'COBRO_DIFERENCIA_CAMBIO'],
+                        venta__isnull=False,
+                        recibo__isnull=True,
+                        orden_pago__isnull=True,
+                        postventa_operacion__isnull=False,
+                    )
+                    | models.Q(
+                        tipo_operacion='COBRO_RECIBO',
+                        venta__isnull=True,
+                        recibo__isnull=False,
+                        orden_pago__isnull=True,
+                        postventa_operacion__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_operacion='PAGO_ORDEN_PAGO',
+                        venta__isnull=True,
+                        recibo__isnull=True,
+                        orden_pago__isnull=False,
+                        postventa_operacion__isnull=True,
+                    )
+                ),
+                name='caja_pago_tipo_origen_coherente',
+            ),
         ]
 
     def clean(self):

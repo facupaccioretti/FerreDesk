@@ -36,7 +36,9 @@ class CajaTenantTestCase(TenantTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.setUpTestData()
+        preparar_datos = getattr(cls, 'setUpTestData', None)
+        if preparar_datos:
+            preparar_datos()
 
     @classmethod
     def _test_slug(cls):

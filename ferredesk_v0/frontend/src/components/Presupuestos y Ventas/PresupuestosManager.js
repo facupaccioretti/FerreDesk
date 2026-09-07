@@ -24,6 +24,7 @@ import ClienteSelectorModal from "../Clientes/ClienteSelectorModal"
 import FacturaSelectorModal from "./herramientasforms/FacturaSelectorModal"
 import NotaCreditoForm from "./NotaCreditoForm"
 import NotaDebitoForm from "./NotaDebitoForm"
+import PostventaForm from "./PostventaForm"
 import { useGeneradorPDF } from "./herramientasforms/plantillasComprobantes/PDF/useGeneradorPDF"
 import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
 import useTabsManager from "./hooks/useTabsManager"
@@ -158,6 +159,8 @@ const PresupuestosManager = () => {
     handleConvertirFacturaI,
     esFacturaInternaConvertible,
     handleNotaCredito,
+    handleNotaDebito,
+    handlePostventa,
     setConversionModal,
     setVistaModal,
   } = useComprobantesCRUD({
@@ -555,6 +558,8 @@ const PresupuestosManager = () => {
                         handleDelete,
                         handleConvertirFacturaI,
                         handleNotaCredito,
+                        handleNotaDebito,
+                        handlePostventa,
                         handleVerTicket: (comprobante) => {
                           setSelectedTicketId(comprobante.id)
                           setTicketModalOpen(true)
@@ -593,6 +598,7 @@ const PresupuestosManager = () => {
                 {(activeTab.startsWith("nuevo-") ||
                   activeTab.startsWith("editar") ||
                   activeTab.startsWith("nueva-venta-") ||
+                  activeTab.startsWith("postventa-") ||
                   activeTab.startsWith("nota-credito-") ||
                   activeTab.startsWith("nota-debito-")) &&
                   !activeTab.startsWith("nuevo-vendedor") &&
@@ -672,6 +678,18 @@ const PresupuestosManager = () => {
                       autoSumarDuplicados={autoSumarDuplicados}
                       setAutoSumarDuplicados={setAutoSumarDuplicados}
                       ItemsGrid={ItemsGrid}
+                    />
+                  ) : activeTab.startsWith("postventa-") ? (
+                    <PostventaForm
+                      key={activeTab}
+                      comprobante={activeTabData?.comprobanteOrigen || activeTabData}
+                      onCancel={() => closeTab(activeTab)}
+                      onSuccess={async () => {
+                        await fetchVentas()
+                        closeTab(activeTab)
+                      }}
+                      autoSumarDuplicados={autoSumarDuplicados}
+                      setAutoSumarDuplicados={setAutoSumarDuplicados}
                     />
                   ) : activeTab.startsWith("nota-credito-") ? (
                     <NotaCreditoForm

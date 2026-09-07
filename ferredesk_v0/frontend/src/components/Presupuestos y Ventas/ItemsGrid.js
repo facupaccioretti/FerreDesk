@@ -32,6 +32,7 @@ const ItemsGridPresupuesto = forwardRef(
       setDescu2 = () => { },
       setDescu3 = () => { },
       readOnly = false,
+      mostrarControlesFinancieros = true,
       listaPrecioId = 0,
       listasPrecio = [],
     },
@@ -98,6 +99,7 @@ const ItemsGridPresupuesto = forwardRef(
     return (
       <div className="space-y-4 w-full">
         {/* ── Barra de controles: bonificación, descuentos, modo lector, totales ── */}
+        {mostrarControlesFinancieros && (
         <div className="grid gap-4 mb-2 items-end" style={{ gridTemplateColumns: 'auto auto auto 1fr' }}>
           {/* Bonificación general */}
           <div>
@@ -246,6 +248,7 @@ const ItemsGridPresupuesto = forwardRef(
             </div>
           </div>
         </div>
+        )}
 
         {/* ── Tabla de ítems ── */}
         <div className="w-full">
@@ -259,8 +262,8 @@ const ItemsGridPresupuesto = forwardRef(
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-14">Unidad</th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-12">Cantidad</th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-32">Precio Unitario</th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-16">Bonif. %</th>
-                  <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">Precio Unit Bonif.</th>
+                  {mostrarControlesFinancieros && <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-16">Bonif. %</th>}
+                  {mostrarControlesFinancieros && <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">Precio Unit Bonif.</th>}
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-20">IVA %</th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-24">Total</th>
                   <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-200 uppercase tracking-wider w-10">Acciones</th>
@@ -391,7 +394,7 @@ const ItemsGridPresupuesto = forwardRef(
                           placeholder={row.producto ? "" : ""}
                         />
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
+                      {mostrarControlesFinancieros && <td className="px-3 py-3 whitespace-nowrap">
                         <input
                           type="number"
                           value={row.bonificacion}
@@ -411,14 +414,14 @@ const ItemsGridPresupuesto = forwardRef(
                           readOnly={row.esBloqueado}
                           ref={(el) => (bonificacionRefs.current[idx] = el)}
                         />
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
+                      </td>}
+                      {mostrarControlesFinancieros && <td className="px-3 py-3 whitespace-nowrap">
                         <div className="w-full px-3 py-2 text-sky-600 min-h-[38px] flex items-center font-semibold">
                           {(row.producto || (row.denominacion && row.denominacion.trim() !== ""))
                             ? `$${Number(precioBonificado.toFixed(2)).toLocaleString()}`
                             : ""}
                         </div>
-                      </td>
+                      </td>}
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">
                         {(() => {
                           const alicuotaId = row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0

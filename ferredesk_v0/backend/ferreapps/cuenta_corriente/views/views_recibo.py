@@ -223,6 +223,11 @@ def modificar_imputaciones(request):
                 
                 try:
                     imputacion = Imputacion.objects.get(imp_id=imp_id)
+                    if imputacion.es_postventa:
+                        return Response(
+                            {'detail': 'Una imputacion de postventa asentada no se puede modificar.'},
+                            status=status.HTTP_409_CONFLICT,
+                        )
                     if nuevo_monto <= 0:
                         imputacion.delete()
                     else:

@@ -1,4 +1,5 @@
 import logging
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -25,6 +26,14 @@ def custom_exception_handler(exc, context):
             'error': True,
             'arca_emitido': False
         }
+        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+    if isinstance(exc, DjangoValidationError):
+        if hasattr(exc, 'message_dict'):
+            data = exc.message_dict
+        else:
+            mensajes = list(exc.messages)
+            data = {'detail': mensajes[0] if len(mensajes) == 1 else mensajes}
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
     return response

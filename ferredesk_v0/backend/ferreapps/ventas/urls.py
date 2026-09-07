@@ -11,6 +11,13 @@ from .views import (
 )
 from django.urls import path
 from . import views
+from .views.views_postventa import (
+    confirmar_cambio_view,
+    confirmar_devolucion_view,
+    items_origen_postventa_view,
+    previsualizar_cambio_view,
+    previsualizar_devolucion_view,
+)
 from . import libro_iva_views
 from . import libro_iva_export_views
 from . import eliminador_presupuestos
@@ -31,6 +38,11 @@ urlpatterns = router.urls + [
     path('convertir-factura-interna/', views.convertir_factura_interna_a_fiscal, name='convertir_factura_interna'),
     path('verificar-imputaciones/<int:comprobante_id>/', views.verificar_imputaciones_comprobante, name='verificar_imputaciones_comprobante'),
     path('eliminar-auto-imputaciones-cliente-generico/<int:comprobante_id>/', views.eliminar_auto_imputaciones_cliente_generico, name='eliminar_auto_imputaciones_cliente_generico'),
+    path('postventa/devoluciones/previsualizar/', previsualizar_devolucion_view, name='postventa_previsualizar_devolucion'),
+    path('postventa/devoluciones/confirmar/', confirmar_devolucion_view, name='postventa_confirmar_devolucion'),
+    path('postventa/cambios/previsualizar/', previsualizar_cambio_view, name='postventa_previsualizar_cambio'),
+    path('postventa/cambios/confirmar/', confirmar_cambio_view, name='postventa_confirmar_cambio'),
+    path('postventa/origen/<int:venta_id>/', items_origen_postventa_view, name='postventa_items_origen'),
     
     # Endpoints del Libro IVA Ventas
     path('libro-iva-ventas/generar/', libro_iva_views.generar_libro_iva_ventas_endpoint, name='generar_libro_iva_ventas'),
@@ -49,4 +61,4 @@ urlpatterns = router.urls + [
     path('presupuestos/eliminar-antiguos/', eliminador_presupuestos.eliminar_presupuestos_antiguos, name='eliminar_presupuestos_antiguos'),
     path('presupuestos/vista-previa-antiguos/', eliminador_presupuestos.vista_previa_presupuestos_antiguos, name='vista_previa_presupuestos_antiguos'),
     
-] 
+]

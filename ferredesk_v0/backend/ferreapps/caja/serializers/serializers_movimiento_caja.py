@@ -26,10 +26,11 @@ class MovimientoCajaSerializer(serializers.ModelSerializer):
             'tipo',
             'tipo_display',
             'monto',
+            'afecta_efectivo',
             'descripcion',
             'fecha_hora',
         ]
-        read_only_fields = ['id', 'usuario', 'sesion_caja', 'fecha_hora']
+        read_only_fields = ['id', 'usuario', 'sesion_caja', 'afecta_efectivo', 'fecha_hora']
 
 
 class CrearMovimientoSerializer(serializers.Serializer):

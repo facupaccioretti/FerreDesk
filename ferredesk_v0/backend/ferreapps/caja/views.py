@@ -7,8 +7,9 @@ Implementa los ViewSets para:
 - PagoVenta: Consulta de pagos por venta
 """
 
-from django.db.models import Sum, Q
-from django.db import transaction
+from django.db.models import Case, DecimalField, F, Q, Sum, Value, When
+from django.db.models.functions import Coalesce
+from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -70,6 +71,24 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
     queryset = SesionCaja.objects.all()
     serializer_class = SesionCajaSerializer
     permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Use la accion abrir para crear una sesion de caja.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Las sesiones de caja no se pueden editar.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Las sesiones de caja no se pueden eliminar.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
     
     def get_queryset(self):
         """Filtra por usuario y estado si se solicita."""
@@ -106,12 +125,19 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         # Crear la sesión de caja
-        sesion = SesionCaja.objects.create(
-            usuario=request.user,
-            sucursal=serializer.validated_data.get('sucursal', 1),
-            saldo_inicial=serializer.validated_data['saldo_inicial'],
-            estado=ESTADO_CAJA_ABIERTA,
-        )
+        try:
+            with transaction.atomic():
+                sesion = SesionCaja.objects.create(
+                    usuario=request.user,
+                    sucursal=serializer.validated_data.get('sucursal', 1),
+                    saldo_inicial=serializer.validated_data['saldo_inicial'],
+                    estado=ESTADO_CAJA_ABIERTA,
+                )
+        except IntegrityError:
+            return Response(
+                {'error': 'Ya tiene una caja abierta'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         invalidate_control_fondos_cache(reason='abrir_caja')
         
         return Response(
@@ -120,6 +146,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         )
     
     @action(detail=False, methods=['post'], url_path='cerrar')
+    @transaction.atomic
     def cerrar_caja(self, request):
         """Cierra la caja actual del usuario (Cierre Z).
         
@@ -130,7 +157,7 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         Calcula diferencia y cierra la sesión.
         """
         # Obtener la caja abierta del usuario
-        sesion = SesionCaja.objects.filter(
+        sesion = SesionCaja.objects.select_for_update().filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA
         ).first()
@@ -238,14 +265,16 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         
         # Sumar ingresos manuales y automáticos
         ingresos = sesion.movimientos.filter(
-            tipo=TIPO_MOVIMIENTO_ENTRADA
+            tipo=TIPO_MOVIMIENTO_ENTRADA,
+            afecta_efectivo=True,
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         saldo += ingresos
         
         # Restar egresos manuales y automáticos
         egresos = sesion.movimientos.filter(
-            tipo=TIPO_MOVIMIENTO_SALIDA
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            afecta_efectivo=True,
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         saldo -= egresos
@@ -262,30 +291,49 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         - Movimientos manuales
         """
         # Totales por método de pago (Ventas + Recibos)
-        totales_por_metodo = PagoVenta.objects.filter(
-            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
-            es_vuelto=False,
+        pagos_sesion = PagoVenta.objects.filter(
+            Q(sesion_caja=sesion)
+            | Q(sesion_caja__isnull=True, venta__sesion_caja=sesion)
+            | Q(sesion_caja__isnull=True, recibo__sesion_caja=sesion)
+            | Q(sesion_caja__isnull=True, orden_pago__sesion_caja=sesion)
         ).exclude(
             venta__ven_estado='AN'
         ).exclude(
             recibo__rec_estado='N'
-        ).values(
+        ).exclude(
+            orden_pago__op_estado='N'
+        )
+        tipos_egreso = [
+            PagoVenta.TIPO_VUELTO_VENTA,
+            PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+            PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+        ]
+        campo_monto = DecimalField(max_digits=15, decimal_places=2)
+        monto_entrada = Coalesce('monto_recibido', 'monto', output_field=campo_monto)
+
+        totales_por_metodo = pagos_sesion.values(
             'metodo_pago__codigo',
             'metodo_pago__nombre',
-            'metodo_pago__orden', # Asegurar que estemos agrupando bien
+            'metodo_pago__orden',
         ).annotate(
-            total=Sum('monto')
+            total_ingresos=Sum(Case(
+                When(tipo_operacion__in=tipos_egreso, then=Value(Decimal('0.00'))),
+                default=monto_entrada,
+                output_field=campo_monto,
+            )),
+            total_egresos=Sum(Case(
+                When(tipo_operacion__in=tipos_egreso, then=F('monto')),
+                default=Value(Decimal('0.00')),
+                output_field=campo_monto,
+            )),
         ).order_by('metodo_pago__orden')
+        totales_por_metodo = totales_por_metodo.annotate(
+            total=F('total_ingresos') - F('total_egresos')
+        )
 
         # Transferencias/QR por banco/billetera (Ventas + Recibos)
-        totales_por_banco = PagoVenta.objects.filter(
-            Q(venta__sesion_caja=sesion) | Q(recibo__sesion_caja=sesion),
-            es_vuelto=False,
+        totales_por_banco = pagos_sesion.filter(
             metodo_pago__codigo__in=[CODIGO_TRANSFERENCIA, CODIGO_QR],
-        ).exclude(
-            venta__ven_estado='AN'
-        ).exclude(
-            recibo__rec_estado='N'
         ).values(
             'metodo_pago__codigo',
             'metodo_pago__nombre',
@@ -293,16 +341,30 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             'cuenta_banco__nombre',
             'metodo_pago__orden',
         ).annotate(
-            total=Sum('monto')
+            total_ingresos=Sum(Case(
+                When(tipo_operacion__in=tipos_egreso, then=Value(Decimal('0.00'))),
+                default=monto_entrada,
+                output_field=campo_monto,
+            )),
+            total_egresos=Sum(Case(
+                When(tipo_operacion__in=tipos_egreso, then=F('monto')),
+                default=Value(Decimal('0.00')),
+                output_field=campo_monto,
+            )),
         ).order_by('metodo_pago__orden', 'cuenta_banco__nombre')
+        totales_por_banco = totales_por_banco.annotate(
+            total=F('total_ingresos') - F('total_egresos')
+        )
         
         # Movimientos manuales
         total_ingresos = sesion.movimientos.filter(
-            tipo=TIPO_MOVIMIENTO_ENTRADA
+            tipo=TIPO_MOVIMIENTO_ENTRADA,
+            afecta_efectivo=True,
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         total_egresos = sesion.movimientos.filter(
-            tipo=TIPO_MOVIMIENTO_SALIDA
+            tipo=TIPO_MOVIMIENTO_SALIDA,
+            afecta_efectivo=True,
         ).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
         
         # Saldo teórico
@@ -461,6 +523,7 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
     queryset = MovimientoCaja.objects.all()
     serializer_class = MovimientoCajaSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
     
     def get_queryset(self):
         """Filtra movimientos por sesión si se especifica."""
@@ -472,10 +535,11 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         """Crea un nuevo movimiento en la caja abierta del usuario."""
         # Obtener la caja abierta del usuario
-        sesion = SesionCaja.objects.filter(
+        sesion = SesionCaja.objects.select_for_update().filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA
         ).first()
@@ -626,9 +690,12 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
         ).select_related('venta', 'venta__comprobante', 'recibo', 'orden_pago', 'metodo_pago')
 
         for pago in pagos:
-            # Determinar si es INGRESO o EGRESO
-            # Ventas y Recibos son INGRESO (entrada a banco)
-            # Ordenes de Pago son EGRESO (salida de banco)
+            tipos_egreso = {
+                PagoVenta.TIPO_PAGO_ORDEN_PAGO,
+                PagoVenta.TIPO_DEVOLUCION_CLIENTE,
+                PagoVenta.TIPO_VUELTO_VENTA,
+            }
+            tipo = 'EGRESO' if pago.tipo_operacion in tipos_egreso else 'INGRESO'
             if pago.orden_pago:
                 tipo = 'EGRESO'
                 origen = 'Orden de Pago'
@@ -639,7 +706,6 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
                 if pago.orden_pago.op_estado == 'N':
                     continue
             elif pago.recibo:
-                tipo = 'INGRESO'
                 origen = 'Recibo'
                 desc = f"Cobro a {pago.recibo.rec_cliente.razon}"
                 comp_num = pago.recibo.rec_numero
@@ -648,9 +714,15 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
                 if pago.recibo.rec_estado == 'N':
                     continue
             elif pago.venta:
-                tipo = 'INGRESO'
-                origen = 'Venta'
-                desc = f"Cobro a {pago.venta.ven_idcli.razon}"
+                if pago.tipo_operacion == PagoVenta.TIPO_DEVOLUCION_CLIENTE:
+                    origen = 'Devolucion a cliente'
+                    desc = f"Devolucion a {pago.venta.ven_idcli.razon}"
+                elif pago.tipo_operacion == PagoVenta.TIPO_VUELTO_VENTA:
+                    origen = 'Vuelto de venta'
+                    desc = f"Vuelto a {pago.venta.ven_idcli.razon}"
+                else:
+                    origen = 'Venta'
+                    desc = f"Cobro a {pago.venta.ven_idcli.razon}"
                 comp_num = f"{pago.venta.ven_punto:04d}-{pago.venta.ven_numero:08d}"
                 comp_tipo = pago.venta.comprobante.nombre
                 # Excluir si la venta está anulada
@@ -658,7 +730,6 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
                     continue
             else:
                 # Caso genérico (no debería ocurrir con los flujos actuales)
-                tipo = 'INGRESO'
                 origen = 'Otro'
                 desc = pago.observacion or 'Movimiento bancario'
                 comp_num = ''
@@ -678,7 +749,12 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
         # 2. Obtener Cheques (Ingresos por acreditación)
         cheques = banco.cheques_depositados.filter(
             estado='ACREDITADO',
-            fecha_pago__range=(fecha_desde.date(), fecha_hasta.date())
+        ).filter(
+            Q(fecha_acreditacion__range=(fecha_desde, fecha_hasta))
+            | Q(
+                fecha_acreditacion__isnull=True,
+                fecha_pago__range=(fecha_desde.date(), fecha_hasta.date()),
+            )
         ).select_related('venta', 'recibo', 'orden_pago')
 
         for cheque in cheques:
@@ -693,8 +769,13 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
             else:
                 origen_cheque = "Cartera"
 
+            fecha_movimiento = cheque.fecha_acreditacion
+            if fecha_movimiento is None:
+                fecha_movimiento = timezone.make_aware(
+                    timezone.datetime.combine(cheque.fecha_pago, timezone.datetime.min.time())
+                )
             movimientos.append({
-                'fecha': timezone.make_aware(timezone.datetime.combine(cheque.fecha_pago, timezone.datetime.min.time())),
+                'fecha': fecha_movimiento,
                 'tipo': 'INGRESO',
                 'monto': cheque.monto,
                 'metodo_pago': 'Cheque',
@@ -785,6 +866,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                     usuario=request.user,
                     tipo=TIPO_MOVIMIENTO_ENTRADA,
                     monto=data['monto'],
+                    afecta_efectivo=False,
                     descripcion=f"Cheque recibido - {desc_entrada}",
                 )
             movimiento_salida = None

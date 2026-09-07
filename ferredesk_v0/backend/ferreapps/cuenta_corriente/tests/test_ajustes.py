@@ -1,18 +1,19 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from decimal import Decimal
 from ferreapps.productos.models import Proveedor
 from ferreapps.cuenta_corriente.models import (
     AjusteProveedor,
-    CuentaCorrienteProveedor
 )
+from ferreapps.cuenta_corriente.services.cuenta_corriente_service import obtener_movimientos_proveedor
+from ferreapps.ventas.tests import VentasTenantTestCase
 
 User = get_user_model()
 
-class AjusteProveedorTests(TestCase):
+class AjusteProveedorTests(VentasTenantTestCase):
     """Tests para el sistema de Ajustes Débito/Crédito de Proveedor."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(username='testuser', password='password')
         self.proveedor = Proveedor.objects.create(
             razon='Proveedor Test',
@@ -63,21 +64,21 @@ class AjusteProveedorTests(TestCase):
         )
 
         # Consultar la vista
-        movimientos = CuentaCorrienteProveedor.objects.filter(proveedor_id=self.proveedor.id).order_by('fecha', 'id')
+        movimientos = obtener_movimientos_proveedor(self.proveedor.id, completo=True)
         
-        self.assertEqual(movimientos.count(), 2)
+        self.assertEqual(len(movimientos), 2)
         
         # Primero el débito
         m1 = movimientos[0]
-        self.assertEqual(m1.comprobante_tipo, 'ajuste_debito')
-        self.assertEqual(m1.debe, Decimal('1000.00'))
-        self.assertEqual(m1.haber, Decimal('0.00'))
-        self.assertEqual(m1.saldo_acumulado, Decimal('1000.00'))
+        self.assertEqual(m1['comprobante_tipo'], 'ajuste_debito')
+        self.assertEqual(m1['debe'], Decimal('1000.00'))
+        self.assertEqual(m1['haber'], Decimal('0.00'))
+        self.assertEqual(m1['saldo_acumulado'], Decimal('1000.00'))
 
         # Luego el crédito
         m2 = movimientos[1]
-        self.assertEqual(m2.comprobante_tipo, 'ajuste_credito')
-        self.assertEqual(m2.debe, Decimal('0.00'))
-        self.assertEqual(m2.haber, Decimal('400.00'))
+        self.assertEqual(m2['comprobante_tipo'], 'ajuste_credito')
+        self.assertEqual(m2['debe'], Decimal('0.00'))
+        self.assertEqual(m2['haber'], Decimal('400.00'))
         # 1000 - 400 = 600
-        self.assertEqual(m2.saldo_acumulado, Decimal('600.00'))
+        self.assertEqual(m2['saldo_acumulado'], Decimal('600.00'))

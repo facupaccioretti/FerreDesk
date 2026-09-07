@@ -184,7 +184,8 @@ def _recalcular_totales_venta(venta_id: int) -> None:
             subtotal=Sum('subtotal_bruto_item')
         )
 
-        total = (agregados['total'] or Decimal('0')).quantize(Decimal('0.01'))
+        ajuste = Venta.objects.filter(pk=venta_id).values_list('ajuste_redondeo', flat=True).first() or Decimal('0')
+        total = ((agregados['total'] or Decimal('0')) + ajuste).quantize(Decimal('0.01'))
         neto = (agregados['neto'] or Decimal('0')).quantize(Decimal('0.01'))
         iva = (agregados['iva'] or Decimal('0')).quantize(Decimal('0.01'))
         subtotal_bruto = (agregados['subtotal'] or Decimal('0')).quantize(Decimal('0.01'))

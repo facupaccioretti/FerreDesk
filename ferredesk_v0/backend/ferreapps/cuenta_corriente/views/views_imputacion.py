@@ -19,6 +19,11 @@ def eliminar_imputacion(request, imp_id):
     """
     try:
         imputacion = get_object_or_404(Imputacion, pk=imp_id)
+        if imputacion.es_postventa:
+            return Response(
+                {'detail': 'Una imputacion de postventa asentada no se puede eliminar.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         
         # Guardar info para el log antes de borrar
         origen = str(imputacion.origen)

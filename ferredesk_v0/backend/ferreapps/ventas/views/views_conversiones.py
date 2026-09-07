@@ -14,9 +14,7 @@ from decimal import Decimal
 from django.utils import timezone
 import logging
 
-from ..models import (
-    Comprobante, Venta, VentaDetalleItem
-)
+from ..models import Comprobante, PostventaOperacion, Venta, VentaDetalleItem
 from ..serializers import VentaSerializer
 from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
@@ -96,8 +94,7 @@ def _validar_y_procesar_stock(items, venta_data, ferreteria):
         tuple: (stock_actualizado, errores_stock)
                stock_actualizado es una lista, errores_stock es una lista o None
     """
-    permitir_stock_negativo = venta_data.get('permitir_stock_negativo', 
-                                              getattr(ferreteria, 'permitir_stock_negativo', False))
+    permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
     
     tipo_comprobante = venta_data.get('tipo_comprobante')
     es_presupuesto = (tipo_comprobante == 'presupuesto')
@@ -106,7 +103,8 @@ def _validar_y_procesar_stock(items, venta_data, ferreteria):
     stock_actualizado = []
     
     if not es_presupuesto:
-        for item in items:
+        items_ordenados = sorted(items, key=lambda item: str(item.get('vdi_idsto') or 0).zfill(20))
+        for item in items_ordenados:
             id_stock = item.get('vdi_idsto')
             cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
 
@@ -530,7 +528,7 @@ def convertir_presupuesto_a_venta(request):
                 raise Exception('Solo se pueden convertir presupuestos (estado AB).')
 
             # Obtener items del presupuesto
-            items_presupuesto = list(presupuesto.items.all())
+            items_presupuesto = list(presupuesto.items.all().order_by('vdi_idsto_id', 'pk'))
             ids_items_presupuesto = [str(item.id) for item in items_presupuesto]
             print("DEBUG - IDs items presupuesto:", ids_items_presupuesto)
             # Validar que los ítems seleccionados pertenecen al presupuesto
@@ -568,7 +566,7 @@ def convertir_presupuesto_a_venta(request):
             # Obtener configuración de la ferretería para determinar política de stock negativo
             ferreteria = Ferreteria.objects.first()
             # Usar configuración de la ferretería, con posibilidad de override desde el frontend
-            permitir_stock_negativo = data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False))
+            permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
             
             # Validar stock si es necesario (sumando entre TODOS los proveedores del producto)
             if not permitir_stock_negativo:
@@ -945,7 +943,7 @@ def convertir_presupuesto_a_venta(request):
                     stock_id=id_stock_conv,
                     proveedor_preferido_id=id_prov_conv,
                     cantidad=cantidad_conv,
-                    permitir_stock_negativo=venta_data.get('permitir_stock_negativo', getattr(ferreteria, 'permitir_stock_negativo', False)),
+                    permitir_stock_negativo=permitir_stock_negativo,
                     errores_stock=errores_en_descuento,
                     stock_actualizado=stock_actualizado,
                 )
@@ -1059,6 +1057,15 @@ def convertir_factura_interna_a_fiscal(request):
                 'error_code': 'YA_CONVERTIDA',
                 'factura_fiscal_id': factura_interna.factura_fiscal_convertida.ven_id if factura_interna.factura_fiscal_convertida else None
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        if PostventaOperacion.objects.filter(
+            venta_origen=factura_interna,
+            estado=PostventaOperacion.ESTADO_COMPLETADA,
+        ).exists():
+            return Response({
+                'detail': 'Una cotizacion con postventas no se puede convertir a comprobante fiscal.',
+                'error_code': 'POSTVENTA_EXISTENTE',
+            }, status=status.HTTP_409_CONFLICT)
         
         # Preparar datos de la nueva factura fiscal
         venta_data = data.copy()

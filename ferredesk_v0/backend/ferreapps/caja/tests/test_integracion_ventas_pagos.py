@@ -167,7 +167,7 @@ class VentasPagosIntegracionTests(CajaTenantAPITestCase, CajaTestMixin):
         from django.core.exceptions import ValidationError
         with self.assertRaises(ValidationError) as cm:
             self.client.post('/api/ventas/', data, format='json')
-        self.assertIn('requiere una sesión de caja abierta', str(cm.exception))
+        self.assertIn('requiere una sesion de caja abierta', str(cm.exception))
 
     def test_si_cobro_falla_transaccion_revierte_completa(self):
         """si un cobro falla, la transacción revierte completa (venta no se crea)"""

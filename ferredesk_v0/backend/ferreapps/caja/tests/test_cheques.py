@@ -25,13 +25,13 @@ from ..models import (
     TIPO_MOVIMIENTO_ENTRADA,
     TIPO_MOVIMIENTO_SALIDA,
 )
-from .mixins import CajaTestMixin
+from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 # CUIT con dígito verificador válido (base 2011111111 → dv 2)
 CUIT_TEST_VALIDO = '20111111112'
 
 
-class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
+class ChequeRechazadoYReactivarTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para marcar cheque rechazado (generación ND) y reactivar (RECHAZADO → EN_CARTERA)."""
 
     @classmethod
@@ -77,7 +77,7 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
         from ferreapps.ventas.models import Venta
         from ..models import PagoVenta
 
-        self.client = APIClient()
+        super().setUp()
         self.sesion = self.crear_sesion_caja(self.usuario)
         self.venta = Venta.objects.create(
             ven_sucursal=1,
@@ -126,6 +126,7 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
         MovimientoCaja.objects.filter(sesion_caja=self.sesion).delete()
         self.venta.delete()
         self.sesion.delete()
+        super().tearDown()
 
     def test_marcar_rechazado_actualiza_estado(self):
         """Marcar rechazado deja el cheque en RECHAZADO y devuelve mensaje de siguiente paso."""
@@ -235,7 +236,7 @@ class ChequeRechazadoYReactivarTests(APITestCase, CajaTestMixin):
         self.assertEqual(cheque_sin_vta.estado, Cheque.ESTADO_RECHAZADO)
 
 
-class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
+class CrearChequeDesdeCajaTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para crear cheques desde caja (caja general y cambio de cheque)."""
 
     @classmethod
@@ -243,7 +244,7 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
         cls.usuario = cls.crear_usuario_test(username='cheque_caja_user')
 
     def setUp(self):
-        self.client = APIClient()
+        super().setUp()
         self.sesion = self.crear_sesion_caja(self.usuario, estado=ESTADO_CAJA_ABIERTA)
         self.url_list = reverse('cheque-list')
 
@@ -283,8 +284,11 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
         self.assertEqual(cheque.movimiento_caja_entrada.sesion_caja_id, self.sesion.id)
         self.assertEqual(cheque.movimiento_caja_entrada.tipo, TIPO_MOVIMIENTO_ENTRADA)
         self.assertEqual(cheque.movimiento_caja_entrada.monto, Decimal('500.00'))
+        self.assertFalse(cheque.movimiento_caja_entrada.afecta_efectivo)
         self.assertIsNone(cheque.movimiento_caja_salida_id)
         self.assertIsNone(cheque.comision_cambio)
+        estado = self.client.get('/api/caja/sesiones/estado/')
+        self.assertEqual(estado.data['resumen']['saldo_teorico_efectivo'], '1000.00')
 
     def test_crear_cheque_cambio_ok(self):
         """Crear cheque con cambio: efectivo entregado + comisión; crea entrada y salida."""
@@ -308,6 +312,10 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
         cheque = Cheque.objects.get(id=data['id'])
         self.assertEqual(cheque.movimiento_caja_entrada.monto, Decimal('500.00'))
         self.assertEqual(cheque.movimiento_caja_salida.monto, Decimal('480.00'))
+        self.assertFalse(cheque.movimiento_caja_entrada.afecta_efectivo)
+        self.assertTrue(cheque.movimiento_caja_salida.afecta_efectivo)
+        estado = self.client.get('/api/caja/sesiones/estado/')
+        self.assertEqual(estado.data['resumen']['saldo_teorico_efectivo'], '520.00')
         self.assertEqual(cheque.movimiento_caja_salida.tipo, TIPO_MOVIMIENTO_SALIDA)
         self.assertEqual(cheque.comision_cambio, Decimal('20.00'))
 
@@ -385,7 +393,7 @@ class CrearChequeDesdeCajaTests(APITestCase, CajaTestMixin):
         self.assertIn('monto_efectivo_entregado', (response.data or {}).keys())
 
 
-class ChequeCustodiaTests(APITestCase, CajaTestMixin):
+class ChequeCustodiaTests(CajaTenantAPITestCase, CajaTestMixin):
     """Tests para integrar custodia de cheques con movimientos de caja."""
 
     @classmethod
@@ -399,7 +407,7 @@ class ChequeCustodiaTests(APITestCase, CajaTestMixin):
         cls.cuenta_banco = CuentaBanco.objects.create(nombre='Banco Galicia', activo=True)
 
     def setUp(self):
-        self.client = APIClient()
+        super().setUp()
         self.sesion = self.crear_sesion_caja(self.usuario)
         self.client.force_authenticate(user=self.usuario)
 

@@ -11,7 +11,7 @@ from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
-from ferreapps.productos.models import AlicuotaIVA, PrecioProveedorExcel, Proveedor, Stock, StockProve
+from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
 from tenants.models import EmpresaTenant
@@ -293,6 +293,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
             # Configurar el mock del QuerySet
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             # Ejecutar la función bajo test
             _recalcular_totales_venta(1)
@@ -324,6 +325,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             _recalcular_totales_venta(99)
 
@@ -352,6 +354,7 @@ class TestDenormalizacionTotalesVenta(TestCase):
 
             mock_qs = mock_item_cls.objects.filter.return_value.con_calculos.return_value
             mock_qs.aggregate.return_value = agregados_simulados
+            mock_venta_cls.objects.filter.return_value.values_list.return_value.first.return_value = Decimal('0.00')
 
             _recalcular_totales_venta(42)
 
@@ -494,6 +497,96 @@ class TestValidacionProductosVenta(VentasTenantTestCase):
             precio_lista_0_manual=False,
         )
 
+    def test_create_completa_proveedor_habitual_si_falta(self):
+        serializer = VentaSerializer(
+            data={
+                "ven_sucursal": 1,
+                "ven_fecha": date(2026, 2, 3),
+                "comprobante_id": self.comprobante_presupuesto.codigo_afip,
+                "ven_punto": 1,
+                "ven_numero": 505,
+                "ven_estado": "AB",
+                "ven_idcli": self.cliente.id,
+                "ven_idpla": self.plazo.id,
+                "ven_idvdo": self.vendedor.id,
+                "ven_copia": 1,
+                "tipo_comprobante": "presupuesto",
+                "items": [
+                    {
+                        "vdi_orden": 1,
+                        "vdi_idsto": self.stock.id,
+                        "vdi_cantidad": "1",
+                        "vdi_costo": "100.00",
+                        "vdi_margen": "0",
+                        "vdi_bonifica": "0",
+                        "vdi_precio_unitario_final": "121.00",
+                        "vdi_detalle1": "Producto Ventas",
+                        "vdi_detalle2": "UN",
+                    }
+                ],
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        venta = serializer.save()
+
+        self.assertEqual(venta.items.get().vdi_idpro_id, self.proveedor.id)
+
+    def test_update_conserva_proveedor_historico_si_payload_lo_omite(self):
+        otro_proveedor = Proveedor.objects.create(
+            razon="Proveedor Historico",
+            fantasia="Proveedor Historico",
+            domicilio="Calle Historica 1",
+            cuit="20999111445",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PVH",
+        )
+        venta = self.crear_venta(
+            comprobante=self.comprobante_presupuesto,
+            numero=506,
+            fecha=date(2026, 2, 4),
+        )
+        item = VentaDetalleItem.objects.create(
+            vdi_idve=venta,
+            vdi_orden=1,
+            vdi_idsto=self.stock,
+            vdi_idpro=otro_proveedor,
+            vdi_cantidad=Decimal("1"),
+            vdi_costo=Decimal("100.00"),
+            vdi_margen=Decimal("0"),
+            vdi_precio_unitario_final=Decimal("121.00"),
+            vdi_bonifica=Decimal("0"),
+            vdi_detalle1="Producto Ventas",
+            vdi_detalle2="UN",
+            vdi_idaliiva=self.alicuota_iva_21,
+        )
+        serializer = VentaSerializer(
+            instance=venta,
+            data={
+                "items": [
+                    {
+                        "id": item.id,
+                        "vdi_idsto": self.stock.id,
+                        "vdi_cantidad": "1",
+                        "vdi_costo": "100.00",
+                        "vdi_margen": "0",
+                        "vdi_bonifica": "0",
+                        "vdi_precio_unitario_final": "121.00",
+                        "vdi_detalle1": "Producto Ventas",
+                        "vdi_detalle2": "UN",
+                    }
+                ]
+            },
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        serializer.save()
+
+        item.refresh_from_db()
+        self.assertEqual(item.vdi_idpro_id, otro_proveedor.id)
+
     def test_create_con_producto_inexistente_falla_antes_de_persistir(self):
         serializer = VentaSerializer(
             data={
@@ -581,6 +674,177 @@ class TestValidacionProductosVenta(VentasTenantTestCase):
         item.refresh_from_db()
         self.assertEqual(item.vdi_idsto_id, self.stock.id)
         self.assertEqual(item.vdi_detalle1, "Producto original")
+
+
+class TestAtomicidadStockVenta(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.proveedor = Proveedor.objects.create(
+            razon="Proveedor Atomicidad",
+            fantasia="Proveedor Atomicidad",
+            domicilio="Calle Atomicidad 1",
+            cuit="20999111455",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PVA",
+        )
+        ferreteria = Ferreteria.objects.first()
+        ferreteria.permitir_stock_negativo = False
+        ferreteria.nombre = "Ferreteria Atomicidad"
+        ferreteria.razon_social = "Ferreteria Atomicidad SA"
+        ferreteria.cuit_cuil = "30111111118"
+        ferreteria.direccion = "Calle Atomicidad 1"
+        ferreteria.telefono = "123456"
+        ferreteria.save()
+        self.comprobante_interno = Comprobante.objects.create(
+            codigo_afip="9988",
+            nombre="Factura interna atomica",
+            letra="I",
+            tipo="factura_interna",
+            activo=True,
+        )
+
+    def _stock(self, codigo, cantidad):
+        stock_id = (Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0) + 1
+        stock = Stock.objects.create(
+            id=stock_id,
+            codvta=codigo,
+            codigo_barras=f"779900{stock_id:07d}",
+            deno=f"Producto {codigo}",
+            unidad="UN",
+            margen=Decimal("20.00"),
+            cantmin=1,
+            idaliiva=self.alicuota_iva_21,
+            proveedor_habitual=self.proveedor,
+            acti="S",
+            precio_lista_0=Decimal("100.00"),
+        )
+        StockProve.objects.create(
+            stock=stock,
+            proveedor=self.proveedor,
+            cantidad=Decimal(cantidad),
+            costo=Decimal("50.00"),
+        )
+        return stock
+
+    def _item_payload(self, stock, orden):
+        return {
+            "vdi_orden": orden,
+            "vdi_idsto": stock.id,
+            "vdi_idpro": self.proveedor.id,
+            "vdi_cantidad": "1.00",
+            "vdi_costo": "50.00",
+            "vdi_margen": "20.00",
+            "vdi_bonifica": "0.00",
+            "vdi_precio_unitario_final": "100.00",
+            "vdi_detalle1": stock.deno,
+            "vdi_detalle2": "UN",
+            "vdi_idaliiva": self.alicuota_iva_21.id,
+        }
+
+    def test_create_revierte_el_primer_descuento_si_otro_item_no_tiene_stock(self):
+        stock_ok = self._stock("AT-STOCK-OK", "5.00")
+        stock_falla = self._stock("AT-STOCK-NO", "0.00")
+        ventas_antes = Venta.objects.count()
+        payload = {
+            "tipo_comprobante": "factura_interna",
+            "comprobante_id": self.comprobante_interno.codigo_afip,
+            "ven_sucursal": 1,
+            "ven_fecha": "2026-07-16",
+            "ven_punto": 99,
+            "ven_estado": "CE",
+            "ven_idcli": self.cliente.id,
+            "ven_idpla": self.plazo.id,
+            "ven_idvdo": self.vendedor.id,
+            "ven_copia": 1,
+            "permitir_stock_negativo": True,
+            "items": [
+                self._item_payload(stock_ok, 1),
+                self._item_payload(stock_falla, 2),
+            ],
+        }
+
+        respuesta = self.client.post(ENDPOINT_VENTAS, payload, content_type="application/json")
+
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertEqual(StockProve.objects.get(stock=stock_ok).cantidad, Decimal("5.00"))
+        self.assertEqual(StockProve.objects.get(stock=stock_falla).cantidad, Decimal("0.00"))
+        self.assertEqual(Venta.objects.count(), ventas_antes)
+
+    def test_conversion_simple_revierte_stock_si_falla_un_item(self):
+        stock_ok = self._stock("CV-STOCK-OK", "5.00")
+        stock_falla = self._stock("CV-STOCK-NO", "0.00")
+        presupuesto = self.crear_venta(
+            comprobante=self.comprobante_presupuesto,
+            numero=801,
+            fecha=date(2026, 7, 16),
+        )
+        presupuesto.ven_estado = "AB"
+        presupuesto.save(update_fields=["ven_estado"])
+        for orden, stock in enumerate((stock_ok, stock_falla), start=1):
+            VentaDetalleItem.objects.create(
+                vdi_idve=presupuesto,
+                vdi_orden=orden,
+                vdi_idsto=stock,
+                vdi_idpro=self.proveedor,
+                vdi_cantidad=Decimal("1.00"),
+                vdi_costo=Decimal("50.00"),
+                vdi_margen=Decimal("20.00"),
+                vdi_bonifica=Decimal("0.00"),
+                vdi_precio_unitario_final=Decimal("100.00"),
+                vdi_detalle1=stock.deno,
+                vdi_detalle2="UN",
+                vdi_idaliiva=self.alicuota_iva_21,
+            )
+
+        respuesta = self.client.post(
+            f"{ENDPOINT_VENTAS}{presupuesto.ven_id}/convertir-a-venta/",
+            {},
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertEqual(StockProve.objects.get(stock=stock_ok).cantidad, Decimal("5.00"))
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.ven_estado, "AB")
+        self.assertEqual(presupuesto.comprobante_id, self.comprobante_presupuesto.codigo_afip)
+
+    def test_conversion_simple_persiste_estado_y_comprobante(self):
+        stock = self._stock("CV-PERSISTE", "5.00")
+        presupuesto = self.crear_venta(
+            comprobante=self.comprobante_presupuesto,
+            numero=802,
+            fecha=date(2026, 7, 16),
+        )
+        presupuesto.ven_estado = "AB"
+        presupuesto.save(update_fields=["ven_estado"])
+        VentaDetalleItem.objects.create(
+            vdi_idve=presupuesto,
+            vdi_orden=1,
+            vdi_idsto=stock,
+            vdi_idpro=None,
+            vdi_cantidad=Decimal("1.00"),
+            vdi_costo=Decimal("50.00"),
+            vdi_margen=Decimal("20.00"),
+            vdi_bonifica=Decimal("0.00"),
+            vdi_precio_unitario_final=Decimal("100.00"),
+            vdi_detalle1=stock.deno,
+            vdi_detalle2="UN",
+            vdi_idaliiva=self.alicuota_iva_21,
+        )
+
+        respuesta = self.client.post(
+            f"{ENDPOINT_VENTAS}{presupuesto.ven_id}/convertir-a-venta/",
+            {},
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.ven_estado, "CE")
+        self.assertEqual(presupuesto.comprobante.tipo, "factura")
+        self.assertEqual(presupuesto.items.get().vdi_idpro_id, self.proveedor.id)
+        self.assertEqual(StockProve.objects.get(stock=stock).cantidad, Decimal("4.00"))
 
 
 class TestContextoIsListEnSerializer(TestCase):

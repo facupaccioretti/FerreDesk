@@ -4,6 +4,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('ventas', '0010_venta_auditoria_cobro'),
+        ('cuenta_corriente', '0003_corregir_nc_nd_internas'),
     ]
 
     operations = [

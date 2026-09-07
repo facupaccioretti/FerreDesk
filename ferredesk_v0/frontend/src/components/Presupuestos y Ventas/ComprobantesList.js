@@ -1,11 +1,12 @@
 import React from "react"
 import { IconVenta, IconFactura, IconCredito, IconPresupuesto, IconRecibo } from "../ComprobanteIcono"
-import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito } from "../Botones"
+import { BotonEditar, BotonEliminar, BotonGenerarPDF, BotonConvertir, BotonVerDetalle, BotonNotaCredito, BotonNotaDebito, BotonPostventa } from "../Botones"
 import ComprobanteAsociadoTooltip from "./herramientasforms/ComprobanteAsociadoTooltip"
 import TooltipFacturado from "./herramientasforms/TooltipFacturado"
 import AccionesMenu from "./herramientasforms/AccionesMenu"
 import { formatearMoneda } from "./herramientasforms/plantillasComprobantes/helpers"
 import Tabla from "../Tabla"
+import { esElegibleParaPostventa } from "./elegibilidadPostventa"
 
 /**
  * Función para obtener el icono y etiqueta de un comprobante
@@ -44,7 +45,7 @@ const getComprobanteIconAndLabel = (tipo, nombre = "", letra = "") => {
  * @param {Function} esFacturaInternaConvertible - Función para verificar si es factura interna convertible
  * @returns {Array} - Array de botones para el AccionesMenu
  */
-const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible) => {
+export const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversion, fetchingPresupuestoId, esFacturaInternaConvertible) => {
   const {
     handleImprimir,
     openVistaTab,
@@ -53,6 +54,8 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
     handleDelete,
     handleConvertirFacturaI,
     handleNotaCredito,
+    handleNotaDebito,
+    handlePostventa,
   } = acciones
 
   // Función para determinar si una factura puede tener NC
@@ -152,8 +155,23 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         titulo: comprobante.comprobante?.tipo === 'factura_interna'
           ? "Crear Modificación de Contenido"
           : "Crear Nota de Crédito"
-      }
+      },
+      {
+        componente: BotonNotaDebito,
+        onClick: () => handleNotaDebito && handleNotaDebito(comprobante),
+        titulo: comprobante.comprobante?.tipo === 'factura_interna'
+          ? "Crear Extensión de Contenido"
+          : "Crear Nota de Débito"
+      },
     )
+
+    if (esElegibleParaPostventa(comprobante)) {
+      botones.push({
+        componente: BotonPostventa,
+        onClick: () => handlePostventa(comprobante),
+        titulo: "Cambios o devoluciones"
+      })
+    }
 
     // Botón de conversión para facturas internas
     if (esFacturaInternaConvertibleActual) {
@@ -183,7 +201,7 @@ const generarBotonesComprobante = (comprobante, acciones, isFetchingForConversio
         componente: BotonVerDetalle,
         onClick: () => openVistaTab(comprobante),
         titulo: "Ver detalle"
-      }
+      },
     )
   }
   // Otros casos (solo ver y generar PDF)
@@ -389,7 +407,7 @@ const ComprobantesList = ({
             <span className="text-slate-600">{icon}</span>
             <div>
               <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Comprobante</span>
-              <p className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 leading-tight">
+              <div className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 leading-tight">
                 {label}
                 {tieneNotasCredito && (
                   <ComprobanteAsociadoTooltip
@@ -403,7 +421,7 @@ const ComprobantesList = ({
                     titulo="Comprobantes Asociados"
                   />
                 )}
-              </p>
+              </div>
             </div>
           </div>
           <div className="text-right">
@@ -474,4 +492,4 @@ const ComprobantesList = ({
   )
 }
 
-export default ComprobantesList 
+export default ComprobantesList

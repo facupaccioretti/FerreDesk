@@ -130,10 +130,13 @@ const CajaDetalleView = ({ sesionId }) => {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
           {resumen?.totales_por_metodo && resumen.totales_por_metodo.length > 0 && (
             <>
-              <span className="text-slate-500 font-medium">Cobros:</span>
+              <span className="text-slate-500 font-medium">Pagos:</span>
               {resumen.totales_por_metodo.map((item, index) => (
                 <span key={index}>
-                  {item.metodo_pago__nombre} <strong className="text-slate-800">${formatearMoneda(item.total)}</strong>
+                  {item.metodo_pago__nombre}{" "}
+                  <strong className="text-green-700">+${formatearMoneda(item.total_ingresos)}</strong>{" "}
+                  <strong className="text-red-700">-${formatearMoneda(item.total_egresos)}</strong>{" "}
+                  <strong className="text-slate-800">Neto ${formatearMoneda(item.total)}</strong>
                 </span>
               ))}
               {(parseFloat(resumen?.total_ingresos_manuales) > 0 || parseFloat(resumen?.total_egresos_manuales) > 0) && (

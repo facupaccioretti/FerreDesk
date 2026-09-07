@@ -28,18 +28,33 @@ class PagoVentaSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'venta',
+            'recibo',
+            'orden_pago',
+            'postventa_operacion',
+            'sesion_caja',
             'metodo_pago',
             'metodo_pago_nombre',
             'metodo_pago_codigo',
             'cuenta_banco',
             'cuenta_banco_nombre',
             'monto',
+            'monto_recibido',
             'es_vuelto',
+            'tipo_operacion',
             'referencia_externa',
             'fecha_hora',
             'observacion',
         ]
-        read_only_fields = ['id', 'fecha_hora']
+        read_only_fields = [
+            'id',
+            'venta',
+            'recibo',
+            'orden_pago',
+            'postventa_operacion',
+            'sesion_caja',
+            'tipo_operacion',
+            'fecha_hora',
+        ]
 
 
 class PagoVentaCreateSerializer(serializers.Serializer):

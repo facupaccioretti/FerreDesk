@@ -2,6 +2,9 @@
 Utilidades para gestión de stock entre proveedores.
 """
 from decimal import Decimal
+from django.db.models import Q
+from rest_framework.exceptions import ValidationError
+
 from ferreapps.productos.models import Stock, StockProve, Proveedor
 
 
@@ -9,7 +12,7 @@ def _obtener_stock_proveedores_bloqueado(stock_id):
     """
     Devuelve la lista de StockProve del producto (stock_id) con bloqueo select_for_update.
     """
-    return list(StockProve.objects.select_for_update().filter(stock_id=stock_id))
+    return list(StockProve.objects.select_for_update().filter(stock_id=stock_id).order_by('pk'))
 
 
 def _total_disponible_en_proveedores(stock_id):
@@ -148,6 +151,90 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
         return False
 
     return True
+
+
+def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir_stock_negativo):
+    reposiciones = []
+    for item in items_devueltos:
+        detalle = detalles[item["venta_detalle_item_id"]]
+        if not detalle.vdi_idsto_id:
+            continue
+        denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
+        if not detalle.vdi_idpro_id:
+            raise ValidationError({"items": f"{denominacion} no tiene proveedor de referencia"})
+        reposiciones.append((detalle, Decimal(str(item["cantidad"]))))
+
+    stock_ids_nuevos = {item["stock_id"] for item in items_nuevos}
+    condiciones = [Q(stock_id=detalle.vdi_idsto_id, proveedor_id=detalle.vdi_idpro_id) for detalle, _ in reposiciones]
+    if stock_ids_nuevos:
+        condiciones.append(Q(stock_id__in=stock_ids_nuevos))
+    if condiciones:
+        filtro = condiciones.pop()
+        for condicion in condiciones:
+            filtro |= condicion
+        bloqueados = list(StockProve.objects.select_for_update().filter(filtro).order_by("pk"))
+    else:
+        bloqueados = []
+    por_clave = {(stock_prove.stock_id, stock_prove.proveedor_id): stock_prove for stock_prove in bloqueados}
+    proveedores_repuestos = {}
+    for detalle, _ in reposiciones:
+        stock_prove = por_clave.get((detalle.vdi_idsto_id, detalle.vdi_idpro_id))
+        if stock_prove is None:
+            denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
+            raise ValidationError({"items": f"No existe stock para {denominacion} y su proveedor de referencia"})
+        proveedores_repuestos[detalle.id] = stock_prove.proveedor_id
+
+    proveedores_por_stock = {}
+    for stock_prove in bloqueados:
+        proveedores_por_stock.setdefault(stock_prove.stock_id, []).append(stock_prove)
+    stocks_nuevos = Stock.objects.in_bulk(stock_ids_nuevos)
+    descuentos = []
+    for item in items_nuevos:
+        stock_id = item["stock_id"]
+        proveedores = proveedores_por_stock.get(stock_id, [])
+        cantidad = Decimal(str(item["cantidad"]))
+        if stock_id not in stocks_nuevos:
+            raise ValidationError({"items_nuevos": f"Producto inexistente {stock_id}"})
+        total_disponible = sum((proveedor.cantidad for proveedor in proveedores), Decimal("0"))
+        total_disponible += sum(
+            cantidad_repuesta
+            for detalle_repuesto, cantidad_repuesta in reposiciones
+            if detalle_repuesto.vdi_idsto_id == stock_id
+        )
+        if not permitir_stock_negativo and total_disponible < cantidad:
+            raise ValidationError({"items_nuevos": f"Stock insuficiente para el producto {stock_id}"})
+        descuentos.append((stocks_nuevos[stock_id], proveedores, cantidad))
+
+    for detalle, cantidad in reposiciones:
+        stock_prove = por_clave[(detalle.vdi_idsto_id, detalle.vdi_idpro_id)]
+        stock_prove.cantidad += cantidad
+
+    for stock, proveedores, cantidad in descuentos:
+        por_proveedor = {proveedor.proveedor_id: proveedor for proveedor in proveedores}
+        restante = cantidad
+        orden = []
+        if stock.proveedor_habitual_id in por_proveedor:
+            orden.append(por_proveedor[stock.proveedor_habitual_id])
+        orden.extend(sorted(
+            (proveedor for proveedor in proveedores if proveedor.proveedor_id != stock.proveedor_habitual_id),
+            key=lambda proveedor: (-proveedor.cantidad, proveedor.pk),
+        ))
+        for stock_prove in orden:
+            disponible = max(stock_prove.cantidad, Decimal("0"))
+            descontar = min(disponible, restante)
+            stock_prove.cantidad -= descontar
+            restante -= descontar
+            if not restante:
+                break
+        if restante:
+            stock_prove = por_proveedor.get(stock.proveedor_habitual_id)
+            if stock_prove is None:
+                raise ValidationError({"items_nuevos": f"No existe stock para el producto {stock.id} y proveedor habitual"})
+            stock_prove.cantidad -= restante
+
+    for stock_prove in bloqueados:
+        stock_prove.save()
+    return proveedores_repuestos
 
 
 

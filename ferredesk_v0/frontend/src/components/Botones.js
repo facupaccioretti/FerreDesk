@@ -122,6 +122,35 @@ export const BotonNotaCredito = ({ onClick, title = 'Nota de Crédito', ...props
   </button>
 );
 
+export const BotonNotaDebito = ({ onClick, title = 'Nota de Débito', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-emerald-600 hover:text-emerald-800"
+    {...props}
+  >
+    <svg width="20" height="20" viewBox="0 0 48 48" className="w-5 h-5">
+      <rect x="6" y="6" width="36" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <text x="24" y="30" textAnchor="middle" className="fill-current font-bold text-lg">ND</text>
+    </svg>
+  </button>
+);
+
+export const BotonPostventa = ({ onClick, title = 'Cambios o devoluciones', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-amber-600 hover:text-amber-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865A8.25 8.25 0 0 1 17.834 6.165l3.181 3.182" />
+    </svg>
+  </button>
+);
+
 export const BotonVinculado = ({ onClick, title = 'Ver presupuesto vinculado', ...props }) => (
   <button
     type="button"

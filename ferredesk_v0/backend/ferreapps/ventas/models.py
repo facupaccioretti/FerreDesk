@@ -217,12 +217,19 @@ class Venta(models.Model):
         db_column='VEN_SUBTOTAL_BRUTO_GUARDADO',
         help_text='Subtotal bruto antes de descuentos. Se actualiza via signals al cambiar ítems.'
     )
+    ajuste_redondeo = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        db_column='VEN_AJUSTE_REDONDEO',
+        help_text='Residuo explicito para conservar centavos en documentos parciales.'
+    )
 
     @property
     def ven_total(self):
         """Total venta (annotated o calculado en vivo)"""
         if hasattr(self, '_ven_total'): return self._ven_total
-        return sum(
+        return self.ajuste_redondeo + sum(
             (Decimal(str(i.vdi_precio_unitario_final)) * Decimal(str(i.vdi_cantidad))).quantize(Decimal('0.01'))
             for i in self.items.all()
         )
@@ -368,6 +375,115 @@ class Venta(models.Model):
             return max(saldo_pendiente, Decimal('0.00'))
         
         return Decimal('0.00')
+
+
+class PostventaOperacion(models.Model):
+    TIPO_DEVOLUCION = "DEVOLUCION"
+    TIPO_CAMBIO = "CAMBIO"
+    TIPOS = [
+        (TIPO_DEVOLUCION, "Devolucion"),
+        (TIPO_CAMBIO, "Cambio"),
+    ]
+
+    RESOLUCION_SALDO_A_FAVOR = "SALDO_A_FAVOR"
+    RESOLUCION_IMPUTAR_DEUDA = "IMPUTAR_DEUDA"
+    RESOLUCION_DEVOLVER_DINERO = "DEVOLVER_DINERO"
+    RESOLUCION_COBRAR_DIFERENCIA = "COBRAR_DIFERENCIA"
+    RESOLUCION_DEJAR_DEUDA = "DEJAR_DEUDA"
+
+    ESTADO_INICIADA = "INICIADA"
+    ESTADO_COMPLETADA = "COMPLETADA"
+    ESTADOS = [
+        (ESTADO_INICIADA, "Iniciada"),
+        (ESTADO_COMPLETADA, "Completada"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    operacion_uid = models.UUIDField(unique=True, db_index=True)
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    venta_origen = models.ForeignKey(
+        'ventas.Venta',
+        on_delete=models.PROTECT,
+        related_name='postventas_origen',
+    )
+    nota_credito = models.ForeignKey(
+        'ventas.Venta',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='postventas_nc',
+    )
+    nueva_venta = models.ForeignKey(
+        'ventas.Venta',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='postventas_nueva_venta',
+    )
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    resolucion_dinero = models.CharField(max_length=30)
+    motivo = models.TextField()
+    motivo_forzado = models.TextField(blank=True, default="")
+    total_credito = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_debito = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    payload_hash = models.CharField(max_length=64)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default=ESTADO_INICIADA)
+    payload_snapshot = models.JSONField(default=dict)
+    resultado_snapshot = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'VENTA_POSTVENTA_OPERACION'
+        indexes = [
+            models.Index(fields=['venta_origen', 'tipo']),
+            models.Index(fields=['created_at']),
+        ]
+
+
+class PostventaOperacionItem(models.Model):
+    ROL_DEVUELTO = "DEVUELTO"
+    ROL_NUEVO = "NUEVO"
+    ROLES = [
+        (ROL_DEVUELTO, "Devuelto"),
+        (ROL_NUEVO, "Nuevo"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    operacion = models.ForeignKey(
+        PostventaOperacion,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    rol = models.CharField(max_length=20, choices=ROLES)
+    venta_detalle_origen = models.ForeignKey(
+        'ventas.VentaDetalleItem',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
+    stock = models.ForeignKey(
+        'productos.Stock',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
+    proveedor = models.ForeignKey(
+        'productos.Proveedor',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
+    cantidad = models.DecimalField(max_digits=15, decimal_places=2)
+    precio_unitario = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    detalle = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        db_table = 'VENTA_POSTVENTA_OPERACION_ITEM'
+        indexes = [
+            models.Index(fields=['venta_detalle_origen', 'rol']),
+            models.Index(fields=['operacion', 'rol']),
+        ]
+
 
 class VentaDetalleItem(models.Model):
     vdi_idve = models.ForeignKey(
