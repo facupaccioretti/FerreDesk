@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.db.models import Max
 from django.urls import clear_url_caches
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from rest_framework import serializers as drf_serializers
@@ -12,13 +12,38 @@ from rest_framework import serializers as drf_serializers
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
-from ferreapps.ventas.serializers import VentaSerializer
+from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
 
 ENDPOINT_VENTAS = "/api/ventas/"
+
+
+class TestPrecioUnitarioField(SimpleTestCase):
+    def test_normaliza_vacios_y_conserva_valores_validos(self):
+        campo = PrecioUnitarioField(max_digits=15, decimal_places=2)
+
+        casos = (
+            (None, Decimal("0.00")),
+            ("", Decimal("0.00")),
+            ("   ", Decimal("0.00")),
+            (0, Decimal("0.00")),
+            ("0.00", Decimal("0.00")),
+            ("14100.25", Decimal("14100.25")),
+        )
+        for entrada, esperado in casos:
+            with self.subTest(entrada=entrada):
+                self.assertEqual(campo.run_validation(entrada), esperado)
+
+    def test_rechaza_valores_invalidos(self):
+        campo = PrecioUnitarioField(max_digits=15, decimal_places=2)
+
+        for entrada in ("abc", "NaN", "Infinity", "12345678901234.56", "1.234"):
+            with self.subTest(entrada=entrada):
+                with self.assertRaises(drf_serializers.ValidationError):
+                    campo.run_validation(entrada)
 
 
 class VentasTenantTestCase(TenantTestCase):

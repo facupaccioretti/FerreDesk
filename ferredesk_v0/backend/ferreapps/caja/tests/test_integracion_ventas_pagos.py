@@ -8,7 +8,7 @@ from ferreapps.caja.models import (
     SesionCaja, MetodoPago, MovimientoCaja, PagoVenta, CuentaBanco,
     CODIGO_EFECTIVO, CODIGO_TRANSFERENCIA
 )
-from ferreapps.ventas.models import Venta, Comprobante
+from ferreapps.ventas.models import Venta, Comprobante, VentaDetalleItem
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
 from django.urls import reverse
 from ferreapps.productos.models import Ferreteria
@@ -283,3 +283,197 @@ class VentasPagosIntegracionTests(CajaTenantAPITestCase, CajaTestMixin):
         # Verificar que cotizacion se marcó como convertida
         cotizacion.refresh_from_db()
         self.assertTrue(cotizacion.convertida_a_fiscal)
+
+    def test_saldo_caja_correcto_con_tres_ventas_efectivo_y_vuelto(self):
+        """
+        REGRESIÓN E2E — Escenario exacto del bug reportado, usando el API real de ventas.
+
+        Flujo completo vía API (el único mock es ARCA, servicio externo de AFIP):
+        1. Abrir caja con $16.500
+        2. POST /api/ventas/ venta1 ($14.500) pagada con $20.500 → excedente_destino='vuelto'
+        3. POST /api/ventas/ venta2 ($5.000) pagada exacta
+        4. POST /api/ventas/ venta3 ($42.000) pagada exacta
+        5. GET /api/caja/sesiones/estado/ → saldo_teorico_efectivo debe ser $78.000
+
+        Saldo correcto: 16500 + 20500 - 6000 + 5000 + 42000 = 78000
+        Bug anterior:   16500 + 14500 - 6000 + 5000 + 42000 = 72000
+        """
+        from ferreapps.caja.models import MovimientoCaja, TIPO_MOVIMIENTO_ENTRADA, TIPO_MOVIMIENTO_SALIDA
+        from ferreapps.ventas.models import Comprobante
+
+        # Garantizar que solo haya UN comprobante activo de tipo 'factura_interna'
+        # para que asignar_comprobante() lo use directamente sin lógica fiscal de letra.
+        # Desactivar temporalmente cualquier otro comprobante del mismo tipo.
+        otros_internos = Comprobante.objects.filter(
+            tipo='factura_interna', activo=True
+        ).exclude(id=self.comprobante_interna.id)
+        otros_internos.update(activo=False)
+
+        try:
+            # Abrir caja con $16.500
+            resp = self.client.post('/api/caja/sesiones/abrir/', {'saldo_inicial': '16500.00'}, format='json')
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+            def _payload_venta(precio_unitario, monto_pago, excedente_destino=None):
+                payload = {
+                    'tipo_comprobante': 'factura_interna',
+                    'ven_sucursal': 1,
+                    'ven_fecha': '2024-03-01',
+                    'ven_copia': 1,
+                    'ven_idcli': self.cliente.id,
+                    'ven_idpla': self.plazo.id,
+                    'ven_idvdo': self.vendedor.id,
+                    'comprobante_pagado': True,
+                    'pagos': [{
+                        'metodo_pago_id': self.metodo_efectivo.id,
+                        'monto': str(monto_pago),
+                    }],
+                    'items': [{
+                        'vdi_orden': 1,
+                        'vdi_cantidad': 1,
+                        'vdi_precio_unitario_final': precio_unitario,
+                        'vdi_detalle1': 'Producto test',
+                    }],
+                }
+                if excedente_destino:
+                    payload['excedente_destino'] = excedente_destino
+                return payload
+
+            # Venta 1: $14.500, pagan $20.500 → vuelto $6.000
+            resp1 = self.client.post('/api/ventas/', _payload_venta(14500.00, 20500.00, 'vuelto'), format='json')
+            self.assertEqual(resp1.status_code, status.HTTP_201_CREATED, resp1.data)
+            self.assertTrue(resp1.data.get('vuelto_registrado'), "La venta debe haber registrado el vuelto.")
+            self.assertEqual(resp1.data.get('vuelto_monto'), '6000.00')
+
+            # Venta 2: $5.000 exacto (sin vuelto)
+            resp2 = self.client.post('/api/ventas/', _payload_venta(5000.00, 5000.00), format='json')
+            self.assertEqual(resp2.status_code, status.HTTP_201_CREATED, resp2.data)
+
+            # Venta 3: $42.000 exacto (sin vuelto)
+            resp3 = self.client.post('/api/ventas/', _payload_venta(42000.00, 42000.00), format='json')
+            self.assertEqual(resp3.status_code, status.HTTP_201_CREATED, resp3.data)
+
+            # Verificar el estado de la caja
+            estado = self.client.get('/api/caja/sesiones/estado/')
+            self.assertEqual(estado.status_code, status.HTTP_200_OK, estado.data)
+
+            saldo = estado.data['resumen']['saldo_teorico_efectivo']
+            self.assertEqual(
+                saldo, '78000.00',
+                f"REGRESIÓN E2E: saldo teórico debe ser 78000.00, obtenido: {saldo}. "
+                f"Cálculo esperado: 16500 (inicial) + 20500 (venta1 bruto) - 6000 (vuelto) "
+                f"+ 5000 (venta2) + 42000 (venta3) = 78000."
+            )
+
+            # Verificar los movimientos de caja en detalle
+            movimientos = MovimientoCaja.objects.filter(
+                sesion_caja__usuario=self.usuario
+            ).order_by('id')
+
+            entradas = movimientos.filter(tipo=TIPO_MOVIMIENTO_ENTRADA)
+            salidas = movimientos.filter(tipo=TIPO_MOVIMIENTO_SALIDA)
+
+            suma_entradas = sum(m.monto for m in entradas)
+            suma_salidas = sum(m.monto for m in salidas)
+
+            # Entradas: 20500 (bruto venta1) + 5000 + 42000 = 67500
+            self.assertEqual(suma_entradas, 67500,
+                f"Suma de entradas debe ser 67500 (20500+5000+42000), obtenido: {suma_entradas}")
+            # Salidas: 6000 (solo el vuelto de venta1)
+            self.assertEqual(suma_salidas, 6000,
+                f"Suma de salidas debe ser 6000 (solo el vuelto), obtenido: {suma_salidas}")
+            # Saldo final: 16500 + 67500 - 6000 = 78000
+            self.assertEqual(16500 + suma_entradas - suma_salidas, 78000)
+
+        finally:
+            # Restaurar comprobantes desactivados
+            otros_internos.update(activo=True)
+
+    def test_resumen_tolera_precio_null_historico_con_vuelto(self):
+        otros_internos = Comprobante.objects.filter(
+            tipo='factura_interna', activo=True
+        ).exclude(id=self.comprobante_interna.id)
+        otros_internos.update(activo=False)
+
+        try:
+            apertura = self.client.post(
+                '/api/caja/sesiones/abrir/',
+                {'saldo_inicial': '22500.00'},
+                format='json',
+            )
+            self.assertEqual(apertura.status_code, status.HTTP_201_CREATED, apertura.data)
+
+            venta_response = self.client.post('/api/ventas/', {
+                'tipo_comprobante': 'factura_interna',
+                'ven_sucursal': 1,
+                'ven_fecha': '2026-09-05',
+                'ven_copia': 1,
+                'ven_idcli': self.cliente.id,
+                'ven_idpla': self.plazo.id,
+                'ven_idvdo': self.vendedor.id,
+                'comprobante_pagado': True,
+                'excedente_destino': 'vuelto',
+                'pagos': [{
+                    'metodo_pago_id': self.metodo_efectivo.id,
+                    'monto': '40000.00',
+                }],
+                'items': [
+                    {
+                        'vdi_orden': 1,
+                        'vdi_cantidad': 2,
+                        'vdi_precio_unitario_final': '14100.00',
+                        'vdi_detalle1': 'Sky',
+                    },
+                    {
+                        'vdi_orden': 2,
+                        'vdi_cantidad': 4,
+                        'vdi_detalle1': 'Speed XL',
+                    },
+                ],
+            }, format='json')
+            self.assertEqual(venta_response.status_code, status.HTTP_201_CREATED, venta_response.data)
+
+            venta = Venta.objects.get(ven_id=venta_response.data['ven_id'])
+            item_sin_cargo = venta.items.get(vdi_detalle1='Speed XL')
+            self.assertEqual(item_sin_cargo.vdi_precio_unitario_final, Decimal('0.00'))
+
+            VentaDetalleItem.objects.filter(pk=item_sin_cargo.pk).update(
+                vdi_precio_unitario_final=None
+            )
+            self.assertTrue(
+                PagoVenta.objects.filter(
+                    venta=venta,
+                    observacion='Vuelto al cliente',
+                ).exists()
+            )
+
+            estado = self.client.get('/api/caja/sesiones/estado/')
+            self.assertEqual(estado.status_code, status.HTTP_200_OK, estado.data)
+            self.assertEqual(estado.data['resumen']['total_ventas'], '28200.00')
+
+            tramite = next(
+                item for item in estado.data['resumen']['tramites_con_observaciones']
+                if item['tipo'] == 'VENTA' and item['id'] == venta.ven_id
+            )
+            self.assertEqual(tramite['monto'], '28200.00')
+            self.assertIn('Pago: Vuelto al cliente', tramite['observaciones'])
+
+            cierre = self.client.post(
+                '/api/caja/sesiones/cerrar/',
+                {'saldo_final_declarado': '50700.00'},
+                format='json',
+            )
+            self.assertEqual(cierre.status_code, status.HTTP_200_OK, cierre.data)
+            self.assertEqual(cierre.data['sesion']['estado'], 'CERRADA')
+            self.assertEqual(cierre.data['sesion']['saldo_final_sistema'], '50700.00')
+
+            detalle = self.client.get(
+                f"/api/caja/sesiones/{apertura.data['id']}/resumen/"
+            )
+            self.assertEqual(detalle.status_code, status.HTTP_200_OK, detalle.data)
+            self.assertEqual(detalle.data['resumen']['total_ventas'], '28200.00')
+
+            item_sin_cargo.refresh_from_db()
+            self.assertIsNone(item_sin_cargo.vdi_precio_unitario_final)
+        finally:
+            otros_internos.update(activo=True)

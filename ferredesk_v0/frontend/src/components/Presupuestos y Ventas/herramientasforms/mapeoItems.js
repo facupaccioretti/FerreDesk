@@ -29,7 +29,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     return Number.isFinite(numero) ? numero : COSTO_POR_DEFECTO;
   })();
 
-
+  const precioFinal = item.precioFinal ?? item.vdi_precio_unitario_final;
 
   // Lista de campos permitidos. Se mantiene como referencia estática
   // aunque el mapeo se hace explícitamente más abajo.
@@ -49,7 +49,14 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     vdi_costo: vdi_costo,
     vdi_margen: item.margen ?? item.vdi_margen ?? (item.producto?.margen ?? 0),
     vdi_bonifica: item.bonificacion ?? item.bonifica ?? item.vdi_bonifica ?? 0,
-    vdi_precio_unitario_final: item.precioFinal ?? item.vdi_precio_unitario_final ?? null,
+    vdi_precio_unitario_final: (() => {
+      if (typeof precioFinal === 'string') {
+        // String vacío/espacios → 0; string inválido ('abc') → pasa al backend para rechazo explícito
+        return precioFinal.trim() === '' ? 0 : precioFinal
+      }
+      // NaN, Infinity, -Infinity → 0; null/undefined → 0; número válido → conservar
+      return Number.isFinite(precioFinal) ? precioFinal : 0
+    })(),
     vdi_detalle1: item.denominacion ?? item.detalle1 ?? item.vdi_detalle1 ?? '',
     vdi_detalle2: item.detalle2 ?? item.vdi_detalle2 ?? '',
     vdi_idaliiva: idaliiva,
@@ -60,8 +67,6 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
     // ATENCIÓN: No incluir campos como 'cuit' o 'domicilio' en los ítems. Estos solo corresponden a la cabecera de la venta.
     // Si necesitas esos datos, agrégalos en el objeto principal de la venta, nunca en los ítems.
   };
-
-
 
   // Eliminar cualquier campo calculado si accidentalmente se incluyó
   const camposCalculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem', 'precioFinal'];
@@ -123,4 +128,4 @@ export const normalizarItemsStock = (items) => {
     // Si ya tiene objeto producto, mantenerlo tal como está
     return item;
   });
-}; 
+};

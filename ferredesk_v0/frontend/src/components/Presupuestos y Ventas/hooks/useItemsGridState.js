@@ -944,6 +944,13 @@ export function useItemsGridState({
                 const cantidad = Number.parseFloat(row.cantidad) || 0
                 const bonif = Number.parseFloat(row.bonificacion) || 0
                 const esStock = !!(row.producto || row.vdi_idsto)
+                const precioFinal = (() => {
+                    if (typeof row.precioFinal === 'string') {
+                        return row.precioFinal.trim() === '' ? 0 : row.precioFinal
+                    }
+                    // NaN, Infinity, -Infinity → 0; null/undefined → 0
+                    return Number.isFinite(row.precioFinal) ? row.precioFinal : 0
+                })()
 
                 if (esStock) {
                     const idStock = row.producto?.id ?? row.vdi_idsto
@@ -957,7 +964,7 @@ export function useItemsGridState({
                         vdi_costo: row.vdi_costo ?? 0,
                         vdi_margen: margen,
                         vdi_bonifica: bonif,
-                        vdi_precio_unitario_final: row.precioFinal || null,
+                        vdi_precio_unitario_final: precioFinal,
                         vdi_detalle1: row.denominacion || '',
                         vdi_detalle2: row.unidad || '',
                         vdi_idaliiva: idaliiva,
@@ -972,7 +979,7 @@ export function useItemsGridState({
                         vdi_cantidad: cantidad,
                         vdi_costo: Number.parseFloat(row.vdi_costo) || 0,
                         vdi_margen: 0,
-                        vdi_precio_unitario_final: row.precioFinal || null,
+                        vdi_precio_unitario_final: precioFinal,
                         vdi_bonifica: bonif,
                         vdi_detalle1: row.denominacion || '',
                         vdi_detalle2: row.unidad || '',

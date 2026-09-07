@@ -455,18 +455,22 @@ def registrar_valores_y_movimientos(
             descripcion_mov = f"{descripcion_base} {descripcion_comprobante} ({metodo_pago.nombre})"
             if observacion:
                 descripcion_mov = f"{descripcion_mov} - {observacion}"
-            monto_movimiento = monto_recibido if (
+            monto_para_movimiento = monto_recibido if (
                 direccion == 'entrada' and metodo_pago.codigo == CODIGO_EFECTIVO and monto_recibido is not None
             ) else monto
             movimiento_obj = MovimientoCaja.objects.create(
                 sesion_caja=sesion_caja,
                 usuario=sesion_caja.usuario,
                 tipo=tipo_movimiento,
-                monto=monto_movimiento,
+                monto=monto_para_movimiento,
                 descripcion=descripcion_mov,
             )
             signo = '+' if direccion == 'entrada' else '-'
-            logger.debug(f"Movimiento de caja creado: {signo}{monto} por pago en {metodo_pago.nombre}")
+            logger.debug(
+                f"Movimiento de caja creado: {signo}{monto_para_movimiento} "
+                f"por pago en {metodo_pago.nombre}"
+                + (f" (bruto recibido; neto venta: {monto})" if monto_para_movimiento != monto else "")
+            )
 
         resultados.append({
             'metodo_pago': metodo_pago,

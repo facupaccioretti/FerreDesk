@@ -175,4 +175,29 @@ describe("useItemsGridState", () => {
     expect(api.getRows()[0].precio).toBeCloseTo(132, 4);
     expect(api.getRows()[0].vdi_costo).toBe(100);
   });
+
+  test("serializa un precio vacio como cero", async () => {
+    await renderHarness();
+
+    api.codigoRefs.current[0] = {
+      focus: jest.fn(),
+      setCustomValidity: jest.fn(),
+      reportValidity: jest.fn(),
+    };
+    api.cantidadRefs.current[0] = { focus: jest.fn() };
+
+    await act(async () => {
+      api.handleRowChange(0, "codigo", "SCAN001");
+    });
+    await act(async () => {
+      await api.handleRowKeyDown(
+        { key: "Enter", preventDefault() {}, stopPropagation() {} },
+        0,
+        "codigo"
+      );
+      api.handleRowChange(0, "precio", "   ");
+    });
+
+    expect(api.getItems()[0].vdi_precio_unitario_final).toBe(0);
+  });
 });
