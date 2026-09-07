@@ -20,7 +20,7 @@ def clasificar_movimientos_historicos(apps, schema_editor):
         MovimientoCaja.objects.filter(pk__in=ids_custodia).update(afecta_efectivo=False)
 
     MovimientoCaja.objects.filter(
-        descripcion__contains='cheque rechazado'
+        descripcion__icontains='cheque rechazado'
     ).update(afecta_efectivo=False)
 
 

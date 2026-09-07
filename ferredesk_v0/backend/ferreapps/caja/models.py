@@ -482,7 +482,6 @@ class PagoVenta(models.Model):
         max_length=40,
         db_column='PAG_TIPO_OPERACION',
         default=TIPO_COBRO_VENTA,
-        db_index=True,
         help_text='Clasifica el sentido economico del pago'
     )
     

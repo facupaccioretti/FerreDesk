@@ -71,7 +71,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='pagoventa',
             name='tipo_operacion',
-            field=models.CharField(db_column='PAG_TIPO_OPERACION', db_index=True, default='COBRO_VENTA', help_text='Clasifica el sentido economico del pago', max_length=40),
+            field=models.CharField(db_column='PAG_TIPO_OPERACION', default='COBRO_VENTA', help_text='Clasifica el sentido economico del pago', max_length=40),
         ),
         migrations.AddIndex(
             model_name='pagoventa',
