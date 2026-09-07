@@ -139,6 +139,8 @@ def previsualizar_devolucion(payload):
             }
         )
 
+    monto_imputable = min(total_credito, saldo_pendiente)
+    monto_devolucion_neto = max(total_credito - monto_imputable, ZERO)
     return {
         "venta_origen": {
             "ven_id": venta.ven_id,
@@ -157,8 +159,8 @@ def previsualizar_devolucion(payload):
         "resumen_monetario": {
             "total_credito": _money(total_credito),
             "saldo_pendiente_venta": _money(saldo_pendiente),
-            "maximo_a_imputar_deuda": _money(min(total_credito, saldo_pendiente)),
-            "maximo_saldo_a_favor_o_devolucion": _money(total_credito),
+            "maximo_a_imputar_deuda": _money(monto_imputable),
+            "maximo_saldo_a_favor_o_devolucion": _money(monto_devolucion_neto),
         },
         "opciones_resolucion": obtener_resoluciones_devolucion(venta),
         "advertencias": [],

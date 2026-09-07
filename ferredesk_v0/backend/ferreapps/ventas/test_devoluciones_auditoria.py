@@ -25,6 +25,7 @@ from ferreapps.ventas.postventa_test_base import PostventaTenantTestCase
 from ferreapps.ventas.selectors.postventa import (
     calcular_credito_incremental,
     obtener_items_origen_postventa,
+    obtener_saldo_pendiente_venta,
     previsualizar_devolucion,
 )
 from ferreapps.ventas.services.confirmar_devolucion import _build_nc_payload, confirmar_devolucion
@@ -102,24 +103,43 @@ class DevolucionesAuditoriaTests(PostventaTenantTestCase):
 
                 self.assertEqual(self._snapshot(), before)
 
-    def test_consumidor_final_recibe_credito_completo_sin_imputaciones(self):
+    def test_consumidor_final_imputa_deuda_y_recibe_solo_el_neto(self):
         stock = self._crear_stock("AUD-CF-DINERO")
         venta, detalle = self._crear_venta_origen(stock)
         self._usar_consumidor_final(venta)
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("150.00")}])
         metodo, cuenta = self._medio_transferencia()
         payload = self._payload(venta, detalle)
         payload["resolucion_dinero"] = "DEVOLVER_DINERO"
+        preview = previsualizar_devolucion(payload)
+        self.assertEqual(preview["resumen_monetario"]["maximo_a_imputar_deuda"], "50.00")
+        self.assertEqual(preview["resumen_monetario"]["maximo_saldo_a_favor_o_devolucion"], "50.00")
         payload["medios"] = [{
             "metodo_pago_id": metodo.pk,
             "cuenta_banco_id": cuenta.pk,
-            "monto": "100.00",
+            "monto": "50.00",
         }]
 
         resultado = confirmar_devolucion(payload=payload, usuario=self.usuario)
 
-        self.assertEqual(resultado["total_imputado"], "0.00")
-        self.assertEqual(resultado["total_devuelto"], "100.00")
-        self.assertFalse(Imputacion.objects.exists())
+        self.assertEqual(resultado["total_imputado"], "50.00")
+        self.assertEqual(resultado["total_devuelto"], "50.00")
+        self.assertEqual(obtener_saldo_pendiente_venta(venta), Decimal("0.00"))
+        nota_credito = Venta.objects.get(pk=resultado["nota_credito_id"])
+        self.assertEqual(validar_saldo_comprobante_pago(nota_credito, Decimal("0.00")), Decimal("0.00"))
+
+    def test_devolucion_no_crea_pago_si_la_deuda_cubre_el_credito(self):
+        stock = self._crear_stock("AUD-CF-D-TOTAL")
+        venta, detalle = self._crear_venta_origen(stock)
+        self._usar_consumidor_final(venta)
+        payload = self._payload(venta, detalle)
+        payload["resolucion_dinero"] = "DEVOLVER_DINERO"
+
+        resultado = confirmar_devolucion(payload=payload, usuario=self.usuario)
+
+        self.assertEqual(resultado["total_imputado"], "100.00")
+        self.assertEqual(resultado["total_devuelto"], "0.00")
+        self.assertFalse(PagoVenta.objects.filter(postventa_operacion_id=resultado["operacion_id"]).exists())
 
     def test_devolucion_efectivo_insuficiente_se_registra_con_advertencia(self):
         efectivo, _ = MetodoPago.objects.get_or_create(
@@ -134,6 +154,7 @@ class DevolucionesAuditoriaTests(PostventaTenantTestCase):
         )
         stock = self._crear_stock("AUD-CASH-WARN")
         venta, detalle = self._crear_venta_origen(stock)
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("200.00")}])
         payload = self._payload(venta, detalle)
         payload["resolucion_dinero"] = "DEVOLVER_DINERO"
         payload["medios"] = [{"metodo_pago_id": efectivo.pk, "monto": "100.00"}]
@@ -325,7 +346,8 @@ class DevolucionesAuditoriaTests(PostventaTenantTestCase):
             defaults={"nombre": "Transferencia", "afecta_arqueo": False, "activo": True},
         )
         stock = self._crear_stock("AUD-BCO", cantidad=Decimal("10.00"))
-        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("2.00"))
+        venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("2.00"), precio=Decimal("121.00"))
+        imputar_deuda(venta, [{"factura": venta, "monto": Decimal("242.00")}])
         payload = self._payload(venta, detalle, cantidad="1.00")
         payload["resolucion_dinero"] = "DEVOLVER_DINERO"
         payload["medios"] = [
@@ -346,8 +368,8 @@ class DevolucionesAuditoriaTests(PostventaTenantTestCase):
         self.assertEqual(pago.cuenta_banco_id, banco.id)
         self.assertEqual(pago.monto, Decimal("121.00"))
 
-        from django.test import Client
-        client = Client()
+        from ferreapps.caja.tests.mixins import TenantAPIClient
+        client = TenantAPIClient(self.tenant)
         client.force_login(self.usuario)
         response = client.get(f"/api/caja/cuentas-banco/{banco.id}/historial/")
         self.assertEqual(response.status_code, 200)

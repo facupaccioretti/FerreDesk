@@ -64,7 +64,8 @@ class PostventaConcurrencyTests(TransactionTestCase):
             activo="S",
         )
         self.plazo = Plazo.objects.first() or Plazo.objects.create(nombre="Contado", activo="S")
-        self.cliente = Cliente.objects.order_by("id").first() or Cliente.objects.create(
+        self.cliente = Cliente.objects.exclude(pk=1).order_by("id").first() or Cliente.objects.create(
+            id=(Cliente.objects.aggregate(max_id=Max("id"))["max_id"] or 1) + 1,
             razon="Cliente Test",
             domicilio="Siempre Viva 742",
             iva=self.tipo_iva,

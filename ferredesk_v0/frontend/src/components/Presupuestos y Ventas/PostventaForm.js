@@ -141,6 +141,10 @@ export const esConsumidorFinal = (previewData) => (
   String(previewData?.venta_origen?.cliente_id) === "1"
 )
 
+export const resolucionDineroPorDefecto = (previewData) => (
+  esConsumidorFinal(previewData) ? "DEVOLVER_DINERO" : "SALDO_A_FAVOR"
+)
+
 export const tieneEfectivoInsuficiente = (saldoDisponible, montoEfectivo) => {
   const saldo = Number.parseFloat(saldoDisponible)
   return Number.isFinite(saldo) && Number(montoEfectivo) > saldo + 0.009
@@ -209,7 +213,11 @@ export const buildConfirmPayload = ({
     motivo,
     motivo_forzado: "",
     resolucion_dinero: resolucionDineroFinal,
-    ...(direccionMediosPostventa(resolucionDineroFinal)
+    ...(direccionMediosPostventa(resolucionDineroFinal) && obtenerMontoObjetivo(
+      modo,
+      previewData?.resumen_monetario,
+      resolucionDineroFinal,
+    ) > 0
       ? { medios: mediosPago.map(normalizarMedioPago) }
       : {}),
   }
@@ -470,7 +478,7 @@ const PostventaForm = ({
       } else {
         const previewData = await previsualizarDevolucion(previewPayload)
         if (!previewData) return
-        setResolucionDinero("SALDO_A_FAVOR")
+        setResolucionDinero(resolucionDineroPorDefecto(previewData))
         setUltimoPreviewContext({ previewPayload, previewData })
       }
     } catch {
@@ -912,7 +920,13 @@ const PostventaForm = ({
 
                   {modo === "devolucion" && (
                     <div className="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                      Se genera una nota de credito y el importe queda como saldo a favor del cliente.
+                      {resolucionDinero === "DEVOLVER_DINERO"
+                        ? Number(resumenMonetario?.maximo_a_imputar_deuda || 0) > 0
+                          ? `Del credito, ${formatMoney(resumenMonetario.maximo_a_imputar_deuda)} cancela la deuda de esta venta y ${formatMoney(resumenMonetario.maximo_saldo_a_favor_o_devolucion)} se devuelve al cliente.`
+                          : "Se genera una nota de credito y se realiza la devolucion del dinero al cliente."
+                        : resolucionDinero === "IMPUTAR_DEUDA"
+                          ? "Se genera una nota de credito y se imputa a la deuda pendiente de la venta origen."
+                          : "Se genera una nota de credito y el importe queda como saldo a favor del cliente."}
                     </div>
                   )}
 
@@ -925,8 +939,12 @@ const PostventaForm = ({
                         onChange={(event) => setResolucionDinero(event.target.value)}
                         disabled={interaccionBloqueada}
                       >
-                        <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
-                        <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
+                        {!esConsumidorFinal(vistaPrevia) && (
+                          <>
+                            <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
+                            <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
+                          </>
+                        )}
                         <option value="DEVOLVER_DINERO">Devolver dinero</option>
                       </select>
                     </div>
@@ -942,7 +960,9 @@ const PostventaForm = ({
                         disabled={interaccionBloqueada}
                       >
                         <option value="COBRAR_DIFERENCIA">Cobrar diferencia</option>
-                        <option value="DEJAR_DEUDA">Dejar deuda</option>
+                        {!esConsumidorFinal(vistaPrevia) && (
+                          <option value="DEJAR_DEUDA">Dejar deuda</option>
+                        )}
                       </select>
                     </div>
                   )}
@@ -956,8 +976,12 @@ const PostventaForm = ({
                         onChange={(event) => setResolucionDiferencia(event.target.value)}
                         disabled={interaccionBloqueada}
                       >
-                        <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
-                        <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
+                        {!esConsumidorFinal(vistaPrevia) && (
+                          <>
+                            <option value="SALDO_A_FAVOR">Dejar saldo a favor</option>
+                            <option value="IMPUTAR_DEUDA">Imputar deuda pendiente</option>
+                          </>
+                        )}
                         <option value="DEVOLVER_DINERO">Devolver dinero</option>
                       </select>
                     </div>

@@ -106,6 +106,7 @@ describe("PostventaForm payloads", () => {
       venta_origen: { cliente_id: 1 },
       resumen_monetario: {
         direccion_diferencia: "CLIENTE_RECIBE",
+        maximo_saldo_a_favor_o_devolucion: "100.00",
       },
     }
 
@@ -130,7 +131,10 @@ describe("PostventaForm payloads", () => {
       previewPayload: { venta_id: 10, items_devueltos: [], items_nuevos: [] },
       previewData: {
         venta_origen: { cliente_id: "1" },
-        resumen_monetario: { direccion_diferencia: "CLIENTE_PAGA" },
+        resumen_monetario: {
+          diferencia: "10.00",
+          direccion_diferencia: "CLIENTE_PAGA",
+        },
       },
       resolucionDiferencia: "DEJAR_DEUDA",
       mediosPago: [{ metodo_pago_id: 1, monto: "10.00" }],
@@ -199,6 +203,31 @@ describe("PostventaForm payloads", () => {
       diferencia: "60.00",
       saldo_pendiente_venta: "60.00",
     }, "DEVOLVER_DINERO")).toBe(0)
+  })
+
+  test("usa el neto informado para una devolucion directa", () => {
+    expect(obtenerMontoObjetivo("devolucion", {
+      total_credito: "100.00",
+      saldo_pendiente_venta: "50.00",
+      maximo_saldo_a_favor_o_devolucion: "50.00",
+    }, "DEVOLVER_DINERO")).toBe(50)
+  })
+
+  test("no envia medios si la deuda cubre una devolucion directa", () => {
+    const payload = buildConfirmPayload({
+      modo: "devolucion",
+      observacion: "Devolucion sin reintegro",
+      previewPayload: { venta_id: 10, items: [] },
+      previewData: {
+        resumen_monetario: {
+          maximo_saldo_a_favor_o_devolucion: "0.00",
+        },
+      },
+      resolucionDinero: "DEVOLVER_DINERO",
+      mediosPago: [{ metodo_pago_id: 1, monto: "100.00" }],
+    })
+
+    expect(payload.medios).toBeUndefined()
   })
 
   test("no envia medios cuando la deuda cubre todo el saldo a favor", () => {

@@ -132,10 +132,13 @@ def confirmar_devolucion(*, payload, usuario):
             saldo_pendiente = Decimal(str(preview["resumen_monetario"]["saldo_pendiente_venta"]))
             medios = payload.get("medios", [])
             monto_imputado_estimado = ZERO
-            if payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA:
+            if payload["resolucion_dinero"] in {
+                PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA,
+                PostventaOperacion.RESOLUCION_DEVOLVER_DINERO,
+            }:
                 monto_imputado_estimado = min(total_credito, saldo_pendiente)
             monto_devolucion_estimado = (
-                total_credito - monto_imputado_estimado
+                max(total_credito - monto_imputado_estimado, ZERO)
                 if payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO
                 else ZERO
             )
@@ -186,12 +189,8 @@ def confirmar_devolucion(*, payload, usuario):
                     detalle=detalle.vdi_detalle1 or "",
                 )
 
-            monto_imputado = ZERO
-            if (
-                payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_IMPUTAR_DEUDA
-                and saldo_pendiente > ZERO
-            ):
-                monto_imputado = min(total_credito, saldo_pendiente)
+            monto_imputado = monto_imputado_estimado
+            if monto_imputado > ZERO:
                 imputar_deuda(
                     nota_credito,
                     [
@@ -207,7 +206,7 @@ def confirmar_devolucion(*, payload, usuario):
             monto_devolucion = ZERO
             advertencias = []
             if payload["resolucion_dinero"] == PostventaOperacion.RESOLUCION_DEVOLVER_DINERO:
-                monto_devolucion = total_credito
+                monto_devolucion = max(total_credito - monto_imputado, ZERO)
                 if monto_devolucion > ZERO:
                     pagos, advertencias = registrar_devolucion_cliente(
                         venta_documento=nota_credito,
