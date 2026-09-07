@@ -1040,7 +1040,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         venta, detalle = self._crear_venta_origen(stock, cantidad=Decimal("1.00"))
         StockProve.objects.filter(stock=stock, proveedor=self.proveedor).delete()
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesMessage(ValidationError, detalle.vdi_detalle1):
             confirmar_devolucion(payload={
                 "venta_id": venta.ven_id,
                 "modo": "DEVOLUCION_PARCIAL",
@@ -1059,7 +1059,7 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
         detalle.vdi_idpro = None
         detalle.save(update_fields=["vdi_idpro"])
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesMessage(ValidationError, detalle.vdi_detalle1):
             confirmar_devolucion(payload={
                 "venta_id": venta.ven_id,
                 "modo": "DEVOLUCION_PARCIAL",

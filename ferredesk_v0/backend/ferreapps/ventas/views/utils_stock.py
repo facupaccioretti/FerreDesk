@@ -159,8 +159,9 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
         detalle = detalles[item["venta_detalle_item_id"]]
         if not detalle.vdi_idsto_id:
             continue
+        denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
         if not detalle.vdi_idpro_id:
-            raise ValidationError({"items": f"El item {detalle.id} no tiene proveedor de referencia"})
+            raise ValidationError({"items": f"{denominacion} no tiene proveedor de referencia"})
         reposiciones.append((detalle, Decimal(str(item["cantidad"]))))
 
     stock_ids_nuevos = {item["stock_id"] for item in items_nuevos}
@@ -179,7 +180,8 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
     for detalle, _ in reposiciones:
         stock_prove = por_clave.get((detalle.vdi_idsto_id, detalle.vdi_idpro_id))
         if stock_prove is None:
-            raise ValidationError({"items": f"No existe stock para el producto {detalle.vdi_idsto_id} y su proveedor de referencia"})
+            denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
+            raise ValidationError({"items": f"No existe stock para {denominacion} y su proveedor de referencia"})
         proveedores_repuestos[detalle.id] = stock_prove.proveedor_id
 
     proveedores_por_stock = {}

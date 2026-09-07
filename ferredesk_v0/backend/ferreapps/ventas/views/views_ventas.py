@@ -718,6 +718,10 @@ class VentaViewSet(viewsets.ModelViewSet):
                         cod = _obtener_codigo_venta(id_stock)
                         errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
                         continue
+
+                    if not item.vdi_idpro_id:
+                        item.vdi_idpro_id = id_proveedor
+                        item.save(update_fields=['vdi_idpro'])
                     
                     # Descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
