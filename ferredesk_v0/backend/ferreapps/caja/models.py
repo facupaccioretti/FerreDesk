@@ -46,6 +46,7 @@ CODIGO_QR = 'qr'
 CODIGO_CUENTA_CORRIENTE = 'cuenta_corriente'
 CODIGO_CHEQUE = 'cheque'
 CODIGO_FONDOS_PROPIOS = 'fondos_propios'
+CODIGO_DESCUENTO_HABERES = 'descuento_haberes'
 
 
 # =============================================================================

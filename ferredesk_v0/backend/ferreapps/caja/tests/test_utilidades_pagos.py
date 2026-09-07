@@ -24,6 +24,7 @@ from ..models import (
     CODIGO_EFECTIVO,
     CODIGO_CHEQUE,
     CODIGO_CUENTA_CORRIENTE,
+    CODIGO_DESCUENTO_HABERES,
 )
 from .mixins import CajaTestMixin, CajaTenantTestCase
 
@@ -231,6 +232,19 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(len(pagos), 1)
         self.assertEqual(pagos[0].metodo_pago, self.metodo_transferencia)
         self.assertEqual(MovimientoCaja.objects.count(), 0)
+
+    def test_descuento_haberes_no_se_puede_usar_en_una_venta(self):
+        from ..utils import registrar_pagos_venta
+
+        metodo = MetodoPago.objects.get(codigo=CODIGO_DESCUENTO_HABERES)
+        with self.assertRaisesMessage(ValidationError, 'solo puede utilizarse en recibos'):
+            registrar_pagos_venta(
+                venta=self.venta,
+                sesion_caja=self.sesion,
+                pagos=[{'metodo_pago_id': metodo.id, 'monto': Decimal('500.00')}],
+            )
+
+        self.assertFalse(PagoVenta.objects.filter(venta=self.venta).exists())
 
     def test_registrar_pago_cheque_sin_caja_funciona(self):
         """Un cheque de terceros debe poder registrarse sin caja y no generar movimiento de custodia."""

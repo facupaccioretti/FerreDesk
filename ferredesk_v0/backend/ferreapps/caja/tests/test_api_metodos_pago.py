@@ -7,7 +7,7 @@ Verifica:
 """
 
 from rest_framework import status
-from ..models import MetodoPago
+from ..models import MetodoPago, CODIGO_DESCUENTO_HABERES
 from .mixins import CajaTenantAPITestCase, CajaTestMixin
 
 
@@ -51,3 +51,14 @@ class MetodoPagoAPITests(CajaTenantAPITestCase, CajaTestMixin):
         # Restaurar
         metodo.activo = True
         metodo.save()
+
+    def test_descuento_haberes_solo_se_expone_para_recibos(self):
+        respuesta_general = self.client.get('/api/caja/metodos-pago/')
+        respuesta_recibos = self.client.get(
+            '/api/caja/metodos-pago/?contexto=recibo_cuenta_corriente'
+        )
+
+        codigos_generales = [item['codigo'] for item in respuesta_general.data]
+        codigos_recibos = [item['codigo'] for item in respuesta_recibos.data]
+        self.assertNotIn(CODIGO_DESCUENTO_HABERES, codigos_generales)
+        self.assertIn(CODIGO_DESCUENTO_HABERES, codigos_recibos)

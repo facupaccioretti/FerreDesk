@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from decimal import Decimal
 from ..models import Recibo
+from ferreapps.caja.models import MetodoPago, CODIGO_DESCUENTO_HABERES
 
 
 class ReciboSerializer(serializers.ModelSerializer):
@@ -50,6 +51,23 @@ class ReciboCreateSerializer(serializers.Serializer):
         imputaciones = data.get('imputaciones', [])
         pagos = data.get('pagos', [])
         monto_total = data.get('rec_monto_total', Decimal('0'))
+
+        ids_metodos = [p.get('metodo_pago_id') for p in pagos if p.get('metodo_pago_id')]
+        metodos_haberes = MetodoPago.objects.filter(
+            id__in=ids_metodos,
+            codigo=CODIGO_DESCUENTO_HABERES,
+        ).count()
+        if metodos_haberes:
+            if len(pagos) != 1 or metodos_haberes != 1:
+                raise serializers.ValidationError({
+                    'pagos': 'Descuento de haberes no puede combinarse con medios que mueven fondos.'
+                })
+            monto_imputaciones = sum(imp['imp_monto'] for imp in imputaciones)
+            if not imputaciones or abs(monto_imputaciones - monto_total) > Decimal('0.01'):
+                raise serializers.ValidationError({
+                    'imputaciones': 'Descuento de haberes debe aplicarse por completo a deuda existente.'
+                })
+            data['es_descuento_haberes'] = True
         
         pv_raw = (data.get('rec_pv') or '').strip()
         num_raw = (data.get('rec_numero') or '').strip()
@@ -69,9 +87,7 @@ class ReciboCreateSerializer(serializers.Serializer):
                     'rec_monto_total': f'La suma de los medios de pago ({monto_pagos}) no coincide con el total del recibo ({monto_total})'
                 })
 
-        monto_imputaciones = sum(
-            imp['imp_monto'] for imp in imputaciones
-        )
+        monto_imputaciones = sum(imp['imp_monto'] for imp in imputaciones)
         
         if monto_total < monto_imputaciones:
             raise serializers.ValidationError({
