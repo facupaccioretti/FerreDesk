@@ -33,6 +33,7 @@ from .models import (
     TIPO_MOVIMIENTO_SALIDA,
     CODIGO_TRANSFERENCIA,
     CODIGO_QR,
+    CODIGO_DESCUENTO_HABERES,
 )
 from .serializers import (
     SesionCajaSerializer,
@@ -296,6 +297,8 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
             | Q(sesion_caja__isnull=True, venta__sesion_caja=sesion)
             | Q(sesion_caja__isnull=True, recibo__sesion_caja=sesion)
             | Q(sesion_caja__isnull=True, orden_pago__sesion_caja=sesion)
+        ).exclude(
+            metodo_pago__codigo=CODIGO_DESCUENTO_HABERES
         ).exclude(
             venta__ven_estado='AN'
         ).exclude(
@@ -582,6 +585,9 @@ class MetodoPagoViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Permite filtrar todos los métodos incluyendo inactivos."""
         queryset = MetodoPago.objects.all()
+
+        if self.request.query_params.get('contexto') != 'recibo_cuenta_corriente':
+            queryset = queryset.exclude(codigo=CODIGO_DESCUENTO_HABERES)
         
         solo_activos = self.request.query_params.get('solo_activos', 'true').lower() == 'true'
         if solo_activos:

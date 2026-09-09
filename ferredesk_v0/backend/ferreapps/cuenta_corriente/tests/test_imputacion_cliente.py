@@ -8,6 +8,13 @@ from ferreapps.clientes.models import Cliente
 from ferreapps.cuenta_corriente.models import Imputacion, Recibo
 from ferreapps.cuenta_corriente.services.cuenta_corriente_service import obtener_movimientos_cliente
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
+from ferreapps.caja.models import (
+    CODIGO_DESCUENTO_HABERES,
+    CuentaBanco,
+    MetodoPago,
+    MovimientoCaja,
+    PagoVenta,
+)
 from ferreapps.ventas.postventa_test_base import PostventaTenantTestCase
 
 
@@ -138,6 +145,40 @@ class ImputacionClienteTests(PostventaTenantTestCase):
         movimientos = obtener_movimientos_cliente(self.cliente.id, completo=True)
         self.assertFalse(any(mov["comprobante_tipo"] == "factura_recibo" for mov in movimientos))
         self.assertEqual(movimientos[-1]["saldo_acumulado"], Decimal("0.00"))
+
+    def test_descuento_haberes_salda_deuda_sin_mover_fondos(self):
+        factura = self._crear_venta(self.comprobante_origen, 124)
+        metodo = MetodoPago.objects.get(codigo=CODIGO_DESCUENTO_HABERES)
+        bancos_antes = CuentaBanco.objects.count()
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.post(
+            '/api/cuenta-corriente/crear-recibo/',
+            data={
+                'cliente_id': self.cliente.id,
+                'rec_fecha': '2026-07-15',
+                'rec_monto_total': '100.00',
+                'rec_pv': '1',
+                'rec_numero': '124',
+                'rec_observacion': 'Retiro de empleado',
+                'pagos': [{'metodo_pago_id': metodo.id, 'monto': '100.00'}],
+                'imputaciones': [{'imp_id_venta': factura.pk, 'imp_monto': '100.00'}],
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        recibo = Recibo.objects.get(pk=respuesta.json()['rec_id'])
+        pago = PagoVenta.objects.get(recibo=recibo)
+        self.assertEqual(pago.metodo_pago.codigo, CODIGO_DESCUENTO_HABERES)
+        self.assertIsNone(pago.sesion_caja_id)
+        self.assertIsNone(pago.cuenta_banco_id)
+        self.assertFalse(MovimientoCaja.objects.exists())
+        self.assertEqual(CuentaBanco.objects.count(), bancos_antes)
+
+        movimientos = obtener_movimientos_cliente(self.cliente.id, completo=True)
+        factura_movimiento = next(mov for mov in movimientos if mov['id'] == factura.pk)
+        self.assertEqual(factura_movimiento['saldo_pendiente'], Decimal('0.00'))
 
     def test_locks_de_ventas_se_ordenan_por_pk(self):
         factura_uno = self._crear_venta(self.comprobante_origen, 121)

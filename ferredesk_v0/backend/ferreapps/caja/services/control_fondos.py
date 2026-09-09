@@ -11,6 +11,7 @@ from ferreapps.cuenta_corriente.models import OrdenPago, Recibo
 
 from ..models import (
     Cheque,
+    CODIGO_DESCUENTO_HABERES,
     CODIGO_EFECTIVO,
     CuentaBanco,
     MovimientoCaja,
@@ -399,6 +400,7 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
             es_vuelto=False,
         )
         .exclude(metodo_pago__codigo=CODIGO_EFECTIVO)
+        .exclude(metodo_pago__codigo=CODIGO_DESCUENTO_HABERES)
         .filter(Q(venta__isnull=False) | Q(recibo__isnull=False))
         .exclude(venta__ven_estado="AN")
         .exclude(recibo__rec_estado=Recibo.ESTADO_ANULADO)

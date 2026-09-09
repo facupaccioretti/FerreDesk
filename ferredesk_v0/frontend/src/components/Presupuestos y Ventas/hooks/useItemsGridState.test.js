@@ -176,6 +176,40 @@ describe("useItemsGridState", () => {
     expect(api.getRows()[0].vdi_costo).toBe(100);
   });
 
+  test("conserva el precio final historico al cargar un item del backend", async () => {
+    await act(async () => {
+      root.render(
+        <HookHarness
+          params={{
+            initialItems: [{
+              id: 20,
+              vdi_idsto: 10,
+              vdi_codigo: "HIST400",
+              vdi_detalle1: "Producto historico",
+              vdi_detalle2: "UN",
+              vdi_cantidad: 5,
+              vdi_costo: 400,
+              vdi_margen: 0,
+              vdi_bonifica: 0,
+              vdi_precio_unitario_final: 400,
+              vdi_idaliiva: 4,
+            }],
+            autoSumarDuplicados: "sumar",
+            modo: "venta",
+            readOnly: false,
+            listaPrecioId: 0,
+            listasPrecio: [],
+            alicuotas: { 4: 10.5 },
+          }}
+          onReady={(value) => { api = value; }}
+        />
+      );
+    });
+
+    expect(api.getRows()[0].precioFinal).toBe(400);
+    expect(api.getRows()[0].precioFinal * api.getRows()[0].cantidad).toBe(2000);
+  });
+
   test("serializa un precio vacio como cero", async () => {
     await renderHarness();
 

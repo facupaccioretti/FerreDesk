@@ -81,9 +81,14 @@ def crear_recibo_con_imputaciones(request):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
-        sesion_caja = SesionCaja.objects.filter(usuario=request.user, estado=ESTADO_CAJA_ABIERTA).first()
-        
         data = serializer.validated_data
+        sesion_caja = None
+        if not data.get('es_descuento_haberes'):
+            sesion_caja = SesionCaja.objects.filter(
+                usuario=request.user,
+                estado=ESTADO_CAJA_ABIERTA,
+            ).first()
+
         cliente = get_object_or_404(Cliente, id=data['cliente_id'])
         
         with transaction.atomic():

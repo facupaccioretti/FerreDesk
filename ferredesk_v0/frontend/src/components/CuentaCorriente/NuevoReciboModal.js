@@ -114,6 +114,7 @@ const NuevoReciboModal = ({
 
   // Calcular monto total de cobro desde los pagos
   const montoPagos = pagos.reduce((acc, p) => acc + (parseFloat(p.monto) || 0), 0)
+  const esDescuentoHaberes = pagos.some(p => p.codigo === 'DESCUENTO_HABERES')
 
   // Handlers para Medios de Pago
   const agregarPago = () => {
@@ -209,6 +210,16 @@ const NuevoReciboModal = ({
     }
 
     // Validaciones específicas por medio de pago
+    if (esDescuentoHaberes && pagos.length !== 1) {
+      setError('Descuento de haberes no puede combinarse con otros medios de pago')
+      return
+    }
+
+    if (esDescuentoHaberes && Math.abs(montoPagos - montoImputaciones) > 0.01) {
+      setError('Descuento de haberes debe aplicarse por completo a deuda existente')
+      return
+    }
+
     for (const p of pagos) {
       if (!p.metodo_pago_id) {
         setError('Debe seleccionar el método de pago para todos los items')
@@ -597,6 +608,12 @@ const NuevoReciboModal = ({
                           + Agregar Pago
                         </button>
                       </div>
+
+                      {esDescuentoHaberes && (
+                        <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                          Esta cancelacion salda deuda sin registrar ingresos en caja o banco.
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         {pagos.map((pago, idx) => (

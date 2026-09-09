@@ -36,6 +36,7 @@ from .models import (
     CODIGO_CHEQUE,
     CODIGO_CUENTA_CORRIENTE,
     Cheque,
+    CODIGO_DESCUENTO_HABERES,
 )
 
 logger = logging.getLogger(__name__)
@@ -299,6 +300,7 @@ def registrar_valores_y_movimientos(
     orden_pago=None,
     usuario=None,
     permitir_efectivo_insuficiente=False,
+    permitir_descuento_haberes=False,
 ) -> List[Dict[str, Any]]:
     """
     Procesa una lista de medios de pago y genera los movimientos de caja y cheques
@@ -360,6 +362,11 @@ def registrar_valores_y_movimientos(
             metodo_pago = MetodoPago.objects.get(id=metodo_pago_id)
         except MetodoPago.DoesNotExist:
             raise ValueError(f"No se encontró el método de pago con ID {metodo_pago_id}")
+
+        if metodo_pago.codigo == CODIGO_DESCUENTO_HABERES and not permitir_descuento_haberes:
+            raise ValidationError(
+                'Descuento de haberes solo puede utilizarse en recibos de cuenta corriente.'
+            )
 
         if (metodo_pago.codigo == CODIGO_EFECTIVO or metodo_pago.afecta_arqueo) and not sesion_caja:
             raise ValidationError(
@@ -619,6 +626,7 @@ def registrar_pagos_recibo(
             descripcion_comprobante=numero_recibo,
             descripcion_base=descripcion_base,
             usuario=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
+            permitir_descuento_haberes=True,
         )
 
         for res in resultados:

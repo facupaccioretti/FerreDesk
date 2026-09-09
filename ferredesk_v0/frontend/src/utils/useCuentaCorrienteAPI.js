@@ -178,7 +178,7 @@ const useCuentaCorrienteAPI = () => {
     // Obtener métodos de pago
     const getMetodosPago = useCallback(async () => {
         try {
-            const data = await makeRequest('/api/caja/metodos-pago/');
+            const data = await makeRequest('/api/caja/metodos-pago/?contexto=recibo_cuenta_corriente');
             return data;
         } catch (err) {
             console.error("Error fetching metodos pago:", err);
