@@ -297,7 +297,7 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
             esBloqueado,
             noDescontarStock,
             idOriginal,
-            precioEditadoManualmente: item.precioEditadoManualmente ?? false,
+            precioEditadoManualmente: item.precioEditadoManualmente ?? true,
         }
     }
 
@@ -360,6 +360,6 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
         esBloqueado,
         noDescontarStock,
         idOriginal,
-        precioEditadoManualmente: item.precioEditadoManualmente ?? false,
+        precioEditadoManualmente: item.precioEditadoManualmente ?? true,
     }
 }
