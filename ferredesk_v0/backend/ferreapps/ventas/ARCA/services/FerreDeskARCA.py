@@ -306,7 +306,7 @@ class FerreDeskARCA:
             
             # 2. Actualizar el número de la venta con el número correcto de AFIP
             venta.ven_numero = numero_afip
-            venta.save()
+            venta.save(update_fields=['ven_numero'])
             
             logger.info(f"Número actualizado para venta {venta.ven_id}: {numero_afip}")
             
@@ -351,7 +351,7 @@ class FerreDeskARCA:
                         observaciones_texto = str(resultado_arca['observaciones'])
                 
                 venta.ven_observacion = observaciones_texto
-                venta.save()
+                venta.save(update_fields=['ven_cae', 'ven_caevencimiento', 'ven_qr', 'ven_observacion'])
             
             logger.info(f"Emisión ARCA exitosa para venta {venta.ven_id}: CAE {resultado_arca['cae']}")
             
