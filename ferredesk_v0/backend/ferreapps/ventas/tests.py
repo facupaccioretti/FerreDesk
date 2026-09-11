@@ -1,7 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
+from django.contrib.auth import get_user_model
 from django.db.models import Max
 from django.urls import clear_url_caches
 from django.test import SimpleTestCase, TestCase
@@ -11,14 +12,17 @@ from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
+from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
+from ferreapps.ventas.ARCA.services.FerreDeskARCA import FerreDeskARCA
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
 
 ENDPOINT_VENTAS = "/api/ventas/"
+ENDPOINT_CONVERTIR_PRESUPUESTO = "/api/convertir-presupuesto/"
 
 
 class TestPrecioUnitarioField(SimpleTestCase):
@@ -44,6 +48,34 @@ class TestPrecioUnitarioField(SimpleTestCase):
             with self.subTest(entrada=entrada):
                 with self.assertRaises(drf_serializers.ValidationError):
                     campo.run_validation(entrada)
+
+
+class TestFerreDeskARCAPersistencia(TestCase):
+    @patch('ferreapps.ventas.ARCA.services.FerreDeskARCA.armar_payload_arca')
+    def test_emision_guarda_solo_los_campos_de_arca(self, armar_payload):
+        venta = MagicMock()
+        venta.ven_id = 42
+        venta.ven_cae = None
+        venta.comprobante.codigo_afip = 6
+        venta.get_iva_breakdown.return_value = []
+
+        arca = FerreDeskARCA.__new__(FerreDeskARCA)
+        arca.obtener_ultimo_numero_autorizado = MagicMock(return_value=7)
+        arca.emitir_comprobante = MagicMock(return_value={
+            'cae': '12345678901234',
+            'cae_fch_vto': '20260910',
+        })
+        arca.generar_qr_comprobante = MagicMock(return_value=b'qr')
+
+        arca.emitir_automatico(venta)
+
+        self.assertEqual(
+            venta.save.call_args_list,
+            [
+                call(update_fields=['ven_numero']),
+                call(update_fields=['ven_cae', 'ven_caevencimiento', 'ven_qr', 'ven_observacion']),
+            ],
+        )
 
 
 class VentasTenantTestCase(TenantTestCase):
@@ -175,6 +207,116 @@ class VentasTenantTestCase(TenantTestCase):
             ven_copia=1,
             ven_bonificacion_general=0,
         )
+
+
+class TestConversionPresupuestoARCA(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.usuario = get_user_model().objects.get(username="admin@ventas.test")
+        self.sesion_caja = SesionCaja.objects.create(
+            usuario=self.usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("0.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        ferreteria = Ferreteria.objects.first()
+        ferreteria.razon_social = "Ferreteria Integracion ARCA SA"
+        ferreteria.cuit_cuil = "30111111118"
+        ferreteria.direccion = "Calle Integracion 1"
+        ferreteria.telefono = "123456"
+        ferreteria.save(update_fields=["razon_social", "cuit_cuil", "direccion", "telefono"])
+
+    def crear_presupuesto(self, numero):
+        presupuesto = self.crear_venta(
+            comprobante=self.comprobante_presupuesto,
+            numero=numero,
+            fecha=date(2026, 9, 10),
+        )
+        presupuesto.ven_estado = "AB"
+        presupuesto.save(update_fields=["ven_estado"])
+        item = self.crear_item_generico(presupuesto, detalle="Servicio ARCA")
+        return presupuesto, item
+
+    def payload_conversion(self, presupuesto, item):
+        return {
+            "presupuesto_origen": presupuesto.ven_id,
+            "items_seleccionados": [item.id],
+            "tipo_comprobante": "factura",
+            "ven_sucursal": 1,
+            "ven_fecha": "2026-09-10",
+            "ven_punto": 1,
+            "ven_idcli": self.cliente.id,
+            "ven_idpla": self.plazo.id,
+            "ven_idvdo": self.vendedor.id,
+            "ven_copia": 1,
+        }
+
+    def comprobante_asignado(self):
+        return {
+            "codigo_afip": self.comprobante_factura.codigo_afip,
+            "letra": self.comprobante_factura.letra,
+            "nombre": self.comprobante_factura.nombre,
+        }
+
+    @patch("ferreapps.ventas.views.views_conversiones.asignar_comprobante")
+    @patch("ferreapps.ventas.views.views_conversiones.emitir_arca_automatico")
+    def test_conversion_fiscal_persiste_arca_y_conserva_sesion(self, emitir_arca, asignar_comprobante):
+        presupuesto, item = self.crear_presupuesto(910)
+        asignar_comprobante.return_value = self.comprobante_asignado()
+
+        def emitir_arca_fake(venta):
+            venta.ven_cae = "12345678901234"
+            venta.ven_caevencimiento = date(2026, 9, 20)
+            venta.ven_qr = b"qr-de-prueba"
+            venta.ven_observacion = "Sin observaciones"
+            venta.save(update_fields=["ven_cae", "ven_caevencimiento", "ven_qr", "ven_observacion"])
+            return {
+                "emitido": True,
+                "resultado": {
+                    "cae": venta.ven_cae,
+                    "cae_vencimiento": "20260920",
+                    "qr_generado": True,
+                    "observaciones": [],
+                },
+            }
+
+        emitir_arca.side_effect = emitir_arca_fake
+        respuesta = self.client.post(
+            ENDPOINT_CONVERTIR_PRESUPUESTO,
+            self.payload_conversion(presupuesto, item),
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        venta_emitida = Venta.objects.get(ven_id=respuesta.json()["venta"]["ven_id"])
+        self.assertEqual(venta_emitida.sesion_caja_id, self.sesion_caja.id)
+        self.assertEqual(venta_emitida.ven_cae, "12345678901234")
+        self.assertEqual(venta_emitida.ven_caevencimiento, date(2026, 9, 20))
+        self.assertEqual(bytes(venta_emitida.ven_qr), b"qr-de-prueba")
+        self.assertEqual(venta_emitida.ven_observacion, "Sin observaciones")
+        self.assertEqual(respuesta.json()["cae"], "12345678901234")
+        self.assertEqual(respuesta.json()["venta"]["ven_cae"], "12345678901234")
+        self.assertEqual(emitir_arca.call_args.args[0].sesion_caja_id, self.sesion_caja.id)
+
+    @patch("ferreapps.ventas.views.views_conversiones.asignar_comprobante")
+    @patch("ferreapps.ventas.views.views_conversiones.emitir_arca_automatico")
+    def test_error_arca_revierte_la_conversion(self, emitir_arca, asignar_comprobante):
+        presupuesto, item = self.crear_presupuesto(911)
+        ventas_antes = Venta.objects.count()
+        asignar_comprobante.return_value = self.comprobante_asignado()
+        emitir_arca.side_effect = Exception("ARCA no disponible")
+
+        respuesta = self.client.post(
+            ENDPOINT_CONVERTIR_PRESUPUESTO,
+            self.payload_conversion(presupuesto, item),
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.ven_estado, "AB")
+        self.assertTrue(VentaDetalleItem.objects.filter(pk=item.pk, vdi_idve=presupuesto).exists())
+        self.assertEqual(Venta.objects.count(), ventas_antes)
 
 
 class TestVentaViewSetPaginacion(VentasTenantTestCase):

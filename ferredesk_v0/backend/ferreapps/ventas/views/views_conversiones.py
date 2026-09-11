@@ -917,7 +917,7 @@ def convertir_presupuesto_a_venta(request):
                 else:
                     # Los totales se calculan automáticamente en las vistas SQL
                     # No es necesario recalcular campos que no existen en el modelo Venta
-                    presupuesto.save()
+                    presupuesto.refresh_from_db()
                     presupuesto_result = VentaSerializer(presupuesto).data
 
             print("LOG: Antes de actualizar stock")
@@ -955,11 +955,11 @@ def convertir_presupuesto_a_venta(request):
             if debe_emitir_arca(tipo_comprobante):
                 try:
                     logger.info(f"Emisión automática ARCA para conversión presupuesto {presupuesto.ven_id} a venta {venta.ven_id} - tipo: {tipo_comprobante}")
-                    resultado_arca = emitir_arca_automatico(venta)
+                    resultado_arca = emitir_arca_automatico(venta_creada)
                     
                     # Agregar información ARCA a la respuesta
                     response_data = {
-                        'venta': VentaSerializer(venta).data,
+                        'venta': VentaSerializer(venta_creada).data,
                         'presupuesto': presupuesto_result,
                         'stock_actualizado': stock_actualizado,
                         'comprobante_letra': comprobante['letra'],
@@ -981,7 +981,7 @@ def convertir_presupuesto_a_venta(request):
             else:
                 # Comprobante interno - no requiere emisión ARCA
                 response_data = {
-                    'venta': VentaSerializer(venta).data,
+                    'venta': VentaSerializer(venta_creada).data,
                     'presupuesto': presupuesto_result,
                     'stock_actualizado': stock_actualizado,
                     'comprobante_letra': comprobante['letra'],
