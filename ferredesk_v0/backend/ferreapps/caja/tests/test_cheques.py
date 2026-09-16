@@ -9,6 +9,7 @@ Verifica:
 """
 
 from decimal import Decimal
+from django.db.models import Max
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -428,8 +429,8 @@ class ChequeCustodiaTests(CajaTenantAPITestCase, CajaTestMixin):
             defaults={'nombre': 'Factura A', 'letra': 'A', 'tipo': 'factura', 'activo': True},
         )
         cli, _ = Cliente.objects.get_or_create(
-            razon='Cliente Custodia Test',
-            defaults={'cuit': '20222222223', 'domicilio': 'Calle X'},
+            id=(Cliente.objects.aggregate(max_id=Max('id'))['max_id'] or 0) + 1,
+            defaults={'razon': 'Cliente Custodia Test', 'cuit': '20222222223', 'domicilio': 'Calle X'},
         )
         plazo, _ = Plazo.objects.get_or_create(id=1, defaults={'nombre': 'Contado', 'activo': 'S'})
         vendedor, _ = Vendedor.objects.get_or_create(id=1, defaults={'nombre': 'Vendedor', 'activo': 'S'})

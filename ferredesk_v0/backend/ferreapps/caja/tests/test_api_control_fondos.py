@@ -138,6 +138,7 @@ class ControlFondosAPITests(CajaTenantAPITestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("90.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
         )
 
         response = self.client.get("/api/caja/control-fondos/")
@@ -175,15 +176,16 @@ class ControlFondosAPITests(CajaTenantAPITestCase, CajaTestMixin):
         self.assertEqual(response_inicial.status_code, status.HTTP_200_OK, response_inicial.data)
         self.assertEqual(response_inicial.data["resumen_actual"]["kpis"]["caja"]["monto"], "100.00")
 
-        movimiento_response = self.client.post(
-            "/api/caja/movimientos/",
-            {
-                "tipo": "ENTRADA",
-                "monto": "50.00",
-                "descripcion": "Ingreso test cache",
-            },
-            format="json",
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            movimiento_response = self.client.post(
+                "/api/caja/movimientos/",
+                {
+                    "tipo": "ENTRADA",
+                    "monto": "50.00",
+                    "descripcion": "Ingreso test cache",
+                },
+                format="json",
+            )
         self.assertEqual(movimiento_response.status_code, status.HTTP_201_CREATED, movimiento_response.data)
 
         response_actualizado = self.client.get("/api/caja/control-fondos/")

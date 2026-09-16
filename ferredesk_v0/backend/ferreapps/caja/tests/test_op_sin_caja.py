@@ -116,7 +116,7 @@ class OrdenPagoSinCajaTests(CajaTenantAPITestCase, CajaTestMixin):
         
         # Debe fallar por validación de la utilidad centralizada
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('requiere una sesión de caja abierta', response.data['detail'])
+        self.assertIn('requiere una sesion de caja abierta', response.data['detail'])
 
     def test_crear_op_fisica_con_caja_exito(self):
         """
@@ -124,7 +124,7 @@ class OrdenPagoSinCajaTests(CajaTenantAPITestCase, CajaTestMixin):
         Debe crear la OP y el movimiento de caja.
         """
         # Mixin auditado: crear_sesion_caja ahora acepta sucursal
-        sesion = self.crear_sesion_caja(self.usuario, sucursal=2)
+        sesion = self.crear_sesion_caja(self.usuario, saldo_inicial=Decimal('2500.00'), sucursal=2)
         
         data = {
             'proveedor_id': self.proveedor.id,

@@ -625,12 +625,9 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ferreapps.ventas.models import Venta
 
         # Configurar sesión de caja con saldo inicial de $16.500
-        sesion = SesionCaja.objects.create(
-            usuario=self.usuario,
-            sucursal=1,
-            saldo_inicial=Decimal('16500.00'),
-            estado=ESTADO_CAJA_ABIERTA,
-        )
+        sesion = self.sesion
+        sesion.saldo_inicial = Decimal('16500.00')
+        sesion.save(update_fields=['saldo_inicial'])
 
         def _crear_venta(numero):
             return Venta.objects.create(

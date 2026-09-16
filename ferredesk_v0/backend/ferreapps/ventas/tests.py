@@ -16,7 +16,7 @@ from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
 from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
-from ferreapps.ventas.ARCA.services.FerreDeskARCA import FerreDeskARCA
+from ferreapps.ventas.ARCA.services.FerreDeskARCA import FerreDeskARCA, FerreDeskARCAError
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
@@ -76,6 +76,31 @@ class TestFerreDeskARCAPersistencia(TestCase):
                 call(update_fields=['ven_cae', 'ven_caevencimiento', 'ven_qr', 'ven_observacion']),
             ],
         )
+
+    @patch('ferreapps.ventas.ARCA.services.FerreDeskARCA.armar_payload_arca')
+    def test_falla_post_cae_expone_riesgo_de_reemision(self, armar_payload):
+        venta = MagicMock()
+        venta.ven_id = 43
+        venta.ven_cae = None
+        venta.comprobante.codigo_afip = 6
+        venta.get_iva_breakdown.return_value = []
+
+        arca = FerreDeskARCA.__new__(FerreDeskARCA)
+        arca.obtener_ultimo_numero_autorizado = MagicMock(side_effect=[7, 8])
+        arca.emitir_comprobante = MagicMock(side_effect=[
+            {'cae': '11111111111111', 'cae_fch_vto': '20260920'},
+            {'cae': '22222222222222', 'cae_fch_vto': '20260921'},
+        ])
+        arca.generar_qr_comprobante = MagicMock(side_effect=[RuntimeError('QR fallo'), b'qr'])
+
+        with self.assertRaises(FerreDeskARCAError):
+            arca.emitir_automatico(venta)
+
+        self.assertIsNone(venta.ven_cae)
+        resultado = arca.emitir_automatico(venta)
+
+        self.assertEqual(arca.emitir_comprobante.call_count, 2)
+        self.assertEqual(resultado['cae'], '22222222222222')
 
 
 class VentasTenantTestCase(TenantTestCase):
