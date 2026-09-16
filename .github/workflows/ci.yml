@@ -92,6 +92,7 @@ jobs:
 
       - name: Run backend tests with coverage
         working-directory: ferredesk_v0/backend
+        timeout-minutes: 30
         run: coverage run manage.py test --verbosity 1
 
       - name: Publish coverage summary
