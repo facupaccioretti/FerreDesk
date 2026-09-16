@@ -28,7 +28,8 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
 STATICFILES_DIRS = []
-TEMPLATES[0]["DIRS"] = [BASE_DIR / "templates"]  # noqa: F405
+# frontend/public/index.html is an unresolved CRA fixture for public-route tests.
+TEMPLATES[0]["DIRS"] = [BASE_DIR / "templates", BASE_DIR.parent / "frontend" / "public"]  # noqa: F405
 
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
