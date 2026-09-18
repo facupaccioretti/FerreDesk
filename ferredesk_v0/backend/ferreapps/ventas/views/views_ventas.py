@@ -27,7 +27,6 @@ from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
 from .utils_stock import (
-    _obtener_proveedor_habitual_stock,
     _obtener_codigo_venta,
     _descontar_distribuyendo,
 )
@@ -213,6 +212,22 @@ class VentaViewSet(viewsets.ModelViewSet):
         if not items and tipo_comprobante not in ['nota_debito', 'nota_debito_interna']:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Una promo se vende y se descuenta por componentes (ver aplicar_promocion_venta);
+        # una NC/ND creada directamente aca no tiene una linea de venta origen de la que
+        # tomar el snapshot de componentes, asi que por ahora no se acepta acá. Las
+        # devoluciones/cambios de promos se hacen por el flujo de postventa.
+        if any(item.get('vdi_promocion') for item in items) and tipo_comprobante in [
+            'nota_credito', 'nota_credito_interna', 'nota_debito', 'nota_debito_interna'
+        ]:
+            return Response(
+                {'detail': 'Una promoción no puede cargarse directamente en una Nota de Crédito/Débito. Use el flujo de postventa.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if items:
+            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
+            items = expandir_items_promocion(items)
+            data['items'] = items
+
         # === OBTENER SESIÓN DE CAJA ===
         # Obtenemos la sesión para registrar los pagos si existiera.
         # La validación de caja requerida ocurre transaccionalmente en caja/utils.py 
@@ -226,6 +241,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         except Exception:
             bonif_general = 0
         for item in items:
+            if item.get('_promo_snapshot'):
+                # El precio de una promo es fijo (definido al crearla); no se le
+                # aplica bonificación general ni particular por línea.
+                item['vdi_bonifica'] = Decimal('0')
+                continue
             bonif = item.get('vdi_bonifica')
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
@@ -241,23 +261,18 @@ class VentaViewSet(viewsets.ModelViewSet):
         errores_stock = []
         stock_actualizado = []
         if not es_presupuesto:
-            items_stock = sorted(items, key=lambda item: str(item.get('vdi_idsto') or 0).zfill(20))
-            for item in items_stock:
-                id_stock = item.get('vdi_idsto')
-                cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+            # Resolver_operaciones_stock aplana productos sueltos y componentes de
+            # promo en una unica lista ordenada por stock_id, para bloquear StockProve
+            # siempre en el mismo orden global (ver docstring del service).
+            from ferreapps.promos.services.aplicar_promocion_venta import resolver_operaciones_stock
+            operaciones_stock, errores_resolucion = resolver_operaciones_stock(items)
+            errores_stock.extend(errores_resolucion)
 
-                # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
-                if not id_stock:
-                    continue
+            for operacion in operaciones_stock:
+                id_stock = operacion['stock_id']
+                id_proveedor = operacion['proveedor_id']
+                cantidad = operacion['cantidad']
 
-                # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                # El frontend solo debe enviar vdi_idsto, el backend maneja toda la lógica
-                id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
-                if not id_proveedor:
-                    cod = _obtener_codigo_venta(id_stock)
-                    errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
-                    continue
-                    
                 if es_nota_credito:
                     # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
                     try:
@@ -272,15 +287,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # Notas de débito: no tocan stock (no hay ItemsGrid de productos)
                 elif es_nota_debito:
                     continue
-                    try:
-                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                    except StockProve.DoesNotExist:
-                        cod = _obtener_codigo_venta(id_stock)
-                        errores_stock.append(f"No existe stock para el producto {cod}")
-                        continue
-                    stockprove.cantidad += cantidad
-                    stockprove.save()
-                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
                 else:
                     # Venta: descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
@@ -697,37 +703,25 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # === OBTENER SESIÓN DE CAJA ===
                 sesion_caja = obtener_sesion_caja_activa(request.user)
                 
-                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id).order_by('vdi_idsto_id', 'pk')
+                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id).prefetch_related(
+                    'componentes_promocion'
+                ).order_by('vdi_idsto_id', 'pk')
                 # Obtener configuración de la ferretería para determinar política de stock negativo
                 ferreteria = Ferreteria.objects.first()
                 # Usar configuración de la ferretería, con posibilidad de override desde el frontend
                 permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
-                errores_stock = []
                 stock_actualizado = []
-                for item in items:
-                    # Usar _id para obtener el entero, no el objeto FK
-                    id_stock = item.vdi_idsto_id
-                    cantidad = Decimal(str(item.vdi_cantidad))
-                    if not id_stock:
-                        errores_stock.append(f"Falta stock en item: {item.id}")
-                        continue
-                    
-                    # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                    id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
-                    if not id_proveedor:
-                        cod = _obtener_codigo_venta(id_stock)
-                        errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
-                        continue
 
-                    if not item.vdi_idpro_id:
-                        item.vdi_idpro_id = id_proveedor
-                        item.save(update_fields=['vdi_idpro'])
-                    
+                from ferreapps.promos.services.aplicar_promocion_venta import (
+                    resolver_operaciones_stock_desde_detalles,
+                )
+                operaciones_stock, errores_stock = resolver_operaciones_stock_desde_detalles(items)
+                for operacion in operaciones_stock:
                     # Descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
-                        stock_id=id_stock,
-                        proveedor_preferido_id=id_proveedor,
-                        cantidad=cantidad,
+                        stock_id=operacion['stock_id'],
+                        proveedor_preferido_id=operacion['proveedor_id'],
+                        cantidad=operacion['cantidad'],
                         permitir_stock_negativo=permitir_stock_negativo,
                         errores_stock=errores_stock,
                         stock_actualizado=stock_actualizado,

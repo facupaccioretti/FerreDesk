@@ -13,6 +13,7 @@ from ferreapps.caja.services.postventa import (
 from ferreapps.caja.utils import normalizar_cobro, registrar_vuelto
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import Stock, StockProve
+from ferreapps.promos.services.aplicar_promocion_venta import construir_item_devolucion_promocion
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_cambio
 from ferreapps.ventas.services.crear_venta import (
@@ -60,11 +61,14 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     detalles = {item["venta_detalle_item_id"]: item for item in payload["items_devueltos"]}
     items = []
     for idx, item_preview in enumerate(preview["items_devueltos"], start=1):
-        detalle = venta_origen.items.select_related("vdi_idaliiva").get(id=item_preview["venta_detalle_item_id"])
+        detalle = venta_origen.items.select_related("vdi_idaliiva").prefetch_related(
+            "promo_alicuotas__alicuota", "componentes_promocion"
+        ).get(id=item_preview["venta_detalle_item_id"])
         cantidad = Decimal(str(detalles[detalle.id]["cantidad"])).quantize(Decimal("0.01"))
-        items.append(
-            {
-                "vdi_orden": idx,
+        if detalle.vdi_promocion_id:
+            item = construir_item_devolucion_promocion(detalle, cantidad)
+        else:
+            item = {
                 "vdi_idsto": detalle.vdi_idsto_id,
                 "vdi_idpro": detalle.vdi_idpro_id,
                 "vdi_cantidad": cantidad,
@@ -76,7 +80,8 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
                 "vdi_detalle2": detalle.vdi_detalle2,
                 "vdi_idaliiva": detalle.vdi_idaliiva_id,
             }
-        )
+        item["vdi_orden"] = idx
+        items.append(item)
     ajuste_redondeo = calcular_ajuste_nota_credito(
         items,
         preview["items_devueltos"],
@@ -194,6 +199,17 @@ def confirmar_cambio(*, payload, usuario):
             if resultado_existente is not None:
                 return resultado_existente
 
+            # Una promo no se admite todavia como item nuevo de un cambio: no tiene un
+            # stock_id propio para el flujo de items_nuevos (precio manual, stock por
+            # producto suelto) y requeriria resolver sus componentes contra la
+            # definicion vigente de la promo en este mismo paso. Se puede devolver la
+            # promo vieja y cargar la nueva como una venta aparte mientras tanto.
+            if any(item.get("promocion_id") or not item.get("stock_id") for item in payload["items_nuevos"]):
+                raise ValidationError({
+                    "items_nuevos": "No se admite una promoción como ítem nuevo en un cambio. "
+                                     "Devuelva la promoción y cárguela como una venta nueva."
+                })
+
             preview = previsualizar_cambio(payload)
             validar_items_cambio(venta_origen, payload["items_devueltos"], payload["items_nuevos"])
 
@@ -240,7 +256,12 @@ def confirmar_cambio(*, payload, usuario):
             comprobante_nc = _resolver_comprobante("nota_credito")
             comprobante_venta = _resolver_comprobante("factura")
 
-            detalles = {detalle.id: detalle for detalle in venta_origen.items.all().select_related("vdi_idaliiva")}
+            detalles = {
+                detalle.id: detalle
+                for detalle in venta_origen.items.all().select_related("vdi_idaliiva").prefetch_related(
+                    "componentes_promocion", "promo_alicuotas__alicuota"
+                )
+            }
             proveedores_repuestos = ajustar_stock_postventa(
                 items_devueltos=payload["items_devueltos"],
                 detalles=detalles,

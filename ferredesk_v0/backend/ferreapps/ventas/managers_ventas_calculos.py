@@ -9,7 +9,21 @@ class VentaDetalleItemQuerySet(models.QuerySet):
         Replica la lógica de la vista SQL VENTADETALLEITEM_CALCULADO usando Django ORM.
         Calcula precios unitarios intermedios con 4 decimales y totales con 2 decimales
         siguiendo estrictamente la normativa de ARCA (AFIP).
+
+        Una linea de promocion (vdi_promocion no nulo) puede mezclar componentes de
+        distintas alicuotas, algo que esta vista -- pensada para una alicuota por
+        linea -- no puede representar. Para esas lineas, `subtotal_neto`/`iva_monto`
+        se pisan mas abajo con la suma del desglose congelado en
+        VentaDetalleItemPromoAlicuota (el prorrateo real, calculado una unica vez al
+        vender). El resto de esta funcion sigue usando vdi_idaliiva como aproximacion
+        de display (por ejemplo para `ali_porce`), pero nunca para lo que se declara
+        ante ARCA.
         """
+        # Import tardio: managers_ventas_calculos se importa desde models.py, así que
+        # un import de nivel de modulo de VentaDetalleItemPromoAlicuota (definido en
+        # el mismo models.py) crearia un ciclo.
+        from .models import VentaDetalleItemPromoAlicuota
+
         # --- 1. Definición de Expresiones Base ---
         alicuota_porcentaje = Cast(F('vdi_idaliiva__porce'), DecimalField(max_digits=5, decimal_places=2))
         
@@ -41,19 +55,34 @@ class VentaDetalleItemQuerySet(models.QuerySet):
         precio_unitario_bonificado_sin_iva = precio_unitario_sin_iva_base - bonificacion_monto_unitario_neto
         
         # --- 3. Aplicación de Descuentos Generales de la Venta (Cascada) ---
-        # NOTA: ven_descu1/2/3 almacenan porcentajes enteros (ej: 5 para 5%), 
+        # NOTA: ven_descu1/2/3 almacenan porcentajes enteros (ej: 5 para 5%),
         # por lo que hay que dividir por 100 para obtener la fracción.
-        descuento_general_1_factor = ExpressionWrapper(
-            Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu1'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()), 
-            output_field=FloatField()
+        # Una promo tiene precio fijo (Parte 1, regla 1): el descuento general de la
+        # venta no se le aplica, sin importar el valor de ven_descu1/2/3.
+        es_linea_promocion = Q(vdi_promocion__isnull=False)
+        descuento_general_1_factor = Case(
+            When(es_linea_promocion, then=Value(1.0, output_field=FloatField())),
+            default=ExpressionWrapper(
+                Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu1'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()),
+                output_field=FloatField()
+            ),
+            output_field=FloatField(),
         )
-        descuento_general_2_factor = ExpressionWrapper(
-            Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu2'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()), 
-            output_field=FloatField()
+        descuento_general_2_factor = Case(
+            When(es_linea_promocion, then=Value(1.0, output_field=FloatField())),
+            default=ExpressionWrapper(
+                Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu2'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()),
+                output_field=FloatField()
+            ),
+            output_field=FloatField(),
         )
-        descuento_general_3_factor = ExpressionWrapper(
-            Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu3'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()), 
-            output_field=FloatField()
+        descuento_general_3_factor = Case(
+            When(es_linea_promocion, then=Value(1.0, output_field=FloatField())),
+            default=ExpressionWrapper(
+                Value(1.0, output_field=FloatField()) - Coalesce(Cast(F('vdi_idve__ven_descu3'), FloatField()), Value(0.0)) / Value(100.0, output_field=FloatField()),
+                output_field=FloatField()
+            ),
+            output_field=FloatField(),
         )
         
         # precio_unitario_final_total_sin_iva = ROUND(precio_unitario_bonificado_sin_iva * d1 * d2 * d3, 4)
@@ -100,6 +129,46 @@ class VentaDetalleItemQuerySet(models.QuerySet):
             2
         )
 
+        # --- 5. Override de neto/IVA para lineas de promocion ---
+        # El calculo de arriba asume una sola alicuota por linea (vdi_idaliiva), asi
+        # que para una promo con componentes de alicuotas distintas da un numero
+        # aproximado, no el que se declara ante ARCA. El desglose real, prorrateado
+        # una unica vez al vender, vive en VentaDetalleItemPromoAlicuota; se suma aca
+        # por linea y se usa en su lugar cuando vdi_promocion esta seteado.
+        dinero = DecimalField(max_digits=15, decimal_places=2)
+        promo_neto_subquery = Subquery(
+            VentaDetalleItemPromoAlicuota.objects.filter(detalle_id=OuterRef('pk'))
+            .values('detalle_id')
+            .annotate(total=Sum('neto'))
+            .values('total')[:1],
+            output_field=dinero,
+        )
+        promo_iva_subquery = Subquery(
+            VentaDetalleItemPromoAlicuota.objects.filter(detalle_id=OuterRef('pk'))
+            .values('detalle_id')
+            .annotate(total=Sum('iva_monto'))
+            .values('total')[:1],
+            output_field=dinero,
+        )
+        subtotal_neto_final = Case(
+            When(es_linea_promocion, then=Coalesce(promo_neto_subquery, Value(0, output_field=dinero))),
+            default=subtotal_neto_calculado,
+            output_field=dinero,
+        )
+        iva_monto_final = Case(
+            When(es_linea_promocion, then=Coalesce(promo_iva_subquery, Value(0, output_field=dinero))),
+            default=iva_monto_calculado,
+            output_field=dinero,
+        )
+        # total_item se deriva de neto+iva ya corregidos para una promo, en vez de
+        # confiar en que el redondeo de la aproximacion por alicuota dominante
+        # cierre exacto contra precio_promocional * cantidad.
+        total_item_final = Case(
+            When(es_linea_promocion, then=ExpressionWrapper(subtotal_neto_final + iva_monto_final, output_field=dinero)),
+            default=total_item_calculado,
+            output_field=dinero,
+        )
+
         return self.annotate(
             ali_porce=alicuota_porcentaje,
             codigo=F('vdi_idsto__codvta'),
@@ -112,9 +181,9 @@ class VentaDetalleItemQuerySet(models.QuerySet):
             precio_unitario_bonificado_con_iva=Round(precio_unitario_final_con_descuentos_sin_iva * divisor_iva, 2),
             precio_unitario_bonificado=Round(precio_unitario_final_con_descuentos_sin_iva, 2),
             subtotal_bruto_item=subtotal_bruto_item_calculado,
-            subtotal_neto=subtotal_neto_calculado,
-            iva_monto=iva_monto_calculado,
-            total_item=total_item_calculado,
+            subtotal_neto=subtotal_neto_final,
+            iva_monto=iva_monto_final,
+            total_item=total_item_final,
             margen_monto=Round(precio_unitario_sin_iva_base - F('vdi_costo'), 3),
             margen_porcentaje=Case(
                 When(vdi_costo__gt=0, then=Round(ExpressionWrapper(((precio_unitario_sin_iva_base - F('vdi_costo')) / F('vdi_costo')) * Value(100, output_field=DecimalField()), output_field=DecimalField(max_digits=15, decimal_places=4)), 3)),

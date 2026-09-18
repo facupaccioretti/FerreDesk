@@ -128,6 +128,7 @@ def previsualizar_devolucion(payload):
             {
                 "venta_detalle_item_id": detalle.id,
                 "stock_id": detalle.vdi_idsto_id,
+                "promocion_id": detalle.vdi_promocion_id,
                 "detalle": detalle.vdi_detalle1 or "",
                 "cantidad_original": _money(cantidad_original),
                 "cantidad_ya_devuelta": _money(cantidad_devuelta),
@@ -135,7 +136,9 @@ def previsualizar_devolucion(payload):
                 "cantidad_solicitada": _money(cantidad),
                 "precio_unitario_origen": _money(precio),
                 "subtotal_credito": _money(subtotal),
-                "toca_stock": bool(detalle.vdi_idsto_id),
+                # Una promo toca stock por sus componentes (VentaPromocionComponente),
+                # no por un vdi_idsto propio.
+                "toca_stock": bool(detalle.vdi_idsto_id or detalle.vdi_promocion_id),
             }
         )
 
@@ -194,6 +197,7 @@ def previsualizar_cambio(payload):
             {
                 "venta_detalle_item_id": detalle.id,
                 "stock_id": detalle.vdi_idsto_id,
+                "promocion_id": detalle.vdi_promocion_id,
                 "detalle": detalle.vdi_detalle1 or "",
                 "cantidad_original": _money(cantidad_original),
                 "cantidad_ya_devuelta": _money(cantidad_devuelta),

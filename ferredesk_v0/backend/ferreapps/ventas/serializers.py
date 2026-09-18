@@ -87,7 +87,7 @@ class VentaDetalleItemSerializer(serializers.ModelSerializer):
         fields = [
             'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
             'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final',
-            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva'
+            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva', 'vdi_promocion'
         ]
 
 
@@ -128,6 +128,7 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
             'id', 'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro',
             'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica',
             'vdi_precio_unitario_final', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva',
+            'vdi_promocion',
             # Campos anotados
             'ali_porce', 'codigo', 'unidad',
             'precio_unitario_sin_iva', 'iva_unitario',
@@ -301,6 +302,9 @@ class VentaSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = self.initial_data.get('items', [])
+        if items_data:
+            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
+            items_data = expandir_items_promocion(items_data)
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
 
         # Determinar tipo de comprobante solicitado
@@ -501,9 +505,13 @@ class VentaSerializer(serializers.ModelSerializer):
             validated_data['comprobante_id'] = comprobante_id
 
         # Asignar bonificación general a los ítems sin bonificación particular
+        # (una promo tiene precio fijo: no recibe bonificación general ni particular)
         bonif_general = self.initial_data.get('bonificacionGeneral', 0)
         bonif_general = float(bonif_general)
         for item in items_data:
+            if item.get('_promo_snapshot'):
+                item['vdi_bonifica'] = Decimal('0')
+                continue
             bonif = item.get('vdi_bonifica')
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
@@ -560,13 +568,17 @@ class VentaSerializer(serializers.ModelSerializer):
             # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
             for campo_calculado in ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']:
                 item_data.pop(campo_calculado, None)
+            snapshot_promocion = item_data.pop('_promo_snapshot', None)
             # Convertir IDs numéricos de FK a la forma _id (Django espera instancias o _id)
-            for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
+            for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva', 'vdi_promocion']:
                 if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
                     val = item_data.pop(fk_field)
                     if val is not None:
                         item_data[f'{fk_field}_id'] = val
-            VentaDetalleItem.objects.create(**item_data)
+            detalle = VentaDetalleItem.objects.create(**item_data)
+            if snapshot_promocion:
+                from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
+                crear_snapshot_promocion(detalle, snapshot_promocion)
         return venta
 
     def update(self, instance, validated_data):
@@ -597,6 +609,9 @@ class VentaSerializer(serializers.ModelSerializer):
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
         items_data = self.initial_data.get('items', [])
+        if items_data:
+            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
+            items_data = expandir_items_promocion(items_data)
         _normalizar_precios_items(items_data, crear=False)
         # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
@@ -617,6 +632,9 @@ class VentaSerializer(serializers.ModelSerializer):
             except Exception:
                 bonif_general = 0
             for item in items_data:
+                if item.get('_promo_snapshot'):
+                    item['vdi_bonifica'] = Decimal('0')
+                    continue
                 bonif = item.get('vdi_bonifica')
                 if not bonif or float(bonif) == 0:
                     item['vdi_bonifica'] = bonif_general
@@ -681,32 +699,41 @@ class VentaSerializer(serializers.ModelSerializer):
             campos_calculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']
             for campo in campos_calculados:
                 item_data.pop(campo, None)
-            
+            snapshot_promocion = item_data.pop('_promo_snapshot', None)
+
             # Establecer relación con la venta y orden
             item_data['vdi_idve'] = instance
             item_data['vdi_orden'] = i
-            
+
             # Determinar si es actualización o creación
             item_id = item_data.pop('id', None)
-            
+
             if item_id and item_id in items_existentes:
                 # Actualizar item existente
                 item = items_existentes[item_id]
                 for field, value in item_data.items():
                     # Para campos FK, usar la forma _id si el valor es numérico
-                    if field in ('vdi_idsto', 'vdi_idpro', 'vdi_idaliiva') and not isinstance(value, models.Model) and value is not None:
+                    if field in ('vdi_idsto', 'vdi_idpro', 'vdi_idaliiva', 'vdi_promocion') and not isinstance(value, models.Model) and value is not None:
                         setattr(item, f'{field}_id', value)
                     else:
                         setattr(item, field, value)
                 item.save()
+                if snapshot_promocion:
+                    from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
+                    item.componentes_promocion.all().delete()
+                    item.promo_alicuotas.all().delete()
+                    crear_snapshot_promocion(item, snapshot_promocion)
             else:
                 # Crear nuevo item — normalizar FK a forma _id
-                for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva']:
+                for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva', 'vdi_promocion']:
                     if fk_field in item_data and not isinstance(item_data[fk_field], models.Model):
                         val = item_data.pop(fk_field)
                         if val is not None:
                             item_data[f'{fk_field}_id'] = val
-                VentaDetalleItem.objects.create(**item_data)
+                item = VentaDetalleItem.objects.create(**item_data)
+                if snapshot_promocion:
+                    from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
+                    crear_snapshot_promocion(item, snapshot_promocion)
 
     def validate(self, data):
         ven_punto = data.get('ven_punto', getattr(self.instance, 'ven_punto', None))

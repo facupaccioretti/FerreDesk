@@ -170,7 +170,7 @@ def validar_items_devolucion(venta, items, *, modo):
         detalle.id: detalle
         for detalle in VentaDetalleItem.objects.filter(vdi_idve=venta, id__in=item_ids).select_related(
             "vdi_idsto", "vdi_idpro", "vdi_idaliiva"
-        )
+        ).prefetch_related("componentes_promocion")
     }
     if len(detalles) != len(item_ids):
         raise ValidationError({"items": "Hay items que no pertenecen a la venta indicada"})
@@ -235,13 +235,20 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
         return detalles, devueltas
 
     reposiciones_por_stock = {}
+
+    def _sumar_reposicion(stock_id, cantidad):
+        reposiciones_por_stock[stock_id] = reposiciones_por_stock.get(stock_id, ZERO) + cantidad
+
     for item in items_devueltos:
         detalle = detalles[item["venta_detalle_item_id"]]
-        if detalle.vdi_idsto_id:
-            reposiciones_por_stock[detalle.vdi_idsto_id] = (
-                reposiciones_por_stock.get(detalle.vdi_idsto_id, ZERO)
-                + _to_decimal(item["cantidad"], "cantidad")
-            )
+        cantidad_devuelta = _to_decimal(item["cantidad"], "cantidad")
+        if detalle.vdi_promocion_id:
+            # Una promo repone stock por cada componente de su snapshot congelado,
+            # no por un vdi_idsto propio (no tiene).
+            for componente in detalle.componentes_promocion.all():
+                _sumar_reposicion(componente.stock_id, componente.cantidad_por_promo * cantidad_devuelta)
+        elif detalle.vdi_idsto_id:
+            _sumar_reposicion(detalle.vdi_idsto_id, cantidad_devuelta)
 
     disponibles = {
         row["stock_id"]: Decimal(str(row["total"] or ZERO))

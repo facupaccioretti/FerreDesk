@@ -154,18 +154,39 @@ def _descontar_distribuyendo(stock_id, proveedor_preferido_id, cantidad, permiti
 
 
 def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir_stock_negativo):
-    reposiciones = []
+    # Cada movimiento: {'detalle', 'stock_id', 'proveedor_id', 'cantidad'}. Una linea
+    # de promo se expande a un movimiento por componente, usando el snapshot congelado
+    # en VentaPromocionComponente -- nunca la composicion actual de la Promocion, que
+    # pudo cambiar despues de la venta. El resto de las lineas genera un movimiento.
+    movimientos = []
     for item in items_devueltos:
         detalle = detalles[item["venta_detalle_item_id"]]
+        cantidad_devuelta = Decimal(str(item["cantidad"]))
+
+        if detalle.vdi_promocion_id:
+            for componente in detalle.componentes_promocion.all():
+                movimientos.append({
+                    "detalle": detalle,
+                    "stock_id": componente.stock_id,
+                    "proveedor_id": componente.proveedor_id,
+                    "cantidad": componente.cantidad_por_promo * cantidad_devuelta,
+                })
+            continue
+
         if not detalle.vdi_idsto_id:
             continue
         denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
         if not detalle.vdi_idpro_id:
             raise ValidationError({"items": f"{denominacion} no tiene proveedor de referencia"})
-        reposiciones.append((detalle, Decimal(str(item["cantidad"]))))
+        movimientos.append({
+            "detalle": detalle,
+            "stock_id": detalle.vdi_idsto_id,
+            "proveedor_id": detalle.vdi_idpro_id,
+            "cantidad": cantidad_devuelta,
+        })
 
     stock_ids_nuevos = {item["stock_id"] for item in items_nuevos}
-    condiciones = [Q(stock_id=detalle.vdi_idsto_id, proveedor_id=detalle.vdi_idpro_id) for detalle, _ in reposiciones]
+    condiciones = [Q(stock_id=mov["stock_id"], proveedor_id=mov["proveedor_id"]) for mov in movimientos]
     if stock_ids_nuevos:
         condiciones.append(Q(stock_id__in=stock_ids_nuevos))
     if condiciones:
@@ -177,12 +198,16 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
         bloqueados = []
     por_clave = {(stock_prove.stock_id, stock_prove.proveedor_id): stock_prove for stock_prove in bloqueados}
     proveedores_repuestos = {}
-    for detalle, _ in reposiciones:
-        stock_prove = por_clave.get((detalle.vdi_idsto_id, detalle.vdi_idpro_id))
+    for mov in movimientos:
+        stock_prove = por_clave.get((mov["stock_id"], mov["proveedor_id"]))
         if stock_prove is None:
-            denominacion = detalle.vdi_detalle1 or f"Producto {detalle.vdi_idsto_id}"
+            denominacion = mov["detalle"].vdi_detalle1 or f"Producto {mov['stock_id']}"
             raise ValidationError({"items": f"No existe stock para {denominacion} y su proveedor de referencia"})
-        proveedores_repuestos[detalle.id] = stock_prove.proveedor_id
+        # Una promo no tiene "el" proveedor de la linea (son varios componentes, cada
+        # uno con el suyo): su PostventaOperacionItem queda con proveedor null a
+        # proposito, ver invariantes de postventa.
+        if not mov["detalle"].vdi_promocion_id:
+            proveedores_repuestos[mov["detalle"].id] = stock_prove.proveedor_id
 
     proveedores_por_stock = {}
     for stock_prove in bloqueados:
@@ -197,17 +222,17 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
             raise ValidationError({"items_nuevos": f"Producto inexistente {stock_id}"})
         total_disponible = sum((proveedor.cantidad for proveedor in proveedores), Decimal("0"))
         total_disponible += sum(
-            cantidad_repuesta
-            for detalle_repuesto, cantidad_repuesta in reposiciones
-            if detalle_repuesto.vdi_idsto_id == stock_id
+            mov["cantidad"]
+            for mov in movimientos
+            if mov["stock_id"] == stock_id
         )
         if not permitir_stock_negativo and total_disponible < cantidad:
             raise ValidationError({"items_nuevos": f"Stock insuficiente para el producto {stock_id}"})
         descuentos.append((stocks_nuevos[stock_id], proveedores, cantidad))
 
-    for detalle, cantidad in reposiciones:
-        stock_prove = por_clave[(detalle.vdi_idsto_id, detalle.vdi_idpro_id)]
-        stock_prove.cantidad += cantidad
+    for mov in movimientos:
+        stock_prove = por_clave[(mov["stock_id"], mov["proveedor_id"])]
+        stock_prove.cantidad += mov["cantidad"]
 
     for stock, proveedores, cantidad in descuentos:
         por_proveedor = {proveedor.proveedor_id: proveedor for proveedor in proveedores}

@@ -280,20 +280,38 @@ class Venta(models.Model):
         """
         Calcula el desglose de IVA por alícuota para esta venta.
         Reemplaza la funcionalidad de la vista SQL VENTAIVA_ALICUOTA con precisión ARCA.
+
+        Una línea de promoción puede mezclar componentes de varias alícuotas, algo
+        que esta función -- pensada para una alícuota por línea -- no puede derivar
+        de vdi_idaliiva (que en una promo solo guarda la alícuota dominante, para
+        display). Para esas líneas se usa en cambio el prorrateo real congelado en
+        VentaDetalleItemPromoAlicuota al momento de la venta.
         """
         from decimal import Decimal
         results = {}
-        for item in self.items.all().select_related('vdi_idaliiva'):
+
+        def _sumar(porce, neto_item, iva_item):
+            if porce not in results:
+                results[porce] = {'ali_porce': porce, 'neto_gravado': Decimal('0.00'), 'iva_total': Decimal('0.00')}
+            results[porce]['neto_gravado'] += neto_item
+            results[porce]['iva_total'] += iva_item
+
+        for item in self.items.all().select_related('vdi_idaliiva').prefetch_related(
+            'promo_alicuotas__alicuota'
+        ):
+            if item.vdi_promocion_id:
+                for grupo in item.promo_alicuotas.all():
+                    porce = Decimal(str(grupo.alicuota.porce))
+                    _sumar(porce, grupo.neto, grupo.iva_monto)
+                continue
+
             porce = Decimal(str(item.vdi_idaliiva.porce)) if item.vdi_idaliiva else Decimal('0')
             cantidad = Decimal(str(item.vdi_cantidad))
             precio_final = Decimal(str(item.vdi_precio_unitario_final))
             monto_item = (precio_final * cantidad).quantize(Decimal('0.01'))
             neto_item = (monto_item / (1 + porce / 100)).quantize(Decimal('0.01'))
             iva_item = monto_item - neto_item
-            if porce not in results:
-                results[porce] = {'ali_porce': porce, 'neto_gravado': Decimal('0.00'), 'iva_total': Decimal('0.00')}
-            results[porce]['neto_gravado'] += neto_item
-            results[porce]['iva_total'] += iva_item
+            _sumar(porce, neto_item, iva_item)
         # Retornar como objetos con atributos para compatibilidad con código que espera un QuerySet o lista de objetos
         class AlicuotaResult:
             def __init__(self, data):
@@ -503,6 +521,19 @@ class VentaDetalleItem(models.Model):
     vdi_detalle1 = models.CharField(max_length=settings.PRODUCTO_DENOMINACION_MAX_CARACTERES, db_column='VDI_DETALLE1', null=True)
     vdi_detalle2 = models.CharField(max_length=40, db_column='VDI_DETALLE2', null=True)
     vdi_idaliiva = models.ForeignKey(AlicuotaIVA, on_delete=models.PROTECT, db_column='VDI_IDALIIVA', related_name='ventas_detalles')
+    # Promo vendida en esta linea. Si esta seteado, vdi_idsto/vdi_idpro deben
+    # quedar en null (constraint mas abajo): la linea es UNA promo, nunca una
+    # promo Y un producto suelto a la vez. Los componentes fisicos vendidos
+    # viven en VentaPromocionComponente (snapshot), no se derivan de
+    # PromocionItem porque la promo puede cambiar despues de esta venta.
+    vdi_promocion = models.ForeignKey(
+        'promos.Promocion',
+        on_delete=models.PROTECT,
+        db_column='VDI_IDPROMOCION',
+        null=True,
+        blank=True,
+        related_name='ventas_detalles',
+    )
 
     objects = VentaDetalleItemQuerySet.as_manager()
 
@@ -511,7 +542,74 @@ class VentaDetalleItem(models.Model):
         indexes = [
             models.Index(fields=['vdi_idve', 'vdi_orden']),
             models.Index(fields=['vdi_idsto']),
+            models.Index(fields=['vdi_promocion']),
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(vdi_promocion__isnull=True) | models.Q(vdi_idsto__isnull=True),
+                name='vdi_promocion_excluye_idsto',
+            ),
+        ]
+
+
+class VentaPromocionComponente(models.Model):
+    """Snapshot congelado de los componentes fisicos de una promo al momento
+    de venderse. Es la unica fuente para descontar y reponer stock de una
+    linea promo: nunca se consulta PromocionItem para esto, porque la promo
+    puede cambiar, desactivarse o reemplazar componentes despues de la venta.
+    """
+    detalle = models.ForeignKey(
+        VentaDetalleItem,
+        on_delete=models.CASCADE,
+        db_column='VPC_IDVDI',
+        related_name='componentes_promocion',
+    )
+    stock = models.ForeignKey(Stock, on_delete=models.PROTECT, db_column='VPC_IDSTO')
+    proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, db_column='VPC_IDPRO')
+    cantidad_por_promo = models.DecimalField(max_digits=15, decimal_places=2, db_column='VPC_CANTIDAD_POR_PROMO')
+    costo_unitario = models.DecimalField(max_digits=15, decimal_places=3, db_column='VPC_COSTO_UNITARIO')
+
+    class Meta:
+        db_table = 'VENTA_PROMOCION_COMPONENTE'
+        verbose_name = 'Componente de Promocion Vendida'
+        verbose_name_plural = 'Componentes de Promociones Vendidas'
+        indexes = [
+            models.Index(fields=['detalle']),
+            models.Index(fields=['stock', 'proveedor']),
+        ]
+
+    def __str__(self):
+        return f"{self.detalle_id} - {self.stock.codvta} x{self.cantidad_por_promo}"
+
+
+class VentaDetalleItemPromoAlicuota(models.Model):
+    """Prorrateo por alicuota congelado de una linea promo, para el neto/IVA
+    que se declara ante ARCA. Se calcula una unica vez al concretar la venta;
+    una devolucion o cambio posterior reutiliza este desglose, no lo recalcula
+    contra la composicion actual de la promo.
+    """
+    detalle = models.ForeignKey(
+        VentaDetalleItem,
+        on_delete=models.CASCADE,
+        db_column='VDA_IDVDI',
+        related_name='promo_alicuotas',
+    )
+    alicuota = models.ForeignKey(AlicuotaIVA, on_delete=models.PROTECT, db_column='VDA_IDALIIVA')
+    neto = models.DecimalField(max_digits=15, decimal_places=2, db_column='VDA_NETO')
+    iva_monto = models.DecimalField(max_digits=15, decimal_places=2, db_column='VDA_IVA_MONTO')
+
+    class Meta:
+        db_table = 'VENTA_DETALLE_PROMO_ALICUOTA'
+        verbose_name = 'Desglose de IVA de Promocion Vendida'
+        verbose_name_plural = 'Desgloses de IVA de Promociones Vendidas'
+        unique_together = (('detalle', 'alicuota'),)
+        indexes = [
+            models.Index(fields=['detalle']),
+        ]
+
+    def __str__(self):
+        return f"{self.detalle_id} - {self.alicuota.deno}: neto {self.neto}"
+
 
 class VentaDetalleMan(models.Model):
     vdm_idve = models.IntegerField(db_column='VDM_IDVE')

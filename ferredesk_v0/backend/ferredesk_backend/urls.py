@@ -43,6 +43,7 @@ urlpatterns = [
     path("api/", include("ferreapps.notas.urls")),
     path("api/", include("ferreapps.compras.urls")),
     path("api/informes/", include("ferreapps.informes.urls")),
+    path("api/promos/", include("ferreapps.promos.urls")),
     path("api/cuenta-corriente/", include("ferreapps.cuenta_corriente.urls")),
     path("api/caja/", include("ferreapps.caja.urls")),
     path("api/sistema/", include("ferreapps.sistema.urls")),

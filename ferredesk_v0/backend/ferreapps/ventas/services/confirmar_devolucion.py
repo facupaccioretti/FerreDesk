@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
 from ferreapps.caja.services.postventa import registrar_devolucion_cliente
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
+from ferreapps.promos.services.aplicar_promocion_venta import construir_item_devolucion_promocion
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_devolucion
 from ferreapps.ventas.services.crear_venta import (
@@ -50,11 +51,14 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     items = []
     detalles = {item["venta_detalle_item_id"]: item for item in payload["items"]}
     for idx, item_preview in enumerate(preview["items_seleccionados"], start=1):
-        detalle = venta_origen.items.select_related("vdi_idaliiva").get(id=item_preview["venta_detalle_item_id"])
+        detalle = venta_origen.items.select_related("vdi_idaliiva").prefetch_related(
+            "promo_alicuotas__alicuota", "componentes_promocion"
+        ).get(id=item_preview["venta_detalle_item_id"])
         cantidad = Decimal(str(detalles[detalle.id]["cantidad"])).quantize(Decimal("0.01"))
-        items.append(
-            {
-                "vdi_orden": idx,
+        if detalle.vdi_promocion_id:
+            item = construir_item_devolucion_promocion(detalle, cantidad)
+        else:
+            item = {
                 "vdi_idsto": detalle.vdi_idsto_id,
                 "vdi_idpro": detalle.vdi_idpro_id,
                 "vdi_cantidad": cantidad,
@@ -66,7 +70,8 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
                 "vdi_detalle2": detalle.vdi_detalle2,
                 "vdi_idaliiva": detalle.vdi_idaliiva_id,
             }
-        )
+        item["vdi_orden"] = idx
+        items.append(item)
 
     ajuste_redondeo = calcular_ajuste_nota_credito(
         items,
@@ -154,7 +159,12 @@ def confirmar_devolucion(*, payload, usuario):
             )
             comprobante = _resolver_comprobante_nota_credito()
 
-            detalles = {detalle.id: detalle for detalle in venta_origen.items.all().select_related("vdi_idaliiva")}
+            detalles = {
+                detalle.id: detalle
+                for detalle in venta_origen.items.all().select_related("vdi_idaliiva").prefetch_related(
+                    "componentes_promocion", "promo_alicuotas__alicuota"
+                )
+            }
             proveedores_repuestos = ajustar_stock_postventa(
                 items_devueltos=payload["items"],
                 detalles=detalles,
