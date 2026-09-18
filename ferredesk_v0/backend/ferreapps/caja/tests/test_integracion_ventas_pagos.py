@@ -164,10 +164,10 @@ class VentasPagosIntegracionTests(CajaTenantAPITestCase, CajaTestMixin):
             }]
         }
         
-        from django.core.exceptions import ValidationError
-        with self.assertRaises(ValidationError) as cm:
-            self.client.post('/api/ventas/', data, format='json')
-        self.assertIn('requiere una sesion de caja abierta', str(cm.exception))
+        response = self.client.post('/api/ventas/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('requiere una sesion de caja abierta', str(response.data))
 
     def test_si_cobro_falla_transaccion_revierte_completa(self):
         """si un cobro falla, la transacción revierte completa (venta no se crea)"""
@@ -201,9 +201,9 @@ class VentasPagosIntegracionTests(CajaTenantAPITestCase, CajaTestMixin):
             }]
         }
         
-        from django.core.exceptions import ValidationError
-        with self.assertRaises(ValidationError):
-            self.client.post('/api/ventas/', data, format='json')
+        response = self.client.post('/api/ventas/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         
         self.assertEqual(Venta.objects.count(), ventas_count_antes)
         self.assertEqual(PagoVenta.objects.count(), pagos_count_antes)

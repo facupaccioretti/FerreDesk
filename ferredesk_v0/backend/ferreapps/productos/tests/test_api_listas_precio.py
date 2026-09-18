@@ -1,31 +1,33 @@
 """
 Tests para los endpoints de la API de listas de precios.
 """
-from django.test import TestCase
 from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
+from django.db.models import Max
 from rest_framework import status
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
+
+from django.utils import timezone
 
 from ferreapps.productos.models import (
-    Stock, Proveedor, StockProve, AlicuotaIVA,
+    Stock, Proveedor, AlicuotaIVA,
     ListaPrecio, PrecioProductoLista, ActualizacionListaDePrecios
 )
+from ferreapps.productos.tests.mixins import ProductoTenantAPITestCase
 
 User = get_user_model()
 
 
-class ListaPrecioAPITest(APITestCase):
+class ListaPrecioAPITest(ProductoTenantAPITestCase):
     """Tests para los endpoints de la API de listas de precios."""
     
     def setUp(self):
         """Configura datos de prueba y autenticación."""
+        super().setUp()
         self.user = User.objects.create_user(
             username='testuser_api_lista',
             password='testpass123'
         )
-        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         
         self.proveedor = Proveedor.objects.create(
@@ -38,12 +40,15 @@ class ListaPrecioAPITest(APITestCase):
             sigla='APL'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
-        
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        self.alicuota = AlicuotaIVA.objects.order_by("id").first()
+        if self.alicuota is None:
+            self.alicuota = AlicuotaIVA.objects.create(
+                codigo="21",
+                deno="IVA 21%",
+                porce=Decimal("21.00"),
+            )
+
+        max_id = Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='APILISTA001',
@@ -71,7 +76,7 @@ class ListaPrecioAPITest(APITestCase):
         self.assertEqual(response.data['numero'], 1)
     
     def test_actualizar_margen_lista(self):
-        """PATCH /api/productos/listas-precio/{id}/ - Actualiza margen y recalcula."""
+        """PATCH /api/productos/listas-precio/{id}/ - Actualiza margen y audita."""
         lista = ListaPrecio.objects.get(numero=1)
         
         response = self.client.patch(
@@ -81,7 +86,7 @@ class ListaPrecioAPITest(APITestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('recalculo', response.data)
+        self.assertEqual(response.data['productos_con_precio_manual'], 0)
         
         lista.refresh_from_db()
         self.assertEqual(lista.margen_descuento, Decimal('-10.00'))
@@ -91,7 +96,7 @@ class ListaPrecioAPITest(APITestCase):
         self.assertEqual(auditoria.porcentaje_nuevo, Decimal('-10.00'))
     
     def test_actualizar_nombre_lista_no_recalcula(self):
-        """PATCH solo nombre no dispara recálculo."""
+        """PATCH solo nombre no crea una auditoria."""
         lista = ListaPrecio.objects.get(numero=1)
         
         response = self.client.patch(
@@ -101,33 +106,55 @@ class ListaPrecioAPITest(APITestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # No debe haber recálculo porque margen no cambió
-        self.assertEqual(response.data['recalculo']['productos_recalculados'], 0)
+        self.assertEqual(response.data['nombre'], 'Nuevo Nombre')
+        self.assertEqual(response.data['productos_con_precio_manual'], 0)
+        self.assertFalse(ActualizacionListaDePrecios.objects.exists())
     
     def test_manuales_pendientes(self):
-        """GET /api/productos/listas-precio/{n}/manuales-pendientes/"""
+        """GET /api/productos/listas-precio/{id}/manuales-pendientes/"""
         PrecioProductoLista.objects.create(
             stock=self.producto,
             lista_numero=2,
             precio=Decimal('1200.00'),
-            precio_manual=True
+            precio_manual=True,
+            fecha_carga_manual=timezone.now() - timedelta(seconds=1),
         )
+        ActualizacionListaDePrecios.objects.create(
+            lista_numero=2,
+            porcentaje_anterior=Decimal('0.00'),
+            porcentaje_nuevo=Decimal('-5.00'),
+            cantidad_productos_recalculados=0,
+            cantidad_productos_manuales_no_recalculados=1,
+        )
+        lista = ListaPrecio.objects.get(numero=2)
         
-        response = self.client.get('/api/productos/listas-precio/2/manuales-pendientes/')
+        response = self.client.get(
+            f'/api/productos/listas-precio/{lista.id}/manuales-pendientes/'
+        )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['lista_numero'], 2)
-        self.assertEqual(response.data['cantidad_productos_manuales'], 1)
+        self.assertEqual(response.data['cantidad_productos_desactualizados'], 1)
         self.assertEqual(len(response.data['productos']), 1)
     
     def test_manuales_pendientes_lista_0_error(self):
-        """GET /api/productos/listas-precio/0/manuales-pendientes/ - Error."""
-        response = self.client.get('/api/productos/listas-precio/0/manuales-pendientes/')
+        """La lista base no admite precios manuales."""
+        lista = ListaPrecio.objects.get(numero=0)
+        response = self.client.get(
+            f'/api/productos/listas-precio/{lista.id}/manuales-pendientes/'
+        )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_manuales_pendientes_lista_5_error(self):
-        """GET /api/productos/listas-precio/5/manuales-pendientes/ - Error."""
-        response = self.client.get('/api/productos/listas-precio/5/manuales-pendientes/')
+        """Las listas fuera del rango 1-4 no admiten precios manuales."""
+        lista = ListaPrecio.objects.create(
+            numero=5,
+            nombre='Lista 5',
+            margen_descuento=Decimal('0.00'),
+        )
+        response = self.client.get(
+            f'/api/productos/listas-precio/{lista.id}/manuales-pendientes/'
+        )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_listar_listas_filtrar_activas(self):
@@ -143,4 +170,4 @@ class ListaPrecioAPITest(APITestCase):
         self.client.logout()
         
         response = self.client.get('/api/productos/listas-precio/')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

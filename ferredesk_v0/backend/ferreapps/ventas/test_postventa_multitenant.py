@@ -4,12 +4,9 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
-from django.db import connection
 from django.db.models import Max
-from django.test import TransactionTestCase
 from django_tenants.test.client import TenantClient
-from django_tenants.utils import get_public_schema_name, get_tenant_domain_model, schema_context
+from django_tenants.utils import schema_context
 
 from ferreapps.caja.models import MovimientoCaja, PagoVenta
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
@@ -18,64 +15,16 @@ from ferreapps.productos.models import AlicuotaIVA, Ferreteria, Proveedor, Stock
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
+from tenants.tests.mixins import TwoTenantIsolationTestCase
 
 
-class PostventaMultitenantTests(TransactionTestCase):
-    @classmethod
-    def _eliminar_tenant(cls, tenant, domain):
-        try:
-            connection.set_schema_to_public()
-        except Exception:
-            pass
-        if domain is not None:
-            try:
-                domain.delete()
-            except Exception:
-                pass
-        if tenant is not None:
-            try:
-                tenant.delete(force_drop=True)
-            except Exception:
-                pass
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        call_command("migrate_schemas", schema_name=get_public_schema_name(), interactive=False, verbosity=0)
-        cls.addClassCleanup(connection.set_schema_to_public)
-
-        # Tenant A
-        cls.tenant_a = EmpresaTenant(
-            schema_name="testpvtenanta",
-            nombre="Tenant Postventa A",
-            slug_subdominio="testpvtenanta",
-            email_admin="admin@tenanta.test",
-            estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO,
-        )
-        cls.tenant_a.save(verbosity=0)
-        cls.domain_a = get_tenant_domain_model()(tenant=cls.tenant_a, domain="testpvtenanta.lvh.me")
-        cls.domain_a.save()
-        cls.addClassCleanup(cls._eliminar_tenant, cls.tenant_a, cls.domain_a)
-
-        # Tenant B
-        cls.tenant_b = EmpresaTenant(
-            schema_name="testpvtenantb",
-            nombre="Tenant Postventa B",
-            slug_subdominio="testpvtenantb",
-            email_admin="admin@tenantb.test",
-            estado_suscripcion=EmpresaTenant.ESTADO_SUSCRIPCION_ACTIVO,
-        )
-        cls.tenant_b.save(verbosity=0)
-        cls.domain_b = get_tenant_domain_model()(tenant=cls.tenant_b, domain="testpvtenantb.lvh.me")
-        cls.domain_b.save()
-        cls.addClassCleanup(cls._eliminar_tenant, cls.tenant_b, cls.domain_b)
-
-    def tearDown(self):
-        try:
-            connection.set_schema_to_public()
-        except Exception:
-            pass
-        super().tearDown()
+class PostventaMultitenantTests(TwoTenantIsolationTestCase):
+    tenant_a_schema_name = "testpvtenanta"
+    tenant_b_schema_name = "testpvtenantb"
+    tenant_a_domain = "testpvtenanta.lvh.me"
+    tenant_b_domain = "testpvtenantb.lvh.me"
+    tenant_a_email = "admin@tenanta.test"
+    tenant_b_email = "admin@tenantb.test"
 
     def _snapshot_tenant_b(self):
         with schema_context(self.tenant_b.schema_name):

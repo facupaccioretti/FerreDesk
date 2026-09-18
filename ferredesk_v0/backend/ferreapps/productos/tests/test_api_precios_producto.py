@@ -1,31 +1,31 @@
 """
 Tests para los endpoints de precios de productos por lista.
 """
-from django.test import TestCase
 from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
+from django.db.models import Max
 from rest_framework import status
 from decimal import Decimal
 from datetime import date
 
 from ferreapps.productos.models import (
-    Stock, Proveedor, StockProve, AlicuotaIVA,
+    Stock, Proveedor, AlicuotaIVA,
     PrecioProductoLista
 )
+from ferreapps.productos.tests.mixins import ProductoTenantAPITestCase
 
 User = get_user_model()
 
 
-class PrecioProductoListaAPITest(APITestCase):
+class PrecioProductoListaAPITest(ProductoTenantAPITestCase):
     """Tests para los endpoints de precios de productos por lista."""
     
     def setUp(self):
         """Configura datos de prueba y autenticación."""
+        super().setUp()
         self.user = User.objects.create_user(
             username='testuser_precio_prod',
             password='testpass123'
         )
-        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         
         self.proveedor = Proveedor.objects.create(
@@ -38,12 +38,15 @@ class PrecioProductoListaAPITest(APITestCase):
             sigla='PPR'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
-        
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        self.alicuota = AlicuotaIVA.objects.order_by("id").first()
+        if self.alicuota is None:
+            self.alicuota = AlicuotaIVA.objects.create(
+                codigo="21",
+                deno="IVA 21%",
+                porce=Decimal("21.00"),
+            )
+
+        max_id = Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='PRECIOPROD001',
@@ -96,8 +99,8 @@ class PrecioProductoListaAPITest(APITestCase):
         for precio in response.data:
             self.assertEqual(precio['lista_numero'], 1)
     
-    def test_guardar_precios_producto(self):
-        """POST /api/productos/precios-lista/guardar-precios-producto/"""
+    def test_guardar_solo_precios_manuales(self):
+        """POST guarda solo los overrides manuales."""
         response = self.client.post(
             '/api/productos/precios-lista/guardar-precios-producto/',
             {
@@ -112,10 +115,10 @@ class PrecioProductoListaAPITest(APITestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['precios_guardados']), 3)
+        self.assertEqual(len(response.data['resultados']), 1)
         
         precios = PrecioProductoLista.objects.filter(stock=self.producto)
-        self.assertEqual(precios.count(), 3)
+        self.assertEqual(precios.count(), 1)
         
         precio_manual = precios.get(lista_numero=2)
         self.assertTrue(precio_manual.precio_manual)
@@ -138,15 +141,17 @@ class PrecioProductoListaAPITest(APITestCase):
                 'stock_id': self.producto.id,
                 'precios': [
                     {'lista_numero': 0, 'precio': 1300.00, 'precio_manual': True},
-                    {'lista_numero': 1, 'precio': 1200.00, 'precio_manual': False},
+                    {'lista_numero': 1, 'precio': 1200.00, 'precio_manual': True},
                 ]
             },
             format='json'
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Solo debe guardar lista 1, no lista 0
-        self.assertEqual(len(response.data['precios_guardados']), 1)
+        self.assertEqual(len(response.data['resultados']), 1)
+        self.assertFalse(
+            PrecioProductoLista.objects.filter(stock=self.producto, lista_numero=0).exists()
+        )
     
     def test_actualizar_precio_marca_como_manual(self):
         """PATCH /api/productos/precios-lista/{id}/ - Marca como manual."""
