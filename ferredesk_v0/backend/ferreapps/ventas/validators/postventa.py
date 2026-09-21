@@ -13,6 +13,7 @@ from ferreapps.caja.models import (
     MetodoPago,
 )
 from ferreapps.productos.models import Ferreteria, Stock, StockProve
+from ferreapps.promos.services.aplicar_promocion_venta import resolver_items_nuevos_cambio
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 
 
@@ -214,22 +215,30 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
     if not items_nuevos:
         raise ValidationError({"items_nuevos": "Debe agregar al menos un item nuevo"})
 
-    stock_ids = [item["stock_id"] for item in items_nuevos]
-    repetidos = {stock_id for stock_id in stock_ids if stock_ids.count(stock_id) > 1}
+    items_nuevos_resueltos = resolver_items_nuevos_cambio(items_nuevos)
+    stock_ids_directos = [item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
+    repetidos = {stock_id for stock_id in stock_ids_directos if stock_ids_directos.count(stock_id) > 1}
     if repetidos:
         raise ValidationError({"items_nuevos": "No puede repetir el mismo stock en el cambio"})
 
+    operaciones_nuevas = [
+        operacion
+        for item in items_nuevos_resueltos
+        for operacion in item["operaciones_stock"]
+    ]
+    stock_ids = [operacion["stock_id"] for operacion in operaciones_nuevas]
     stocks_existentes = set(Stock.objects.filter(id__in=stock_ids).values_list("id", flat=True))
     faltantes = sorted(set(stock_ids) - stocks_existentes)
     if faltantes:
         raise ValidationError({"items_nuevos": f"Producto inexistente {faltantes[0]}"})
 
     cantidades_por_stock = {}
-    for item in items_nuevos:
-        cantidad = _to_decimal(item["cantidad"], "cantidad")
+    for operacion in operaciones_nuevas:
+        cantidad = _to_decimal(operacion["cantidad"], "cantidad")
         if cantidad <= ZERO:
             raise ValidationError({"items_nuevos": "La cantidad del item nuevo debe ser mayor que cero"})
-        cantidades_por_stock[item["stock_id"]] = cantidad
+        stock_id = operacion["stock_id"]
+        cantidades_por_stock[stock_id] = cantidades_por_stock.get(stock_id, ZERO) + cantidad
 
     if permitir_stock_negativo_habilitado():
         return detalles, devueltas

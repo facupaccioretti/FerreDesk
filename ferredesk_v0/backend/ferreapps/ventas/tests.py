@@ -3,19 +3,22 @@ from decimal import Decimal
 from unittest.mock import MagicMock, call, patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import connection
 from django.db.models import Max
 from django.urls import clear_url_caches
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
-from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, SesionCaja
+from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, MetodoPago, PagoVenta, SesionCaja
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
-from ferreapps.ventas.models import Comprobante, Venta, VentaDetalleItem
+from ferreapps.ventas.models import Comprobante, ComprobanteAsociacion, Venta, VentaDetalleItem
 from ferreapps.ventas.ARCA.services.FerreDeskARCA import FerreDeskARCA
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
@@ -48,6 +51,15 @@ class TestPrecioUnitarioField(SimpleTestCase):
             with self.subTest(entrada=entrada):
                 with self.assertRaises(drf_serializers.ValidationError):
                     campo.run_validation(entrada)
+
+
+class TestDesglosePromocionIncompleto(SimpleTestCase):
+    def test_promo_sin_alicuotas_falla(self):
+        item = MagicMock(vdi_promocion_id=1, pk=42)
+        item.promo_alicuotas.all.return_value = []
+
+        with self.assertRaisesMessage(ValidationError, 'Linea de promocion 42 sin desglose de IVA'):
+            VentaDetalleItem.obtener_alicuotas_promocion(item)
 
 
 class TestFerreDeskARCAPersistencia(TestCase):
@@ -378,6 +390,68 @@ class TestVentaViewSetPaginacion(VentasTenantTestCase):
         self.assertTrue(
             all(venta["comprobante"]["tipo"] == "factura" for venta in payload["results"])
         )
+
+
+class TestVentasListadoSinNMasUno(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        self.comprobante_nota_credito, _ = Comprobante.objects.get_or_create(
+            codigo_afip="1020",
+            defaults={
+                "nombre": "Nota de Credito A",
+                "letra": "A",
+                "tipo": "nota_credito",
+                "activo": True,
+            },
+        )
+        self.metodo_pago, _ = MetodoPago.objects.get_or_create(
+            codigo="efectivo_test_n_mas_uno",
+            defaults={"nombre": "Efectivo test", "afecta_arqueo": True},
+        )
+        fecha = date(2026, 9, 21)
+        facturas = []
+        for indice in range(8):
+            factura = self.crear_venta(self.comprobante_factura, 1000 + indice, fecha)
+            facturas.append(factura)
+            PagoVenta.objects.create(
+                venta=factura,
+                metodo_pago=self.metodo_pago,
+                monto=Decimal("100.00"),
+            )
+
+        for indice, factura in enumerate(facturas):
+            nota_credito = self.crear_venta(self.comprobante_nota_credito, 2000 + indice, fecha)
+            ComprobanteAsociacion.objects.create(
+                nota_credito=nota_credito,
+                factura_afectada=factura,
+            )
+            PagoVenta.objects.create(
+                venta=nota_credito,
+                metodo_pago=self.metodo_pago,
+                monto=Decimal("100.00"),
+            )
+
+        for indice in range(4):
+            factura_fiscal = self.crear_venta(self.comprobante_factura, 3000 + indice, fecha)
+            presupuesto = self.crear_venta(self.comprobante_presupuesto, 4000 + indice, fecha)
+            presupuesto.factura_fiscal_convertida = factura_fiscal
+            presupuesto.convertida_a_fiscal = True
+            presupuesto.save(update_fields=["factura_fiscal_convertida", "convertida_a_fiscal"])
+
+    def _consultar_y_contar_queries(self, limit):
+        with CaptureQueriesContext(connection) as consultas:
+            respuesta = self.client.get(ENDPOINT_VENTAS, {"limit": limit})
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        return len(consultas), respuesta.json()
+
+    def test_listado_mantiene_queries_constantes_al_crecer_la_pagina(self):
+        queries_una, pagina_una = self._consultar_y_contar_queries(1)
+        queries_todas, pagina_todas = self._consultar_y_contar_queries(24)
+
+        self.assertEqual(len(pagina_una["results"]), 1)
+        self.assertEqual(len(pagina_todas["results"]), 24)
+        self.assertIsNotNone(pagina_una["results"][0]["factura_fiscal_info"])
+        self.assertLessEqual(queries_todas, queries_una + 1)
 
 
 class TestIndicesDeAltoImpacto(VentasTenantTestCase):

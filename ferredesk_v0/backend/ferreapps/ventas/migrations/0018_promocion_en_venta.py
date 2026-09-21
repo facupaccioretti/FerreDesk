@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='ventadetalleitem',
-            index=models.Index(fields=['vdi_promocion'], name='VENTA_DETAITEM_promocion_idx'),
+            index=models.Index(fields=['vdi_promocion'], name='VENTA_DETAI_VDI_IDP_dcdbda_idx'),
         ),
         migrations.AddConstraint(
             model_name='ventadetalleitem',
@@ -52,11 +52,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='ventapromocioncomponente',
-            index=models.Index(fields=['detalle'], name='VENTA_PROMOCION_COMPONENTE_detalle_idx'),
+            index=models.Index(fields=['detalle'], name='VENTA_PROMO_VPC_IDV_72e92f_idx'),
         ),
         migrations.AddIndex(
             model_name='ventapromocioncomponente',
-            index=models.Index(fields=['stock', 'proveedor'], name='VENTA_PROMOCION_COMPONENTE_sto_pro_idx'),
+            index=models.Index(fields=['stock', 'proveedor'], name='VENTA_PROMO_VPC_IDS_9fc4e5_idx'),
         ),
         migrations.CreateModel(
             name='VentaDetalleItemPromoAlicuota',
@@ -75,7 +75,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='ventadetalleitempromoalicuota',
-            index=models.Index(fields=['detalle'], name='VENTA_DETALLE_PROMO_ALICUOTA_detalle_idx'),
+            index=models.Index(fields=['detalle'], name='VENTA_DETAL_VDA_IDV_f9be89_idx'),
         ),
         migrations.AlterUniqueTogether(
             name='ventadetalleitempromoalicuota',

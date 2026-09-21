@@ -13,7 +13,10 @@ from ferreapps.caja.services.postventa import (
 from ferreapps.caja.utils import normalizar_cobro, registrar_vuelto
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import Stock, StockProve
-from ferreapps.promos.services.aplicar_promocion_venta import construir_item_devolucion_promocion
+from ferreapps.promos.services.aplicar_promocion_venta import (
+    construir_item_devolucion_promocion,
+    resolver_items_nuevos_cambio,
+)
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_cambio
 from ferreapps.ventas.services.crear_venta import (
@@ -116,15 +119,22 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     }
 
 
-def _build_nueva_venta_payload(venta_origen, payload, comprobante):
+def _build_nueva_venta_payload(venta_origen, items_nuevos, motivo, comprobante):
     stock_map = {
         stock.id: stock
-        for stock in Stock.objects.filter(id__in=[item["stock_id"] for item in payload["items_nuevos"]]).select_related(
+        for stock in Stock.objects.filter(
+            id__in=[item["stock_id"] for item in items_nuevos if item["tipo"] == "stock"]
+        ).select_related(
             "idaliiva", "proveedor_habitual"
         )
     }
     items = []
-    for idx, item in enumerate(payload["items_nuevos"], start=1):
+    for idx, item in enumerate(items_nuevos, start=1):
+        if item["tipo"] == "promocion":
+            item_venta = dict(item["item_venta"])
+            item_venta["vdi_orden"] = idx
+            items.append(item_venta)
+            continue
         stock = stock_map[item["stock_id"]]
         costo = (
             StockProve.objects.filter(stock=stock, proveedor=stock.proveedor_habitual)
@@ -168,7 +178,7 @@ def _build_nueva_venta_payload(venta_origen, payload, comprobante):
         "ven_idpla": venta_origen.ven_idpla_id,
         "ven_idvdo": venta_origen.ven_idvdo_id,
         "ven_copia": venta_origen.ven_copia,
-        "ven_observacion": payload["motivo"],
+        "ven_observacion": motivo,
         "ven_bonificacion_general": 0,
         "ven_idlpa": venta_origen.ven_idlpa,
         "items": items,
@@ -199,17 +209,12 @@ def confirmar_cambio(*, payload, usuario):
             if resultado_existente is not None:
                 return resultado_existente
 
-            # Una promo no se admite todavia como item nuevo de un cambio: no tiene un
-            # stock_id propio para el flujo de items_nuevos (precio manual, stock por
-            # producto suelto) y requeriria resolver sus componentes contra la
-            # definicion vigente de la promo en este mismo paso. Se puede devolver la
-            # promo vieja y cargar la nueva como una venta aparte mientras tanto.
-            if any(item.get("promocion_id") or not item.get("stock_id") for item in payload["items_nuevos"]):
-                raise ValidationError({
-                    "items_nuevos": "No se admite una promoción como ítem nuevo en un cambio. "
-                                     "Devuelva la promoción y cárguela como una venta nueva."
-                })
-
+            items_nuevos_resueltos = resolver_items_nuevos_cambio(payload["items_nuevos"])
+            operaciones_stock_nuevas = [
+                operacion
+                for item in items_nuevos_resueltos
+                for operacion in item["operaciones_stock"]
+            ]
             preview = previsualizar_cambio(payload)
             validar_items_cambio(venta_origen, payload["items_devueltos"], payload["items_nuevos"])
 
@@ -265,7 +270,7 @@ def confirmar_cambio(*, payload, usuario):
             proveedores_repuestos = ajustar_stock_postventa(
                 items_devueltos=payload["items_devueltos"],
                 detalles=detalles,
-                items_nuevos=payload["items_nuevos"],
+                items_nuevos=operaciones_stock_nuevas,
                 permitir_stock_negativo=permitir_stock_negativo_habilitado(),
             )
 
@@ -277,7 +282,12 @@ def confirmar_cambio(*, payload, usuario):
                 origen_postventa=True,
             )
             nueva_venta, _ = crear_documento_venta_desde_payload(
-                payload=_build_nueva_venta_payload(venta_origen, payload, comprobante_venta),
+                payload=_build_nueva_venta_payload(
+                    venta_origen,
+                    items_nuevos_resueltos,
+                    payload["motivo"],
+                    comprobante_venta,
+                ),
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
@@ -306,15 +316,29 @@ def confirmar_cambio(*, payload, usuario):
                     detalle=detalle.vdi_detalle1 or "",
                 )
 
-            stock_map = {stock.id: stock for stock in Stock.objects.filter(id__in=[item["stock_id"] for item in payload["items_nuevos"]])}
-            for item in payload["items_nuevos"]:
+            stock_map = {
+                stock.id: stock
+                for stock in Stock.objects.filter(
+                    id__in=[item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
+                )
+            }
+            for item in items_nuevos_resueltos:
+                if item["tipo"] == "promocion":
+                    PostventaOperacionItem.objects.create(
+                        operacion=operacion,
+                        rol=PostventaOperacionItem.ROL_NUEVO,
+                        cantidad=item["cantidad"].quantize(Decimal("0.01")),
+                        precio_unitario=item["precio_unitario"].quantize(Decimal("0.01")),
+                        detalle=item["detalle"],
+                    )
+                    continue
                 stock = stock_map[item["stock_id"]]
                 PostventaOperacionItem.objects.create(
                     operacion=operacion,
                     rol=PostventaOperacionItem.ROL_NUEVO,
                     stock=stock,
-                    cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
-                    precio_unitario=Decimal(str(item["precio_unitario"])).quantize(Decimal("0.01")),
+                    cantidad=item["cantidad"].quantize(Decimal("0.01")),
+                    precio_unitario=item["precio_unitario"].quantize(Decimal("0.01")),
                     detalle=stock.deno,
                 )
 

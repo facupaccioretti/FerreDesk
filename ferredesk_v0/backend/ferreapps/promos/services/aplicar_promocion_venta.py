@@ -202,6 +202,51 @@ def expandir_items_promocion(items):
     ]
 
 
+def resolver_items_nuevos_cambio(items):
+    """Normaliza los items nuevos de un cambio sin perder que una promo es
+    una sola linea comercial. Las operaciones de stock quedan separadas para
+    que el cambio pueda descontar sus componentes en la misma transaccion.
+    """
+    resultado = []
+    for item in items:
+        if item.get('promocion_id') is not None:
+            item_venta = expandir_item_promocion({
+                'vdi_promocion': item['promocion_id'],
+                'vdi_cantidad': item['cantidad'],
+            })
+            cantidad = Decimal(str(item_venta['vdi_cantidad']))
+            resultado.append({
+                'tipo': 'promocion',
+                'promocion_id': item_venta['vdi_promocion'],
+                'cantidad': cantidad,
+                'precio_unitario': item_venta['vdi_precio_unitario_final'],
+                'detalle': item_venta['vdi_detalle1'],
+                'item_venta': item_venta,
+                'operaciones_stock': [
+                    {
+                        'stock_id': componente['stock_id'],
+                        'proveedor_id': componente['proveedor_id'],
+                        'cantidad': componente['cantidad_por_promo'] * cantidad,
+                    }
+                    for componente in item_venta['_promo_snapshot']['componentes']
+                ],
+            })
+            continue
+
+        cantidad = Decimal(str(item['cantidad']))
+        resultado.append({
+            'tipo': 'stock',
+            'stock_id': item['stock_id'],
+            'cantidad': cantidad,
+            'precio_unitario': Decimal(str(item['precio_unitario'])),
+            'operaciones_stock': [{
+                'stock_id': item['stock_id'],
+                'cantidad': cantidad,
+            }],
+        })
+    return resultado
+
+
 def resolver_operaciones_stock(items):
     """Aplana los items (ya expandidos) en una lista de operaciones de
     stock -- una por producto suelto, una por CADA componente de cada
@@ -333,6 +378,10 @@ def crear_snapshot_promocion(detalle, snapshot):
         )
         for grupo in snapshot['alicuotas']
     ])
+    # El detalle dispara el recalculo antes de que existan sus filas de IVA.
+    # Recalcular al final conserva los totales de la venta y del presupuesto.
+    from ferreapps.ventas.signals import _recalcular_totales_venta
+    _recalcular_totales_venta(detalle.vdi_idve_id)
 
 
 def construir_item_devolucion_promocion(detalle_original, cantidad_devuelta):

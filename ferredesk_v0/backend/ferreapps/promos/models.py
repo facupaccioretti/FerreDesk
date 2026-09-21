@@ -26,8 +26,8 @@ class Promocion(models.Model):
         verbose_name = 'Promocion'
         verbose_name_plural = 'Promociones'
         indexes = [
-            models.Index(fields=['activa']),
-            models.Index(fields=['desactualizada']),
+            models.Index(fields=['activa'], name='PROMOCIONES_activa_3fe315_idx'),
+            models.Index(fields=['desactualizada'], name='PROMOCIONES_desactu_7a839d_idx'),
         ]
 
     def __str__(self):
@@ -45,7 +45,7 @@ class PromocionItem(models.Model):
         verbose_name_plural = 'Items de Promocion'
         unique_together = (('promocion', 'stock'),)
         indexes = [
-            models.Index(fields=['stock']),
+            models.Index(fields=['stock'], name='PROMOCIONES_stock_i_dbb54b_idx'),
         ]
 
     def __str__(self):

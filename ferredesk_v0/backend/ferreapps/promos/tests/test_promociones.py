@@ -120,7 +120,8 @@ class PromocionesTestCase(TenantTestCase):
         promo = self._crear_promo_combo()
         stock_prove = StockProve.objects.get(stock=self.vodka, proveedor=self.proveedor)
         stock_prove.costo = Decimal("6500.00")
-        stock_prove.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            stock_prove.save()
 
         promo.refresh_from_db()
         self.assertTrue(promo.desactualizada)

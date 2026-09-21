@@ -28,6 +28,7 @@ from ferreapps.cuenta_corriente.services.imputacion_service import (
     validar_saldo_comprobante_pago,
 )
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, Proveedor, StockProve
+from ferreapps.promos.services.gestionar_promocion import crear_promocion
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 from ferreapps.ventas.selectors.postventa import (
     obtener_saldo_pendiente_venta,
@@ -119,8 +120,50 @@ class PostventaPureUnitTests(SimpleTestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["medios_diferencia"][0]["monto"], Decimal("40.00"))
 
+    def test_serializer_acepta_promocion_como_item_nuevo(self):
+        serializer = ConfirmarCambioInputSerializer(data={
+            "venta_id": 1,
+            "items_devueltos": [{"venta_detalle_item_id": 2, "cantidad": "1.00"}],
+            "items_nuevos": [{"promocion_id": 3, "cantidad": "1.00"}],
+            "idempotency_key": str(uuid4()),
+            "motivo": "Cambio por promocion",
+            "resolucion_diferencia": "SIN_DIFERENCIA",
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
 
 class PostventaIntegrationTests(PostventaTenantTestCase):
+
+    def test_cambio_admite_promocion_nueva_y_descuenta_componentes(self):
+        stock_origen = self._crear_stock("PV-PROMO-ORI", cantidad=Decimal("5.00"))
+        componente = self._crear_stock("PV-PROMO-COMP", cantidad=Decimal("5.00"))
+        venta, detalle = self._crear_venta_origen(stock_origen, cantidad=Decimal("1.00"))
+        promo = crear_promocion(
+            datos={"nombre": "Combo postventa", "precio_promocional": Decimal("90.00")},
+            items_data=[{"stock_id": componente.id, "cantidad": Decimal("2.00")}],
+        )
+
+        resultado = confirmar_cambio(payload={
+            "venta_id": venta.ven_id,
+            "items_devueltos": [{"venta_detalle_item_id": detalle.id, "cantidad": "1.00"}],
+            "items_nuevos": [{"promocion_id": promo.id, "cantidad": "1.00"}],
+            "idempotency_key": uuid4(),
+            "motivo": "Cambio por combo",
+            "resolucion_diferencia": "SALDO_A_FAVOR",
+        }, usuario=self.usuario)
+
+        nueva_venta = Venta.objects.get(pk=resultado["nueva_venta_id"])
+        nuevo_detalle = nueva_venta.items.get()
+        operacion = PostventaOperacion.objects.get(pk=resultado["operacion_id"])
+        item_nuevo = operacion.items.get(rol=PostventaOperacionItem.ROL_NUEVO)
+
+        self.assertEqual(nuevo_detalle.vdi_promocion_id, promo.id)
+        self.assertEqual(nuevo_detalle.componentes_promocion.count(), 1)
+        self.assertIsNone(item_nuevo.stock_id)
+        self.assertEqual(item_nuevo.precio_unitario, Decimal("90.00"))
+        self.assertEqual(StockProve.objects.get(stock=stock_origen).cantidad, Decimal("6.00"))
+        self.assertEqual(StockProve.objects.get(stock=componente).cantidad, Decimal("3.00"))
 
     def test_idempotencia_reintenta_despues_de_perder_la_respuesta(self):
         stock = self._crear_stock("PV-IDEM-RETRY")

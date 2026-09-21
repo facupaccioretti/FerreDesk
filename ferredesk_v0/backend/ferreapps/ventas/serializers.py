@@ -59,19 +59,7 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
         return None
     
     def get_ven_total(self, obj):
-        # Si el objeto ya viene anotado desde el manager, lo usamos directamente.
-        # Si no, caemos en una consulta (aunque idealmente siempre debería venir anotado)
-        if hasattr(obj, 'ven_total'):
-            return obj.ven_total
-        
-        # Fallback seguro para evitar romper si no está anotado
-        try:
-            from .managers_ventas_calculos import VentaQuerySet
-            # Esto es ineficiente en listados, pero asegura que no devuelva None si falta la anotación
-            venta_con_totales = Venta.objects.filter(pk=obj.pk).con_calculos().first()
-            return venta_con_totales.ven_total if venta_con_totales else None
-        except Exception:
-            return None
+        return getattr(obj, '_ven_total', obj.total_guardado)
 
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     vdi_precio_unitario_final = PrecioUnitarioField(
@@ -764,6 +752,7 @@ class VentaRemPedSerializer(serializers.ModelSerializer):
 class VentaCalculadaSerializer(serializers.ModelSerializer):
     iva_desglose = serializers.SerializerMethodField()
     comprobante = serializers.SerializerMethodField()
+    comprobantes_asociados = serializers.SerializerMethodField()
     # NUEVOS CAMPOS PARA EL TOOLTIP
     notas_credito_que_la_anulan = serializers.SerializerMethodField()
     facturas_anuladas = serializers.SerializerMethodField()
@@ -834,15 +823,18 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
 
     def get_ven_total(self, obj):
         """Total de la venta (anotación ORM o property del modelo)."""
-        return str(getattr(obj, '_ven_total', None) or obj.ven_total or 0)
+        total = getattr(obj, '_ven_total', None)
+        return str(total if total is not None else obj.ven_total or 0)
 
     def get_ven_impneto(self, obj):
         """Importe neto gravado (anotación ORM o property del modelo)."""
-        return str(getattr(obj, '_ven_impneto', None) or obj.ven_impneto or 0)
+        impneto = getattr(obj, '_ven_impneto', None)
+        return str(impneto if impneto is not None else obj.ven_impneto or 0)
 
     def get_iva_global(self, obj):
         """IVA total (anotación ORM o property del modelo)."""
-        return str(getattr(obj, '_iva_global', None) or obj.iva_global or 0)
+        iva_global = getattr(obj, '_iva_global', None)
+        return str(iva_global if iva_global is not None else obj.iva_global or 0)
 
     def get_subtotal_bruto(self, obj):
         """Subtotal bruto antes de descuentos (anotación ORM)."""
@@ -858,11 +850,21 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
 
         # Refactorización: Usamos el manager de item para obtener el desglose por alícuota
         from .models import VentaDetalleItem
-        items_anotados = VentaDetalleItem.objects.filter(vdi_idve=obj.pk).con_calculos()
+        items_anotados = VentaDetalleItem.objects.filter(vdi_idve=obj.pk).con_calculos().prefetch_related(
+            "promo_alicuotas__alicuota"
+        )
         
         # Agrupamos por alícuota en Python (más sencillo para el formato de dict esperado)
         desglose_agrupado = {}
         for item in items_anotados:
+            if item.vdi_promocion_id:
+                for grupo in item.obtener_alicuotas_promocion():
+                    porcentaje_str = str(grupo.alicuota.porce)
+                    if porcentaje_str not in desglose_agrupado:
+                        desglose_agrupado[porcentaje_str] = {"neto": Decimal('0'), "iva": Decimal('0')}
+                    desglose_agrupado[porcentaje_str]["neto"] += grupo.neto
+                    desglose_agrupado[porcentaje_str]["iva"] += grupo.iva_monto
+                continue
             if item.ali_porce == 0:
                 continue
             
@@ -876,15 +878,26 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         return desglose_agrupado
 
     def get_comprobante(self, obj):
-        # Usar anotaciones del manager (prefijo _) con fallback al FK directo
+        if hasattr(obj, '_comprobante_nombre'):
+            return {
+                'id': obj.comprobante_id,
+                'nombre': obj._comprobante_nombre,
+                'letra': obj._comprobante_letra,
+                'tipo': obj.comprobante_tipo,
+                'codigo_afip': obj._comprobante_codigo_afip,
+                'descripcion': obj.comprobante_descripcion,
+                'activo': obj.comprobante_activo,
+            }
+
+        comprobante = obj.comprobante
         return {
             'id': obj.comprobante_id if hasattr(obj, 'comprobante_id') else None,
-            'nombre': getattr(obj, '_comprobante_nombre', None) or (obj.comprobante.nombre if obj.comprobante else None),
-            'letra': getattr(obj, '_comprobante_letra', None) or (obj.comprobante.letra if obj.comprobante else None),
-            'tipo': getattr(obj, 'comprobante_tipo', None) or (obj.comprobante.tipo if obj.comprobante else None),
-            'codigo_afip': getattr(obj, '_comprobante_codigo_afip', None) or (obj.comprobante.codigo_afip if obj.comprobante else None),
-            'descripcion': getattr(obj, 'comprobante_descripcion', None) or (obj.comprobante.descripcion if obj.comprobante else None),
-            'activo': getattr(obj, 'comprobante_activo', None) if hasattr(obj, 'comprobante_activo') else (obj.comprobante.activo if obj.comprobante else None),
+            'nombre': comprobante.nombre if comprobante else None,
+            'letra': comprobante.letra if comprobante else None,
+            'tipo': comprobante.tipo if comprobante else None,
+            'codigo_afip': comprobante.codigo_afip if comprobante else None,
+            'descripcion': comprobante.descripcion if comprobante else None,
+            'activo': comprobante.activo if comprobante else None,
         }
 
     def get_factura_fiscal_info(self, obj):
@@ -892,24 +905,17 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         Si esta cotización fue convertida a factura fiscal, devuelve los datos
         de la factura resultante y auditoría (número, fecha facturación, usuario que facturó).
         """
-        # CORRECCIÓN: El campo FK real del modelo Venta es 'factura_fiscal_convertida',
-        # Django expone el PK numérico como 'factura_fiscal_convertida_id'.
-        # 'factura_fiscal_id' era el nombre de la columna en la vista SQL obsoleta VentaCalculada.
-        fk_id = getattr(obj, 'factura_fiscal_convertida_id', None) or getattr(obj, 'factura_fiscal_id', None)
-        if not fk_id:
+        venta = obj.factura_fiscal_convertida
+        if venta is None:
             return None
-        try:
-            venta = Venta.objects.select_related('sesion_caja__usuario').get(pk=fk_id)
-            data = dict(VentaAsociadaSerializer(venta, context=self.context).data)
-            data['fecha_conversion'] = getattr(obj, 'fecha_conversion', None)
-            if venta.sesion_caja and venta.sesion_caja.usuario:
-                u = venta.sesion_caja.usuario
-                data['usuario_conversion'] = (u.get_full_name() or u.username) if hasattr(u, 'get_full_name') else getattr(u, 'username', str(u))
-            else:
-                data['usuario_conversion'] = None
-            return data
-        except Venta.DoesNotExist:
-            return None
+        data = dict(VentaAsociadaSerializer(venta, context=self.context).data)
+        data['fecha_conversion'] = obj.fecha_conversion
+        if venta.sesion_caja and venta.sesion_caja.usuario:
+            u = venta.sesion_caja.usuario
+            data['usuario_conversion'] = (u.get_full_name() or u.username) if hasattr(u, 'get_full_name') else getattr(u, 'username', str(u))
+        else:
+            data['usuario_conversion'] = None
+        return data
 
     # MÉTODOS NUEVOS PARA EL TOOLTIP (Implementación segura)
     def get_notas_credito_que_la_anulan(self, obj):
@@ -917,8 +923,11 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         Si 'obj' es una Factura (desde la vista VentaCalculada),
         devuelve las Notas de Crédito que la anulan.
         """
-        # Consulta directa a la tabla de asociación para evitar errores de related_name
-        asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id)
+        asociaciones = getattr(obj, '_notas_credito_recibidas_prefetch', None)
+        if asociaciones is None:
+            asociaciones = ComprobanteAsociacion.objects.filter(factura_afectada_id=obj.ven_id).select_related(
+                'nota_credito__comprobante'
+            )
         # De cada asociación, obtenemos la nota de crédito que la originó
         ncs = [asc.nota_credito for asc in asociaciones]
         return VentaAsociadaSerializer(ncs, many=True, context=self.context).data
@@ -928,18 +937,27 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
         Si 'obj' es una Nota de Crédito (desde la vista VentaCalculada),
         devuelve las Facturas que anula.
         """
-        # Consulta directa a la tabla de asociación
-        asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id)
+        asociaciones = getattr(obj, '_facturas_anuladas_prefetch', None)
+        if asociaciones is None:
+            asociaciones = ComprobanteAsociacion.objects.filter(nota_credito_id=obj.ven_id).select_related(
+                'factura_afectada__comprobante'
+            )
         # De cada asociación, obtenemos la factura que fue afectada
         facturas = [asc.factura_afectada for asc in asociaciones]
         return VentaAsociadaSerializer(facturas, many=True, context=self.context).data 
+
+    def get_comprobantes_asociados(self, obj):
+        asociaciones = getattr(obj, '_facturas_anuladas_prefetch', None)
+        if asociaciones is None:
+            return list(obj.comprobantes_asociados.values_list('pk', flat=True))
+        return [asociacion.factura_afectada_id for asociacion in asociaciones]
 
     def get_pagos_detalle(self, obj):
         """
         Obtiene el detalle de los pagos asociados a la venta.
         Utilizado para mostrar cómo se abonó la comprobante.
         """
-        pagos = PagoVenta.objects.filter(venta_id=obj.pk).select_related('metodo_pago', 'cuenta_banco')
+        pagos = obj.pagos.all()
         resultado = []
         for pago in pagos:
             detalle = {

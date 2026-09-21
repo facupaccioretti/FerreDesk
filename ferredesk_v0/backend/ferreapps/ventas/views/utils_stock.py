@@ -228,20 +228,25 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
         )
         if not permitir_stock_negativo and total_disponible < cantidad:
             raise ValidationError({"items_nuevos": f"Stock insuficiente para el producto {stock_id}"})
-        descuentos.append((stocks_nuevos[stock_id], proveedores, cantidad))
+        descuentos.append((
+            stocks_nuevos[stock_id],
+            proveedores,
+            cantidad,
+            item.get("proveedor_id") or stocks_nuevos[stock_id].proveedor_habitual_id,
+        ))
 
     for mov in movimientos:
         stock_prove = por_clave[(mov["stock_id"], mov["proveedor_id"])]
         stock_prove.cantidad += mov["cantidad"]
 
-    for stock, proveedores, cantidad in descuentos:
+    for stock, proveedores, cantidad, proveedor_preferido_id in descuentos:
         por_proveedor = {proveedor.proveedor_id: proveedor for proveedor in proveedores}
         restante = cantidad
         orden = []
-        if stock.proveedor_habitual_id in por_proveedor:
-            orden.append(por_proveedor[stock.proveedor_habitual_id])
+        if proveedor_preferido_id in por_proveedor:
+            orden.append(por_proveedor[proveedor_preferido_id])
         orden.extend(sorted(
-            (proveedor for proveedor in proveedores if proveedor.proveedor_id != stock.proveedor_habitual_id),
+            (proveedor for proveedor in proveedores if proveedor.proveedor_id != proveedor_preferido_id),
             key=lambda proveedor: (-proveedor.cantidad, proveedor.pk),
         ))
         for stock_prove in orden:
@@ -252,7 +257,7 @@ def ajustar_stock_postventa(*, items_devueltos, detalles, items_nuevos, permitir
             if not restante:
                 break
         if restante:
-            stock_prove = por_proveedor.get(stock.proveedor_habitual_id)
+            stock_prove = por_proveedor.get(proveedor_preferido_id)
             if stock_prove is None:
                 raise ValidationError({"items_nuevos": f"No existe stock para el producto {stock.id} y proveedor habitual"})
             stock_prove.cantidad -= restante

@@ -15,7 +15,7 @@ from django.db.models import Sum
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+    Comprobante, ComprobanteAsociacion, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
 )
 from ..serializers import (
     VentaSerializer, VentaDetalleItemSerializer, VentaDetalleManSerializer,
@@ -30,7 +30,7 @@ from .utils_stock import (
     _obtener_codigo_venta,
     _descontar_distribuyendo,
 )
-from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+from ferreapps.caja.models import PagoVenta, SesionCaja, ESTADO_CAJA_ABIERTA
 from ferreapps.productos.setup import requerir_setup_completo
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from ferredesk_backend.utils.observability import medir_proceso
@@ -148,7 +148,25 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
             # Usamos el manager personalizado con todas las anotaciones necesarias
-            return Venta.objects.con_calculos().order_by('-ven_fecha', '-ven_id')
+            return Venta.objects.con_calculos().select_related(
+                'factura_fiscal_convertida__comprobante',
+                'factura_fiscal_convertida__sesion_caja__usuario',
+            ).prefetch_related(
+                models.Prefetch(
+                    'pagos',
+                    queryset=PagoVenta.objects.select_related('metodo_pago', 'cuenta_banco'),
+                ),
+                models.Prefetch(
+                    'notas_de_credito_recibidas',
+                    queryset=ComprobanteAsociacion.objects.select_related('nota_credito__comprobante'),
+                    to_attr='_notas_credito_recibidas_prefetch',
+                ),
+                models.Prefetch(
+                    'facturas_anuladas',
+                    queryset=ComprobanteAsociacion.objects.select_related('factura_afectada__comprobante'),
+                    to_attr='_facturas_anuladas_prefetch',
+                ),
+            ).order_by('-ven_fecha', '-ven_id')
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()

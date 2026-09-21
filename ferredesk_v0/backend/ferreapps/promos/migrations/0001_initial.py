@@ -48,15 +48,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='promocion',
-            index=models.Index(fields=['activa'], name='PROMOCIONES_activa_idx'),
+            index=models.Index(fields=['activa'], name='PROMOCIONES_activa_3fe315_idx'),
         ),
         migrations.AddIndex(
             model_name='promocion',
-            index=models.Index(fields=['desactualizada'], name='PROMOCIONES_desactualizada_idx'),
+            index=models.Index(fields=['desactualizada'], name='PROMOCIONES_desactu_7a839d_idx'),
         ),
         migrations.AddIndex(
             model_name='promocionitem',
-            index=models.Index(fields=['stock'], name='PROMOCIONES_ITEMS_stock_idx'),
+            index=models.Index(fields=['stock'], name='PROMOCIONES_stock_i_dbb54b_idx'),
         ),
         migrations.AlterUniqueTogether(
             name='promocionitem',

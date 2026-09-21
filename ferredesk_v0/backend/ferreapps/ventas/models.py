@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db.models import JSONField
 from .managers_ventas_calculos import VentaQuerySet, VentaDetalleItemQuerySet
 from decimal import Decimal
@@ -300,7 +301,7 @@ class Venta(models.Model):
             'promo_alicuotas__alicuota'
         ):
             if item.vdi_promocion_id:
-                for grupo in item.promo_alicuotas.all():
+                for grupo in item.obtener_alicuotas_promocion():
                     porce = Decimal(str(grupo.alicuota.porce))
                     _sumar(porce, grupo.neto, grupo.iva_monto)
                 continue
@@ -535,6 +536,12 @@ class VentaDetalleItem(models.Model):
         related_name='ventas_detalles',
     )
 
+    def obtener_alicuotas_promocion(self):
+        grupos = list(self.promo_alicuotas.all())
+        if self.vdi_promocion_id and not grupos:
+            raise ValidationError(f'Linea de promocion {self.pk} sin desglose de IVA')
+        return grupos
+
     objects = VentaDetalleItemQuerySet.as_manager()
 
     class Meta:
@@ -542,7 +549,7 @@ class VentaDetalleItem(models.Model):
         indexes = [
             models.Index(fields=['vdi_idve', 'vdi_orden']),
             models.Index(fields=['vdi_idsto']),
-            models.Index(fields=['vdi_promocion']),
+            models.Index(fields=['vdi_promocion'], name='VENTA_DETAI_VDI_IDP_dcdbda_idx'),
         ]
         constraints = [
             models.CheckConstraint(
@@ -574,8 +581,8 @@ class VentaPromocionComponente(models.Model):
         verbose_name = 'Componente de Promocion Vendida'
         verbose_name_plural = 'Componentes de Promociones Vendidas'
         indexes = [
-            models.Index(fields=['detalle']),
-            models.Index(fields=['stock', 'proveedor']),
+            models.Index(fields=['detalle'], name='VENTA_PROMO_VPC_IDV_72e92f_idx'),
+            models.Index(fields=['stock', 'proveedor'], name='VENTA_PROMO_VPC_IDS_9fc4e5_idx'),
         ]
 
     def __str__(self):
@@ -604,7 +611,7 @@ class VentaDetalleItemPromoAlicuota(models.Model):
         verbose_name_plural = 'Desgloses de IVA de Promociones Vendidas'
         unique_together = (('detalle', 'alicuota'),)
         indexes = [
-            models.Index(fields=['detalle']),
+            models.Index(fields=['detalle'], name='VENTA_DETAL_VDA_IDV_f9be89_idx'),
         ]
 
     def __str__(self):
