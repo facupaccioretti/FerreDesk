@@ -37,11 +37,16 @@ function botonPorTexto(texto) {
   );
 }
 
-function radioPorLabel(texto) {
-  const label = Array.from(document.body.querySelectorAll("label")).find(
-    (l) => l.textContent.trim() === texto
-  );
-  return label ? label.querySelector('input[type="radio"]') : null;
+function inputCantidad(texto) {
+  return document.body.querySelector(`[aria-label="Cantidad de ${texto}"]`);
+}
+
+async function cambiarCantidad(input, cantidad) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(input, cantidad);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 describe("ConfiguradorPromocionModal", () => {
@@ -64,7 +69,7 @@ describe("ConfiguradorPromocionModal", () => {
     document.body.querySelectorAll('[id^="headlessui-portal-root"]').forEach((n) => n.remove());
   });
 
-  test("bloquea la confirmacion mientras falten grupos por elegir", async () => {
+  test("bloquea la confirmacion hasta que cada grupo complete su cantidad", async () => {
     const onConfirmar = jest.fn();
 
     await act(async () => {
@@ -83,25 +88,20 @@ describe("ConfiguradorPromocionModal", () => {
     expect(botonConfirmar).toBeTruthy();
     expect(botonConfirmar.disabled).toBe(true);
 
-    // Elegir solo el primer grupo: sigue bloqueado por el segundo.
-    // Se usa .click() (no setear .checked a mano) para pasar por el pipeline
-    // nativo de eventos que React efectivamente observa en un radio controlado.
-    const radioFernet = radioPorLabel("Fernet");
-    expect(radioFernet).toBeTruthy();
-    await act(async () => {
-      radioFernet.click();
-    });
-    expect(radioFernet.checked).toBe(true);
+    const inputRedbull = inputCantidad("Redbull");
+    const inputFernet = inputCantidad("Fernet");
+    const inputMani = inputCantidad("Maní");
+    expect(inputRedbull).toBeTruthy();
+    expect(inputFernet).toBeTruthy();
+    expect(inputMani).toBeTruthy();
+
+    await cambiarCantidad(inputRedbull, "1");
 
     botonConfirmar = botonPorTexto("Confirmar");
     expect(botonConfirmar.disabled).toBe(true);
 
-    // Elegir el segundo grupo: ahora se puede confirmar.
-    const radioMani = radioPorLabel("Maní");
-    await act(async () => {
-      radioMani.click();
-    });
-    expect(radioMani.checked).toBe(true);
+    await cambiarCantidad(inputFernet, "1");
+    await cambiarCantidad(inputMani, "1");
 
     botonConfirmar = botonPorTexto("Confirmar");
     expect(botonConfirmar.disabled).toBe(false);
@@ -114,29 +114,33 @@ describe("ConfiguradorPromocionModal", () => {
     const [eleccionesGrupos, cantidad] = onConfirmar.mock.calls[0];
     expect(eleccionesGrupos).toEqual(
       expect.arrayContaining([
-        { grupo_id: 9, stock_id: 201 },
-        { grupo_id: 10, stock_id: 301 },
+        { grupo_id: 9, stock_id: 200, cantidad: 1 },
+        { grupo_id: 9, stock_id: 201, cantidad: 1 },
+        { grupo_id: 10, stock_id: 301, cantidad: 1 },
       ])
     );
     expect(cantidad).toBe(1);
   });
 
-  test("en modo reconfigurar no muestra el campo de cantidad", async () => {
+  test("en modo reconfigurar precompleta las cantidades elegidas", async () => {
     await act(async () => {
       root.render(
         <ConfiguradorPromocionModal
           abierto
           modo="reconfigurar"
           promocion={promocionDosGrupos}
-          eleccionesIniciales={[{ grupo_id: 9, stock_id: 200 }, { grupo_id: 10, stock_id: 300 }]}
+          eleccionesIniciales={[
+            { grupo_id: 9, stock_id: 200, cantidad: 2 },
+            { grupo_id: 10, stock_id: 300, cantidad: 1 },
+          ]}
           onConfirmar={() => {}}
           onCancelar={() => {}}
         />
       );
     });
 
-    expect(document.body.querySelector('input[type="number"]')).toBeNull();
-    // Las elecciones iniciales ya vienen preseleccionadas: se puede confirmar directo.
+    expect(inputCantidad("Redbull").value).toBe("2");
+    expect(inputCantidad("Papas fritas").value).toBe("1");
     expect(botonPorTexto("Confirmar").disabled).toBe(false);
   });
 });

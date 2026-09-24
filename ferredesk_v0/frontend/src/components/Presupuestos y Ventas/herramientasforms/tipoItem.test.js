@@ -27,7 +27,10 @@ const promocionConGrupo = {
 
 describe("crearItemDesdePromocion", () => {
   test("crea una fila de tipo promocion con el resumen de sus componentes elegidos", () => {
-    const eleccionesGrupos = [{ grupo_id: 9, stock_id: 201 }];
+    const eleccionesGrupos = [
+      { grupo_id: 9, stock_id: 200, cantidad: 1 },
+      { grupo_id: 9, stock_id: 201, cantidad: 1 },
+    ];
     const item = crearItemDesdePromocion(promocionConGrupo, { eleccionesGrupos, cantidad: 3 });
 
     expect(item.tipo).toBe("promocion");
@@ -37,7 +40,7 @@ describe("crearItemDesdePromocion", () => {
     expect(item.precioFinal).toBe(15000);
     expect(item.codigo).toBe("PROMO");
     expect(item.eleccionesGrupos).toEqual(eleccionesGrupos);
-    expect(item.resumenComponentes).toBe("Vodka x1 · Fernet x2");
+    expect(item.resumenComponentes).toBe("Vodka x1 · Redbull x1 · Fernet x1");
   });
 
   test("sin elegir el grupo todavia, el resumen marca la opcion como pendiente", () => {
@@ -96,7 +99,7 @@ describe("resolverEleccionesDesdeComponentes", () => {
 
     const elecciones = resolverEleccionesDesdeComponentes(promocionConGrupo, componentesVendidos);
 
-    expect(elecciones).toEqual([{ grupo_id: 9, stock_id: 201 }]);
+    expect(elecciones).toEqual([{ grupo_id: 9, stock_id: 201, cantidad: "2.00" }]);
   });
 
   test("si la alternativa vendida ya no existe en la promocion actual, ese grupo queda sin preseleccion", () => {

@@ -7,6 +7,7 @@ No envía nada a AFIP, solo construye el payload usando los datos del sistema.
 import logging
 import json
 from datetime import datetime
+from decimal import Decimal
 
 logger = logging.getLogger('ferredesk_arca.armador')
 
@@ -44,6 +45,22 @@ def _importe_arca(valor):
     if valor is None:
         return 0.0
     return round(float(valor), 2)
+
+
+def _totales_desde_alicuotas(venta_calculada, alicuotas_venta):
+    """Usa el mismo desglose que se envia en AlicIva para evitar diferencias.
+
+    Una promocion con alicuotas mixtas no puede derivar sus totales desde la
+    alicuota dominante de la linea. Cuando hay desglose, ARCA debe recibir sus
+    sumas exactas en ImpNeto e ImpIVA.
+    """
+    if not alicuotas_venta:
+        neto = Decimal(str(venta_calculada.ven_impneto or 0))
+        iva = Decimal(str(venta_calculada.iva_global or 0))
+    else:
+        neto = sum((Decimal(str(a.neto_gravado or 0)) for a in alicuotas_venta), Decimal('0'))
+        iva = sum((Decimal(str(a.iva_total or 0)) for a in alicuotas_venta), Decimal('0'))
+    return neto, iva, neto + iva
 
 
 def armar_payload_arca(venta, cliente, comprobante, venta_calculada, alicuotas_venta):
@@ -215,12 +232,14 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
     """
     Construye los campos específicos según el tipo de comprobante.
     """
+    neto, iva, total = _totales_desde_alicuotas(venta_calculada, alicuotas_venta)
+
     # Factura A, Nota de Crédito A y Nota de Débito A (1, 3, 2) - Con IVA discriminado
     if tipo_cbte in [1, 3, 2]:
         datos_comprobante.update({
-            'ImpNeto': _importe_arca(venta_calculada.ven_impneto),
-            'ImpIVA': _importe_arca(venta_calculada.iva_global),
-            'ImpTotal': _importe_arca(venta_calculada.ven_total)
+            'ImpNeto': _importe_arca(neto),
+            'ImpIVA': _importe_arca(iva),
+            'ImpTotal': _importe_arca(total)
         })
         
         # Incluir alícuotas de IVA si existen
@@ -245,12 +264,10 @@ def _construir_campos_por_tipo(datos_comprobante, tipo_cbte, venta_calculada, al
             logger.info(f"   • ImpTotal: {venta_calculada.ven_total} (igual al neto)")
             logger.info(f"   • NO se incluye objeto IVA")
         else:  # Factura B, Nota de Crédito B, Nota de Débito B, Nota de Débito C
-            neto = _importe_arca(venta_calculada.ven_impneto)
-            iva = _importe_arca(venta_calculada.iva_global)
             datos_comprobante.update({
-                'ImpNeto': neto,
-                'ImpIVA': iva,
-                'ImpTotal': _importe_arca(venta_calculada.ven_impneto + venta_calculada.iva_global)
+                'ImpNeto': _importe_arca(neto),
+                'ImpIVA': _importe_arca(iva),
+                'ImpTotal': _importe_arca(total)
             })
             
             # Incluir alícuotas de IVA si existen y si ImpNeto > 0 (solo para Factura B, no C)
@@ -423,4 +440,4 @@ def _construir_comprobantes_asociados(datos_comprobante, venta, tipo_cbte):
             'CbteAsoc': cbte_asoc
         })
     
-    datos_comprobante['CbtesAsoc'] = cbtes_asoc 
+    datos_comprobante['CbtesAsoc'] = cbtes_asoc

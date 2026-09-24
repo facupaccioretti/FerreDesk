@@ -54,4 +54,9 @@ describe("mapearCamposItem", () => {
     const item = mapearCamposItem({ tipo: "promocion", vdi_promocion: 7, vdi_cantidad: 1 }, 0);
     expect(item.elecciones_grupos).toEqual([]);
   });
+
+  test("una promocion existente conserva su id al editar", () => {
+    const item = mapearCamposItem({ id: 42, tipo: "promocion", vdi_promocion: 7, vdi_cantidad: 1 }, 0);
+    expect(item.id).toBe(42);
+  });
 });

@@ -2,7 +2,7 @@
 
 // EditorComponentesPromo.js — Editor de los componentes de una promocion:
 // componentes fijos (siempre incluidos) y grupos de productos a eleccion
-// (el vendedor elige una alternativa por grupo al vender).
+// (el vendedor distribuye la cantidad del grupo al vender).
 //
 // POR QUE: Vive aparte de PromocionForm.js para que la logica de armar
 // items/grupos (agregar, quitar, cambiar cantidad) no se mezcle con el resto
@@ -102,7 +102,7 @@ function EditorComponentesPromo({ items, setItems, grupos, setGrupos, disabled =
           )}
         </div>
         <p className="text-xs text-slate-500 mb-3">
-          En cada grupo el vendedor elige una sola alternativa al momento de vender, por la cantidad del grupo.
+          En cada grupo el vendedor distribuye la cantidad entre las alternativas al momento de vender.
         </p>
         <div className="space-y-4">
           {grupos.map((g, idxGrupo) => (

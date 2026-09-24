@@ -160,6 +160,9 @@ class PostventaIntegrationTests(PostventaTenantTestCase):
 
         self.assertEqual(nuevo_detalle.vdi_promocion_id, promo.id)
         self.assertEqual(nuevo_detalle.componentes_promocion.count(), 1)
+        self.assertEqual(nuevo_detalle.promo_alicuotas.count(), 1)
+        self.assertGreater(nuevo_detalle.promo_alicuotas.get().neto, Decimal("0"))
+        self.assertGreater(nuevo_detalle.promo_alicuotas.get().iva_monto, Decimal("0"))
         self.assertIsNone(item_nuevo.stock_id)
         self.assertEqual(item_nuevo.precio_unitario, Decimal("90.00"))
         self.assertEqual(StockProve.objects.get(stock=stock_origen).cantidad, Decimal("6.00"))

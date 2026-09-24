@@ -166,6 +166,15 @@ class PromocionesTestCase(TenantTestCase):
         promo.refresh_from_db()
         self.assertFalse(promo.desactualizada)
 
+    def test_cambio_de_precio_lista_marca_la_promo(self):
+        promo = self._crear_promo_combo()
+        self.vodka.precio_lista_0 = Decimal("11000.00")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.vodka.save(update_fields=["precio_lista_0"])
+
+        promo.refresh_from_db()
+        self.assertTrue(promo.desactualizada)
+
     def test_promos_inactivas_no_se_invalidan(self):
         promo = self._crear_promo_combo()
         promo.activa = False
@@ -223,6 +232,39 @@ class PromocionesTestCase(TenantTestCase):
         total = sum(g["neto"] + g["iva_monto"] for g in snapshot["alicuotas"])
         # precio_promocional * cantidad_vendida, cerrado exacto pese al prorrateo
         self.assertEqual(total, Decimal("15000.00"))
+
+    def test_prorrateo_sin_precios_lista_usa_costos(self):
+        pincel = Stock.objects.create(
+            id=90006,
+            codvta="PINCEL-SIN-LIS",
+            deno="Pincel sin lista",
+            margen=Decimal("30.00"),
+            idaliiva=self.alicuota_10_5,
+            proveedor_habitual=self.proveedor,
+            precio_lista_0=Decimal("0.00"),
+            acti="S",
+        )
+        self.vodka.precio_lista_0 = Decimal("0.00")
+        self.vodka.save(update_fields=["precio_lista_0"])
+        StockProve.objects.create(
+            stock=pincel, proveedor=self.proveedor, cantidad=100, costo=Decimal("1000.00")
+        )
+        promo = crear_promocion(
+            datos={"nombre": "Combo sin lista", "precio_promocional": Decimal("100.00")},
+            items_data=[
+                {"stock_id": self.vodka.id, "cantidad": Decimal("1")},
+                {"stock_id": pincel.id, "cantidad": Decimal("1")},
+            ],
+        )
+
+        item_real = expandir_item_promocion({"vdi_promocion": promo.id, "vdi_cantidad": 1})
+        montos_por_alicuota = {
+            grupo["alicuota_id"]: grupo["neto"] + grupo["iva_monto"]
+            for grupo in item_real["_promo_snapshot"]["alicuotas"]
+        }
+
+        self.assertEqual(montos_por_alicuota[self.alicuota_21.id], Decimal("85.71"))
+        self.assertEqual(montos_por_alicuota[self.alicuota_10_5.id], Decimal("14.29"))
 
     # --- Grupos de productos a eleccion ---
 
@@ -294,6 +336,40 @@ class PromocionesTestCase(TenantTestCase):
         self.assertIn(self.fernet.id, componentes_por_stock)
         self.assertNotIn(self.redbull.id, componentes_por_stock)
         self.assertEqual(componentes_por_stock[self.fernet.id]["cantidad_por_promo"], Decimal("2"))
+
+    def test_expandir_item_promocion_grupo_admite_mezcla_de_alternativas(self):
+        promo = self._crear_promo_con_grupo()
+        grupo = PromocionGrupo.objects.get(promocion=promo)
+
+        item_real = expandir_item_promocion({
+            "vdi_promocion": promo.id,
+            "vdi_cantidad": 1,
+            "elecciones_grupos": [
+                {"grupo_id": grupo.id, "stock_id": self.redbull.id, "cantidad": "1"},
+                {"grupo_id": grupo.id, "stock_id": self.fernet.id, "cantidad": "1"},
+            ],
+        })
+
+        componentes_por_stock = {
+            componente["stock_id"]: componente
+            for componente in item_real["_promo_snapshot"]["componentes"]
+        }
+        self.assertEqual(item_real["vdi_costo"], Decimal("9300.00"))
+        self.assertEqual(componentes_por_stock[self.redbull.id]["cantidad_por_promo"], Decimal("1"))
+        self.assertEqual(componentes_por_stock[self.fernet.id]["cantidad_por_promo"], Decimal("1"))
+
+    def test_expandir_item_promocion_grupo_rechaza_suma_incompleta(self):
+        promo = self._crear_promo_con_grupo()
+        grupo = PromocionGrupo.objects.get(promocion=promo)
+
+        with self.assertRaises(ValidationError):
+            expandir_item_promocion({
+                "vdi_promocion": promo.id,
+                "vdi_cantidad": 1,
+                "elecciones_grupos": [
+                    {"grupo_id": grupo.id, "stock_id": self.redbull.id, "cantidad": "1"},
+                ],
+            })
 
     def test_expandir_item_promocion_grupo_sin_eleccion_falla(self):
         promo = self._crear_promo_con_grupo()

@@ -21,4 +21,4 @@ def promociones_desactualizadas():
     """
     return Promocion.objects.filter(activa=True, desactualizada=True).prefetch_related(
         'items__stock', 'grupos__alternativas__stock'
-    )
+    ).order_by('-id')

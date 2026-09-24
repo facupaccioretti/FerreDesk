@@ -382,16 +382,19 @@ export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI 
 // forzar esa forma en las ramas pensadas para productos sueltos.
 
 /**
- * Busca, dentro de las elecciones ya hechas por el usuario, la alternativa
- * elegida para un grupo puntual de una promocion.
+ * Busca, dentro de las elecciones ya hechas por el usuario, las alternativas
+ * elegidas para un grupo puntual de una promocion.
  * @param {Object} grupo - Grupo de la promo (con .id y .alternativas)
  * @param {Array} eleccionesGrupos - [{ grupo_id, stock_id }, ...]
- * @returns {Object|null} La alternativa elegida, o null si el grupo no tiene eleccion todavia
+ * @returns {Array} Las alternativas con cantidad, o vacio si el grupo no tiene eleccion todavia
  */
 export function resolverAlternativaElegidaGrupo(grupo, eleccionesGrupos = []) {
-    const eleccion = (eleccionesGrupos || []).find((e) => e.grupo_id === grupo.id)
-    if (!eleccion) return null
-    return (grupo.alternativas || []).find((a) => a.stock_id === eleccion.stock_id) || null
+    return (eleccionesGrupos || []).flatMap((eleccion) => {
+        if (eleccion.grupo_id !== grupo.id) return []
+        const alternativa = (grupo.alternativas || []).find((a) => a.stock_id === eleccion.stock_id)
+        if (!alternativa) return []
+        return [{ ...alternativa, cantidad: eleccion.cantidad ?? grupo.cantidad }]
+    })
 }
 
 /**
@@ -407,10 +410,10 @@ export function construirResumenPromocion(promocion, eleccionesGrupos = []) {
     const partesFijas = (promocion?.items || []).map(
         (it) => `${it.denominacion || it.codigo || 'Producto'} x${it.cantidad}`
     )
-    const partesGrupos = (promocion?.grupos || []).map((grupo) => {
-        const alternativa = resolverAlternativaElegidaGrupo(grupo, eleccionesGrupos)
-        const nombre = alternativa ? (alternativa.denominacion || alternativa.codigo) : `${grupo.nombre} (sin elegir)`
-        return `${nombre} x${grupo.cantidad}`
+    const partesGrupos = (promocion?.grupos || []).flatMap((grupo) => {
+        const alternativas = resolverAlternativaElegidaGrupo(grupo, eleccionesGrupos)
+        if (!alternativas.length) return [`${grupo.nombre} (sin elegir) x${grupo.cantidad}`]
+        return alternativas.map((alternativa) => `${alternativa.denominacion || alternativa.codigo} x${alternativa.cantidad}`)
     })
     return [...partesFijas, ...partesGrupos].join(' · ')
 }
@@ -479,15 +482,21 @@ export function crearItemDesdePromocion(promocion, { eleccionesGrupos = [], cant
  * vigente contra la promocion actual.
  * @param {Object} promocion - Promocion completa y actual (con .grupos)
  * @param {Array} componentes - componentes_promocion de la linea vendida (con stock_id)
- * @returns {Array} [{ grupo_id, stock_id }, ...]
+ * @returns {Array} [{ grupo_id, stock_id, cantidad }, ...]
  */
 export function resolverEleccionesDesdeComponentes(promocion, componentes = []) {
-    const stockIdsVendidos = new Set((componentes || []).map((c) => c.stock_id))
+    const componentesPorStock = new Map((componentes || []).map((componente) => [componente.stock_id, componente]))
     const elecciones = []
     for (const grupo of promocion?.grupos || []) {
-        const alternativaVendida = (grupo.alternativas || []).find((a) => stockIdsVendidos.has(a.stock_id))
-        if (alternativaVendida) {
-            elecciones.push({ grupo_id: grupo.id, stock_id: alternativaVendida.stock_id })
+        for (const alternativa of grupo.alternativas || []) {
+            const componente = componentesPorStock.get(alternativa.stock_id)
+            if (componente) {
+                elecciones.push({
+                    grupo_id: grupo.id,
+                    stock_id: alternativa.stock_id,
+                    cantidad: componente.cantidad,
+                })
+            }
         }
     }
     return elecciones

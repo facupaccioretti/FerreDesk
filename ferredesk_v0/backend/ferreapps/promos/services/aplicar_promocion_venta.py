@@ -63,46 +63,87 @@ def _resolver_promocion(promocion_id):
 
 
 def _resolver_elecciones_grupos(promocion, grupos_promocion, elecciones_payload):
-    """Valida que cada grupo de la promo tenga una eleccion valida en
-    elecciones_payload (una alternativa que realmente pertenezca a ese
-    grupo) y devuelve la lista de componentes efectivos resueltos: uno por
-    grupo, con el stock elegido y la cantidad del grupo (no de la
-    alternativa, que no tiene cantidad propia).
+    """Valida y resuelve las cantidades elegidas para cada grupo.
+
+    Cada fila del payload indica grupo_id, stock_id y cantidad. Las filas de
+    un grupo deben sumar exactamente su cantidad configurada. Se acepta la
+    forma anterior sin cantidad solo si hay una unica alternativa en el grupo,
+    para conservar compatibilidad con ventas que aun envien ese payload.
     """
     if not grupos_promocion:
         return []
 
-    elecciones_por_grupo = {}
+    if elecciones_payload is not None and not isinstance(elecciones_payload, list):
+        raise ValidationError({'items': ['Las elecciones de grupos deben ser una lista.']})
+
+    grupos_por_id = {grupo.id: grupo for grupo in grupos_promocion}
+    elecciones_por_grupo = {grupo.id: [] for grupo in grupos_promocion}
     for eleccion in (elecciones_payload or []):
+        if not isinstance(eleccion, dict):
+            raise ValidationError({'items': ['Cada eleccion de grupo debe ser un objeto valido.']})
         grupo_id = eleccion.get('grupo_id')
         stock_id = eleccion.get('stock_id')
         if grupo_id is None or stock_id is None:
             raise ValidationError({'items': ['Cada eleccion de grupo debe indicar grupo_id y stock_id.']})
-        elecciones_por_grupo[grupo_id] = stock_id
+        if grupo_id not in grupos_por_id:
+            raise ValidationError({'items': ['La eleccion indica un grupo que no pertenece a la promocion.']})
+        elecciones_por_grupo[grupo_id].append(eleccion)
 
     resueltos = []
     for grupo in grupos_promocion:
-        stock_id_elegido = elecciones_por_grupo.get(grupo.id)
-        if stock_id_elegido is None:
+        elecciones_grupo = elecciones_por_grupo[grupo.id]
+        if not elecciones_grupo:
             raise ValidationError({
                 'items': [
                     f'Falta elegir una alternativa para el grupo "{grupo.nombre}" '
                     f'de la promocion "{promocion.nombre}".'
                 ]
             })
-        alternativa = next(
-            (a for a in grupo.alternativas.all() if a.stock_id == stock_id_elegido),
-            None,
-        )
-        if alternativa is None:
+
+        faltan_cantidades = [eleccion for eleccion in elecciones_grupo if eleccion.get('cantidad') is None]
+        if faltan_cantidades:
+            if len(elecciones_grupo) != 1:
+                raise ValidationError({
+                    'items': [f'Cada alternativa del grupo "{grupo.nombre}" debe indicar su cantidad.']
+                })
+            elecciones_grupo[0] = {**elecciones_grupo[0], 'cantidad': grupo.cantidad}
+
+        cantidades_por_stock = {}
+        for eleccion in elecciones_grupo:
+            stock_id = eleccion['stock_id']
+            if stock_id in cantidades_por_stock:
+                raise ValidationError({
+                    'items': [f'No se puede repetir una alternativa en el grupo "{grupo.nombre}".']
+                })
+            try:
+                cantidad = Decimal(str(eleccion['cantidad']))
+            except Exception as exc:
+                raise ValidationError({
+                    'items': [f'Cantidad invalida en el grupo "{grupo.nombre}".']
+                }) from exc
+            if cantidad <= 0:
+                raise ValidationError({
+                    'items': [f'La cantidad de cada alternativa en "{grupo.nombre}" debe ser mayor a cero.']
+                })
+            cantidades_por_stock[stock_id] = cantidad
+
+        if sum(cantidades_por_stock.values(), Decimal('0')) != grupo.cantidad:
             raise ValidationError({
-                'items': [f'La alternativa elegida no pertenece al grupo "{grupo.nombre}".']
+                'items': [f'Las cantidades elegidas para "{grupo.nombre}" deben sumar {grupo.cantidad}.']
             })
-        resueltos.append(ComponenteEfectivo(
-            stock=alternativa.stock,
-            stock_id=alternativa.stock_id,
-            cantidad=grupo.cantidad,
-        ))
+
+        alternativas_por_stock = {alternativa.stock_id: alternativa for alternativa in grupo.alternativas.all()}
+        for stock_id, cantidad in cantidades_por_stock.items():
+            alternativa = alternativas_por_stock.get(stock_id)
+            if alternativa is None:
+                raise ValidationError({
+                    'items': [f'La alternativa elegida no pertenece al grupo "{grupo.nombre}".']
+                })
+            resueltos.append(ComponenteEfectivo(
+                stock=alternativa.stock,
+                stock_id=alternativa.stock_id,
+                cantidad=cantidad,
+            ))
     return resueltos
 
 
@@ -125,12 +166,12 @@ def _costos_habituales(componentes_efectivos):
     }
 
 
-def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva):
+def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva, costos_por_stock):
     """Reparte precio_total_con_iva (ya multiplicado por la cantidad
     vendida) entre los grupos de alicuota de los componentes, proporcional
-    al precio de lista de cada componente. Si ningun componente tiene
-    precio de lista cargado, reparte en partes iguales entre los grupos
-    presentes. El ultimo grupo absorbe el residuo para que la suma cierre
+    al precio de lista de cada componente. Si ningun componente tiene precio
+    de lista cargado, usa su costo; si tampoco hay costos, reparte por unidad
+    de componente. El ultimo grupo absorbe el residuo para que la suma cierre
     exacto contra precio_total_con_iva.
     """
     pesos_por_alicuota = {}
@@ -151,8 +192,17 @@ def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva):
 
     total_peso = sum(pesos_por_alicuota.values())
     if total_peso <= 0:
-        pesos_por_alicuota = {alicuota_id: Decimal('1') for alicuota_id in orden_alicuotas}
-        total_peso = Decimal(len(orden_alicuotas))
+        pesos_por_alicuota = {alicuota_id: Decimal('0') for alicuota_id in orden_alicuotas}
+        for componente in componentes_efectivos:
+            pesos_por_alicuota[componente.stock.idaliiva_id] += (
+                costos_por_stock.get(componente.stock_id, Decimal('0')) * componente.cantidad
+            )
+        total_peso = sum(pesos_por_alicuota.values())
+    if total_peso <= 0:
+        pesos_por_alicuota = {alicuota_id: Decimal('0') for alicuota_id in orden_alicuotas}
+        for componente in componentes_efectivos:
+            pesos_por_alicuota[componente.stock.idaliiva_id] += componente.cantidad
+        total_peso = sum(pesos_por_alicuota.values())
 
     resultado = []
     restante = precio_total_con_iva
@@ -224,7 +274,11 @@ def expandir_item_promocion(item_payload):
         Decimal('0.01'), rounding=ROUND_HALF_UP
     )
 
-    desglose_alicuotas = _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva)
+    desglose_alicuotas = _prorratear_por_alicuota(
+        componentes_efectivos,
+        precio_total_con_iva,
+        costos_por_stock,
+    )
     grupo_dominante = max(desglose_alicuotas, key=lambda grupo: grupo['monto_final'])
     alicuota_dominante_id = grupo_dominante['alicuota_id']
     alicuota_dominante_porce = next(

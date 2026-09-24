@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from ferreapps.productos.models import StockProve
+from ferreapps.productos.models import Stock, StockProve
 from ferreapps.promos.services.invalidacion import marcar_promos_desactualizadas
 
 
@@ -41,3 +41,22 @@ def invalidar_promos_por_cambio_costo(sender, instance, created, **kwargs):
 
     stock_id = instance.stock_id
     transaction.on_commit(lambda: marcar_promos_desactualizadas([stock_id]))
+
+
+@receiver(pre_save, sender=Stock, dispatch_uid="promos_capturar_precio_lista_anterior")
+def capturar_precio_lista_anterior(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._precio_lista_anterior = None
+        return
+    instance._precio_lista_anterior = (
+        Stock.objects.filter(pk=instance.pk).values_list('precio_lista_0', flat=True).first()
+    )
+
+
+@receiver(post_save, sender=Stock, dispatch_uid="promos_invalidar_por_cambio_precio_lista")
+def invalidar_promos_por_cambio_precio_lista(sender, instance, created, **kwargs):
+    if created:
+        return
+    if getattr(instance, '_precio_lista_anterior', None) == instance.precio_lista_0:
+        return
+    transaction.on_commit(lambda: marcar_promos_desactualizadas([instance.pk]))

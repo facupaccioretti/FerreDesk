@@ -171,12 +171,15 @@ def previsualizar_devolucion(payload):
     }
 
 
-def previsualizar_cambio(payload):
+def previsualizar_cambio(payload, *, items_nuevos_resueltos=None):
     venta = obtener_venta_origen(payload["venta_id"])
+    if items_nuevos_resueltos is None:
+        items_nuevos_resueltos = resolver_items_nuevos_cambio(payload["items_nuevos"])
     detalles, devueltas = validar_items_cambio(
         venta,
         payload["items_devueltos"],
         payload["items_nuevos"],
+        items_nuevos_resueltos=items_nuevos_resueltos,
     )
 
     venta_calculada = venta.__class__.objects.con_calculos().filter(pk=venta.pk).first() or venta
@@ -209,7 +212,6 @@ def previsualizar_cambio(payload):
             }
         )
 
-    items_nuevos_resueltos = resolver_items_nuevos_cambio(payload["items_nuevos"])
     stock_map = {
         stock.id: stock
         for stock in Stock.objects.filter(

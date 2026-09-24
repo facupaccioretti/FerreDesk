@@ -26,7 +26,7 @@ export const mapearCamposItem = (item, idx, esModificacion = false) => {
       vdi_cantidad: item.vdi_cantidad ?? item.cantidad ?? 1,
       elecciones_grupos: item.elecciones_grupos ?? item.eleccionesGrupos ?? [],
     };
-    if (esModificacion && item.id) {
+    if (item.id) {
       camposPromocion.id = item.id;
     }
     return camposPromocion;

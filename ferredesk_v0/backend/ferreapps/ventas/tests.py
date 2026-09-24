@@ -17,8 +17,16 @@ from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
 from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, MetodoPago, PagoVenta, SesionCaja
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
+from ferreapps.promos.models import PromocionGrupo
+from ferreapps.promos.services.aplicar_promocion_venta import (
+    crear_snapshot_promocion,
+    expandir_item_promocion,
+    recalcular_totales_venta_si_hace_falta,
+)
+from ferreapps.promos.services.gestionar_promocion import crear_promocion
 from ferreapps.ventas.serializers import PrecioUnitarioField, VentaSerializer
 from ferreapps.ventas.models import Comprobante, ComprobanteAsociacion, Venta, VentaDetalleItem
+from ferreapps.ventas.ARCA.armador_arca import armar_payload_arca
 from ferreapps.ventas.ARCA.services.FerreDeskARCA import FerreDeskARCA
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
@@ -219,6 +227,152 @@ class VentasTenantTestCase(TenantTestCase):
             ven_copia=1,
             ven_bonificacion_general=0,
         )
+
+
+class TestPayloadArcaPromocionMixta(VentasTenantTestCase):
+    def test_actualizar_presupuesto_con_promo_vencida_reusa_snapshot(self):
+        proveedor = Proveedor.objects.create(
+            razon="Proveedor update promo",
+            fantasia="Proveedor update promo",
+            domicilio="Calle 123",
+            cuit="20123456780",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PUP",
+            acti="S",
+        )
+        stock = Stock.objects.create(
+            id=990903,
+            codvta="PROMO-UPDATE",
+            deno="Producto promo",
+            margen=Decimal("30.00"),
+            idaliiva=self.alicuota_iva_21,
+            proveedor_habitual=proveedor,
+            precio_lista_0=Decimal("100.00"),
+            acti="S",
+        )
+        StockProve.objects.create(
+            stock=stock, proveedor=proveedor, cantidad=100, costo=Decimal("50.00")
+        )
+        promo = crear_promocion(
+            datos={"nombre": "Promo vencida", "precio_promocional": Decimal("90.00")},
+            items_data=[{"stock_id": stock.id, "cantidad": Decimal("1")}],
+        )
+        item_data = expandir_item_promocion({"vdi_promocion": promo.id, "vdi_cantidad": 1})
+        snapshot = item_data.pop("_promo_snapshot")
+        item_data["vdi_bonifica"] = Decimal("0")
+        venta = self.crear_venta(
+            self.comprobante_presupuesto,
+            numero=778,
+            fecha=date(2026, 9, 24),
+        )
+        venta.ven_estado = "AB"
+        venta.save(update_fields=["ven_estado"])
+        for campo in ("vdi_idsto", "vdi_idpro", "vdi_idaliiva", "vdi_promocion"):
+            item_data[f"{campo}_id"] = item_data.pop(campo)
+        detalle = VentaDetalleItem.objects.create(vdi_idve=venta, vdi_orden=1, **item_data)
+        crear_snapshot_promocion(detalle, snapshot)
+        recalcular_totales_venta_si_hace_falta(venta.pk, hubo_snapshot_promocion=True)
+        promo.activa = False
+        promo.save(update_fields=["activa"])
+
+        serializer = VentaSerializer(
+            instance=venta,
+            data={"items": [{
+                "id": detalle.id,
+                "vdi_promocion": promo.id,
+                "vdi_cantidad": "1.00",
+            }]},
+            partial=True,
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        detalle.refresh_from_db()
+        self.assertEqual(detalle.vdi_promocion_id, promo.id)
+        self.assertEqual(detalle.promo_alicuotas.count(), 1)
+
+    def test_promo_pepsi_y_caa_cierra_totales_con_alicuotas(self):
+        comprobante = Comprobante.objects.filter(codigo_afip="1").first()
+        if comprobante is None:
+            comprobante = Comprobante.objects.create(
+                codigo_afip="1",
+                nombre="Factura A",
+                letra="A",
+                tipo="factura",
+                activo=True,
+            )
+        proveedor = Proveedor.objects.create(
+            razon="Proveedor promo ARCA",
+            fantasia="Proveedor promo ARCA",
+            domicilio="Calle 123",
+            cuit="20123456780",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PAR",
+            acti="S",
+        )
+        alicuota_10_5 = AlicuotaIVA.objects.get(porce=Decimal("10.50"))
+        pepsi = Stock.objects.create(
+            id=990901,
+            codvta="PEPSI-ARCA",
+            deno="Pepsi",
+            margen=Decimal("30.00"),
+            idaliiva=self.alicuota_iva_21,
+            proveedor_habitual=proveedor,
+            precio_lista_0=Decimal("3000.00"),
+            acti="S",
+        )
+        caa = Stock.objects.create(
+            id=990902,
+            codvta="CAA-ARCA",
+            deno="CAA",
+            margen=Decimal("30.00"),
+            idaliiva=alicuota_10_5,
+            proveedor_habitual=proveedor,
+            precio_lista_0=Decimal("200.00"),
+            acti="S",
+        )
+        for stock in (pepsi, caa):
+            StockProve.objects.create(
+                stock=stock, proveedor=proveedor, cantidad=100, costo=Decimal("100.00")
+            )
+        promo = crear_promocion(
+            datos={"nombre": "Pepsi con bebida", "precio_promocional": Decimal("4500.00")},
+            items_data=[{"stock_id": pepsi.id, "cantidad": Decimal("1")}],
+            grupos_data=[{
+                "nombre": "Bebida opcional",
+                "cantidad": Decimal("1"),
+                "alternativas": [{"stock_id": pepsi.id}, {"stock_id": caa.id}],
+            }],
+        )
+        grupo = PromocionGrupo.objects.get(promocion=promo)
+        item_data = expandir_item_promocion({
+            "vdi_promocion": promo.id,
+            "vdi_cantidad": 1,
+            "elecciones_grupos": [{"grupo_id": grupo.id, "stock_id": caa.id}],
+        })
+        snapshot = item_data.pop("_promo_snapshot")
+        item_data["vdi_bonifica"] = Decimal("0")
+        venta = self.crear_venta(comprobante, numero=777, fecha=date(2026, 9, 24))
+        venta.ven_cuit = "20123456780"
+        venta.save(update_fields=["ven_cuit"])
+        for campo in ("vdi_idsto", "vdi_idpro", "vdi_idaliiva", "vdi_promocion"):
+            item_data[f"{campo}_id"] = item_data.pop(campo)
+        detalle = VentaDetalleItem.objects.create(vdi_idve=venta, vdi_orden=1, **item_data)
+        crear_snapshot_promocion(detalle, snapshot)
+        recalcular_totales_venta_si_hace_falta(venta.pk, hubo_snapshot_promocion=True)
+
+        payload = armar_payload_arca(
+            venta, self.cliente, comprobante, venta, venta.get_iva_breakdown()
+        )
+        alicuotas = payload["Iva"]["AlicIva"]
+
+        self.assertEqual(payload["ImpNeto"], 3741.09)
+        self.assertEqual(payload["ImpIVA"], 758.91)
+        self.assertEqual(payload["ImpTotal"], 4500.00)
+        self.assertEqual(round(sum(a["BaseImp"] for a in alicuotas), 2), payload["ImpNeto"])
+        self.assertEqual(round(sum(a["Importe"] for a in alicuotas), 2), payload["ImpIVA"])
 
 
 class TestConversionPresupuestoARCA(VentasTenantTestCase):

@@ -1006,6 +1006,7 @@ export function useItemsGridState({
                 const bonif = Number.parseFloat(row.bonificacion) || 0
                 if (row.tipo === 'promocion') {
                     return {
+                        ...(row.id && { id: row.id }),
                         vdi_orden: idx + 1,
                         tipo: 'promocion',
                         vdi_promocion: row.promocionId,

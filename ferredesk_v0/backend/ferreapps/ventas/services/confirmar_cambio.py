@@ -219,8 +219,16 @@ def confirmar_cambio(*, payload, usuario):
                 for item in items_nuevos_resueltos
                 for operacion in item["operaciones_stock"]
             ]
-            preview = previsualizar_cambio(payload)
-            validar_items_cambio(venta_origen, payload["items_devueltos"], payload["items_nuevos"])
+            preview = previsualizar_cambio(
+                payload,
+                items_nuevos_resueltos=items_nuevos_resueltos,
+            )
+            validar_items_cambio(
+                venta_origen,
+                payload["items_devueltos"],
+                payload["items_nuevos"],
+                items_nuevos_resueltos=items_nuevos_resueltos,
+            )
 
             total_credito = Decimal(str(preview["resumen_monetario"]["total_credito"]))
             total_debito = Decimal(str(preview["resumen_monetario"]["total_debito"]))

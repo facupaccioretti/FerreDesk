@@ -206,7 +206,7 @@ def validar_items_devolucion(venta, items, *, modo):
     return detalles, devueltas
 
 
-def validar_items_cambio(venta, items_devueltos, items_nuevos):
+def validar_items_cambio(venta, items_devueltos, items_nuevos, *, items_nuevos_resueltos=None):
     detalles, devueltas = validar_items_devolucion(
         venta,
         items_devueltos,
@@ -215,7 +215,8 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
     if not items_nuevos:
         raise ValidationError({"items_nuevos": "Debe agregar al menos un item nuevo"})
 
-    items_nuevos_resueltos = resolver_items_nuevos_cambio(items_nuevos)
+    if items_nuevos_resueltos is None:
+        items_nuevos_resueltos = resolver_items_nuevos_cambio(items_nuevos)
     stock_ids_directos = [item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
     repetidos = {stock_id for stock_id in stock_ids_directos if stock_ids_directos.count(stock_id) > 1}
     if repetidos:

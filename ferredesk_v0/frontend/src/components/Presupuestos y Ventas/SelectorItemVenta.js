@@ -32,7 +32,9 @@ const SelectorItemVenta = forwardRef(
         setCargandoPromocion(true)
         try {
           const promocionCompleta = await obtenerPromocionPorId(row.promocionId)
-          const eleccionesIniciales = resolverEleccionesDesdeComponentes(promocionCompleta, row.componentesPromocion)
+          const eleccionesIniciales = row.eleccionesGrupos?.length
+            ? row.eleccionesGrupos
+            : resolverEleccionesDesdeComponentes(promocionCompleta, row.componentesPromocion)
           setConfigurador({ modo: "reconfigurar", promocion: promocionCompleta, eleccionesIniciales, idx })
         } catch (err) {
           alert(err?.message || "No se pudo cargar la promoción para reconfigurarla.")

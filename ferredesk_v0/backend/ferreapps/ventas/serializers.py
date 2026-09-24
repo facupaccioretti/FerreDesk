@@ -330,6 +330,39 @@ class VentaSerializer(serializers.ModelSerializer):
         from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
         return expandir_items_promocion(items_data)
 
+    def _obtener_items_para_update(self, instance):
+        items_data = getattr(self, 'initial_data', {}).get('items', [])
+        existentes = {item.id: item for item in instance.items.all()}
+        resultado = []
+        for item in items_data:
+            detalle = existentes.get(item.get('id'))
+            try:
+                misma_cantidad = detalle and Decimal(str(item.get('vdi_cantidad'))) == detalle.vdi_cantidad
+            except Exception:
+                misma_cantidad = False
+            if (
+                detalle and detalle.vdi_promocion_id
+                and str(item.get('vdi_promocion')) == str(detalle.vdi_promocion_id)
+                and misma_cantidad
+            ):
+                resultado.append({
+                    'id': detalle.id,
+                    'vdi_idsto': None,
+                    'vdi_idpro': None,
+                    'vdi_promocion': detalle.vdi_promocion_id,
+                    'vdi_cantidad': detalle.vdi_cantidad,
+                    'vdi_costo': detalle.vdi_costo,
+                    'vdi_margen': detalle.vdi_margen,
+                    'vdi_bonifica': Decimal('0'),
+                    'vdi_precio_unitario_final': detalle.vdi_precio_unitario_final,
+                    'vdi_detalle1': detalle.vdi_detalle1,
+                    'vdi_detalle2': detalle.vdi_detalle2,
+                    'vdi_idaliiva': detalle.vdi_idaliiva_id,
+                })
+            else:
+                resultado.extend(self._obtener_items_expandidos([item]))
+        return resultado
+
     def create(self, validated_data):
         items_data = self._obtener_items_expandidos(self.initial_data.get('items', []))
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
@@ -536,7 +569,7 @@ class VentaSerializer(serializers.ModelSerializer):
         bonif_general = self.initial_data.get('bonificacionGeneral', 0)
         bonif_general = float(bonif_general)
         for item in items_data:
-            if item.get('_promo_snapshot'):
+            if item.get('_promo_snapshot') or item.get('vdi_promocion'):
                 item['vdi_bonifica'] = Decimal('0')
                 continue
             bonif = item.get('vdi_bonifica')
@@ -643,7 +676,7 @@ class VentaSerializer(serializers.ModelSerializer):
             instance.comprobantes_asociados.set(comprobantes_asociados_ids)
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
-        items_data = self._obtener_items_expandidos(self.initial_data.get('items', []))
+        items_data = self._obtener_items_para_update(instance)
         _normalizar_precios_items(items_data, crear=False)
         # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
@@ -664,7 +697,7 @@ class VentaSerializer(serializers.ModelSerializer):
             except Exception:
                 bonif_general = 0
             for item in items_data:
-                if item.get('_promo_snapshot'):
+                if item.get('_promo_snapshot') or item.get('vdi_promocion'):
                     item['vdi_bonifica'] = Decimal('0')
                     continue
                 bonif = item.get('vdi_bonifica')

@@ -1,11 +1,10 @@
 "use client"
 
-// ConfiguradorPromocionModal.js — Elegir una alternativa por cada grupo de
-// una promocion (y, al agregarla por primera vez, la cantidad de la linea).
+// ConfiguradorPromocionModal.js — Distribuir la cantidad de cada grupo de
+// una promocion entre sus alternativas (y, al agregarla, la cantidad de linea).
 //
 // POR QUE UN SOLO COMPONENTE PARA AGREGAR Y RECONFIGURAR: la regla de negocio
-// es la misma en los dos casos (una alternativa por grupo, no se puede
-// confirmar con grupos incompletos); separarlos hubiera significado
+// es la misma en los dos casos (cada grupo debe completar su cantidad); separarlos hubiera significado
 // duplicar esa regla. `modo` solo cambia si se pide la cantidad inicial.
 
 import { Fragment, useEffect, useState } from "react"
@@ -20,14 +19,19 @@ export default function ConfiguradorPromocionModal({
   onConfirmar = () => {},
   onCancelar = () => {},
 }) {
-  const [elecciones, setElecciones] = useState({}) // { [grupo_id]: stock_id }
+  const [elecciones, setElecciones] = useState({}) // { [grupo_id]: { [stock_id]: cantidad } }
   const [cantidad, setCantidad] = useState(cantidadInicial)
 
   useEffect(() => {
     if (!abierto) return
     const mapaInicial = {}
     for (const eleccion of eleccionesIniciales) {
-      mapaInicial[eleccion.grupo_id] = eleccion.stock_id
+      const grupo = (promocion?.grupos || []).find((item) => item.id === eleccion.grupo_id)
+      const cantidadElegida = eleccion.cantidad ?? grupo?.cantidad ?? 0
+      mapaInicial[eleccion.grupo_id] = {
+        ...(mapaInicial[eleccion.grupo_id] || {}),
+        [eleccion.stock_id]: String(cantidadElegida),
+      }
     }
     setElecciones(mapaInicial)
     setCantidad(cantidadInicial)
@@ -38,11 +42,31 @@ export default function ConfiguradorPromocionModal({
 
   const grupos = promocion.grupos || []
   const items = promocion.items || []
-  const faltanGrupos = grupos.some((g) => !elecciones[g.id])
+  const cantidadElegida = (grupo) => Object.values(elecciones[grupo.id] || {}).reduce(
+    (total, cantidadElegidaGrupo) => total + (Number(cantidadElegidaGrupo) || 0),
+    0,
+  )
+  const faltanGrupos = grupos.some((grupo) => Math.abs(cantidadElegida(grupo) - Number(grupo.cantidad)) > 0.000001)
+
+  const cambiarCantidadAlternativa = (grupoId, stockId, valor) => {
+    setElecciones((prev) => ({
+      ...prev,
+      [grupoId]: {
+        ...(prev[grupoId] || {}),
+        [stockId]: valor,
+      },
+    }))
+  }
 
   const handleConfirmar = () => {
     if (faltanGrupos) return
-    const eleccionesGrupos = grupos.map((g) => ({ grupo_id: g.id, stock_id: elecciones[g.id] }))
+    const eleccionesGrupos = grupos.flatMap((grupo) => Object.entries(elecciones[grupo.id] || {})
+      .filter(([, cantidadElegidaGrupo]) => Number(cantidadElegidaGrupo) > 0)
+      .map(([stockId, cantidadElegidaGrupo]) => ({
+        grupo_id: grupo.id,
+        stock_id: Number(stockId),
+        cantidad: Number(cantidadElegidaGrupo),
+      })))
     onConfirmar(eleccionesGrupos, Number(cantidad) || 1)
   }
 
@@ -105,30 +129,36 @@ export default function ConfiguradorPromocionModal({
                 {grupos.map((grupo) => (
                   <div key={grupo.id}>
                     <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                      {grupo.nombre} <span className="normal-case font-normal">(elegí 1, cantidad {grupo.cantidad})</span>
+                      {grupo.nombre} <span className="normal-case font-normal">(completa {grupo.cantidad})</span>
                     </h4>
                     <div className="space-y-1">
                       {(grupo.alternativas || []).map((alt) => {
-                        const seleccionada = elecciones[grupo.id] === alt.stock_id
+                        const cantidadAlternativa = elecciones[grupo.id]?.[alt.stock_id] ?? ""
                         return (
-                          <label
+                          <div
                             key={alt.stock_id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                              seleccionada ? "border-orange-500 bg-orange-50" : "border-slate-200 hover:border-slate-300"
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
+                              Number(cantidadAlternativa) > 0 ? "border-orange-500 bg-orange-50" : "border-slate-200"
                             }`}
                           >
+                            <span className="flex-1 text-sm text-slate-700">{alt.denominacion}</span>
                             <input
-                              type="radio"
-                              name={`grupo-${grupo.id}`}
-                              checked={seleccionada}
-                              onChange={() => setElecciones((prev) => ({ ...prev, [grupo.id]: alt.stock_id }))}
-                              className="text-orange-600 focus:ring-orange-500"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              max={grupo.cantidad}
+                              value={cantidadAlternativa}
+                              onChange={(event) => cambiarCantidadAlternativa(grupo.id, alt.stock_id, event.target.value)}
+                              aria-label={`Cantidad de ${alt.denominacion}`}
+                              className="w-20 px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                             />
-                            <span className="text-sm text-slate-700">{alt.denominacion}</span>
-                          </label>
+                          </div>
                         )
                       })}
                     </div>
+                    <p className={`mt-2 text-xs ${Math.abs(cantidadElegida(grupo) - Number(grupo.cantidad)) <= 0.000001 ? "text-emerald-600" : "text-amber-600"}`}>
+                      Elegidos: {cantidadElegida(grupo)} de {grupo.cantidad}
+                    </p>
                   </div>
                 ))}
 
@@ -147,7 +177,7 @@ export default function ConfiguradorPromocionModal({
                 )}
 
                 {faltanGrupos && (
-                  <p className="text-xs text-amber-600">Elegí una opción en cada grupo para poder confirmar.</p>
+                  <p className="text-xs text-amber-600">Completá exactamente la cantidad indicada en cada grupo para confirmar.</p>
                 )}
               </div>
 

@@ -556,6 +556,10 @@ class VentaDetalleItem(models.Model):
                 check=models.Q(vdi_promocion__isnull=True) | models.Q(vdi_idsto__isnull=True),
                 name='vdi_promocion_excluye_idsto',
             ),
+            models.CheckConstraint(
+                check=models.Q(vdi_promocion__isnull=True) | models.Q(vdi_idpro__isnull=True),
+                name='vdi_promocion_excluye_idpro',
+            ),
         ]
 
 
