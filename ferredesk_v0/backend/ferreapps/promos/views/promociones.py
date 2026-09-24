@@ -36,7 +36,7 @@ class PromocionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='activas')
     def activas(self, request):
-        pagina = self.paginate_queryset(promociones_activas())
+        pagina = self.paginate_queryset(promociones_activas(request.query_params.get('search', '')))
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
 

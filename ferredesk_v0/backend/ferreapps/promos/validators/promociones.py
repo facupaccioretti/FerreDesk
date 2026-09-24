@@ -65,6 +65,18 @@ def validar_grupos(grupos_data):
             stock_ids_vistos.add(stock_id)
 
 
+def validar_productos_unicos(items_data, grupos_data):
+    stock_ids_vistos = set()
+    for item in items_data or []:
+        stock_ids_vistos.add(item['stock_id'])
+    for grupo in grupos_data or []:
+        for alternativa in grupo.get('alternativas') or []:
+            stock_id = alternativa['stock_id']
+            if stock_id in stock_ids_vistos:
+                raise ValidationError({'items': 'Un producto solo puede formar parte una vez de la promocion.'})
+            stock_ids_vistos.add(stock_id)
+
+
 def validar_composicion(items_data, grupos_data):
     """Una promocion necesita al menos un componente fijo o un grupo de
     eleccion. Valida ademas cada parte por separado.
@@ -73,6 +85,7 @@ def validar_composicion(items_data, grupos_data):
         raise ValidationError({'items': 'La promocion debe tener al menos un componente fijo o un grupo de eleccion.'})
     validar_items(items_data)
     validar_grupos(grupos_data)
+    validar_productos_unicos(items_data, grupos_data)
 
 
 def validar_vigencia(fecha_inicio, fecha_fin):

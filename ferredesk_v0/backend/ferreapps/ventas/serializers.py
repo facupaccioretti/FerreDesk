@@ -344,6 +344,7 @@ class VentaSerializer(serializers.ModelSerializer):
                 detalle and detalle.vdi_promocion_id
                 and str(item.get('vdi_promocion')) == str(detalle.vdi_promocion_id)
                 and misma_cantidad
+                and not item.get('elecciones_grupos')
             ):
                 resultado.append({
                     'id': detalle.id,

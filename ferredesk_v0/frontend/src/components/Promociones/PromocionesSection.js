@@ -41,7 +41,6 @@ function PromocionesSection() {
     datos: promociones,
     total,
     cargando,
-    invalidarCache,
     crearPromocion,
     creando,
     editarPromocion,
@@ -63,7 +62,6 @@ function PromocionesSection() {
     } else {
       await crearPromocion(payload)
     }
-    invalidarCache()
     setFormularioActivo(null)
   }
 

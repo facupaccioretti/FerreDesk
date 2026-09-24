@@ -7,6 +7,7 @@ from ferreapps.promos.validators.promociones import (
     validar_grupos,
     validar_items,
     validar_precio_promocional,
+    validar_productos_unicos,
     validar_vigencia,
 )
 
@@ -81,6 +82,14 @@ def actualizar_promocion(*, promocion, datos, items_data=None, grupos_data=None)
         habra_grupos = bool(grupos_data) if grupos_data is not None else promocion.grupos.exists()
         if not habra_items and not habra_grupos:
             raise ValidationError({'items': 'La promocion debe tener al menos un componente fijo o un grupo de eleccion.'})
+        items_para_validar = items_data if items_data is not None else [
+            {'stock_id': item.stock_id} for item in promocion.items.all()
+        ]
+        grupos_para_validar = grupos_data if grupos_data is not None else [
+            {'alternativas': [{'stock_id': alternativa.stock_id} for alternativa in grupo.alternativas.all()]}
+            for grupo in promocion.grupos.all()
+        ]
+        validar_productos_unicos(items_para_validar, grupos_para_validar)
 
     reviso_precio_o_componentes = (
         'precio_promocional' in datos or items_data is not None or grupos_data is not None

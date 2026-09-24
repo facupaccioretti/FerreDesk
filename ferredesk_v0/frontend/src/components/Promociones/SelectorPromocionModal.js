@@ -27,7 +27,7 @@ export default function SelectorPromocionModal({
   onSeleccionar = () => {},
 }) {
   const [termino, setTermino] = useState("")
-  const { datos: promociones, cargando } = usePromocionesVigentesAPI({ itemsPorPagina: 100 })
+  const { datos: promociones, cargando } = usePromocionesVigentesAPI({ itemsPorPagina: 100, search: termino })
 
   useEffect(() => {
     if (abierto) setTermino("")

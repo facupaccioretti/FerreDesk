@@ -88,8 +88,8 @@ export function usePromocionesAPI({ estado = 'activas', pagina = 1, itemsPorPagi
  * desactivadas ni fuera de su rango de fechas: eso lo filtra el backend
  * (selectors/promociones_activas.py), no hay que repetir la regla aca.
  */
-export function usePromocionesVigentesAPI({ pagina = 1, itemsPorPagina = 50 } = {}) {
-  return usePaginacionAPI(CLAVE_CACHE_VIGENTES, `${URL_BASE}activas/`, {}, pagina, itemsPorPagina)
+export function usePromocionesVigentesAPI({ pagina = 1, itemsPorPagina = 50, search = '' } = {}) {
+  return usePaginacionAPI(CLAVE_CACHE_VIGENTES, `${URL_BASE}activas/`, { search }, pagina, itemsPorPagina)
 }
 
 /**
