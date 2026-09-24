@@ -10,6 +10,12 @@ def marcar_promos_desactualizadas(stock_ids):
 
     No vuelve a tocar promos que ya estaban marcadas, para conservar la fecha
     de la primera desactualizacion detectada.
+
+    El UPDATE es atomico a nivel de sentencia SQL. Cuando el caller (la señal
+    o el service de importacion masiva) lo ejecuta dentro de su propio
+    `transaction.atomic()`, un fallo posterior en esa misma transaccion
+    revierte tambien este UPDATE junto con todo lo demas -- no hace falta que
+    esta funcion abra su propia transaccion.
     """
     stock_ids = [stock_id for stock_id in (stock_ids or []) if stock_id]
     if not stock_ids:

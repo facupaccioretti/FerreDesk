@@ -29,6 +29,12 @@ def invalidar_promos_por_cambio_costo(sender, instance, created, **kwargs):
     if created:
         return
 
+    # costo_anterior es None cuando pre_save no pudo leerlo (fila borrada entre
+    # medio, condicion de carrera) -- no cuando el StockProve es nuevo, eso ya
+    # se filtro arriba con `created`. Ante esa incertidumbre se prefiere invalidar
+    # de mas (falso positivo: el usuario revisa una promo que en realidad no
+    # cambio) a invalidar de menos (falso negativo: se vende una promo con un
+    # costo viejo sin ningun aviso). Es una decision a proposito, no un bug.
     costo_anterior = getattr(instance, '_costo_anterior', None)
     if costo_anterior is not None and costo_anterior == instance.costo:
         return

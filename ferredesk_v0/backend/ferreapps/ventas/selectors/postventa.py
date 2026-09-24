@@ -202,6 +202,7 @@ def previsualizar_cambio(payload):
                 "detalle": detalle.vdi_detalle1 or "",
                 "cantidad_original": _money(cantidad_original),
                 "cantidad_ya_devuelta": _money(cantidad_devuelta),
+                "cantidad_disponible_para_devolver": _money(max(cantidad_original - cantidad_devuelta, ZERO)),
                 "cantidad_solicitada": _money(cantidad),
                 "precio_unitario_origen": _money(precio),
                 "subtotal_credito": _money(subtotal),

@@ -6,7 +6,10 @@ from ferreapps.promos.services.gestionar_promocion import actualizar_promocion, 
 
 
 class PromocionItemInputSerializer(serializers.Serializer):
-    stock_id = serializers.PrimaryKeyRelatedField(queryset=Stock.objects.all())
+    # Solo productos activos: no tiene sentido armar una promo nueva con un
+    # producto dado de baja (una promo ya creada con un componente que luego
+    # se desactiva sigue funcionando, esto solo limita altas/ediciones nuevas).
+    stock_id = serializers.PrimaryKeyRelatedField(queryset=Stock.objects.filter(acti='S'))
     cantidad = serializers.DecimalField(max_digits=15, decimal_places=2)
 
     def to_internal_value(self, data):
@@ -46,7 +49,8 @@ class PromocionSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data['items'] = PromocionItemOutputSerializer(
-            instance.items.select_related('stock').all(), many=True
-        ).data
+        # Sin select_related/filtros extra a proposito: si el queryset del caller ya
+        # trajo 'items__stock' vía prefetch_related, instance.items.all() lo reusa en
+        # vez de disparar un query nuevo por cada promo serializada.
+        data['items'] = PromocionItemOutputSerializer(instance.items.all(), many=True).data
         return data

@@ -288,11 +288,24 @@ class VentaSerializer(serializers.ModelSerializer):
 
         return stock_map
 
+    def _obtener_items_expandidos(self, items_data):
+        """Expande promos en items_data, salvo que el caller ya haya resuelto
+        la expansion y la haya pasado por contexto (ver
+        VentaViewSet.get_serializer_context). Preferir el contexto evita
+        depender de que la mutacion de items en la view se propague por
+        referencia hasta self.initial_data para no volver a pegarle a la
+        base de datos por cada item de promo.
+        """
+        items_expandidos = self.context.get('items_expandidos')
+        if items_expandidos is not None:
+            return items_expandidos
+        if not items_data:
+            return items_data
+        from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
+        return expandir_items_promocion(items_data)
+
     def create(self, validated_data):
-        items_data = self.initial_data.get('items', [])
-        if items_data:
-            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
-            items_data = expandir_items_promocion(items_data)
+        items_data = self._obtener_items_expandidos(self.initial_data.get('items', []))
         comprobantes_asociados_ids = validated_data.pop('comprobantes_asociados_ids', [])
 
         # Determinar tipo de comprobante solicitado
@@ -551,6 +564,11 @@ class VentaSerializer(serializers.ModelSerializer):
             venta.comprobantes_asociados.set(comprobantes_asociados_ids)
 
         # Crear los items base (sin campos calculados)
+        from ferreapps.promos.services.aplicar_promocion_venta import (
+            crear_snapshot_promocion,
+            recalcular_totales_venta_si_hace_falta,
+        )
+        hubo_snapshot_promocion = False
         for item_data in items_data:
             item_data['vdi_idve'] = venta
             # ATENCIÓN: Eliminar cualquier campo calculado si viene en el payload
@@ -565,8 +583,11 @@ class VentaSerializer(serializers.ModelSerializer):
                         item_data[f'{fk_field}_id'] = val
             detalle = VentaDetalleItem.objects.create(**item_data)
             if snapshot_promocion:
-                from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
                 crear_snapshot_promocion(detalle, snapshot_promocion)
+                hubo_snapshot_promocion = True
+        # Una unica vez, despues de que todas las lineas (incluidas todas las promos)
+        # ya tienen su snapshot: ver docstring de recalcular_totales_venta_si_hace_falta.
+        recalcular_totales_venta_si_hace_falta(venta.pk, hubo_snapshot_promocion=hubo_snapshot_promocion)
         return venta
 
     def update(self, instance, validated_data):
@@ -596,10 +617,7 @@ class VentaSerializer(serializers.ModelSerializer):
             instance.comprobantes_asociados.set(comprobantes_asociados_ids)
 
         # Si se actualizan ítems, eliminar campos calculados si vienen en el payload
-        items_data = self.initial_data.get('items', [])
-        if items_data:
-            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
-            items_data = expandir_items_promocion(items_data)
+        items_data = self._obtener_items_expandidos(self.initial_data.get('items', []))
         _normalizar_precios_items(items_data, crear=False)
         # --- NUEVO: actualizar fecha de vencimiento si se provee 'dias_validez' ---
         dias_validez = self.initial_data.get('dias_validez')
@@ -682,6 +700,11 @@ class VentaSerializer(serializers.ModelSerializer):
                 item.delete()
         
         # Procesar items enviados
+        from ferreapps.promos.services.aplicar_promocion_venta import (
+            crear_snapshot_promocion,
+            recalcular_totales_venta_si_hace_falta,
+        )
+        hubo_snapshot_promocion = False
         for i, item_data in enumerate(items_data, 1):
             # Limpiar campos calculados que no deben guardarse
             campos_calculados = ['vdi_importe', 'vdi_importe_total', 'vdi_ivaitem']
@@ -707,10 +730,10 @@ class VentaSerializer(serializers.ModelSerializer):
                         setattr(item, field, value)
                 item.save()
                 if snapshot_promocion:
-                    from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
                     item.componentes_promocion.all().delete()
                     item.promo_alicuotas.all().delete()
                     crear_snapshot_promocion(item, snapshot_promocion)
+                    hubo_snapshot_promocion = True
             else:
                 # Crear nuevo item — normalizar FK a forma _id
                 for fk_field in ['vdi_idsto', 'vdi_idpro', 'vdi_idaliiva', 'vdi_promocion']:
@@ -720,8 +743,11 @@ class VentaSerializer(serializers.ModelSerializer):
                             item_data[f'{fk_field}_id'] = val
                 item = VentaDetalleItem.objects.create(**item_data)
                 if snapshot_promocion:
-                    from ferreapps.promos.services.aplicar_promocion_venta import crear_snapshot_promocion
                     crear_snapshot_promocion(item, snapshot_promocion)
+                    hubo_snapshot_promocion = True
+        # Una unica vez, despues de procesar todas las lineas (ver docstring de
+        # recalcular_totales_venta_si_hace_falta).
+        recalcular_totales_venta_si_hace_falta(instance.pk, hubo_snapshot_promocion=hubo_snapshot_promocion)
 
     def validate(self, data):
         ven_punto = data.get('ven_punto', getattr(self.instance, 'ven_punto', None))

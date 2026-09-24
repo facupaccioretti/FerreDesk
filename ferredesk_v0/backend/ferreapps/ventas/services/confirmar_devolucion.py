@@ -56,7 +56,11 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
         ).get(id=item_preview["venta_detalle_item_id"])
         cantidad = Decimal(str(detalles[detalle.id]["cantidad"])).quantize(Decimal("0.01"))
         if detalle.vdi_promocion_id:
-            item = construir_item_devolucion_promocion(detalle, cantidad)
+            item = construir_item_devolucion_promocion(
+                detalle,
+                cantidad,
+                cantidad_disponible=item_preview["cantidad_disponible_para_devolver"],
+            )
         else:
             item = {
                 "vdi_idsto": detalle.vdi_idsto_id,

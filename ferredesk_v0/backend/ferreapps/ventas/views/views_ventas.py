@@ -181,9 +181,20 @@ class VentaViewSet(viewsets.ModelViewSet):
         Inyecta 'is_list' en el contexto del serializer.
         VentaCalculadaSerializer lo usa para evitar la query N+1 de
         iva_desglose en listados masivos (solo se calcula en retrieve/detalle).
+
+        Tambien reenvia 'items_expandidos' cuando create()/update() ya
+        resolvieron las promos de la request (ver _items_promocion_expandidos):
+        asi VentaSerializer no depende de que su mutacion sobre data['items']
+        se propague por referencia hasta self.initial_data -- se lo pasamos
+        explicito. VentaSerializer sigue expandiendo por su cuenta cuando no
+        hay nada en el contexto (por ejemplo, cuando se instancia directo
+        desde crear_documento_venta_desde_payload, fuera de este viewset).
         """
         context = super().get_serializer_context()
         context['is_list'] = getattr(self, 'action', None) == 'list'
+        items_expandidos = getattr(self, '_items_promocion_expandidos', None)
+        if items_expandidos is not None:
+            context['items_expandidos'] = items_expandidos
         return context
 
     def get_filterset_class(self):
@@ -245,6 +256,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
             items = expandir_items_promocion(items)
             data['items'] = items
+            # Se guarda para que get_serializer_context() se lo pase a VentaSerializer
+            # de forma explicita (ver docstring de get_serializer_context): la vista
+            # necesita los items expandidos ya aca, antes del create() del serializer,
+            # para el descuento de stock de abajo.
+            self._items_promocion_expandidos = items
 
         # === OBTENER SESIÓN DE CAJA ===
         # Obtenemos la sesión para registrar los pagos si existiera.
@@ -790,7 +806,17 @@ class VentaViewSet(viewsets.ModelViewSet):
         self.perform_update(serializer)
 
         items_data = request.data.get('items', None)
-        if items_data is not None:
+        # Si hay una linea de promo, este bloque no la sabe manejar: no convierte
+        # 'vdi_promocion' a la forma _id ni entiende '_promo_snapshot', así que
+        # crear el VentaDetalleItem de esa linea con datos crudos falla. El
+        # perform_update() de arriba (VentaSerializer.update() ->
+        # _actualizar_items_venta_inteligente) ya dejo los items -- promo incluida,
+        # con su snapshot -- correctamente actualizados; para ese caso no hace
+        # falta (ni es seguro) que este bloque los borre y recree de nuevo.
+        tiene_linea_promocion = items_data is not None and any(
+            item.get('vdi_promocion') for item in items_data
+        )
+        if items_data is not None and not tiene_linea_promocion:
             try:
                 # ATENCIÓN: No calcular totales ni campos calculados aquí.
                 # Solo actualizar los ítems base.

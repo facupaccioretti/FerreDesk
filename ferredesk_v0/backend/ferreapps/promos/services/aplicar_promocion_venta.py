@@ -77,6 +77,11 @@ def _prorratear_por_alicuota(items_promocion, precio_total_con_iva):
             orden_alicuotas.append(alicuota.id)
         pesos_por_alicuota[alicuota.id] += (item.stock.precio_lista_0 or Decimal('0')) * item.cantidad
 
+    # Orden deterministico (por porcentaje de alicuota, no por orden de llegada de la
+    # query): dos ventas de la misma promo deben repartir el residuo siempre al mismo
+    # grupo, para que el desglose de IVA sea reproducible.
+    orden_alicuotas.sort(key=lambda alicuota_id: alicuota_obj_por_id[alicuota_id].porce)
+
     total_peso = sum(pesos_por_alicuota.values())
     if total_peso <= 0:
         pesos_por_alicuota = {alicuota_id: Decimal('1') for alicuota_id in orden_alicuotas}
@@ -315,7 +320,19 @@ def resolver_operaciones_stock_desde_detalles(detalles):
     errores = []
     for detalle in detalles:
         if detalle.vdi_promocion_id:
-            for componente in detalle.componentes_promocion.all():
+            componentes = list(detalle.componentes_promocion.all())
+            if not componentes:
+                # Una linea de promo sin snapshot no puede pasar en el flujo normal
+                # (se crea junto con el detalle, en la misma transaccion). Si igual
+                # aparece -- dato manipulado a mano, o una fila vieja de antes de
+                # que este snapshot existiera -- no descontar nada en silencio: es
+                # mejor frenar la conversion con un error claro.
+                errores.append(
+                    f"La linea de promocion {detalle.id} no tiene snapshot de componentes guardado; "
+                    "no se puede determinar que stock descontar. Revisar el dato manualmente."
+                )
+                continue
+            for componente in componentes:
                 operaciones.append({
                     'stock_id': componente.stock_id,
                     'proveedor_id': componente.proveedor_id,
@@ -353,6 +370,15 @@ def crear_snapshot_promocion(detalle, snapshot):
     para una linea ya creada. Se llama justo despues de
     VentaDetalleItem.objects.create() con el snapshot que trae ese item
     (la clave '_promo_snapshot' de expandir_item_promocion).
+
+    No dispara el recalculo de totales de la venta: el post_save de
+    VentaDetalleItem ya lo dispara al crear la linea, pero en ese momento
+    las filas de IVA de la promo todavia no existen (se crean aca, despues).
+    El caller es responsable de invocar `recalcular_totales_venta_si_hace_falta`
+    una unica vez, despues de procesar TODOS los items de la venta -- no una
+    vez por cada linea de promo, que es redundante y, si la venta tiene varias
+    promos, hace que el recalculo intermedio ignore las que todavia no
+    llegaron a este punto del loop.
     """
     if not snapshot:
         return
@@ -378,13 +404,21 @@ def crear_snapshot_promocion(detalle, snapshot):
         )
         for grupo in snapshot['alicuotas']
     ])
-    # El detalle dispara el recalculo antes de que existan sus filas de IVA.
-    # Recalcular al final conserva los totales de la venta y del presupuesto.
+
+
+def recalcular_totales_venta_si_hace_falta(venta_id, *, hubo_snapshot_promocion):
+    """Recalcula los totales denormalizados de la venta una unica vez, solo
+    si se creo o reemplazo al menos un snapshot de promo durante el request.
+    Para lineas sin promo el post_save de VentaDetalleItem ya deja los
+    totales correctos; no hace falta este segundo recalculo.
+    """
+    if not hubo_snapshot_promocion:
+        return
     from ferreapps.ventas.signals import _recalcular_totales_venta
-    _recalcular_totales_venta(detalle.vdi_idve_id)
+    _recalcular_totales_venta(venta_id)
 
 
-def construir_item_devolucion_promocion(detalle_original, cantidad_devuelta):
+def construir_item_devolucion_promocion(detalle_original, cantidad_devuelta, cantidad_disponible=None):
     """Arma el item de Nota de Credito para devolver `cantidad_devuelta`
     unidades de una linea de promo ya vendida (`detalle_original`).
 
@@ -393,14 +427,23 @@ def construir_item_devolucion_promocion(detalle_original, cantidad_devuelta):
     desactivado o reemplazado componentes despues de la venta (invariante
     de postventa: la devolucion usa el snapshot, no la composicion actual).
 
+    `cantidad_disponible` es el remanente real (cantidad original menos lo ya
+    devuelto en operaciones previas), que el caller ya conoce por haber
+    llamado a `validar_items_devolucion`/`previsualizar_devolucion`. Si no se
+    pasa, se valida solo contra la cantidad original de la linea -- correcto
+    unicamente si esta es la primera devolucion de esa linea; un caller que
+    invoque esta funcion sin conocer el remanente es responsable de validarlo
+    el mismo antes de llamar.
+
     El resultado ya trae '_promo_snapshot' armado, así que
     expandir_items_promocion lo deja pasar sin re-expandirlo.
     """
     cantidad_original = detalle_original.vdi_cantidad
     if cantidad_original <= 0:
         raise ValidationError({'items': ['La linea de promocion original no tiene una cantidad valida.']})
+    cantidad_maxima = cantidad_original if cantidad_disponible is None else Decimal(str(cantidad_disponible))
     cantidad_devuelta = Decimal(str(cantidad_devuelta))
-    if cantidad_devuelta <= 0 or cantidad_devuelta > cantidad_original:
+    if cantidad_devuelta <= 0 or cantidad_devuelta > cantidad_maxima:
         raise ValidationError({'items': ['Cantidad de promocion a devolver invalida.']})
 
     alicuotas_originales = list(detalle_original.promo_alicuotas.select_related('alicuota').all())
