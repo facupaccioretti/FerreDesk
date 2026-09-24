@@ -14,6 +14,23 @@
  */
 export const mapearCamposItem = (item, idx, esModificacion = false) => {
 
+  // Una linea de promocion no se mapea como un item de stock: el backend
+  // resuelve precio/costo/IVA/componentes el mismo a partir de vdi_promocion
+  // y elecciones_grupos (ver expandir_item_promocion). Enviar solo esos
+  // campos evita pisar esa resolucion con datos de producto que no aplican.
+  if (item.tipo === 'promocion' || item.vdi_promocion) {
+    const camposPromocion = {
+      vdi_idve: item.vdi_idve ?? null,
+      vdi_orden: idx + 1,
+      vdi_promocion: item.vdi_promocion ?? item.promocionId,
+      vdi_cantidad: item.vdi_cantidad ?? item.cantidad ?? 1,
+      elecciones_grupos: item.elecciones_grupos ?? item.eleccionesGrupos ?? [],
+    };
+    if (esModificacion && item.id) {
+      camposPromocion.id = item.id;
+    }
+    return camposPromocion;
+  }
 
   let idaliiva = item.producto?.idaliiva ?? item.alicuotaIva ?? item.vdi_idaliiva ?? null;
   if (idaliiva && typeof idaliiva === 'object') {

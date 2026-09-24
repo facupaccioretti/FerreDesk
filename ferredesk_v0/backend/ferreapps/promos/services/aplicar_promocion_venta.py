@@ -1,3 +1,4 @@
+from collections import namedtuple
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Prefetch, Q
@@ -5,7 +6,16 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.productos.models import StockProve
-from ferreapps.promos.models import Promocion, PromocionItem
+from ferreapps.promos.models import Promocion, PromocionGrupo, PromocionGrupoAlternativa, PromocionItem
+
+
+# Un "componente efectivo" es lo que realmente se vende de la promo: un
+# componente fijo tal cual, o la alternativa elegida de un grupo con la
+# cantidad del grupo. A partir de aca (costo, prorrateo de IVA, snapshot)
+# todo trabaja sobre esta lista unificada, sin distinguir de donde vino
+# cada uno -- PromocionItem ya expone los mismos atributos (stock,
+# stock_id, cantidad), asi que un fijo se usa directo sin envolver.
+ComponenteEfectivo = namedtuple('ComponenteEfectivo', ['stock', 'stock_id', 'cantidad'])
 
 
 def _promo_vigente(promocion):
@@ -26,7 +36,16 @@ def _resolver_promocion(promocion_id):
             Prefetch(
                 'items',
                 queryset=PromocionItem.objects.select_related('stock', 'stock__idaliiva'),
-            )
+            ),
+            Prefetch(
+                'grupos',
+                queryset=PromocionGrupo.objects.prefetch_related(
+                    Prefetch(
+                        'alternativas',
+                        queryset=PromocionGrupoAlternativa.objects.select_related('stock', 'stock__idaliiva'),
+                    )
+                ),
+            ),
         )
         .first()
     )
@@ -36,29 +55,77 @@ def _resolver_promocion(promocion_id):
         raise ValidationError({'items': [f'La promocion "{promocion.nombre}" no esta vigente.']})
 
     items_promocion = list(promocion.items.all())
-    if not items_promocion:
+    grupos_promocion = list(promocion.grupos.all())
+    if not items_promocion and not grupos_promocion:
         raise ValidationError({'items': [f'La promocion "{promocion.nombre}" no tiene componentes.']})
 
-    return promocion, items_promocion
+    return promocion, items_promocion, grupos_promocion
 
 
-def _costos_habituales(items_promocion):
-    """Costo actual (StockProve del proveedor habitual de cada componente),
-    resuelto en un solo query. Se congela para el resto de la operacion.
+def _resolver_elecciones_grupos(promocion, grupos_promocion, elecciones_payload):
+    """Valida que cada grupo de la promo tenga una eleccion valida en
+    elecciones_payload (una alternativa que realmente pertenezca a ese
+    grupo) y devuelve la lista de componentes efectivos resueltos: uno por
+    grupo, con el stock elegido y la cantidad del grupo (no de la
+    alternativa, que no tiene cantidad propia).
+    """
+    if not grupos_promocion:
+        return []
+
+    elecciones_por_grupo = {}
+    for eleccion in (elecciones_payload or []):
+        grupo_id = eleccion.get('grupo_id')
+        stock_id = eleccion.get('stock_id')
+        if grupo_id is None or stock_id is None:
+            raise ValidationError({'items': ['Cada eleccion de grupo debe indicar grupo_id y stock_id.']})
+        elecciones_por_grupo[grupo_id] = stock_id
+
+    resueltos = []
+    for grupo in grupos_promocion:
+        stock_id_elegido = elecciones_por_grupo.get(grupo.id)
+        if stock_id_elegido is None:
+            raise ValidationError({
+                'items': [
+                    f'Falta elegir una alternativa para el grupo "{grupo.nombre}" '
+                    f'de la promocion "{promocion.nombre}".'
+                ]
+            })
+        alternativa = next(
+            (a for a in grupo.alternativas.all() if a.stock_id == stock_id_elegido),
+            None,
+        )
+        if alternativa is None:
+            raise ValidationError({
+                'items': [f'La alternativa elegida no pertenece al grupo "{grupo.nombre}".']
+            })
+        resueltos.append(ComponenteEfectivo(
+            stock=alternativa.stock,
+            stock_id=alternativa.stock_id,
+            cantidad=grupo.cantidad,
+        ))
+    return resueltos
+
+
+def _costos_habituales(componentes_efectivos):
+    """Costo actual (StockProve del proveedor habitual de cada componente
+    efectivo), resuelto en un solo query. Se congela para el resto de la
+    operacion.
     """
     condiciones = Q()
-    for item in items_promocion:
-        condiciones |= Q(stock_id=item.stock_id, proveedor_id=item.stock.proveedor_habitual_id)
+    for componente in componentes_efectivos:
+        condiciones |= Q(stock_id=componente.stock_id, proveedor_id=componente.stock.proveedor_habitual_id)
 
     filas = StockProve.objects.filter(condiciones).values('stock_id', 'proveedor_id', 'costo')
     costos_por_par = {(f['stock_id'], f['proveedor_id']): f['costo'] for f in filas}
     return {
-        item.stock_id: costos_por_par.get((item.stock_id, item.stock.proveedor_habitual_id), Decimal('0'))
-        for item in items_promocion
+        componente.stock_id: costos_por_par.get(
+            (componente.stock_id, componente.stock.proveedor_habitual_id), Decimal('0')
+        )
+        for componente in componentes_efectivos
     }
 
 
-def _prorratear_por_alicuota(items_promocion, precio_total_con_iva):
+def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva):
     """Reparte precio_total_con_iva (ya multiplicado por la cantidad
     vendida) entre los grupos de alicuota de los componentes, proporcional
     al precio de lista de cada componente. Si ningun componente tiene
@@ -69,13 +136,13 @@ def _prorratear_por_alicuota(items_promocion, precio_total_con_iva):
     pesos_por_alicuota = {}
     alicuota_obj_por_id = {}
     orden_alicuotas = []
-    for item in items_promocion:
-        alicuota = item.stock.idaliiva
+    for componente in componentes_efectivos:
+        alicuota = componente.stock.idaliiva
         if alicuota.id not in pesos_por_alicuota:
             pesos_por_alicuota[alicuota.id] = Decimal('0')
             alicuota_obj_por_id[alicuota.id] = alicuota
             orden_alicuotas.append(alicuota.id)
-        pesos_por_alicuota[alicuota.id] += (item.stock.precio_lista_0 or Decimal('0')) * item.cantidad
+        pesos_por_alicuota[alicuota.id] += (componente.stock.precio_lista_0 or Decimal('0')) * componente.cantidad
 
     # Orden deterministico (por porcentaje de alicuota, no por orden de llegada de la
     # query): dos ventas de la misma promo deben repartir el residuo siempre al mismo
@@ -125,13 +192,14 @@ def _margen_informativo(precio_unitario_final, costo_unitario_promo, alicuota_do
 
 
 def expandir_item_promocion(item_payload):
-    """Convierte un pseudo-item de promo (payload con 'vdi_promocion' y
-    'vdi_cantidad') en un item real de VentaDetalleItem, mas la data de
-    snapshot a persistir una vez creada la linea. No toca stock: eso lo
-    hace `descontar_stock_promocion`, aparte.
+    """Convierte un pseudo-item de promo (payload con 'vdi_promocion',
+    'vdi_cantidad' y, si la promo tiene grupos, 'elecciones_grupos':
+    [{'grupo_id', 'stock_id'}, ...]) en un item real de VentaDetalleItem,
+    mas la data de snapshot a persistir una vez creada la linea. No toca
+    stock: eso lo hace `descontar_stock_promocion`, aparte.
     """
     promocion_id = item_payload.get('vdi_promocion')
-    promocion, items_promocion = _resolver_promocion(promocion_id)
+    promocion, items_promocion, grupos_promocion = _resolver_promocion(promocion_id)
 
     try:
         cantidad_vendida = Decimal(str(item_payload.get('vdi_cantidad') or 0))
@@ -140,9 +208,14 @@ def expandir_item_promocion(item_payload):
     if cantidad_vendida <= 0:
         raise ValidationError({'items': ['La cantidad de la promocion debe ser mayor a cero.']})
 
-    costos_por_stock = _costos_habituales(items_promocion)
+    elecciones_resueltas = _resolver_elecciones_grupos(
+        promocion, grupos_promocion, item_payload.get('elecciones_grupos')
+    )
+    componentes_efectivos = list(items_promocion) + elecciones_resueltas
+
+    costos_por_stock = _costos_habituales(componentes_efectivos)
     costo_unitario_promo = sum(
-        (costos_por_stock[item.stock_id] * item.cantidad for item in items_promocion),
+        (costos_por_stock[componente.stock_id] * componente.cantidad for componente in componentes_efectivos),
         Decimal('0'),
     )
 
@@ -151,15 +224,18 @@ def expandir_item_promocion(item_payload):
         Decimal('0.01'), rounding=ROUND_HALF_UP
     )
 
-    desglose_alicuotas = _prorratear_por_alicuota(items_promocion, precio_total_con_iva)
+    desglose_alicuotas = _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva)
     grupo_dominante = max(desglose_alicuotas, key=lambda grupo: grupo['monto_final'])
     alicuota_dominante_id = grupo_dominante['alicuota_id']
     alicuota_dominante_porce = next(
-        item.stock.idaliiva.porce for item in items_promocion if item.stock.idaliiva_id == alicuota_dominante_id
+        componente.stock.idaliiva.porce
+        for componente in componentes_efectivos
+        if componente.stock.idaliiva_id == alicuota_dominante_id
     )
 
     item_real = dict(item_payload)
     item_real.pop('vdi_promocion', None)
+    item_real.pop('elecciones_grupos', None)
     item_real.update({
         'vdi_idsto': None,
         'vdi_idpro': None,
@@ -176,12 +252,12 @@ def expandir_item_promocion(item_payload):
     item_real['_promo_snapshot'] = {
         'componentes': [
             {
-                'stock_id': item.stock_id,
-                'proveedor_id': item.stock.proveedor_habitual_id,
-                'cantidad_por_promo': item.cantidad,
-                'costo_unitario': costos_por_stock[item.stock_id],
+                'stock_id': componente.stock_id,
+                'proveedor_id': componente.stock.proveedor_habitual_id,
+                'cantidad_por_promo': componente.cantidad,
+                'costo_unitario': costos_por_stock[componente.stock_id],
             }
-            for item in items_promocion
+            for componente in componentes_efectivos
         ],
         'alicuotas': [
             {
@@ -218,6 +294,7 @@ def resolver_items_nuevos_cambio(items):
             item_venta = expandir_item_promocion({
                 'vdi_promocion': item['promocion_id'],
                 'vdi_cantidad': item['cantidad'],
+                'elecciones_grupos': item.get('elecciones_grupos'),
             })
             cantidad = Decimal(str(item_venta['vdi_cantidad']))
             resultado.append({

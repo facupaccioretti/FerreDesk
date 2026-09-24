@@ -1,11 +1,22 @@
 from django.contrib import admin
 
-from .models import Promocion, PromocionItem
+from .models import Promocion, PromocionGrupo, PromocionGrupoAlternativa, PromocionItem
 
 
 class PromocionItemInline(admin.TabularInline):
     model = PromocionItem
     extra = 1
+
+
+class PromocionGrupoAlternativaInline(admin.TabularInline):
+    model = PromocionGrupoAlternativa
+    extra = 2
+
+
+@admin.register(PromocionGrupo)
+class PromocionGrupoAdmin(admin.ModelAdmin):
+    list_display = ('promocion', 'nombre', 'cantidad', 'orden')
+    inlines = [PromocionGrupoAlternativaInline]
 
 
 @admin.register(Promocion)

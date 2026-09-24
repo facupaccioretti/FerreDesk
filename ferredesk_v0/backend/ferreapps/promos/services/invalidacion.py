@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils import timezone
 
 from ferreapps.promos.models import Promocion
@@ -5,8 +6,9 @@ from ferreapps.promos.models import Promocion
 
 def marcar_promos_desactualizadas(stock_ids):
     """Marca como desactualizadas las promociones activas que usan alguno de los
-    stock_ids dados como componente. Unica escritura de invalidacion: la usan
-    tanto la senal de StockProve como la importacion masiva de costos.
+    stock_ids dados, sea como componente fijo o como alternativa de un grupo
+    de eleccion. Unica escritura de invalidacion: la usan tanto la senal de
+    StockProve como la importacion masiva de costos.
 
     No vuelve a tocar promos que ya estaban marcadas, para conservar la fecha
     de la primera desactualizacion detectada.
@@ -22,7 +24,7 @@ def marcar_promos_desactualizadas(stock_ids):
         return 0
 
     return Promocion.objects.filter(
+        Q(items__stock_id__in=stock_ids) | Q(grupos__alternativas__stock_id__in=stock_ids),
         activa=True,
         desactualizada=False,
-        items__stock_id__in=stock_ids,
     ).update(desactualizada=True, fecha_desactualizacion=timezone.now())

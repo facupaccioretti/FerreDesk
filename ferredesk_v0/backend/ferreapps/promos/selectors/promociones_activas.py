@@ -12,11 +12,13 @@ def promociones_activas():
     return Promocion.objects.filter(activa=True).filter(
         models.Q(fecha_inicio__isnull=True) | models.Q(fecha_inicio__lte=hoy),
         models.Q(fecha_fin__isnull=True) | models.Q(fecha_fin__gte=hoy),
-    ).prefetch_related('items__stock')
+    ).prefetch_related('items__stock', 'grupos__alternativas__stock')
 
 
 def promociones_desactualizadas():
     """Promociones activas marcadas para revision por cambio de costo de
     algun componente.
     """
-    return Promocion.objects.filter(activa=True, desactualizada=True).prefetch_related('items__stock')
+    return Promocion.objects.filter(activa=True, desactualizada=True).prefetch_related(
+        'items__stock', 'grupos__alternativas__stock'
+    )

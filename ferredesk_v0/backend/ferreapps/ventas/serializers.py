@@ -61,6 +61,21 @@ class VentaAsociadaSerializer(serializers.ModelSerializer):
     def get_ven_total(self, obj):
         return getattr(obj, '_ven_total', obj.total_guardado)
 
+class ComponentePromocionOutputSerializer(serializers.Serializer):
+    """Un componente ya congelado (VentaPromocionComponente) de una linea de
+    promo vendida. Solo lectura: el frontend lo usa para armar el resumen
+    ("Vodka x1 - Red Bull x2") sin volver a consultar la Promocion actual,
+    que pudo haber cambiado desde que se vendio esta linea. `stock_id` se
+    expone ademas para que, al reconfigurar una promo con grupos en un
+    presupuesto editable, el frontend pueda ubicar a que grupo pertenece
+    cada componente comparando contra los grupos actuales de la Promocion.
+    """
+    stock_id = serializers.IntegerField(read_only=True)
+    denominacion = serializers.CharField(source='stock.deno', read_only=True)
+    codigo = serializers.CharField(source='stock.codvta', read_only=True)
+    cantidad = serializers.DecimalField(source='cantidad_por_promo', max_digits=15, decimal_places=2, read_only=True)
+
+
 class VentaDetalleItemSerializer(serializers.ModelSerializer):
     vdi_precio_unitario_final = PrecioUnitarioField(
         max_digits=15,
@@ -68,14 +83,20 @@ class VentaDetalleItemSerializer(serializers.ModelSerializer):
         required=False,
         default=Decimal('0.00'),
     )
+    promocion_nombre = serializers.SerializerMethodField()
+    componentes_promocion = ComponentePromocionOutputSerializer(many=True, read_only=True)
+
+    def get_promocion_nombre(self, obj):
+        return obj.vdi_promocion.nombre if obj.vdi_promocion_id else None
 
     class Meta:
         model = VentaDetalleItem
-        # Solo los campos base de la tabla física
+        # Solo los campos base de la tabla fisica, mas el resumen de promo (solo lectura)
         fields = [
             'vdi_orden', 'vdi_idsto', 'vdi_idpro', 'vdi_cantidad',
             'vdi_costo', 'vdi_margen', 'vdi_bonifica', 'vdi_precio_unitario_final',
-            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva', 'vdi_promocion'
+            'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva', 'vdi_promocion',
+            'promocion_nombre', 'componentes_promocion',
         ]
 
 
@@ -109,6 +130,11 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
     margen = serializers.DecimalField(source='vdi_margen', max_digits=10, decimal_places=3, read_only=True)
     bonificacion = serializers.DecimalField(source='vdi_bonifica', max_digits=10, decimal_places=2, read_only=True)
     idaliiva = serializers.PrimaryKeyRelatedField(source='vdi_idaliiva', read_only=True)
+    promocion_nombre = serializers.SerializerMethodField()
+    componentes_promocion = ComponentePromocionOutputSerializer(many=True, read_only=True)
+
+    def get_promocion_nombre(self, obj):
+        return obj.vdi_promocion.nombre if obj.vdi_promocion_id else None
 
     class Meta:
         model = VentaDetalleItem
@@ -116,7 +142,7 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
             'id', 'vdi_idve', 'vdi_orden', 'vdi_idsto', 'vdi_idpro',
             'vdi_cantidad', 'vdi_costo', 'vdi_margen', 'vdi_bonifica',
             'vdi_precio_unitario_final', 'vdi_detalle1', 'vdi_detalle2', 'vdi_idaliiva',
-            'vdi_promocion',
+            'vdi_promocion', 'promocion_nombre', 'componentes_promocion',
             # Campos anotados
             'ali_porce', 'codigo', 'unidad',
             'precio_unitario_sin_iva', 'iva_unitario',

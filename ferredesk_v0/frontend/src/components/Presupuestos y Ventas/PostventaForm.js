@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import ItemsGrid from "./ItemsGrid"
-import BuscadorProducto from "../BuscadorProducto"
+import SelectorItemVenta from "./SelectorItemVenta"
 import { useVentaDetalleAPI } from "../../utils/useVentaDetalleAPI"
 import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import SumarDuplicar from "./herramientasforms/SumarDuplicar"
@@ -153,6 +153,21 @@ export const tieneEfectivoInsuficiente = (saldoDisponible, montoEfectivo) => {
 export const buildItemsNuevosPayload = (rows = []) => (
   rows
     .map((item, index) => {
+      // Una promocion nueva en un cambio va por promocion_id/elecciones_grupos
+      // (ItemNuevoCambioInputSerializer), no por stock_id/precio_unitario: el
+      // backend resuelve precio y componentes igual que al vender (ver
+      // expandir_item_promocion via resolver_items_nuevos_cambio).
+      if (item.tipo === "promocion") {
+        const promocionId = item.promocionId ?? item.vdi_promocion
+        const cantidad = Number(item.cantidad ?? item.vdi_cantidad ?? 0)
+        if (!promocionId || cantidad <= 0) return null
+        return {
+          promocion_id: promocionId,
+          cantidad: cantidad.toFixed(2),
+          elecciones_grupos: item.eleccionesGrupos || [],
+        }
+      }
+
       const mapped = mapearCamposItem(item, index)
       const stockId = mapped.vdi_idsto ?? mapped.id ?? item.vdi_idsto ?? item.id ?? null
       const cantidad = mapped.vdi_cantidad ?? item.vdi_cantidad ?? item.cantidad ?? 0
@@ -247,6 +262,7 @@ const PostventaForm = ({
 }) => {
   const comprobanteId = comprobante?.id ?? comprobante?.ven_id ?? null
   const itemsGridRef = useRef(null)
+  const selectorItemVentaRef = useRef(null)
 
   const [modo, setModo] = useState("devolucion")
   const [observacion, setObservacion] = useState("")
@@ -411,6 +427,22 @@ const PostventaForm = ({
     itemsGridRef.current?.handleAddItem(producto)
     limpiarPreview()
   }, [limpiarPreview])
+
+  // Agregar/reconfigurar una promocion desde SelectorItemVenta (ver su docstring:
+  // toda la logica de seleccion/configuracion vive ahi, esto solo delega a la grilla).
+  // Solo se usa en modo "cambio": el JSX que renderiza SelectorItemVenta ya esta
+  // condicionado a modo === "cambio", por eso no hace falta repetir esa condicion aca.
+  const handleAgregarPromocionAGrid = useCallback((promocion, eleccionesGrupos, cantidad) => {
+    itemsGridRef.current?.handleAddPromocion(promocion, eleccionesGrupos, cantidad)
+    limpiarPreview()
+  }, [limpiarPreview])
+  const handleReconfigurarPromocionEnGrid = useCallback((idx, promocion, eleccionesGrupos) => {
+    itemsGridRef.current?.handleReconfigurarPromocion(idx, promocion, eleccionesGrupos)
+    limpiarPreview()
+  }, [limpiarPreview])
+  const handleAbrirReconfigurarPromocion = useCallback((idx, row) => {
+    selectorItemVentaRef.current?.iniciarReconfiguracion(idx, row)
+  }, [])
 
   const handleRowsChange = useCallback((rows) => {
     setItemsNuevos(rows)
@@ -842,7 +874,14 @@ const PostventaForm = ({
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className={SECTION_TITLE_CLASS}>Producto nuevo</label>
-                    <BuscadorProducto onSelect={handleAddItemToGrid} disabled={interaccionBloqueada} className="w-full" />
+                    <SelectorItemVenta
+                      ref={selectorItemVentaRef}
+                      onSelectProducto={handleAddItemToGrid}
+                      onAgregarPromocion={handleAgregarPromocionAGrid}
+                      onReconfigurarPromocion={handleReconfigurarPromocionEnGrid}
+                      disabled={interaccionBloqueada}
+                      className="w-full"
+                    />
                   </div>
                   <div>
                     <label className={SECTION_TITLE_CLASS}>Accion por defecto</label>
@@ -868,6 +907,7 @@ const PostventaForm = ({
                 onRowsChange={handleRowsChange}
                 readOnly={interaccionBloqueada}
                 initialItems={normalizarItems(itemsNuevos, { modo: "venta", alicuotasMap })}
+                onReconfigurarPromocion={handleAbrirReconfigurarPromocion}
               />
             </div>
           </>

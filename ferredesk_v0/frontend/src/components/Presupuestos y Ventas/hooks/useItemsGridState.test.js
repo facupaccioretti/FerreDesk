@@ -234,4 +234,73 @@ describe("useItemsGridState", () => {
 
     expect(api.getItems()[0].vdi_precio_unitario_final).toBe(0);
   });
+
+  test("duplicar una fila de promocion conserva la eleccion de grupo ya hecha", async () => {
+    await renderHarness();
+
+    const promocionConGrupo = {
+      id: 5,
+      nombre: "Combo Vodka + Bebida a elección",
+      precio_promocional: "15000.00",
+      items: [{ id: 1, stock_id: 100, codigo: "VODKA", denominacion: "Vodka", cantidad: 1 }],
+      grupos: [{
+        id: 9,
+        nombre: "Bebida",
+        cantidad: 2,
+        alternativas: [
+          { id: 90, stock_id: 200, codigo: "REDBULL", denominacion: "Redbull" },
+          { id: 91, stock_id: 201, codigo: "FERNET", denominacion: "Fernet" },
+        ],
+      }],
+    };
+    const eleccionesGrupos = [{ grupo_id: 9, stock_id: 201 }];
+
+    await act(async () => {
+      api.handleAddPromocion(promocionConGrupo, eleccionesGrupos, 2);
+    });
+
+    const idxPromo = api.getRows().findIndex((row) => row.tipo === "promocion");
+    expect(idxPromo).toBeGreaterThanOrEqual(0);
+    const filaOriginal = api.getRows()[idxPromo];
+    expect(filaOriginal.eleccionesGrupos).toEqual(eleccionesGrupos);
+
+    await act(async () => {
+      api.handleDuplicarRow(idxPromo);
+    });
+
+    const filaDuplicada = api.getRows()[idxPromo + 1];
+    expect(filaDuplicada.tipo).toBe("promocion");
+    expect(filaDuplicada.promocionId).toBe(5);
+    expect(filaDuplicada.eleccionesGrupos).toEqual(eleccionesGrupos);
+    expect(filaDuplicada.resumenComponentes).toBe(filaOriginal.resumenComponentes);
+    expect(filaDuplicada.id).not.toBe(filaOriginal.id);
+  });
+
+  test("una fila de promocion no permite editar codigo/precio/bonificacion por handleRowChange", async () => {
+    await renderHarness();
+
+    const promocionFija = {
+      id: 8,
+      nombre: "Combo fijo",
+      precio_promocional: "5000.00",
+      items: [{ id: 1, stock_id: 100, codigo: "VODKA", denominacion: "Vodka", cantidad: 1 }],
+      grupos: [],
+    };
+
+    await act(async () => {
+      api.handleAddPromocion(promocionFija, [], 1);
+    });
+
+    const idxPromo = api.getRows().findIndex((row) => row.tipo === "promocion");
+    const antes = api.getRows()[idxPromo];
+
+    await act(async () => {
+      api.handleRowChange(idxPromo, "precio", "999");
+      api.handleRowChange(idxPromo, "bonificacion", "50");
+    });
+
+    const despues = api.getRows()[idxPromo];
+    expect(despues.precioFinal).toBe(antes.precioFinal);
+    expect(despues.bonificacion).toBe(antes.bonificacion);
+  });
 });

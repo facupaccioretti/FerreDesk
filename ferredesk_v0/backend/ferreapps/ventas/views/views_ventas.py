@@ -135,8 +135,19 @@ class VentaViewSet(viewsets.ModelViewSet):
     • otras -> continúan usando el modelo base `Venta`.
     """
 
-    # Configuración por defecto (para acciones distintas de list)
-    queryset = Venta.objects.all()
+    # Configuracion por defecto (para acciones distintas de list).
+    # El prefetch de 'items' trae de una vez vdi_promocion y sus componentes
+    # congelados (VentaPromocionComponente): sin esto, abrir un documento con
+    # lineas de promo para editar dispara una query extra por cada linea
+    # (VentaDetalleItemSerializer.componentes_promocion/promocion_nombre).
+    queryset = Venta.objects.all().prefetch_related(
+        models.Prefetch(
+            'items',
+            queryset=VentaDetalleItem.objects.select_related('vdi_promocion').prefetch_related(
+                'componentes_promocion__stock'
+            ),
+        ),
+    )
     serializer_class = VentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
@@ -911,7 +922,9 @@ class VentaDetalleItemCalculadoFilter(FilterSet):
 
 class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para ver detalles con cálculos (reemplaza a la antigua vista SQL)"""
-    queryset = VentaDetalleItem.objects.con_calculos()
+    queryset = VentaDetalleItem.objects.con_calculos().select_related(
+        'vdi_promocion'
+    ).prefetch_related('componentes_promocion__stock')
     serializer_class = VentaDetalleItemCalculadoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter

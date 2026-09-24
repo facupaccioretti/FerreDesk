@@ -11,6 +11,8 @@ import {
     crearItemVacio,
     crearItemDesdeProducto,
     crearItemDesdeBackend,
+    crearItemDesdePromocion,
+    construirResumenPromocion,
     extraerIdAlicuota,
     obtenerPorcentajeIVA,
     generarIdTemporal,
@@ -347,11 +349,15 @@ export function useItemsGridState({
     // ──────────────────────────────────────────────────────────────
 
     function isRowLleno(row) {
+        // Una fila de promocion siempre esta completa: no depende de producto/denominacion,
+        // se carga entera desde el selector con su cantidad ya definida.
+        if (row.tipo === 'promocion') return true
         // Un renglón se considera completo si tiene producto o denominación no vacía (genérico)
         return !!(row.producto || (row.denominacion && row.denominacion.trim() !== ''))
     }
 
     function isRowVacio(row) {
+        if (row.tipo === 'promocion') return false
         return (
             !row.producto &&
             (!row.codigo || row.codigo.trim() === '') &&
@@ -636,11 +642,66 @@ export function useItemsGridState({
     )
 
     // ──────────────────────────────────────────────────────────────
+    // Handlers: Agregar/reconfigurar item de promocion
+    // ──────────────────────────────────────────────────────────────
+    // POR QUE separados de addItemWithDuplicado: una promocion no es un producto
+    // del catalogo (no hay deteccion de duplicados por producto.id) y necesita
+    // conservar su propia definicion (eleccionesGrupos) para reconfigurar despues.
+
+    const handleAddPromocion = useCallback(
+        (promocion, eleccionesGrupos = [], cantidad = 1) => {
+            if (readOnly || !promocion) return
+
+            setRows((prevRows) => {
+                const nuevoItem = crearItemDesdePromocion(promocion, { eleccionesGrupos, cantidad })
+                const lastRow = prevRows[prevRows.length - 1]
+
+                if (lastRow && !lastRow.producto && !lastRow.codigo && lastRow.tipo !== 'promocion') {
+                    const indiceInsertado = prevRows.length - 1
+                    const result = [...prevRows.slice(0, -1), nuevoItem, crearItemVacio()]
+                    setIdxCantidadFoco(indiceInsertado)
+                    return result
+                }
+                const indiceInsertado = prevRows.length
+                const result = [...prevRows, nuevoItem, crearItemVacio()]
+                setIdxCantidadFoco(indiceInsertado)
+                return result
+            })
+        },
+        [readOnly],
+    )
+
+    const handleReconfigurarPromocion = useCallback(
+        (idx, promocion, eleccionesGrupos = []) => {
+            if (readOnly) return
+            setRows((prevRows) => {
+                const fila = prevRows[idx]
+                if (!fila || fila.tipo !== 'promocion') return prevRows
+                const newRows = [...prevRows]
+                newRows[idx] = {
+                    ...fila,
+                    promocion,
+                    eleccionesGrupos,
+                    resumenComponentes: construirResumenPromocion(promocion, eleccionesGrupos),
+                }
+                return newRows
+            })
+        },
+        [readOnly],
+    )
+
+    // ──────────────────────────────────────────────────────────────
     // Handler: Cambio de campo en una fila
     // ──────────────────────────────────────────────────────────────
 
     const handleRowChange = (idx, field, value) => {
         setRows((prevRows) => {
+            // Una linea de promocion no tiene codigo/precio/bonificacion editables por
+            // renglon (precio fijo, IVA resuelto por el backend segun sus componentes).
+            // La cantidad se cambia por handleCantidadChange; el resto (reconfigurar/
+            // duplicar/eliminar) tiene sus propios handlers.
+            if (prevRows[idx]?.tipo === 'promocion') return prevRows
+
             const newRows = [...prevRows]
             if (field === 'codigo') {
                 const inputCodigo = codigoRefs.current[idx]
@@ -943,6 +1004,16 @@ export function useItemsGridState({
             .map((row, idx) => {
                 const cantidad = Number.parseFloat(row.cantidad) || 0
                 const bonif = Number.parseFloat(row.bonificacion) || 0
+                if (row.tipo === 'promocion') {
+                    return {
+                        vdi_orden: idx + 1,
+                        tipo: 'promocion',
+                        vdi_promocion: row.promocionId,
+                        vdi_cantidad: cantidad,
+                        elecciones_grupos: row.eleccionesGrupos || [],
+                    }
+                }
+
                 const esStock = !!(row.producto || row.vdi_idsto)
                 const precioFinal = (() => {
                     if (typeof row.precioFinal === 'string') {
@@ -1016,6 +1087,8 @@ export function useItemsGridState({
         handleDuplicarRow,
         handleIvaChange,
         handleAddItem,
+        handleAddPromocion,
+        handleReconfigurarPromocion,
 
         // Handlers de UI
         handleMouseEnterTooltip,

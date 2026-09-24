@@ -11,7 +11,7 @@ import { useImperativeHandle, forwardRef } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useItemsGridState } from "./hooks/useItemsGridState"
 
-import { BotonDuplicar, BotonEliminar } from "../Botones"
+import { BotonDuplicar, BotonEliminar, BotonEditar } from "../Botones"
 
 const ItemsGridPresupuesto = forwardRef(
   (
@@ -35,6 +35,11 @@ const ItemsGridPresupuesto = forwardRef(
       mostrarControlesFinancieros = true,
       listaPrecioId = 0,
       listasPrecio = [],
+      // Callback opcional: (idx, row) => void. Si se pasa, la fila de promocion
+      // muestra un boton "Reconfigurar" que lo invoca. El padre es quien sabe
+      // abrir el ConfiguradorPromocionModal compartido (SelectorItemVenta) y,
+      // al confirmar, llama a itemsGridRef.current.handleReconfigurarPromocion.
+      onReconfigurarPromocion,
     },
     ref,
   ) => {
@@ -58,6 +63,8 @@ const ItemsGridPresupuesto = forwardRef(
       handleDuplicarRow,
       handleIvaChange,
       handleAddItem,
+      handleAddPromocion,
+      handleReconfigurarPromocion,
       handleMouseEnterTooltip,
       handleMouseLeaveTooltip,
       manejarFocoSeleccionCompleta,
@@ -89,10 +96,12 @@ const ItemsGridPresupuesto = forwardRef(
         getItems,
         getRows,
         handleAddItem,
+        handleAddPromocion,
+        handleReconfigurarPromocion,
         getStockNegativo: () => stockNegativo,
         _debugRows: () => { },
       }),
-      [getItems, getRows, handleAddItem, stockNegativo],
+      [getItems, getRows, handleAddItem, handleAddPromocion, handleReconfigurarPromocion, stockNegativo],
     )
 
     // ── Render ──
@@ -280,9 +289,13 @@ const ItemsGridPresupuesto = forwardRef(
                         : 0)
                   const bonifParticular = Number.parseFloat(row.bonificacion)
                   const bonifGeneral = Number.parseFloat(bonificacionGeneral) || 0
-                  const bonifEfectiva = (Number.isFinite(bonifParticular) && bonifParticular > 0)
-                    ? bonifParticular
-                    : bonifGeneral
+                  // Una promocion tiene precio fijo: nunca se le aplica bonificacion
+                  // general ni particular (igual que resuelve el backend al vender).
+                  const bonifEfectiva = row.tipo === "promocion"
+                    ? 0
+                    : (Number.isFinite(bonifParticular) && bonifParticular > 0)
+                      ? bonifParticular
+                      : bonifGeneral
                   const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
 
                   let precioConDescuentos = precioBonificado
@@ -304,27 +317,40 @@ const ItemsGridPresupuesto = forwardRef(
                         {idx + 1}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <input
-                          type="text"
-                          value={row.codigo}
-                          onChange={(e) => handleRowChange(idx, "codigo", e.target.value)}
-                          onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
-                          onBlur={() => handleCodigoBlur(idx)}
-                          onFocus={manejarFocoSeleccionCompleta}
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
-                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                            }`}
-                          placeholder="Código"
-                          aria-label="Código producto"
-                          tabIndex={row.esBloqueado ? -1 : 0}
-                          disabled={row.esBloqueado}
-                          readOnly={row.esBloqueado}
-                          ref={(el) => (codigoRefs.current[idx] = el)}
-                        />
+                        {row.tipo === "promocion" ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700 border border-orange-300">
+                            PROMO
+                          </span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={row.codigo}
+                            onChange={(e) => handleRowChange(idx, "codigo", e.target.value)}
+                            onKeyDown={(e) => handleRowKeyDown(e, idx, "codigo")}
+                            onBlur={() => handleCodigoBlur(idx)}
+                            onFocus={manejarFocoSeleccionCompleta}
+                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                              }`}
+                            placeholder="Código"
+                            aria-label="Código producto"
+                            tabIndex={row.esBloqueado ? -1 : 0}
+                            disabled={row.esBloqueado}
+                            readOnly={row.esBloqueado}
+                            ref={(el) => (codigoRefs.current[idx] = el)}
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {row.producto ? (
+                        {row.tipo === "promocion" ? (
+                          <div className="w-full px-3 py-2 min-h-[38px] flex flex-col justify-center">
+                            <span className="text-slate-700 font-medium">{row.denominacion || ""}</span>
+                            {row.resumenComponentes && (
+                              <span className="text-xs text-slate-500 italic">{row.resumenComponentes}</span>
+                            )}
+                          </div>
+                        ) : row.producto ? (
                           <div className="w-full px-3 py-2 text-slate-700 min-h-[38px] flex items-center">
                             {row.denominacion || ""}
                           </div>
@@ -356,7 +382,7 @@ const ItemsGridPresupuesto = forwardRef(
                           onChange={(e) => handleCantidadChange(idx, e.target.value)}
                           onKeyDown={(e) => handleRowKeyDown(e, idx, "cantidad")}
                           onFocus={manejarFocoSeleccionCompleta}
-                          min={row.producto || (Number(row.precio) > 0) ? 1 : 0}
+                          min={row.tipo === "promocion" || row.producto || (Number(row.precio) > 0) ? 1 : 0}
                           className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
                             ? "bg-slate-100 text-slate-500 cursor-not-allowed"
                             : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
@@ -369,51 +395,63 @@ const ItemsGridPresupuesto = forwardRef(
                         />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={
-                            row.precioFinal !== "" && row.precioFinal !== undefined
-                              ? row.precioFinal
-                              : (row.precio !== "" && row.precio !== undefined
-                                ? row.precio
-                                : "")
-                          }
-                          onChange={(e) => handleRowChange(idx, "precio", e.target.value)}
-                          onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
-                          onFocus={manejarFocoSeleccionCompleta}
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${row.esBloqueado
-                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                            }`}
-                          style={{ MozAppearance: 'textfield' }}
-                          aria-label="Precio Unitario"
-                          tabIndex={row.esBloqueado ? -1 : 0}
-                          disabled={row.esBloqueado}
-                          readOnly={row.esBloqueado}
-                          placeholder={row.producto ? "" : ""}
-                        />
+                        {row.tipo === "promocion" ? (
+                          <div className="w-full px-3 py-2 text-slate-700 min-h-[38px] flex items-center" title="Precio fijo de la promoción, no editable">
+                            {`$${Number(row.precioFinal || 0).toLocaleString()}`}
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={
+                              row.precioFinal !== "" && row.precioFinal !== undefined
+                                ? row.precioFinal
+                                : (row.precio !== "" && row.precio !== undefined
+                                  ? row.precio
+                                  : "")
+                            }
+                            onChange={(e) => handleRowChange(idx, "precio", e.target.value)}
+                            onKeyDown={(e) => handleRowKeyDown(e, idx, "precio")}
+                            onFocus={manejarFocoSeleccionCompleta}
+                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm appearance-none ${row.esBloqueado
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                              }`}
+                            style={{ MozAppearance: 'textfield' }}
+                            aria-label="Precio Unitario"
+                            tabIndex={row.esBloqueado ? -1 : 0}
+                            disabled={row.esBloqueado}
+                            readOnly={row.esBloqueado}
+                            placeholder={row.producto ? "" : ""}
+                          />
+                        )}
                       </td>
                       {mostrarControlesFinancieros && <td className="px-3 py-3 whitespace-nowrap">
-                        <input
-                          type="number"
-                          value={row.bonificacion}
-                          onChange={(e) => handleRowChange(idx, "bonificacion", e.target.value)}
-                          onKeyDown={(e) => handleRowKeyDown(e, idx, "bonificacion")}
-                          onFocus={manejarFocoSeleccionCompleta}
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
-                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                            : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
-                            }`}
-                          aria-label="Bonificación particular"
-                          tabIndex={row.esBloqueado ? -1 : 0}
-                          disabled={row.esBloqueado}
-                          readOnly={row.esBloqueado}
-                          ref={(el) => (bonificacionRefs.current[idx] = el)}
-                        />
+                        {row.tipo === "promocion" ? (
+                          <div className="w-full px-3 py-2 text-slate-400 min-h-[38px] flex items-center" title="Una promoción no admite bonificación por línea">
+                            —
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            value={row.bonificacion}
+                            onChange={(e) => handleRowChange(idx, "bonificacion", e.target.value)}
+                            onKeyDown={(e) => handleRowKeyDown(e, idx, "bonificacion")}
+                            onFocus={manejarFocoSeleccionCompleta}
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className={`w-full px-3 py-2 border border-slate-300 rounded-xl text-sm transition-all duration-200 shadow-sm ${row.esBloqueado
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                              : "bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-400"
+                              }`}
+                            aria-label="Bonificación particular"
+                            tabIndex={row.esBloqueado ? -1 : 0}
+                            disabled={row.esBloqueado}
+                            readOnly={row.esBloqueado}
+                            ref={(el) => (bonificacionRefs.current[idx] = el)}
+                          />
+                        )}
                       </td>}
                       {mostrarControlesFinancieros && <td className="px-3 py-3 whitespace-nowrap">
                         <div className="w-full px-3 py-2 text-sky-600 min-h-[38px] flex items-center font-semibold">
@@ -424,6 +462,9 @@ const ItemsGridPresupuesto = forwardRef(
                       </td>}
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">
                         {(() => {
+                          if (row.tipo === "promocion") {
+                            return <span title="Resuelto por el backend según los componentes de la promoción">—</span>
+                          }
                           const alicuotaId = row.idaliiva ?? row.producto?.idaliiva?.id ?? row.producto?.idaliiva ?? 0
                           if (!row.producto && Number(row.precio) > 0 && !row.esBloqueado) {
                             return (
@@ -468,6 +509,9 @@ const ItemsGridPresupuesto = forwardRef(
                                 </div>
                               ) : (
                                 <>
+                                  {row.tipo === "promocion" && onReconfigurarPromocion && (
+                                    <BotonEditar title="Reconfigurar" onClick={() => onReconfigurarPromocion(idx, row)} />
+                                  )}
                                   <BotonDuplicar onClick={() => handleDuplicarRow(idx)} />
                                   <BotonEliminar onClick={() => handleDeleteRow(idx)} />
                                 </>

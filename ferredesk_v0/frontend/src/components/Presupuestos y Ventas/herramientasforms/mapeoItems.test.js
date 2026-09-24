@@ -25,4 +25,33 @@ describe("mapearCamposItem", () => {
 
     expect(item.vdi_precio_unitario_final).toBe("abc");
   });
+
+  test("una fila de promocion se mapea solo a vdi_promocion/vdi_cantidad/elecciones_grupos", () => {
+    // Shape que produce getItems() para una fila tipo:'promocion' (ver
+    // useItemsGridState.js). El backend resuelve precio/costo/IVA/componentes
+    // el mismo via expandir_item_promocion; mandar datos de producto aca
+    // pisaria esa resolucion.
+    const eleccionesGrupos = [{ grupo_id: 9, stock_id: 201 }];
+    const item = mapearCamposItem({
+      tipo: "promocion",
+      vdi_promocion: 5,
+      vdi_cantidad: 3,
+      elecciones_grupos: eleccionesGrupos,
+    }, 2);
+
+    expect(item).toEqual({
+      vdi_idve: null,
+      vdi_orden: 3,
+      vdi_promocion: 5,
+      vdi_cantidad: 3,
+      elecciones_grupos: eleccionesGrupos,
+    });
+    expect(item.vdi_idsto).toBeUndefined();
+    expect(item.vdi_costo).toBeUndefined();
+  });
+
+  test("una fila de promocion sin grupos manda elecciones_grupos vacio", () => {
+    const item = mapearCamposItem({ tipo: "promocion", vdi_promocion: 7, vdi_cantidad: 1 }, 0);
+    expect(item.elecciones_grupos).toEqual([]);
+  });
 });

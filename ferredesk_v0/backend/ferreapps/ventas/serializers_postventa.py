@@ -12,6 +12,11 @@ class ItemDevolucionInputSerializer(serializers.Serializer):
     )
 
 
+class EleccionGrupoPromocionInputSerializer(serializers.Serializer):
+    grupo_id = serializers.IntegerField()
+    stock_id = serializers.IntegerField()
+
+
 class ItemNuevoCambioInputSerializer(serializers.Serializer):
     stock_id = serializers.IntegerField(required=False, min_value=1)
     promocion_id = serializers.IntegerField(required=False, min_value=1)
@@ -26,6 +31,9 @@ class ItemNuevoCambioInputSerializer(serializers.Serializer):
         min_value=Decimal("0.01"),
         required=False,
     )
+    # Solo aplica si promocion_id tiene grupos de eleccion; expandir_item_promocion
+    # valida que este completa contra los grupos reales de la promo.
+    elecciones_grupos = EleccionGrupoPromocionInputSerializer(many=True, required=False)
 
     def validate(self, data):
         tiene_stock = data.get("stock_id") is not None

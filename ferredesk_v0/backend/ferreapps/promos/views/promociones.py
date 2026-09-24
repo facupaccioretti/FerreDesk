@@ -17,10 +17,22 @@ class PromocionViewSet(viewsets.ModelViewSet):
     # con el equipo). Cuando existan, este CRUD administrativo (crear/editar/borrar
     # promos, con precio libre) es candidato a requerir un permiso mas estricto que
     # IsAuthenticated, igual que otras pantallas administrativas del sistema.
-    queryset = Promocion.objects.all().prefetch_related('items__stock').order_by('-creado_en')
+    queryset = Promocion.objects.all().prefetch_related(
+        'items__stock', 'grupos__alternativas__stock'
+    ).order_by('-creado_en')
     serializer_class = PromocionSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = PaginacionPorPaginaConLimite
+
+    def get_queryset(self):
+        # Filtro opcional para el listado base (usado por la subpestana de
+        # inactivas en Productos). Los actions activas/desactualizadas usan
+        # sus propios selectors y no pasan por aca.
+        queryset = super().get_queryset()
+        activa = self.request.query_params.get('activa')
+        if activa is not None:
+            queryset = queryset.filter(activa=activa.lower() == 'true')
+        return queryset
 
     @action(detail=False, methods=['get'], url_path='activas')
     def activas(self, request):

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import useNavegacionForm from '../../hooks/useNavegacionForm';
-import BuscadorProducto from '../BuscadorProducto';
+import SelectorItemVenta from './SelectorItemVenta';
 import ItemsGrid from './ItemsGrid';
 import ComprobanteDropdown from '../ComprobanteDropdown';
 import { useAlicuotasIVAAPI } from '../../utils/useAlicuotasIVAAPI';
@@ -163,6 +163,7 @@ const EditarPresupuestoForm = ({
   }, [initialData]);
 
   const itemsGridRef = useRef();
+  const selectorItemVentaRef = useRef();
 
   // Documento (CUIT/DNI) sin lógica fiscal (solo UI consistente con VentaForm)
   const [documentoInfo, setDocumentoInfo] = useState({
@@ -267,6 +268,18 @@ const EditarPresupuestoForm = ({
     if (itemsGridRef.current) {
       itemsGridRef.current.handleAddItem(producto);
     }
+  };
+
+  // Agregar/reconfigurar una promocion desde SelectorItemVenta (ver su docstring:
+  // toda la logica de seleccion/configuracion vive ahi, esto solo delega a la grilla).
+  const handleAgregarPromocionAGrid = (promocion, eleccionesGrupos, cantidad) => {
+    itemsGridRef.current?.handleAddPromocion(promocion, eleccionesGrupos, cantidad);
+  };
+  const handleReconfigurarPromocionEnGrid = (idx, promocion, eleccionesGrupos) => {
+    itemsGridRef.current?.handleReconfigurarPromocion(idx, promocion, eleccionesGrupos);
+  };
+  const handleAbrirReconfigurarPromocion = (idx, row) => {
+    selectorItemVentaRef.current?.iniciarReconfiguracion(idx, row);
   };
 
   // Calcular los totales usando el hook centralizado
@@ -520,7 +533,15 @@ const EditarPresupuestoForm = ({
                 {/* Buscador */}
                 <div>
                   <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                  <BuscadorProducto onSelect={handleAddItemToGrid} disabled={isReadOnly} readOnly={isReadOnly} className="w-full" />
+                  <SelectorItemVenta
+                    ref={selectorItemVentaRef}
+                    onSelectProducto={handleAddItemToGrid}
+                    onAgregarPromocion={handleAgregarPromocionAGrid}
+                    onReconfigurarPromocion={handleReconfigurarPromocionEnGrid}
+                    disabled={isReadOnly}
+                    readOnly={isReadOnly}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Tipo de Comprobante */}
@@ -597,6 +618,7 @@ const EditarPresupuestoForm = ({
               initialItems={formulario.items}
               listaPrecioId={listaPrecioId}
               listasPrecio={listasPrecio}
+              onReconfigurarPromocion={handleAbrirReconfigurarPromocion}
             />
           </div>
 

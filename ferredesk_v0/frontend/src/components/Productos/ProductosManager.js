@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
+import PromocionesSection from "../Promociones/PromocionesSection"
 import FiltrosProductos from "./FiltrosProductos"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
@@ -63,6 +64,17 @@ const ProductosManager = () => {
     } else {
       const listaIndex = currentTabs.findIndex((t) => t.key === "lista")
       currentTabs.splice(listaIndex + 1, 0, { key: "inactivos", label: "Productos Inactivos", closable: false })
+    }
+
+    // Aseguramos que "Promociones" este presente y no sea cerrable. No es un
+    // producto del catalogo: vive aca como subseccion, no como entrada propia
+    // del Navbar (ver spec del modulo de promociones).
+    let promocionesTab = currentTabs.find((t) => t.key === "promociones")
+    if (promocionesTab) {
+      promocionesTab.closable = false
+    } else {
+      const inactivosIndex = currentTabs.findIndex((t) => t.key === "inactivos")
+      currentTabs.splice(inactivosIndex + 1, 0, { key: "promociones", label: "Promociones", closable: false })
     }
 
     return currentTabs
@@ -460,7 +472,8 @@ const ProductosManager = () => {
                     cargando={loadingProductos}
                   />
                 )}
-                {activeTab !== "lista" && activeTab !== "inactivos" && (
+                {activeTab === "promociones" && <PromocionesSection />}
+                {activeTab !== "lista" && activeTab !== "inactivos" && activeTab !== "promociones" && (
                   <StockForm
                     key={activeTab}
                     stock={editStates[activeTab]}
