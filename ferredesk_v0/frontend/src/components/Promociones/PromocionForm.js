@@ -1,13 +1,5 @@
 "use client"
 
-// PromocionForm.js — Alta/edicion de una Promocion: datos generales
-// (nombre, precio, vigencia) mas el editor de componentes fijos/grupos.
-//
-// POR QUE: La validacion de composicion (al menos un fijo o un grupo, cada
-// grupo con >= 2 alternativas) se replica aca en el cliente para dar
-// feedback inmediato, pero el backend (validators/promociones.py) es quien
-// manda: este formulario nunca asume que su validacion alcanza sola.
-
 import { useState } from "react"
 import EditorComponentesPromo from "./EditorComponentesPromo"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
@@ -39,7 +31,7 @@ function validarFormulario({ nombre, precioPromocional, items, grupos, fechaInic
   const precio = Number.parseFloat(precioPromocional)
   if (!Number.isFinite(precio) || precio <= 0) return "El precio promocional debe ser mayor a cero."
   if (items.length === 0 && grupos.length === 0) {
-    return "La promoción debe tener al menos un componente fijo o un grupo de elección."
+    return "La promocion debe tener al menos un componente fijo o un grupo de eleccion."
   }
   for (const it of items) {
     const cantidad = Number.parseFloat(it.cantidad)
@@ -66,6 +58,7 @@ function validarFormulario({ nombre, precioPromocional, items, grupos, fechaInic
 function PromocionForm({ promocion, onGuardar, onCancelar, guardando = false }) {
   const theme = useFerreDeskTheme()
   const esEdicion = !!promocion?.id
+  const inputClass = "w-full h-8 rounded-sm border border-slate-300 bg-white px-2 text-xs text-slate-800 placeholder-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
 
   const [nombre, setNombre] = useState(promocion?.nombre || "")
   const [descripcion, setDescripcion] = useState(promocion?.descripcion || "")
@@ -84,6 +77,7 @@ function PromocionForm({ promocion, onGuardar, onCancelar, guardando = false }) 
       return
     }
     setError("")
+    if (!esEdicion && !window.confirm("Esta seguro de crear la promocion?")) return
 
     const payload = {
       nombre: nombre.trim(),
@@ -102,86 +96,93 @@ function PromocionForm({ promocion, onGuardar, onCancelar, guardando = false }) 
     try {
       await onGuardar(payload)
     } catch (err) {
-      setError(err?.message || "No se pudo guardar la promoción.")
+      setError(err?.message || "No se pudo guardar la promocion.")
     }
   }
 
+  const handleCancelar = () => {
+    if (window.confirm("Esta seguro de cancelar? Los cambios se perderan.")) onCancelar()
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre</label>
-          <input
-            type="text"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            required
-          />
+      <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-3">
+          <h4 className="text-sm font-semibold text-slate-700">Datos de la promocion</h4>
+          <p className="text-xs text-slate-500">Defini el nombre, precio y periodo de vigencia.</p>
         </div>
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Precio promocional</label>
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={precioPromocional}
-            onChange={(e) => setPrecioPromocional(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            required
-          />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Nombre</label>
+            <input
+              type="text"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className={inputClass}
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Precio promocional</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={precioPromocional}
+              onChange={(e) => setPrecioPromocional(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600">Descripcion <span className="font-normal text-slate-400">(opcional)</span></label>
+            <textarea
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              rows={2}
+              className={`${inputClass} h-auto py-2`}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Vigencia desde <span className="font-normal text-slate-400">(opcional)</span></label>
+            <input
+              type="date"
+              value={fechaInicio}
+              onChange={(e) => setFechaInicio(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Vigencia hasta <span className="font-normal text-slate-400">(opcional)</span></label>
+            <input
+              type="date"
+              value={fechaFin}
+              onChange={(e) => setFechaFin(e.target.value)}
+              className={inputClass}
+            />
+          </div>
         </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Descripción (opcional)</label>
-        <textarea
-          value={descripcion}
-          onChange={(e) => setDescripcion(e.target.value)}
-          rows={2}
-          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Vigencia desde (opcional)</label>
-          <input
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Vigencia hasta (opcional)</label>
-          <input
-            type="date"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-          />
-        </div>
-      </div>
+      </section>
 
       <EditorComponentesPromo items={items} setItems={setItems} grupos={grupos} setGrupos={setGrupos} />
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
         <button
           type="button"
-          onClick={onCancelar}
-          className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+          onClick={handleCancelar}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
         >
           Cancelar
         </button>
         <button type="submit" disabled={guardando} className={`${theme.botonPrimario} disabled:opacity-60`}>
-          {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear promoción"}
+          {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear promocion"}
         </button>
       </div>
     </form>

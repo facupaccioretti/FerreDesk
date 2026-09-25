@@ -373,3 +373,45 @@ export const BotonRevisar = ({ onClick, title = 'Marcar como revisada', ...props
     </svg>
   </button>
 );
+
+export const BotonConfirmar = ({ onClick, title = 'Marcar como revisada', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-amber-600 hover:text-amber-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 4.5 4.5 10.5-10.5" />
+    </svg>
+  </button>
+);
+
+export const BotonPausar = ({ onClick, title = 'Desactivar', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-slate-500 hover:text-slate-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" d="M9.75 6.75v10.5m4.5-10.5v10.5" />
+    </svg>
+  </button>
+);
+
+export const BotonReanudar = ({ onClick, title = 'Reactivar', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-emerald-600 hover:text-emerald-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865A8.25 8.25 0 0 1 17.834 6.165l3.181 3.182" />
+    </svg>
+  </button>
+);

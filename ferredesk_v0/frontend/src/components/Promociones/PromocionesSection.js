@@ -1,25 +1,24 @@
 "use client"
 
-// PromocionesSection.js — Seccion "Promociones" dentro de Productos.
-//
-// POR QUE: Una promocion no es un producto del catalogo, pero se administra
-// desde el mismo lugar que los productos (spec explicita: subseccion de
-// Productos, no una entrada propia del Navbar). Es un mini-manager
-// autocontenido: pestanas propias (Activas/Inactivas/Revisar) + alta/edicion,
-// siguiendo el mismo patron de tabs que ProductosManager pero sin tocarlo.
-
 import { useState } from "react"
 import Tabla from "../Tabla"
 import PromocionForm from "./PromocionForm"
 import { usePromocionesAPI } from "./hooks/usePromocionesAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
-import { BotonEditar, BotonDesactivar, BotonReactivar, BotonRevisar } from "../Botones"
+import { BotonConfirmar, BotonEditar, BotonPausar, BotonReanudar } from "../Botones"
+import { toast } from "react-toastify"
 
 function resumenComponentes(promocion) {
   const partesFijas = (promocion.items || []).map((it) => `${it.denominacion} x${it.cantidad}`)
   const partesGrupos = (promocion.grupos || []).map((g) => `${g.nombre} (${(g.alternativas || []).length} opciones)`)
   const partes = [...partesFijas, ...partesGrupos]
-  return partes.length > 0 ? partes.join(" · ") : "Sin componentes"
+  return partes.length > 0 ? partes.join(" / ") : "Sin componentes"
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return "-"
+  const [anio, mes, dia] = String(fecha).split("-")
+  return anio && mes && dia ? `${dia}/${mes}/${anio.slice(-2)}` : fecha
 }
 
 const ESTADOS_TAB = [
@@ -57,25 +56,47 @@ function PromocionesSection() {
   }
 
   const handleGuardar = async (payload) => {
-    if (formularioActivo && formularioActivo !== "nuevo") {
-      await editarPromocion(formularioActivo.id, payload)
-    } else {
-      await crearPromocion(payload)
+    const esEdicion = formularioActivo && formularioActivo !== "nuevo"
+    try {
+      if (esEdicion) {
+        await editarPromocion(formularioActivo.id, payload)
+      } else {
+        await crearPromocion(payload)
+      }
+      toast.success(esEdicion ? "Promocion actualizada." : "Promocion creada.")
+      setFormularioActivo(null)
+    } catch (error) {
+      toast.error(error?.message || "No se pudo guardar la promocion.")
+      throw error
     }
-    setFormularioActivo(null)
   }
 
   const handleDesactivar = async (promocion) => {
-    if (!window.confirm(`¿Desactivar la promoción "${promocion.nombre}"? No se podrá seguir vendiendo hasta reactivarla.`)) return
-    await desactivarPromocion(promocion.id)
+    if (!window.confirm(`Desactivar la promocion "${promocion.nombre}"? No se podra seguir vendiendo hasta reactivarla.`)) return
+    try {
+      await desactivarPromocion(promocion.id)
+      toast.success("Promocion desactivada.")
+    } catch (error) {
+      toast.error(error?.message || "No se pudo desactivar la promocion.")
+    }
   }
 
   const handleReactivar = async (promocion) => {
-    await activarPromocion(promocion.id)
+    try {
+      await activarPromocion(promocion.id)
+      toast.success("Promocion reactivada.")
+    } catch (error) {
+      toast.error(error?.message || "No se pudo reactivar la promocion.")
+    }
   }
 
   const handleRevisar = async (promocion) => {
-    await revisarPromocion(promocion.id)
+    try {
+      await revisarPromocion(promocion.id)
+      toast.success("Promocion marcada como revisada.")
+    } catch (error) {
+      toast.error(error?.message || "No se pudo revisar la promocion.")
+    }
   }
 
   const columnas = [
@@ -93,42 +114,51 @@ function PromocionesSection() {
     ) },
     { id: "vigencia", titulo: "Vigencia", render: (p) => (
       p.fecha_inicio || p.fecha_fin
-        ? <span className="text-xs text-slate-600">{p.fecha_inicio || "—"} a {p.fecha_fin || "—"}</span>
-        : <span className="text-xs text-slate-400">Sin límite</span>
+        ? <span className="text-xs text-slate-600">{formatearFecha(p.fecha_inicio)} a {formatearFecha(p.fecha_fin)}</span>
+        : <span className="text-xs text-slate-400">Sin limite</span>
     ) },
-    { id: "estado", titulo: "Estado", render: (p) => (
-      <div className="flex flex-col gap-1">
-        <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${p.activa ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
-          {p.activa ? "Activa" : "Inactiva"}
+    { id: "alertas", titulo: "Alertas", render: (p) => (
+      p.desactualizada ? (
+        <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold text-yellow-800">
+          Costo cambio
         </span>
-        {p.desactualizada && (
-          <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-800">
-            Costo cambió
-          </span>
-        )}
-      </div>
+      ) : <span className="text-xs text-slate-400">-</span>
     ) },
     { id: "acciones", titulo: "Acciones", align: "center", render: (p) => (
-      <div className="flex items-center justify-center gap-1">
-        <BotonEditar onClick={() => setFormularioActivo(p)} />
-        {p.desactualizada && <BotonRevisar onClick={() => handleRevisar(p)} />}
+      <div className="flex items-center justify-center gap-2">
+        <BotonEditar
+          onClick={() => setFormularioActivo(p)}
+          className="px-1 py-1 text-blue-500 transition-colors hover:text-blue-700"
+        />
+        {p.desactualizada && (
+          <BotonConfirmar
+            onClick={() => handleRevisar(p)}
+            className="px-1 py-1 text-amber-600 transition-colors hover:text-amber-800"
+          />
+        )}
         {p.activa ? (
-          <BotonDesactivar onClick={() => handleDesactivar(p)} />
+          <BotonPausar
+            onClick={() => handleDesactivar(p)}
+            className="px-1 py-1 text-slate-500 transition-colors hover:text-slate-800"
+          />
         ) : (
-          <BotonReactivar onClick={() => handleReactivar(p)} />
+          <BotonReanudar
+            onClick={() => handleReactivar(p)}
+            className="px-1 py-1 text-emerald-600 transition-colors hover:text-emerald-800"
+          />
         )}
       </div>
     ) },
   ]
 
-  // ── Formulario de alta/edicion ──
+  // Formulario de alta/edicion
   if (formularioActivo) {
     const esNuevo = formularioActivo === "nuevo"
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 border-b border-slate-200 pb-3">
           <h3 className="text-lg font-semibold text-slate-800">
-            {esNuevo ? "Nueva promoción" : `Editar promoción: ${formularioActivo.nombre}`}
+            {esNuevo ? "Nueva promocion" : `Editar promocion: ${formularioActivo.nombre}`}
           </h3>
         </div>
         <PromocionForm
@@ -141,17 +171,17 @@ function PromocionesSection() {
     )
   }
 
-  // ── Listado ──
+  // Listado
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-1">
           {ESTADOS_TAB.map((tab) => (
             <button
               key={tab.key}
               onClick={() => cambiarTab(tab.key)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                tabActiva === tab.key ? theme.tabActiva : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                tabActiva === tab.key ? theme.tabActiva : "text-slate-600 hover:bg-white hover:text-slate-800"
               }`}
             >
               {tab.label}
@@ -159,7 +189,7 @@ function PromocionesSection() {
           ))}
         </div>
         <button onClick={() => setFormularioActivo("nuevo")} className={theme.botonPrimario}>
-          + Nueva promoción
+          + Nueva promocion
         </button>
       </div>
 
