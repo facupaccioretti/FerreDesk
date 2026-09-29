@@ -233,7 +233,7 @@ class PromocionesTestCase(TenantTestCase):
         # precio_promocional * cantidad_vendida, cerrado exacto pese al prorrateo
         self.assertEqual(total, Decimal("15000.00"))
 
-    def test_prorrateo_sin_precios_lista_usa_costos(self):
+    def test_prorrateo_mixto_sin_precios_lista_positivos_falla(self):
         pincel = Stock.objects.create(
             id=90006,
             codvta="PINCEL-SIN-LIS",
@@ -257,14 +257,8 @@ class PromocionesTestCase(TenantTestCase):
             ],
         )
 
-        item_real = expandir_item_promocion({"vdi_promocion": promo.id, "vdi_cantidad": 1})
-        montos_por_alicuota = {
-            grupo["alicuota_id"]: grupo["neto"] + grupo["iva_monto"]
-            for grupo in item_real["_promo_snapshot"]["alicuotas"]
-        }
-
-        self.assertEqual(montos_por_alicuota[self.alicuota_21.id], Decimal("85.71"))
-        self.assertEqual(montos_por_alicuota[self.alicuota_10_5.id], Decimal("14.29"))
+        with self.assertRaises(ValidationError):
+            expandir_item_promocion({"vdi_promocion": promo.id, "vdi_cantidad": 1})
 
     # --- Grupos de productos a eleccion ---
 

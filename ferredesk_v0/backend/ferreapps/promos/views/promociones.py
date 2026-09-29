@@ -34,6 +34,12 @@ class PromocionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(activa=activa.lower() == 'true')
         return queryset
 
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Las promociones no se eliminan; deben desactivarse'},
+            status=405,
+        )
+
     @action(detail=False, methods=['get'], url_path='activas')
     def activas(self, request):
         pagina = self.paginate_queryset(promociones_activas(request.query_params.get('search', '')))

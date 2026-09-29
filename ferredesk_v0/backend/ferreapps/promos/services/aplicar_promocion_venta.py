@@ -1,12 +1,14 @@
 from collections import namedtuple
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ferreapps.productos.models import StockProve
 from ferreapps.promos.models import Promocion, PromocionGrupo, PromocionGrupoAlternativa, PromocionItem
+from ferreapps.promos.services.gestionar_promocion import validar_stocks_promocion
 
 
 # Un "componente efectivo" es lo que realmente se vende de la promo: un
@@ -58,6 +60,14 @@ def _resolver_promocion(promocion_id):
     grupos_promocion = list(promocion.grupos.all())
     if not items_promocion and not grupos_promocion:
         raise ValidationError({'items': [f'La promocion "{promocion.nombre}" no tiene componentes.']})
+
+    validar_stocks_promocion([
+        item.stock for item in items_promocion
+    ] + [
+        alternativa.stock
+        for grupo in grupos_promocion
+        for alternativa in grupo.alternativas.all()
+    ])
 
     return promocion, items_promocion, grupos_promocion
 
@@ -168,10 +178,9 @@ def _costos_habituales(componentes_efectivos):
 
 def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva, costos_por_stock):
     """Reparte precio_total_con_iva (ya multiplicado por la cantidad
-    vendida) entre los grupos de alicuota de los componentes, proporcional
-    al precio de lista de cada componente. Si ningun componente tiene precio
-    de lista cargado, usa su costo; si tampoco hay costos, reparte por unidad
-    de componente. El ultimo grupo absorbe el residuo para que la suma cierre
+    vendida) entre los grupos de alicuota de los componentes. Un combo de
+    una sola alicuota conserva el total; uno mixto se pondera por precio de
+    lista positivo. El ultimo grupo absorbe el residuo para que la suma cierre
     exacto contra precio_total_con_iva.
     """
     pesos_por_alicuota = {}
@@ -188,21 +197,29 @@ def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva, costos
     # Orden deterministico (por porcentaje de alicuota, no por orden de llegada de la
     # query): dos ventas de la misma promo deben repartir el residuo siempre al mismo
     # grupo, para que el desglose de IVA sea reproducible.
-    orden_alicuotas.sort(key=lambda alicuota_id: alicuota_obj_por_id[alicuota_id].porce)
+    orden_alicuotas.sort(key=lambda alicuota_id: (alicuota_obj_por_id[alicuota_id].porce, alicuota_id))
 
+    if len(orden_alicuotas) == 1:
+        alicuota_id = orden_alicuotas[0]
+        alicuota = alicuota_obj_por_id[alicuota_id]
+        divisor_iva = Decimal('1') + (alicuota.porce / Decimal('100'))
+        neto = (precio_total_con_iva / divisor_iva).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        return [{
+            'alicuota_id': alicuota_id,
+            'neto': neto,
+            'iva_monto': precio_total_con_iva - neto,
+            'monto_final': precio_total_con_iva,
+        }]
+
+    for componente in componentes_efectivos:
+        if not componente.stock.precio_lista_0 or componente.stock.precio_lista_0 <= 0:
+            raise ValidationError({
+                'items': [
+                    f'El producto {componente.stock.codvta} - {componente.stock.deno} '
+                    'debe tener precio de lista positivo para prorratear IVA.'
+                ]
+            })
     total_peso = sum(pesos_por_alicuota.values())
-    if total_peso <= 0:
-        pesos_por_alicuota = {alicuota_id: Decimal('0') for alicuota_id in orden_alicuotas}
-        for componente in componentes_efectivos:
-            pesos_por_alicuota[componente.stock.idaliiva_id] += (
-                costos_por_stock.get(componente.stock_id, Decimal('0')) * componente.cantidad
-            )
-        total_peso = sum(pesos_por_alicuota.values())
-    if total_peso <= 0:
-        pesos_por_alicuota = {alicuota_id: Decimal('0') for alicuota_id in orden_alicuotas}
-        for componente in componentes_efectivos:
-            pesos_por_alicuota[componente.stock.idaliiva_id] += componente.cantidad
-        total_peso = sum(pesos_por_alicuota.values())
 
     resultado = []
     restante = precio_total_con_iva
@@ -496,6 +513,7 @@ def resolver_operaciones_stock_desde_detalles(detalles):
     return operaciones, errores
 
 
+@transaction.atomic
 def crear_snapshot_promocion(detalle, snapshot):
     """Persiste VentaPromocionComponente y VentaDetalleItemPromoAlicuota
     para una linea ya creada. Se llama justo despues de
@@ -515,6 +533,16 @@ def crear_snapshot_promocion(detalle, snapshot):
         return
 
     from ferreapps.ventas.models import VentaDetalleItemPromoAlicuota, VentaPromocionComponente
+
+    componentes = detalle.componentes_promocion
+    alicuotas = detalle.promo_alicuotas
+    tiene_componentes = componentes.exists()
+    tiene_alicuotas = alicuotas.exists()
+    if tiene_componentes and tiene_alicuotas:
+        return
+    if tiene_componentes or tiene_alicuotas:
+        componentes.all().delete()
+        alicuotas.all().delete()
 
     VentaPromocionComponente.objects.bulk_create([
         VentaPromocionComponente(
