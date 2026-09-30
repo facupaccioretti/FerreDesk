@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "react-toastify"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
@@ -198,15 +199,34 @@ const ProductosManager = () => {
   }
 
   // Guardar producto (alta o edición)
-  const handleSaveProducto = async (_data, key) => {
+  const handleSaveProducto = async (data, key) => {
+    const esNuevo = key.startsWith("nuevo")
+
     try {
       await invalidarCachesProductos(queryClient)
-      closeTab(key)
     } catch (err) {
-      // Mostrar el error como alerta nativa del navegador
-      alert(err.message)
-      throw err
+      console.error("No se pudieron invalidar los caches de productos:", err)
     }
+
+    if (esNuevo) {
+      const codigo = String(data?.codvta || "").trim()
+      const denominacion = String(data?.deno || "").trim()
+      const termino = codigo.length >= 2 ? codigo : denominacion
+
+      setFam1Filtro("")
+      setFam2Filtro("")
+      setFam3Filtro("")
+      setBuscarPorCodigoProveedor(false)
+      setSearchVal(termino)
+      setSearchProductos(termino)
+      guardarConsultaPersistida("productos_search", termino)
+      setPagina(1)
+    }
+
+    closeTab(key)
+
+    const producto = [data?.codvta, data?.deno].filter(Boolean).join(" - ")
+    toast.success(`Producto${producto ? ` ${producto}` : ""} ${esNuevo ? "creado" : "actualizado"} correctamente.`)
   }
 
   // Editar producto

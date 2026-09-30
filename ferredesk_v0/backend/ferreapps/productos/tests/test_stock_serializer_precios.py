@@ -1,32 +1,24 @@
 """
 Tests para verificar que StockSerializer incluye precios de listas.
 """
-from django.test import TestCase
-from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
+from django.db.models import Max
 from decimal import Decimal
 from datetime import date
 
 from ferreapps.productos.models import (
-    Stock, Proveedor, StockProve, AlicuotaIVA,
+    Stock, Proveedor, StockProve, AlicuotaIVA, ListaPrecio,
     PrecioProductoLista
 )
+from ferreapps.ventas.tests import VentasTenantTestCase
 
-User = get_user_model()
 
-
-class StockSerializerPreciosTest(APITestCase):
+class StockSerializerPreciosTest(VentasTenantTestCase):
     """Tests para verificar que StockSerializer incluye precios de listas."""
     
     def setUp(self):
         """Configura datos de prueba y autenticación."""
-        self.user = User.objects.create_user(
-            username='testuser_stock_ser',
-            password='testpass123'
-        )
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        super().setUp()
         
         self.proveedor = Proveedor.objects.create(
             razon='Proveedor Stock Serializer Test',
@@ -38,12 +30,9 @@ class StockSerializerPreciosTest(APITestCase):
             sigla='SSR'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
+        self.alicuota = self.alicuota_iva_21
         
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        max_id = Stock.objects.aggregate(max_id=Max('id'))['max_id'] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='STOCKSER001',
@@ -94,11 +83,11 @@ class StockSerializerPreciosTest(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('precios_listas', response.data)
-        self.assertEqual(len(response.data['precios_listas']), 2)
+        self.assertEqual(len(response.data['precios_listas']), 4)
         
         # Verificar estructura de lista 1
         lista_1 = next(p for p in response.data['precios_listas'] if p['lista_numero'] == 1)
-        self.assertEqual(lista_1['precio'], 1300.00)
+        self.assertEqual(lista_1['precio'], 1350.00)
         self.assertFalse(lista_1['precio_manual'])
         
         # Verificar estructura de lista 2 (manual)
@@ -106,10 +95,9 @@ class StockSerializerPreciosTest(APITestCase):
         self.assertEqual(lista_2['precio'], 1250.00)
         self.assertTrue(lista_2['precio_manual'])
     
-    def test_stock_sin_precios_listas_retorna_lista_vacia(self):
-        """GET producto sin precios de listas retorna array vacío."""
+    def test_stock_sin_overrides_retorna_listas_calculadas(self):
         # Crear producto sin precios de listas
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        max_id = Stock.objects.aggregate(max_id=Max('id'))['max_id'] or 0
         producto_sin_precios = Stock.objects.create(
             id=max_id + 1,
             codvta='SINPRECIOS001',
@@ -125,7 +113,35 @@ class StockSerializerPreciosTest(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('precios_listas', response.data)
-        self.assertEqual(response.data['precios_listas'], [])
+        self.assertEqual(len(response.data['precios_listas']), 4)
+        self.assertTrue(all(not precio['precio_manual'] for precio in response.data['precios_listas']))
+        self.assertTrue(all(precio['precio'] == 1000.00 for precio in response.data['precios_listas']))
+
+    def test_stock_calcula_cada_lista_con_su_margen(self):
+        margenes = {1: '-10.00', 2: '5.00', 3: '12.50', 4: '20.00'}
+        for numero, margen in margenes.items():
+            ListaPrecio.objects.filter(numero=numero).update(margen_descuento=margen)
+
+        self.producto.precio_lista_0 = Decimal('1000.00')
+        self.producto.save(update_fields=['precio_lista_0'])
+        PrecioProductoLista.objects.filter(stock=self.producto).delete()
+
+        response = self.client.get(f'/api/productos/stock/{self.producto.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        precios = {
+            item['lista_numero']: Decimal(str(item['precio']))
+            for item in response.data['precios_listas']
+        }
+        self.assertEqual(
+            precios,
+            {
+                1: Decimal('900.00'),
+                2: Decimal('1050.00'),
+                3: Decimal('1125.00'),
+                4: Decimal('1200.00'),
+            },
+        )
     
     def test_stock_busqueda_por_codigo_incluye_precios(self):
         """GET /api/productos/stock/?codvta=X incluye precios de listas."""

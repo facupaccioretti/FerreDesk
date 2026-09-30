@@ -8,7 +8,7 @@ import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
-import { useListasPrecioAPI, usePreciosProductoListaAPI } from "../../utils/useListasPrecioAPI"
+import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 import { calcularPrecioLista, calcularPrecioLista0, calcularMargenDesdePrecios } from "../../utils/calcularPrecioLista"
 
 // Importar hooks modulares
@@ -59,7 +59,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // Hooks para listas de precios
   const { listas: listasPrecio } = useListasPrecioAPI()
-  const { guardarPreciosProducto } = usePreciosProductoListaAPI()
 
 
   // Estado para tooltips de precios manuales
@@ -432,26 +431,18 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
       precio_lista_0_manual: preciosListas.lista0.manual,
     }
 
-    // Usar el hook de guardado atómico (maneja todo internamente)
-    const resultado = await guardarProductoAtomico(formConPrecios)
+    const preciosAGuardar = [1, 2, 3, 4].map(i => ({
+      lista_numero: i,
+      precio: Number(preciosListas[`lista${i}`].precio) || 0,
+      precio_manual: preciosListas[`lista${i}`].manual,
+    }))
+
+    // Guardar producto, relaciones y precios en la misma operacion
+    const resultado = await guardarProductoAtomico(formConPrecios, preciosAGuardar)
 
     if (resultado.success) {
-      const productoId = resultado.data?.id || form.id
-      if (productoId) {
-        try {
-          const preciosAGuardar = [1, 2, 3, 4].map(i => ({
-            lista_numero: i,
-            precio: Number(preciosListas[`lista${i}`].precio) || 0,
-            precio_manual: preciosListas[`lista${i}`].manual,
-          }))
-
-          await guardarPreciosProducto(productoId, preciosAGuardar)
-        } catch (errorPrecios) {
-          console.error('Error al guardar precios de listas:', errorPrecios)
-        }
-      }
-
       try { localStorage.removeItem(claveBorrador) } catch (_) { }
+      try { localStorage.removeItem(`${claveBorrador}_precios`) } catch (_) { }
       if (onSave) await onSave(resultado.data)
     }
   }

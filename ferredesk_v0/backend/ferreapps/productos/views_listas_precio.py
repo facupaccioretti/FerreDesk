@@ -8,9 +8,10 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
 
-from .models import ListaPrecio, PrecioProductoLista, ActualizacionListaDePrecios
+from .models import ListaPrecio, PrecioProductoLista, ActualizacionListaDePrecios, Stock
 from .serializers_listas_precio import (
     ListaPrecioSerializer,
+    PrecioListaGuardadoSerializer,
     PrecioProductoListaSerializer,
     ActualizacionListaDePreciosSerializer,
 )
@@ -218,7 +219,13 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
         instancia = self.get_object()
         
         if 'precio' in request.data:
-            instancia.precio = request.data['precio']
+            serializer = self.get_serializer(
+                instancia,
+                data={'precio': request.data['precio']},
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            instancia.precio = serializer.validated_data['precio']
             instancia.precio_manual = True
             instancia.fecha_carga_manual = timezone.now()
             instancia.usuario_carga_manual = request.user if request.user.is_authenticated else None
@@ -240,6 +247,22 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
                 {'error': 'stock_id es requerido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        serializer = PrecioListaGuardadoSerializer(data=precios, many=True)
+        serializer.is_valid(raise_exception=True)
+        precios = serializer.validated_data
+        numeros = [precio['lista_numero'] for precio in precios]
+        if len(numeros) != len(set(numeros)):
+            return Response(
+                {'error': 'No se puede repetir una lista'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not Stock.objects.filter(pk=stock_id).exists():
+            return Response(
+                {'error': 'El producto no existe'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         ahora = timezone.now()
         usuario = request.user if request.user.is_authenticated else None
@@ -249,12 +272,6 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
             for precio_data in precios:
                 lista_numero = precio_data.get('lista_numero')
                 precio_manual = precio_data.get('precio_manual', False)
-                
-                if lista_numero is None:
-                    continue
-                
-                if lista_numero < 1 or lista_numero > 4:
-                    continue
                 
                 if precio_manual:
                     obj, created = PrecioProductoLista.objects.update_or_create(

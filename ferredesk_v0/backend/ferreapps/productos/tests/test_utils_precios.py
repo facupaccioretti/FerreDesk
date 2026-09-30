@@ -13,6 +13,7 @@ from ferreapps.productos.models import (
 from ferreapps.productos.utils_precios import (
     recalcular_precios_lista,
     recalcular_precio_lista_0,
+    calcular_precio_lista_0_final,
     calcular_precio_desde_lista_0,
     calcular_margen_desde_precios
 )
@@ -38,6 +39,14 @@ class CalculosPreciosTest(SimpleTestCase):
         """Verifica el cálculo con margen 0."""
         precio = calcular_precio_desde_lista_0(Decimal('1000.00'), Decimal('0.00'))
         self.assertEqual(precio, Decimal('1000.00'))
+
+    def test_calcular_precio_lista_0_final_con_iva(self):
+        precio = calcular_precio_lista_0_final('1000.00', '40.00', '21.00')
+        self.assertEqual(precio, Decimal('1694.00'))
+
+    def test_calcular_precio_lista_0_redondea_medio_centavo_hacia_arriba(self):
+        precio = calcular_precio_lista_0_final('10.00', '0.05', '0.00')
+        self.assertEqual(precio, Decimal('10.01'))
     
     def test_calcular_margen_desde_precios(self):
         """Verifica el cálculo de margen desde precio y costo."""
@@ -94,13 +103,12 @@ class RecalculoPrecioLista0Test(VentasTenantTestCase):
         )
     
     def test_recalcular_precio_lista_0(self):
-        """Verifica el recálculo de precio_lista_0 desde costo+margen."""
-        # Costo 1000, Margen 40% -> precio_lista_0 = 1400
+        """Verifica el precio final desde costo, margen e IVA."""
         resultado = recalcular_precio_lista_0(self.producto.id)
         self.assertTrue(resultado)
         
         self.producto.refresh_from_db()
-        self.assertEqual(self.producto.precio_lista_0, Decimal('1400.00'))
+        self.assertEqual(self.producto.precio_lista_0, Decimal('1694.00'))
         self.assertFalse(self.producto.precio_lista_0_manual)
     
     def test_recalcular_precio_lista_0_no_recalcula_manual(self):

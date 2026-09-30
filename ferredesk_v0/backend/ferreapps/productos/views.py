@@ -17,6 +17,8 @@ from .serializers import (
     FerreteriaSerializer,
     VistaStockProductoSerializer
 )
+from .serializers_listas_precio import PrecioListaGuardadoSerializer
+from .utils_precios import recalcular_precio_lista_0
 from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
@@ -285,7 +287,7 @@ class StockViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['margenes_listas_precio'] = {
-            lista.numero: float(lista.margen_descuento)
+            lista.numero: lista.margen_descuento
             for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
         }
         return context
@@ -1014,6 +1016,39 @@ def obtener_nuevo_id_temporal(request):
         pass
     return Response({'id': nuevo_id})
 
+
+def _validar_precios_listas(precios_data):
+    serializer = PrecioListaGuardadoSerializer(data=precios_data, many=True)
+    serializer.is_valid(raise_exception=True)
+    precios = serializer.validated_data
+    numeros = [precio['lista_numero'] for precio in precios]
+    if len(numeros) != len(set(numeros)):
+        raise serializers.ValidationError({'precios_listas': 'No se puede repetir una lista.'})
+    return precios
+
+
+def _guardar_precios_listas(stock, precios, usuario):
+    ahora = timezone.now()
+    for precio in precios:
+        lista_numero = precio['lista_numero']
+        if not precio['precio_manual']:
+            PrecioProductoLista.objects.filter(
+                stock=stock,
+                lista_numero=lista_numero,
+            ).delete()
+            continue
+
+        PrecioProductoLista.objects.update_or_create(
+            stock=stock,
+            lista_numero=lista_numero,
+            defaults={
+                'precio': precio['precio'],
+                'precio_manual': True,
+                'fecha_carga_manual': ahora,
+                'usuario_carga_manual': usuario,
+            },
+        )
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def crear_producto_con_relaciones(request):
@@ -1022,6 +1057,7 @@ def crear_producto_con_relaciones(request):
         data = request.data
         producto_data = data.get('producto')
         stock_proveedores_data = data.get('stock_proveedores', [])
+        precios_listas = _validar_precios_listas(data.get('precios_listas', []))
         if not producto_data:
             raise Exception('Faltan datos de producto.')
 
@@ -1069,6 +1105,9 @@ def crear_producto_con_relaciones(request):
                 sp_serializer.is_valid(raise_exception=True)
                 sp_serializer.save()
 
+            recalcular_precio_lista_0(stock.id)
+            _guardar_precios_listas(stock, precios_listas, request.user)
+
         return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
     except serializers.ValidationError as ve:
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
@@ -1083,6 +1122,7 @@ def editar_producto_con_relaciones(request):
         data = request.data
         producto_data = data.get('producto')
         stock_proveedores_data = data.get('stock_proveedores', [])
+        precios_listas = _validar_precios_listas(data.get('precios_listas', []))
         if not producto_data or not producto_data.get('id'):
             raise Exception('Faltan datos de producto o ID.')
         producto_id = producto_data['id']
@@ -1172,6 +1212,8 @@ def editar_producto_con_relaciones(request):
                     StockProve.objects.create(**create_kwargs)
 
             # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
+            recalcular_precio_lista_0(stock.id)
+            _guardar_precios_listas(stock, precios_listas, request.user)
         return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
     except serializers.ValidationError as ve:
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)

@@ -1,9 +1,34 @@
 import {
   crearItemDesdePromocion,
+  crearItemDesdeProducto,
   crearItemDesdeBackend,
   resolverEleccionesDesdeComponentes,
   construirResumenPromocion,
 } from "./tipoItem";
+
+describe("crearItemDesdeProducto", () => {
+  test("conserva el precio manual de lista 0 al crear el item de venta", () => {
+    const producto = {
+      id: 10,
+      codvta: "MANUAL-0",
+      deno: "Precio manual",
+      unidad: "UN",
+      idaliiva: 5,
+      margen: 90,
+      precio_lista_0: "234.56",
+      precio_lista_0_manual: true,
+      proveedor_habitual_id: 7,
+      stock_proveedores: [{ proveedor: { id: 7 }, costo: "10.00" }],
+    };
+
+    const item = crearItemDesdeProducto(producto, {
+      aliMap: { 5: 21 },
+      listaPrecioId: 0,
+    });
+
+    expect(item.precioFinal).toBe(234.56);
+  });
+});
 
 const promocionConGrupo = {
   id: 5,

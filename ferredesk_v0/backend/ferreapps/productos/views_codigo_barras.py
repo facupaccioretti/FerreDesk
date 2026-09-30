@@ -1,12 +1,20 @@
 """Views para funcionalidades de códigos de barras."""
 from django.http import Http404, HttpResponse
 from django.db import connection, transaction
+from django.db.models import F, Prefetch
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Stock, ContadorCodigoBarras, Ferreteria
+from .models import (
+    Stock,
+    StockProve,
+    ContadorCodigoBarras,
+    Ferreteria,
+    ListaPrecio,
+    PrecioProductoLista,
+)
 from .serializers_codigo_barras import (
     AsociarCodigoBarrasSerializer,
     GenerarCodigoBarrasSerializer,
@@ -23,6 +31,7 @@ from .services.codigo_barras import (
     TIPO_CODE128,
     TIPO_EXTERNO,
 )
+from .utils_precios import calcular_precio_desde_lista_0, calcular_precio_lista_0_final
 
 
 class CodigoBarrasProductoView(APIView):
@@ -185,12 +194,40 @@ class ImprimirEtiquetasView(APIView):
         
         data = serializer.validated_data
         producto_ids = data['productos']
+        lista_numero = data.get('lista_precio', 0)
+
+        lista = None
+        if data['incluir_precio']:
+            lista = ListaPrecio.objects.filter(
+                numero=lista_numero,
+                activo=True,
+            ).only('numero', 'margen_descuento').first()
+            if lista is None:
+                return Response(
+                    {'error': f'La lista de precios {lista_numero} no existe o esta inactiva'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         
-        # Obtener productos
         productos = Stock.objects.filter(
             id__in=producto_ids,
             codigo_barras__isnull=False
-        ).select_related('idaliiva')
+        ).select_related('idaliiva', 'proveedor_habitual').prefetch_related(
+            Prefetch(
+                'precios_listas',
+                queryset=PrecioProductoLista.objects.filter(
+                    lista_numero=lista_numero,
+                    precio_manual=True,
+                ),
+                to_attr='precio_lista_seleccionada',
+            ),
+            Prefetch(
+                'stock_proveedores',
+                queryset=StockProve.objects.filter(
+                    proveedor_id=F('stock__proveedor_habitual_id'),
+                ),
+                to_attr='stock_proveedor_habitual',
+            ),
+        )
         
         if not productos.exists():
             return Response(
@@ -208,7 +245,13 @@ class ImprimirEtiquetasView(APIView):
             
             # Agregar precio si se solicita
             if data['incluir_precio']:
-                precio = self._obtener_precio(producto, data.get('lista_precio', 0))
+                try:
+                    precio = self._obtener_precio(producto, lista_numero, lista)
+                except ValueError as exc:
+                    return Response(
+                        {'error': str(exc)},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 producto_info['precio'] = precio
             
             productos_data.append(producto_info)
@@ -236,29 +279,25 @@ class ImprimirEtiquetasView(APIView):
         response['Content-Disposition'] = 'attachment; filename="etiquetas_codigo_barras.pdf"'
         return response
     
-    def _obtener_precio(self, producto, lista_numero):
-        """Obtiene el precio del producto para la lista especificada."""
-        from .models import PrecioProductoLista
-        
-        if lista_numero == 0:
-            # Lista 0 está en el modelo Stock
-            precio_base = producto.precio_lista_0
-            if precio_base and producto.idaliiva:
-                # Calcular precio con IVA
-                iva = producto.idaliiva.porce / 100
-                return precio_base * (1 + iva)
-            return precio_base
-        else:
-            # Otras listas están en PrecioProductoLista
-            try:
-                precio_lista = PrecioProductoLista.objects.get(
-                    stock=producto,
-                    lista_numero=lista_numero
+    def _obtener_precio(self, producto, lista_numero, lista):
+        precio_base = producto.precio_lista_0
+        if precio_base is None:
+            relaciones = getattr(producto, 'stock_proveedor_habitual', [])
+            if not relaciones:
+                raise ValueError(
+                    f'No se puede calcular el precio del producto {producto.codvta}: falta el costo habitual'
                 )
-                precio = precio_lista.precio
-                if precio and producto.idaliiva:
-                    iva = producto.idaliiva.porce / 100
-                    return precio * (1 + iva)
-                return precio
-            except PrecioProductoLista.DoesNotExist:
-                return None
+            precio_base = calcular_precio_lista_0_final(
+                relaciones[0].costo,
+                producto.margen,
+                producto.idaliiva.porce,
+            )
+
+        if lista_numero == 0:
+            return precio_base
+
+        overrides = getattr(producto, 'precio_lista_seleccionada', [])
+        if overrides:
+            return overrides[0].precio
+
+        return calcular_precio_desde_lista_0(precio_base, lista.margen_descuento)

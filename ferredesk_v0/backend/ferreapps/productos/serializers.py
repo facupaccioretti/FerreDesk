@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.urls import reverse
+from decimal import Decimal
 from rest_framework import serializers
 from .models import Stock, Proveedor, StockProve, Familia, AlicuotaIVA, Ferreteria, VistaStockProducto, PrecioProductoLista, ListaPrecio
+from .utils_precios import calcular_precio_desde_lista_0
 from .utils.arca_files import validar_certificado_pem, validar_clave_privada_pem
 
 class ProveedorSerializer(serializers.ModelSerializer):
@@ -86,12 +88,27 @@ class StockSerializer(serializers.ModelSerializer):
             'impuesto_interno_porcentaje',
         ]
 
+    def validate(self, attrs):
+        precio_manual = attrs.get(
+            'precio_lista_0_manual',
+            getattr(self.instance, 'precio_lista_0_manual', False),
+        )
+        precio = attrs.get(
+            'precio_lista_0',
+            getattr(self.instance, 'precio_lista_0', None),
+        )
+        if precio_manual and (precio is None or precio <= 0):
+            raise serializers.ValidationError({
+                'precio_lista_0': 'El precio manual debe ser mayor que cero.',
+            })
+        return attrs
+
     def get_precios_listas(self, obj):
         """Obtiene precios de listas 1-4. Usa override manual si existe, sino calcula desde precio_lista_0."""
         margenes = self.context.get('margenes_listas_precio')
         if margenes is None:
             margenes = {
-                lista.numero: float(lista.margen_descuento)
+                lista.numero: lista.margen_descuento
                 for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
             }
             self.context['margenes_listas_precio'] = margenes
@@ -109,7 +126,7 @@ class StockSerializer(serializers.ModelSerializer):
             if precio.precio_manual
         }
 
-        precio_base = float(obj.precio_lista_0 or 0)
+        precio_base = obj.precio_lista_0 or Decimal('0.00')
         resultado = []
         
         for numero in [1, 2, 3, 4]:
@@ -126,7 +143,7 @@ class StockSerializer(serializers.ModelSerializer):
                 })
             else:
                 margen = margenes.get(numero, 0)
-                precio_calculado = round(precio_base * (1 + margen / 100), 2)
+                precio_calculado = float(calcular_precio_desde_lista_0(precio_base, margen))
                 resultado.append({
                     'lista_numero': numero,
                     'precio': precio_calculado,
@@ -231,7 +248,7 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
         margenes = self.context.get('margenes_listas_precio')
         if margenes is None:
             margenes = {
-                lista.numero: float(lista.margen_descuento)
+                lista.numero: lista.margen_descuento
                 for lista in ListaPrecio.objects.filter(numero__gte=1, numero__lte=4)
             }
             self.context['margenes_listas_precio'] = margenes
@@ -249,7 +266,7 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
             if precio.precio_manual
         }
 
-        precio_base = float(obj.precio_lista_0 or 0)
+        precio_base = obj.precio_lista_0 or Decimal('0.00')
         resultado = []
 
         for numero in [1, 2, 3, 4]:
@@ -262,7 +279,7 @@ class ProductoLookupRapidoSerializer(serializers.ModelSerializer):
                 })
             else:
                 margen = margenes.get(numero, 0)
-                precio_calculado = round(precio_base * (1 + margen / 100), 2)
+                precio_calculado = float(calcular_precio_desde_lista_0(precio_base, margen))
                 resultado.append({
                     'lista_numero': numero,
                     'precio': precio_calculado,

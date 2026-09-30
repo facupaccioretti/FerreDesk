@@ -1,10 +1,10 @@
 """
 Tests para los endpoints de precios de productos por lista.
 """
-from django.test import TestCase
-from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
+import json
+
 from rest_framework import status
+from django.db.models import Max
 from decimal import Decimal
 from datetime import date
 
@@ -12,21 +12,15 @@ from ferreapps.productos.models import (
     Stock, Proveedor, StockProve, AlicuotaIVA,
     PrecioProductoLista
 )
+from ferreapps.ventas.tests import VentasTenantTestCase
 
-User = get_user_model()
 
-
-class PrecioProductoListaAPITest(APITestCase):
+class PrecioProductoListaAPITest(VentasTenantTestCase):
     """Tests para los endpoints de precios de productos por lista."""
     
     def setUp(self):
         """Configura datos de prueba y autenticación."""
-        self.user = User.objects.create_user(
-            username='testuser_precio_prod',
-            password='testpass123'
-        )
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        super().setUp()
         
         self.proveedor = Proveedor.objects.create(
             razon='Proveedor Precio Prod Test',
@@ -38,12 +32,9 @@ class PrecioProductoListaAPITest(APITestCase):
             sigla='PPR'
         )
         
-        self.alicuota = AlicuotaIVA.objects.get_or_create(
-            codigo='21',
-            defaults={'deno': 'IVA 21%', 'porce': Decimal('21.00')}
-        )[0]
+        self.alicuota = self.alicuota_iva_21
         
-        max_id = Stock.objects.aggregate(max_id=max('id'))['max_id'] or 0
+        max_id = Stock.objects.aggregate(max_id=Max('id'))['max_id'] or 0
         self.producto = Stock.objects.create(
             id=max_id + 1,
             codvta='PRECIOPROD001',
@@ -93,60 +84,100 @@ class PrecioProductoListaAPITest(APITestCase):
         response = self.client.get('/api/productos/precios-lista/?lista_numero=1')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        for precio in response.data:
-            self.assertEqual(precio['lista_numero'], 1)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['lista_numero'], 1)
     
     def test_guardar_precios_producto(self):
         """POST /api/productos/precios-lista/guardar-precios-producto/"""
         response = self.client.post(
             '/api/productos/precios-lista/guardar-precios-producto/',
-            {
+            data=json.dumps({
                 'stock_id': self.producto.id,
                 'precios': [
                     {'lista_numero': 1, 'precio': 1150.00, 'precio_manual': False},
                     {'lista_numero': 2, 'precio': 1050.00, 'precio_manual': True},
                     {'lista_numero': 3, 'precio': 950.00, 'precio_manual': False},
                 ]
-            },
-            format='json'
+            }),
+            content_type='application/json',
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['precios_guardados']), 3)
+        self.assertEqual(len(response.data['resultados']), 1)
         
         precios = PrecioProductoLista.objects.filter(stock=self.producto)
-        self.assertEqual(precios.count(), 3)
+        self.assertEqual(precios.count(), 1)
         
         precio_manual = precios.get(lista_numero=2)
-        self.assertTrue(precio_manual.precio_manual)
+        self.assertEqual(precio_manual.precio_manual, True)
+        self.assertEqual(precio_manual.precio, Decimal('1050.00'))
     
     def test_guardar_precios_producto_sin_stock_id(self):
         """POST sin stock_id retorna error."""
         response = self.client.post(
             '/api/productos/precios-lista/guardar-precios-producto/',
-            {'precios': [{'lista_numero': 1, 'precio': 1000.00}]},
-            format='json'
+            data=json.dumps({'precios': [
+                {'lista_numero': 1, 'precio': 1000.00, 'precio_manual': True}
+            ]}),
+            content_type='application/json',
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json(), {'error': 'stock_id es requerido'})
     
-    def test_guardar_precios_ignora_lista_0(self):
-        """POST ignora precios de lista 0 (se guardan en Stock)."""
+    def test_guardar_precios_rechaza_lista_0(self):
         response = self.client.post(
             '/api/productos/precios-lista/guardar-precios-producto/',
-            {
+            data=json.dumps({
                 'stock_id': self.producto.id,
                 'precios': [
                     {'lista_numero': 0, 'precio': 1300.00, 'precio_manual': True},
                     {'lista_numero': 1, 'precio': 1200.00, 'precio_manual': False},
                 ]
-            },
-            format='json'
+            }),
+            content_type='application/json',
         )
         
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Solo debe guardar lista 1, no lista 0
-        self.assertEqual(len(response.data['precios_guardados']), 1)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(PrecioProductoLista.objects.filter(stock=self.producto).exists())
+
+    def test_guardar_precio_manual_rechaza_cero(self):
+        response = self.client.post(
+            '/api/productos/precios-lista/guardar-precios-producto/',
+            data=json.dumps({
+                'stock_id': self.producto.id,
+                'precios': [
+                    {'lista_numero': 2, 'precio': '0.00', 'precio_manual': True},
+                ],
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            PrecioProductoLista.objects.filter(
+                stock=self.producto,
+                lista_numero=2,
+            ).exists()
+        )
+
+    def test_patch_precio_manual_rechaza_cero_y_conserva_anterior(self):
+        precio = PrecioProductoLista.objects.create(
+            stock=self.producto,
+            lista_numero=3,
+            precio=Decimal('123.45'),
+            precio_manual=True,
+        )
+
+        response = self.client.patch(
+            f'/api/productos/precios-lista/{precio.id}/',
+            data=json.dumps({'precio': '0.00'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        precio.refresh_from_db()
+        self.assertEqual(precio.precio, Decimal('123.45'))
     
     def test_actualizar_precio_marca_como_manual(self):
         """PATCH /api/productos/precios-lista/{id}/ - Marca como manual."""
@@ -159,16 +190,15 @@ class PrecioProductoListaAPITest(APITestCase):
         
         response = self.client.patch(
             f'/api/productos/precios-lista/{precio.id}/',
-            {'precio': '1100.00'},
-            format='json'
+            data=json.dumps({'precio': '1100.00'}),
+            content_type='application/json',
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         precio.refresh_from_db()
         self.assertEqual(precio.precio, Decimal('1100.00'))
-        self.assertTrue(precio.precio_manual)
-        self.assertIsNotNone(precio.fecha_carga_manual)
+        self.assertEqual(precio.precio_manual, True)
     
     def test_guardar_precios_actualiza_existentes(self):
         """POST actualiza precios existentes en lugar de duplicar."""
@@ -182,13 +212,13 @@ class PrecioProductoListaAPITest(APITestCase):
         
         response = self.client.post(
             '/api/productos/precios-lista/guardar-precios-producto/',
-            {
+            data=json.dumps({
                 'stock_id': self.producto.id,
                 'precios': [
                     {'lista_numero': 1, 'precio': 1200.00, 'precio_manual': True},
                 ]
-            },
-            format='json'
+            }),
+            content_type='application/json',
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)

@@ -2,7 +2,7 @@
 Funciones utilitarias para cálculos de precios.
 """
 from django.db import transaction
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 
 @transaction.atomic
@@ -35,7 +35,7 @@ def recalcular_precios_lista(lista_numero, margen_descuento):
 
 @transaction.atomic
 def recalcular_precio_lista_0(stock_id):
-    """Recalcula precio_lista_0 de un producto desde costo+margen si no es manual."""
+    """Recalcula precio_lista_0 final desde costo, margen e IVA."""
     from .models import Stock, StockProve
     
     try:
@@ -61,15 +61,26 @@ def recalcular_precio_lista_0(stock_id):
         return False
     
     costo = Decimal(str(stock_prove.costo))
-    margen = Decimal(str(producto.margen)) if producto.margen else Decimal('0')
-    
-    precio_lista_0 = costo * (1 + margen / Decimal('100'))
-    precio_lista_0 = precio_lista_0.quantize(Decimal('0.01'))
+    precio_lista_0 = calcular_precio_lista_0_final(
+        costo,
+        producto.margen,
+        producto.idaliiva.porce,
+    )
     
     producto.precio_lista_0 = precio_lista_0
     producto.save(update_fields=['precio_lista_0'])
     
     return True
+
+
+def calcular_precio_lista_0_final(costo, margen, alicuota_iva):
+    costo = Decimal(str(costo))
+    margen = Decimal(str(margen or 0))
+    alicuota_iva = Decimal(str(alicuota_iva or 0))
+    precio = costo * (1 + margen / Decimal('100')) * (
+        1 + alicuota_iva / Decimal('100')
+    )
+    return precio.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def calcular_precio_desde_lista_0(precio_lista_0, margen_descuento):
@@ -87,7 +98,7 @@ def calcular_precio_desde_lista_0(precio_lista_0, margen_descuento):
     margen_descuento = Decimal(str(margen_descuento))
     
     precio = precio_lista_0 * (1 + margen_descuento / Decimal('100'))
-    return precio.quantize(Decimal('0.01'))
+    return precio.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def obtener_precio_lista_sin_iva(stock, lista_numero=0):

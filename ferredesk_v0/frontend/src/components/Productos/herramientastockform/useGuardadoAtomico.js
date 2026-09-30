@@ -20,7 +20,7 @@ const useGuardadoAtomico = ({ stock }) => {
   const [isSaving, setIsSaving] = useState(false)
 
   // Función principal de guardado atómico (Simplificada para usar el estado unificado)
-  const guardarProductoAtomico = async (form) => {
+  const guardarProductoAtomico = async (form, preciosListas = []) => {
     setIsSaving(true)
 
     try {
@@ -71,6 +71,7 @@ const useGuardadoAtomico = ({ stock }) => {
         body: JSON.stringify({
           producto: formToSave,
           stock_proveedores: stockProveedores,
+          precios_listas: preciosListas,
         }),
       })
 

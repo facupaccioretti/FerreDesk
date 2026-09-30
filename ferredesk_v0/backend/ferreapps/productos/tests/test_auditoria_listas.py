@@ -1,18 +1,17 @@
 """
 Tests para la auditoría de actualizaciones de listas de precios.
 """
-from django.test import TestCase
 from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from decimal import Decimal
 
 from ferreapps.productos.models import ActualizacionListaDePrecios
+from ferreapps.productos.tests.mixins import ProductoTenantAPITestCase, ProductoTenantTestCase
 
 User = get_user_model()
 
 
-class ActualizacionListaDePreciosModelTest(TestCase):
+class ActualizacionListaDePreciosModelTest(ProductoTenantTestCase):
     """Tests para el modelo ActualizacionListaDePrecios."""
     
     def test_crear_registro_auditoria(self):
@@ -45,16 +44,16 @@ class ActualizacionListaDePreciosModelTest(TestCase):
         self.assertIn('-5.00%', str_repr)
 
 
-class AuditoriaListasAPITest(APITestCase):
+class AuditoriaListasAPITest(ProductoTenantAPITestCase):
     """Tests para la API de auditoría de actualizaciones de listas."""
     
     def setUp(self):
         """Configura datos de prueba y autenticación."""
+        super().setUp()
         self.user = User.objects.create_user(
             username='testuser_auditoria',
             password='testpass123'
         )
-        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
     
     def test_listar_actualizaciones(self):
