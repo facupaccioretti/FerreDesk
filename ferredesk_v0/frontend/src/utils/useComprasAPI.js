@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { getCookie } from './csrf'
+import { invalidarCachesProductos } from '../core/query/queryKeys'
 
 export const useComprasAPI = () => {
+  const queryClient = useQueryClient()
   const [compras, setCompras] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -176,6 +179,8 @@ export const useComprasAPI = () => {
       const data = await makeRequest(`/api/compras/${compraId}/cerrar/`, {
         method: 'POST',
       })
+
+      await invalidarCachesProductos(queryClient)
       
       // Actualizar la lista local
       setCompras(prev => prev.map(compra => 
@@ -189,7 +194,7 @@ export const useComprasAPI = () => {
     } finally {
       setLoading(false)
     }
-  }, [makeRequest])
+  }, [makeRequest, queryClient])
 
   // Obtener compra por ID
   const getCompraById = useCallback(async (compraId) => {

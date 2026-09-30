@@ -16,7 +16,7 @@ function getCookie(name) {
   return cookieValue
 }
 
-const useGuardadoAtomico = ({ modo, stock, onSave }) => {
+const useGuardadoAtomico = ({ stock }) => {
   const [isSaving, setIsSaving] = useState(false)
 
   // Función principal de guardado atómico (Simplificada para usar el estado unificado)
@@ -89,7 +89,6 @@ const useGuardadoAtomico = ({ modo, stock, onSave }) => {
       }
 
       const productoGuardado = { ...formToSave, id: data.producto_id || stock?.id }
-      if (onSave) await onSave(productoGuardado)
       return { success: true, data: productoGuardado }
 
     } catch (error) {

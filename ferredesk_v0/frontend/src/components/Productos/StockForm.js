@@ -79,10 +79,12 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   // Estados para precios de listas
   const [preciosListas, setPreciosListas] = useState(() => {
     const clavePrecios = `${claveBorrador}_precios`
-    try {
-      const saved = localStorage.getItem(clavePrecios)
-      if (saved) return JSON.parse(saved)
-    } catch (_) { }
+    if (modo === "nuevo") {
+      try {
+        const saved = localStorage.getItem(clavePrecios)
+        if (saved) return JSON.parse(saved)
+      } catch (_) { }
+    }
     return {
       lista0: { precio: "", manual: false },
       lista1: { precio: "", manual: false },
@@ -94,10 +96,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // Guardar borrador de precios
   useEffect(() => {
+    if (modo !== "nuevo") return
     try {
       localStorage.setItem(`${claveBorrador}_precios`, JSON.stringify(preciosListas))
     } catch (_) { }
-  }, [preciosListas, claveBorrador])
+  }, [preciosListas, claveBorrador, modo])
 
   const {
     handleEditStockProve,
@@ -158,7 +161,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     alert
   })
 
-  const { guardarProductoAtomico } = useGuardadoAtomico({ modo, stock, onSave })
+  const { guardarProductoAtomico } = useGuardadoAtomico({ stock })
 
   const { esValido, errores, erroresCampo } = useValidaciones({
     form,
@@ -449,6 +452,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
       }
 
       try { localStorage.removeItem(claveBorrador) } catch (_) { }
+      if (onSave) await onSave(resultado.data)
     }
   }
 

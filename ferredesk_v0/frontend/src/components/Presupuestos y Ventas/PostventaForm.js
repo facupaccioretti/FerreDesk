@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import ItemsGrid from "./ItemsGrid"
 import SelectorItemVenta from "./SelectorItemVenta"
 import { useVentaDetalleAPI } from "../../utils/useVentaDetalleAPI"
@@ -8,6 +9,7 @@ import { mapearCamposItem } from "./herramientasforms/mapeoItems"
 import { normalizarItems } from "./herramientasforms/normalizadorItems"
 import usePostventaAPI from "./hooks/usePostventaAPI"
 import { useCajaAPI } from "../../utils/useCajaAPI"
+import { invalidarCachesProductos } from "../../core/query/queryKeys"
 
 const INPUT_CLASS = "w-full border border-slate-300 rounded-none px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
 const PANEL_CLASS = "p-2 bg-slate-50 rounded-sm border border-slate-200"
@@ -260,6 +262,7 @@ const PostventaForm = ({
   autoSumarDuplicados,
   setAutoSumarDuplicados,
 }) => {
+  const queryClient = useQueryClient()
   const comprobanteId = comprobante?.id ?? comprobante?.ven_id ?? null
   const itemsGridRef = useRef(null)
   const selectorItemVentaRef = useRef(null)
@@ -602,10 +605,11 @@ const PostventaForm = ({
       return
     }
     if (!resultado) return
+    await invalidarCachesProductos(queryClient)
     setResultadoTerminal(resultado)
     setUltimoPreviewContext(null)
     if (await actualizarListadoDespuesDeConfirmar(resultado)) renewIdempotencyKey()
-  }, [actualizarListadoDespuesDeConfirmar, confirmarCambio, confirmarDevolucion, mediosPago, metodosPago, modo, observacion, renewIdempotencyKey, resolucionDiferencia, resolucionDinero, resultadoTerminal, ultimoPreviewContext])
+  }, [actualizarListadoDespuesDeConfirmar, confirmarCambio, confirmarDevolucion, mediosPago, metodosPago, modo, observacion, queryClient, renewIdempotencyKey, resolucionDiferencia, resolucionDinero, resultadoTerminal, ultimoPreviewContext])
 
   const vistaPrevia = preview || ultimoPreviewContext?.previewData
   const resumenMonetario = vistaPrevia?.resumen_monetario

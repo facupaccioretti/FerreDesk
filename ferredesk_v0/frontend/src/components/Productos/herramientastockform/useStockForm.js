@@ -67,13 +67,15 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
 
   // Estado principal del formulario con carga desde borrador si existe
   const [form, setForm] = useState(() => {
-    try {
-      const saved = localStorage.getItem(claveBorrador)
-      if (saved) {
-        return JSON.parse(saved)
+    if (modo === "nuevo") {
+      try {
+        const saved = localStorage.getItem(claveBorrador)
+        if (saved) {
+          return JSON.parse(saved)
+        }
+      } catch (e) {
+        // Ignorar errores de parseo
       }
-    } catch (e) {
-      // Ignorar errores de parseo
     }
     // Fallback a datos iniciales: normalizar objetos anidados → IDs para selects
     if (stock) {
@@ -97,14 +99,15 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
 
   const [formError, setFormError] = useState(null)
 
-  // Guardar el borrador en cualquier modo
+  // Guardar borrador solo para altas
   useEffect(() => {
+    if (modo !== "nuevo") return
     try {
       localStorage.setItem(claveBorrador, JSON.stringify(form))
     } catch (_) {
       // Ignorar errores de almacenamiento
     }
-  }, [form, claveBorrador])
+  }, [form, claveBorrador, modo])
 
   // useEffect para obtener ID temporal en modo nuevo
   useEffect(() => {

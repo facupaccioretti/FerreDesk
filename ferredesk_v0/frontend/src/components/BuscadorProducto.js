@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useProductoBusquedaLigera } from "../hooks/useProductoBusquedaLigera"
 
 const UMBRAL_BUSQUEDA = 2
@@ -33,6 +33,14 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
   })
 
   const loading = cargando || actualizando
+  const terminoActual = busqueda.trim().toLowerCase()
+  const resultadosActuales = terminoActual.length >= UMBRAL_BUSQUEDA
+    && terminoActual === String(terminoDebounced || '').trim().toLowerCase()
+    && !loading
+  const sugerenciasActuales = useMemo(
+    () => (resultadosActuales ? sugerencias : []),
+    [resultadosActuales, sugerencias],
+  )
 
   const registrarObservabilidadBusqueda = useCallback((payload) => {
     if (typeof window === 'undefined') return
@@ -58,10 +66,12 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
   }, [])
 
   useEffect(() => {
-    if (sugerencias.length > 0 && !disabled && !readOnly) {
+    if (sugerenciasActuales.length > 0 && !disabled && !readOnly) {
       setShowDropdown(true)
+    } else {
+      setShowDropdown(false)
     }
-  }, [sugerencias, disabled, readOnly])
+  }, [sugerenciasActuales.length, disabled, readOnly])
 
   useEffect(() => {
     const terminoNormalizado = String(terminoDebounced || '').trim().toLowerCase()
@@ -141,23 +151,23 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
     if (disabled || readOnly) return
 
     if (e.key === 'Enter') {
-      if (sugerencias.length > 0 && busqueda) {
-        handleSelect(sugerencias[highlighted])
+      if (sugerenciasActuales.length > 0) {
+        handleSelect(sugerenciasActuales[highlighted])
       }
       e.preventDefault()
       e.stopPropagation()
     } else if (e.key === 'ArrowDown') {
-      setHighlighted((h) => Math.min(h + 1, sugerencias.length - 1))
+      setHighlighted((h) => Math.min(h + 1, sugerenciasActuales.length - 1))
     } else if (e.key === 'ArrowUp') {
       setHighlighted((h) => Math.max(h - 1, 0))
     }
-  }, [busqueda, disabled, handleSelect, highlighted, readOnly, sugerencias])
+  }, [disabled, handleSelect, highlighted, readOnly, sugerenciasActuales])
 
   const handleFocus = useCallback(() => {
-    if (sugerencias.length > 0 && !disabled && !readOnly) {
+    if (sugerenciasActuales.length > 0 && !disabled && !readOnly) {
       setShowDropdown(true)
     }
-  }, [sugerencias.length, disabled, readOnly])
+  }, [sugerenciasActuales.length, disabled, readOnly])
 
   const handleBlur = useCallback(() => {
     setTimeout(() => setShowDropdown(false), 150)
@@ -193,9 +203,9 @@ function BuscadorProducto({ onSelect, disabled = false, readOnly = false, classN
         )}
       </div>
 
-      {showDropdown && sugerencias.length > 0 && (
+      {showDropdown && sugerenciasActuales.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-sm shadow-lg max-h-60 overflow-y-auto">
-          {sugerencias.map((p, idx) => {
+          {sugerenciasActuales.map((p, idx) => {
             const isSelected = idx === highlighted
             return (
               <div

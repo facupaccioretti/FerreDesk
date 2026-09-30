@@ -1,10 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { clienteAPI } from './clienteAPI';
 import { mapearCamposItem } from '../components/Presupuestos y Ventas/herramientasforms/mapeoItems';
+import { invalidarCachesProductos } from '../core/query/queryKeys';
 
 const LIMITE_POR_DEFECTO = 15;
 
 export function useVentasAPI() {
+  const queryClient = useQueryClient();
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -98,6 +101,9 @@ export function useVentasAPI() {
         body: ventaMapped,
       });
 
+      if (ventaMapped.tipo === 'Venta' && ventaMapped.estado === 'Cerrado') {
+        await invalidarCachesProductos(queryClient);
+      }
       await refrescarUltimaConsulta();
       return responseData;
     } catch (err) {
@@ -113,6 +119,9 @@ export function useVentasAPI() {
         method: 'PATCH',
         body: updated,
       });
+      if (updated.tipo === 'Venta' || updated.tipoOriginal === 'Venta' || updated.estado === 'Cerrado') {
+        await invalidarCachesProductos(queryClient);
+      }
       await refrescarUltimaConsulta();
     } catch (err) {
       setError(err.message);
@@ -126,6 +135,7 @@ export function useVentasAPI() {
       await clienteAPI(`/api/ventas/${id}/`, {
         method: 'DELETE',
       });
+      await invalidarCachesProductos(queryClient);
       await refrescarUltimaConsulta();
     } catch (err) {
       setError(err.message);

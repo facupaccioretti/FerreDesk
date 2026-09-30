@@ -8,6 +8,7 @@ jest.mock("../hooks/useProductoBusquedaLigera", () => ({
 }));
 
 const BuscadorProducto = require("./BuscadorProducto").default;
+const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
 
 describe("BuscadorProducto", () => {
   let container;
@@ -55,6 +56,12 @@ describe("BuscadorProducto", () => {
       root.render(<BuscadorProducto onSelect={onSelect} />);
     });
 
+    const input = container.querySelector("input");
+    await act(async () => {
+      setInputValue.call(input, "mar");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
     expect(container.textContent).toContain("Martillo");
     expect(container.textContent).toContain("Pinza");
     expect(container.textContent).toContain("Stock: 8");
@@ -84,5 +91,31 @@ describe("BuscadorProducto", () => {
     });
 
     expect(container.textContent).toContain("Error: fallo de prueba");
+  });
+
+  test("no muestra ni selecciona resultados de otro termino", async () => {
+    const onSelect = jest.fn();
+
+    mockUseProductoBusquedaLigera.mockReturnValue({
+      resultados: [{ id: 1, codvta: "PAL001", deno: "Pala", stock_total: 2 }],
+      cargando: false,
+      actualizando: false,
+      error: null,
+      terminoDebounced: "pala",
+    });
+
+    await act(async () => {
+      root.render(<BuscadorProducto onSelect={onSelect} />);
+    });
+
+    const input = container.querySelector("input");
+    await act(async () => {
+      setInputValue.call(input, "tornillo");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+
+    expect(container.querySelector('[role="option"]')).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });
