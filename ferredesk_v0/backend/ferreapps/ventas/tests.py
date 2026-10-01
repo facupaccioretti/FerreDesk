@@ -358,7 +358,17 @@ class TestPayloadArcaPromocionMixta(VentasTenantTestCase):
             precio_lista_0=Decimal("200.00"),
             acti="S",
         )
-        for stock in (pepsi, caa):
+        sprite = Stock.objects.create(
+            id=990903,
+            codvta="SPRITE-ARCA",
+            deno="Sprite",
+            margen=Decimal("30.00"),
+            idaliiva=self.alicuota_iva_21,
+            proveedor_habitual=proveedor,
+            precio_lista_0=Decimal("3000.00"),
+            acti="S",
+        )
+        for stock in (pepsi, caa, sprite):
             StockProve.objects.create(
                 stock=stock, proveedor=proveedor, cantidad=100, costo=Decimal("100.00")
             )
@@ -368,7 +378,7 @@ class TestPayloadArcaPromocionMixta(VentasTenantTestCase):
             grupos_data=[{
                 "nombre": "Bebida opcional",
                 "cantidad": Decimal("1"),
-                "alternativas": [{"stock_id": pepsi.id}, {"stock_id": caa.id}],
+                "alternativas": [{"stock_id": sprite.id}, {"stock_id": caa.id}],
             }],
         )
         grupo = PromocionGrupo.objects.get(promocion=promo)
@@ -1282,8 +1292,7 @@ class TestContextoIsListEnSerializer(TestCase):
 
         # Parcheamos el import tardío dentro del método del serializer
         mock_qs = MagicMock()
-        mock_qs.con_calculos.return_value.__iter__ = MagicMock(return_value=iter([]))
-        mock_qs.con_calculos.return_value = []
+        mock_qs.con_calculos.return_value.prefetch_related.return_value = []
 
         mock_venta_detalle_item = MagicMock()
         mock_venta_detalle_item.objects.filter.return_value = mock_qs
