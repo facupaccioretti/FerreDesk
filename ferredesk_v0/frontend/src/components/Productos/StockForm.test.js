@@ -35,19 +35,19 @@ jest.mock('../../utils/useListasPrecioAPI', () => ({
 }))
 jest.mock('./codigoBarras', () => ({ CodigoBarrasModal: () => null }))
 jest.mock('./herramientastockform', () => ({
-  useStockForm: () => ({
+  useStockForm: ({ stock }) => ({
     form: {
       id: 77,
       codvta: 'ERROR-ATOMICO',
       deno: 'Producto con error',
       unidad: 'UN',
       cantmin: 0,
-      margen: '20.00',
-      proveedor_habitual_id: '',
+      margen: stock?.margen ?? '20.00',
+      proveedor_habitual_id: stock?.proveedor_habitual?.id ? String(stock.proveedor_habitual.id) : '',
       idfam1: null,
       idfam2: null,
       idfam3: null,
-      idaliiva: '',
+      idaliiva: stock?.idaliiva?.id ?? '',
       acti: 'S',
       stock_proveedores: [],
     },
@@ -58,7 +58,7 @@ jest.mock('./herramientastockform', () => ({
     handleCancel: jest.fn(),
     claveBorrador: 'stockFormDraft_test',
   }),
-  useGestionProveedores: () => ({
+  useGestionProveedores: ({ stock }) => ({
     handleEditStockProve: jest.fn(),
     handleEditCostoStockProve: jest.fn(),
     handleEditCancel: jest.fn(),
@@ -67,7 +67,7 @@ jest.mock('./herramientastockform', () => ({
     handleEliminarRelacion: jest.fn(),
     stockTotal: 0,
     proveedoresAsociados: [],
-    stockProveParaMostrar: [],
+    stockProveParaMostrar: stock?.stock_proveedores ?? [],
     editandoCantidadId: null,
     nuevaCantidad: '',
     setNuevaCantidad: jest.fn(),
@@ -182,5 +182,34 @@ describe('StockForm', () => {
     expect(localStorage.removeItem).not.toHaveBeenCalled()
     expect(localStorage.getItem('stockFormDraft_test')).toBe('{"deno":"borrador"}')
     expect(localStorage.getItem('stockFormDraft_test_precios')).not.toBeNull()
+  })
+
+  test('al editar preserva el precio manual antes de cargar las alicuotas', async () => {
+    const stock = {
+      precio_lista_0: 1000,
+      precio_lista_0_manual: true,
+      precios_listas: [],
+      margen: '352.49',
+      idaliiva: { id: 1, porce: '10.50' },
+      proveedor_habitual: { id: 1 },
+      stock_proveedores: [{ proveedor: 1, costo: 200 }],
+    }
+
+    await act(async () => {
+      root.render(
+        <StockForm
+          key="editar-77"
+          stock={stock}
+          onSave={jest.fn()}
+          onCancel={jest.fn()}
+          proveedores={[]}
+          familias={[]}
+          modo="editar"
+          tabKey="editar-77"
+        />
+      )
+    })
+
+    expect(Array.from(container.querySelectorAll('input[type="number"]')).some((input) => Number(input.value) === 1000)).toBe(true)
   })
 })

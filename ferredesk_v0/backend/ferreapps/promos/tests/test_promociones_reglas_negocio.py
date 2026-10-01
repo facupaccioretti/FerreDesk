@@ -18,6 +18,8 @@ from ferreapps.promos.models import (
     PromocionItem,
 )
 from ferreapps.promos.services.aplicar_promocion_venta import (
+    ComponenteEfectivo,
+    _costos_habituales,
     crear_snapshot_promocion,
     expandir_item_promocion,
     resolver_operaciones_stock,
@@ -202,6 +204,17 @@ class PromocionesReglasNegocioTestCase(TenantTestCase):
 
         with self.assertRaisesRegex(ValidationError, self.pincel.codvta):
             expandir_item_promocion({"vdi_promocion": promo.id, "vdi_cantidad": "1.00"})
+
+    def test_costo_habitual_ausente_no_usa_cero(self):
+        StockProve.objects.filter(stock=self.vodka, proveedor=self.proveedor).delete()
+        componente = ComponenteEfectivo(
+            stock=self.vodka,
+            stock_id=self.vodka.id,
+            cantidad=Decimal("1.00"),
+        )
+
+        with self.assertRaisesRegex(ValidationError, self.vodka.codvta):
+            _costos_habituales([componente])
 
     def test_combo_mixto_prorratea_por_precio_lista_y_deja_residuo_en_ultima_alicuota(self):
         promo = self._crear_promo_mixta()

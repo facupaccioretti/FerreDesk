@@ -62,7 +62,7 @@ El frontend solo ayuda a cargar la operacion. El backend vuelve a validar la vig
 | Productos incluidos | Puede no haber, siempre que exista al menos un grupo de eleccion. Cada cantidad debe ser mayor que cero. |
 | Grupos de eleccion | Opcionales. Cada grupo requiere nombre, cantidad mayor que cero y al menos dos alternativas. |
 
-Al crear o editar, solo pueden seleccionarse productos actualmente activos. Si un producto se desactiva despues de haber sido agregado a una promo, la promo existente no se invalida ni queda bloqueada por ese hecho.
+Al crear, editar o vender, todos los productos deben estar activos. Si un producto se desactiva despues de haber sido agregado, la promo permanece registrada pero el backend rechaza su venta y cualquier actualizacion. Permitir desactivarla sin revalidar componentes sigue siendo un ajuste pendiente.
 
 ### Restricciones de composicion
 
@@ -102,8 +102,9 @@ Por cada grupo, el vendedor debe indicar una o varias alternativas y sus cantida
 | Grupo configurado | Selecciones validas | Selecciones invalidas |
 | --- | --- | --- |
 | `Bebida`, cantidad 2: Red Bull o Fernet | 2 Red Bull; 2 Fernet; 1 Red Bull + 1 Fernet | 1 Red Bull; 3 Fernet; Red Bull + un producto que no pertenece al grupo |
+| `Bebida`, cantidad 3: producto A o producto B | 3 A; 3 B; 2 A + 1 B; 1 A + 2 B | Cualquier combinacion cuya suma no sea exactamente 3 |
 
-Por lo tanto, hoy **se permite mezclar alternativas** dentro de un mismo grupo. Esto prevalece sobre algunos comentarios antiguos que hablan de una sola alternativa por grupo.
+Por lo tanto, hoy **se permite combinar alternativas** dentro de un mismo grupo. “Combinar” significa distribuir la cantidad requerida entre los productos habilitados: si el grupo pide 3, se puede entregar 2 de A y 1 de B. El comentario antiguo del modelo que indicaba una sola alternativa ya fue corregido.
 
 La cantidad de la linea de promo debe ser mayor que cero. El configurador de pantalla permite cantidad entera desde 1, pero el backend admite decimales de hasta dos posiciones. Conviene definir si una promo puede venderse fraccionada, porque hoy las dos capas no expresan exactamente la misma regla.
 
@@ -125,15 +126,11 @@ Al vender, se toma el costo actual de cada componente desde su proveedor habitua
 
 El margen que queda en la linea es informativo. Si hay varios IVA, usa la alicuota con mayor parte del precio como aproximacion; no modifica los importes fiscales.
 
-Si falta un costo para un componente/proveedor habitual, el calculo usa costo cero. Esa situacion no impide por si misma armar la promo, por lo que debe considerarse una decision de negocio pendiente.
+Cada componente debe tener proveedor habitual y un costo estrictamente positivo. Si el costo falta, vale cero o es negativo, se rechaza la definicion o la venta de la promo. No existe un fallback valido a costo cero.
 
 ### IVA cuando hay componentes con alicuotas distintas
 
-La promo se vende como una sola linea, pero puede incluir productos con IVA diferente. Para declarar IVA, el precio total se reparte entre las alicuotas:
-
-1. Primero en proporcion al precio de lista de los componentes.
-2. Si todos los precios de lista son cero, en proporcion a sus costos.
-3. Si tampoco hay costos, en proporcion a las cantidades.
+La promo se vende como una sola linea, pero puede incluir productos con IVA diferente. Para declarar IVA, el precio total se reparte entre las alicuotas en proporcion al precio de lista de los componentes. Todos esos precios deben ser estrictamente positivos; si falta uno, vale cero o es negativo, la operacion se rechaza. No se reemplaza el dato por costo ni por cantidad porque indicaria una configuracion incorrecta del producto.
 
 Cada parte se redondea a dos decimales y la ultima absorbe el residuo para que la suma coincida exactamente con el total del combo. La alicuota guardada en la linea principal es solo la dominante, para mostrarla; el desglose real se conserva por separado.
 
@@ -181,7 +178,7 @@ Una promo activa se marca como **A revisar** si cambia:
 - El costo de un componente fijo o de una alternativa de grupo.
 - El precio de lista de un componente fijo o de una alternativa de grupo.
 
-El aviso no bloquea la venta. Solo destaca que el precio o margen merece revision.
+El aviso por si solo no bloquea la venta. Las validaciones de datos siguen siendo independientes: un costo no positivo bloquea cualquier promo y, en un combo de IVA mixto, un precio de lista no positivo tambien bloquea la operacion.
 
 El aviso se limpia cuando alguien:
 
@@ -200,10 +197,12 @@ Cambiar solamente el nombre, descripcion, fechas o estado no limpia el aviso. Un
 | Fecha fin igual a hoy | Se puede vender. |
 | Grupo sin eleccion | Se rechaza. |
 | Alternativas que no suman la cantidad del grupo | Se rechaza. |
-| Mezcla de alternativas del mismo grupo | Se permite. |
+| Combinacion de alternativas del mismo grupo | Se permite: por ejemplo, 2 de A + 1 de B para un grupo de cantidad 3. |
 | Producto repetido dentro de la promo | Se rechaza al definirla. |
+| Componente sin costo positivo | Se rechaza; no se usa costo cero. |
+| Componente de IVA mixto sin precio de lista positivo | Se rechaza; no se prorratea por costo ni cantidad. |
 | Descuento general de la venta | No se aplica a la promo. |
-| Cambio de costo/precio de lista | Marca aviso; no bloquea la venta. |
+| Cambio de costo/precio de lista | Marca aviso; si el nuevo dato viola las reglas de costo o prorrateo, la venta se rechaza. |
 | Editar promo despues de vender | La venta anterior conserva su snapshot. |
 | Devolver promo despues de editarla | Usa el snapshot de la venta original. |
 | Borrar promo ya vendida | La proteccion historica de base de datos lo impide. |
@@ -217,18 +216,14 @@ Completar esta tabla convierte las decisiones en reglas testeables. Cuando se ac
 | Tipo de promociones | Solo combos de precio fijo. | Que tipos se soportaran: 2x1, porcentaje, segunda unidad, precio por cantidad, regalo, etc. |
 | Cantidad de combos | Backend acepta decimales; pantalla propone enteros. | Solo unidades enteras o tambien fraccionadas. |
 | Elecciones en varios combos | Una unica distribucion se multiplica por la cantidad de la linea. | Hace falta elegir una distribucion distinta por cada combo en una misma linea. |
-| Productos inactivos | Una promo existente los puede seguir vendiendo. | Debe bloquearse, advertirse o permitirse. |
-| Costo faltante | Se usa costo cero. | Bloquear venta, advertir o permitir con costo cero. |
+| Productos inactivos | Bloquean venta y edicion de la promo. | Permitir desactivar la promo sin revalidar esos componentes. |
 | Stock insuficiente | Sigue la politica general de stock negativo. | Debe una promo tener una politica propia. |
 | A revisar | Es solo advertencia. | Debe bloquear ventas, requerir aprobacion o seguir informativo. |
 | Vigencia | Fechas inclusivas; sin hora. | Hace falta hora de inicio/fin o esta regla alcanza. |
-| Redondeo de IVA | Se prorratea por precio de lista, luego costo, luego cantidad. | Esta prioridad representa el criterio contable esperado. |
 | Descuentos generales | Nunca se aplican al combo. | Confirmar que tampoco pueden combinarse con descuentos de cliente/lista. |
-| Elegir alternativas | Se puede mezclar dentro de un grupo. | Debe permitirse mezcla, limitarse a una alternativa o definir ambos modos. |
 | Reconfigurar presupuesto | Usa la definicion actual si se modifica. | Debe conservar opciones historicas o solo permitir la definicion vigente. |
 | Limites de uso | No existen. | Limite total, por cliente, por periodo o sin limites. |
 | Clientes y tenants | Los datos viven dentro del tenant; no hay reglas por cliente. | Hace falta segmentar por cliente, sucursal o lista de precios. |
-| Borrado | El endpoint existe; ventas historicas lo bloquean. | Conviene eliminar el borrado y usar solo inactivacion. |
 
 ## 13. Casos para convertir en especificacion y tests
 

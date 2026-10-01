@@ -5,6 +5,7 @@ import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
 import PromocionesSection from "../Promociones/PromocionesSection"
+import PromocionFormTab from "../Promociones/PromocionFormTab"
 import FiltrosProductos from "./FiltrosProductos"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
@@ -174,7 +175,10 @@ const ProductosManager = () => {
   }
   const closeTab = (key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
-    if (activeTab === key) setActiveTab("lista")
+    if (activeTab === key) {
+      // Las tabs de promocion vuelven a la seccion de Promociones, no a Lista
+      setActiveTab(key.startsWith("nueva-promo") || key.startsWith("editar-promo") ? "promociones" : "lista")
+    }
     setEditStates((prev) => {
       const newStates = { ...prev }
       delete newStates[key]
@@ -185,7 +189,6 @@ const ProductosManager = () => {
       delete next[key]
       return next
     })
-    // También limpiar el borrador del form
     // También limpiar el borrador del form y estados relacionados
     const claveBorrador = `stockFormDraft_${key}`
     try {
@@ -233,6 +236,29 @@ const ProductosManager = () => {
   const handleEditProducto = (producto) => {
     const editKey = `editar-${producto.id}-${Date.now()}`
     openTab(editKey, `Editar Producto: ${producto.deno.substring(0, 15)}...`)
+  }
+
+  // ---- Promociones: apertura de subtabs ----
+  const handleNuevaPromocion = () => {
+    const key = `nueva-promo-${Date.now()}`
+    setTabs((prev) => {
+      if (prev.find((t) => t.key === key)) return prev
+      return [...prev, { key, label: "Nueva Promoción", closable: true }]
+    })
+    setActiveTab(key)
+  }
+
+  const handleEditarPromocion = (promocion) => {
+    const key = `editar-promo-${promocion.id}`
+    const label = `Promo: ${(promocion.nombre || "").substring(0, 20)}`
+    setTabs((prev) => {
+      if (prev.find((t) => t.key === key)) {
+        return prev
+      }
+      return [...prev, { key, label, closable: true, promoData: promocion }]
+    })
+    setActiveTab(key)
+    setEditStates((prev) => ({ ...prev, [key]: promocion }))
   }
 
   const cargarDetalleProducto = useCallback(async (editKey, productoId) => {
@@ -537,8 +563,25 @@ const ProductosManager = () => {
                     cargando={loadingProductos}
                   />
                 )}
-                {activeTab === "promociones" && <PromocionesSection />}
-                {activeTab !== "lista" && activeTab !== "inactivos" && activeTab !== "promociones" && (
+                {activeTab === "promociones" && (
+                  <PromocionesSection
+                    onNuevaPromocion={handleNuevaPromocion}
+                    onEditarPromocion={handleEditarPromocion}
+                  />
+                )}
+                {(activeTab.startsWith("nueva-promo") || activeTab.startsWith("editar-promo")) && (
+                  <PromocionFormTab
+                    key={activeTab}
+                    promocion={editStates[activeTab] || null}
+                    onGuardado={() => closeTab(activeTab)}
+                    onCancelar={() => closeTab(activeTab)}
+                  />
+                )}
+                {activeTab !== "lista" &&
+                  activeTab !== "inactivos" &&
+                  activeTab !== "promociones" &&
+                  !activeTab.startsWith("nueva-promo") &&
+                  !activeTab.startsWith("editar-promo") && (
                   activeTab.startsWith("nuevo") || estadoDetalleEdicion[activeTab]?.estado === "listo" ? (
                     <StockForm
                       key={activeTab}

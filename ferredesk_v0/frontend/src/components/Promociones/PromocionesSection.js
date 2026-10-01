@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import Tabla from "../Tabla"
-import PromocionForm from "./PromocionForm"
 import { usePromocionesAPI } from "./hooks/usePromocionesAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { BotonConfirmar, BotonEditar, BotonPausar, BotonReanudar } from "../Botones"
@@ -27,12 +26,14 @@ const ESTADOS_TAB = [
   { key: "desactualizadas", label: "A revisar" },
 ]
 
-function PromocionesSection() {
+/**
+ * @param {Function} props.onNuevaPromocion    - abre la subtab de alta
+ * @param {Function} props.onEditarPromocion   - abre la subtab de edición, recibe el objeto promocion
+ */
+function PromocionesSection({ onNuevaPromocion, onEditarPromocion }) {
   const theme = useFerreDeskTheme()
 
   const [tabActiva, setTabActiva] = useState("activas")
-  // Pestana dinamica: null (lista) | 'nuevo' | promocion completa a editar
-  const [formularioActivo, setFormularioActivo] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
 
@@ -40,10 +41,6 @@ function PromocionesSection() {
     datos: promociones,
     total,
     cargando,
-    crearPromocion,
-    creando,
-    editarPromocion,
-    editando,
     activarPromocion,
     desactivarPromocion,
     revisarPromocion,
@@ -52,23 +49,6 @@ function PromocionesSection() {
   const cambiarTab = (key) => {
     setTabActiva(key)
     setPagina(1)
-    setFormularioActivo(null)
-  }
-
-  const handleGuardar = async (payload) => {
-    const esEdicion = formularioActivo && formularioActivo !== "nuevo"
-    try {
-      if (esEdicion) {
-        await editarPromocion(formularioActivo.id, payload)
-      } else {
-        await crearPromocion(payload)
-      }
-      toast.success(esEdicion ? "Promocion actualizada." : "Promocion creada.")
-      setFormularioActivo(null)
-    } catch (error) {
-      toast.error(error?.message || "No se pudo guardar la promocion.")
-      throw error
-    }
   }
 
   const handleDesactivar = async (promocion) => {
@@ -127,7 +107,7 @@ function PromocionesSection() {
     { id: "acciones", titulo: "Acciones", align: "center", render: (p) => (
       <div className="flex items-center justify-center gap-2">
         <BotonEditar
-          onClick={() => setFormularioActivo(p)}
+          onClick={() => onEditarPromocion(p)}
           className="px-1 py-1 text-blue-500 transition-colors hover:text-blue-700"
         />
         {p.desactualizada && (
@@ -151,27 +131,6 @@ function PromocionesSection() {
     ) },
   ]
 
-  // Formulario de alta/edicion
-  if (formularioActivo) {
-    const esNuevo = formularioActivo === "nuevo"
-    return (
-      <div>
-        <div className="mb-4 border-b border-slate-200 pb-3">
-          <h3 className="text-lg font-semibold text-slate-800">
-            {esNuevo ? "Nueva promocion" : `Editar promocion: ${formularioActivo.nombre}`}
-          </h3>
-        </div>
-        <PromocionForm
-          promocion={esNuevo ? null : formularioActivo}
-          onGuardar={handleGuardar}
-          onCancelar={() => setFormularioActivo(null)}
-          guardando={creando || editando}
-        />
-      </div>
-    )
-  }
-
-  // Listado
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -188,7 +147,7 @@ function PromocionesSection() {
             </button>
           ))}
         </div>
-        <button onClick={() => setFormularioActivo("nuevo")} className={theme.botonPrimario}>
+        <button onClick={onNuevaPromocion} className={theme.botonPrimario}>
           + Nueva promocion
         </button>
       </div>

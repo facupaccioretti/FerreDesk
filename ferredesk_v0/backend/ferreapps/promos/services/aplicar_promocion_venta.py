@@ -168,12 +168,20 @@ def _costos_habituales(componentes_efectivos):
 
     filas = StockProve.objects.filter(condiciones).values('stock_id', 'proveedor_id', 'costo')
     costos_por_par = {(f['stock_id'], f['proveedor_id']): f['costo'] for f in filas}
-    return {
-        componente.stock_id: costos_por_par.get(
-            (componente.stock_id, componente.stock.proveedor_habitual_id), Decimal('0')
+    costos_por_stock = {}
+    for componente in componentes_efectivos:
+        costo = costos_por_par.get(
+            (componente.stock_id, componente.stock.proveedor_habitual_id)
         )
-        for componente in componentes_efectivos
-    }
+        if costo is None or costo <= 0:
+            raise ValidationError({
+                'items': [
+                    f'El producto {componente.stock.codvta} - {componente.stock.deno} '
+                    'debe tener un costo positivo para su proveedor habitual.'
+                ]
+            })
+        costos_por_stock[componente.stock_id] = costo
+    return costos_por_stock
 
 
 def _prorratear_por_alicuota(componentes_efectivos, precio_total_con_iva, costos_por_stock):

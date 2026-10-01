@@ -2,19 +2,20 @@
  * Utilidades para cálculos de precios de listas.
  */
 
-const ESCALA_PORCENTAJE = BigInt(10000);
+const enteroGrande = window.BigInt;
+const ESCALA_PORCENTAJE = enteroGrande(10000);
 
 function decimalAEntero(value) {
   const numero = Number(value);
-  if (!Number.isFinite(numero)) return BigInt(0);
+  if (!Number.isFinite(numero)) return enteroGrande(0);
   const [entero, fraccion] = Math.abs(numero).toFixed(2).split('.');
-  const valor = BigInt(entero) * BigInt(100) + BigInt(fraccion);
+  const valor = enteroGrande(entero) * enteroGrande(100) + enteroGrande(fraccion);
   return numero < 0 ? -valor : valor;
 }
 
 function calcularPrecioConPorcentajes(precio, porcentajes) {
   let numerador = decimalAEntero(precio);
-  let denominador = BigInt(1);
+  let denominador = enteroGrande(1);
 
   porcentajes.forEach((porcentaje) => {
     numerador *= ESCALA_PORCENTAJE + decimalAEntero(porcentaje);
@@ -23,7 +24,7 @@ function calcularPrecioConPorcentajes(precio, porcentajes) {
 
   const negativo = numerador < 0;
   const absoluto = negativo ? -numerador : numerador;
-  const centavos = (absoluto + denominador / BigInt(2)) / denominador;
+  const centavos = (absoluto + denominador / enteroGrande(2)) / denominador;
   return Number(negativo ? -centavos : centavos) / 100;
 }
 

@@ -54,10 +54,9 @@ class PromocionItem(models.Model):
 
 class PromocionGrupo(models.Model):
     """Grupo de productos a eleccion dentro de una promocion (ej: 'Elegir
-    energizante'). El vendedor elige UNA alternativa del grupo al cargar la
-    promocion en una venta; esa alternativa se vende con la cantidad del
-    grupo, no una propia. Regla de esta primera version: una sola
-    alternativa por grupo aplicada a toda la cantidad (no hay mezcla).
+    energizante'). El vendedor puede distribuir la cantidad del grupo entre
+    una o varias alternativas. Por ejemplo, para cantidad 3 puede elegir
+    2 unidades de A y 1 de B.
     """
     promocion = models.ForeignKey(Promocion, on_delete=models.CASCADE, related_name='grupos')
     nombre = models.CharField(max_length=150)
@@ -79,8 +78,9 @@ class PromocionGrupo(models.Model):
 
 class PromocionGrupoAlternativa(models.Model):
     """Una alternativa posible dentro de un PromocionGrupo (ej: 'Red Bull'
-    como alternativa del grupo 'Elegir energizante'). No tiene cantidad
-    propia: usa la del grupo al que pertenece.
+    como alternativa del grupo 'Elegir energizante'). La cantidad elegida
+    se informa al vender y, sumada con las demas alternativas, debe coincidir
+    con la cantidad del grupo.
     """
     grupo = models.ForeignKey(PromocionGrupo, on_delete=models.CASCADE, related_name='alternativas')
     stock = models.ForeignKey(Stock, on_delete=models.PROTECT, related_name='promociones_grupo_alternativas')

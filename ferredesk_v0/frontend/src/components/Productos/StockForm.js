@@ -36,6 +36,33 @@ const MARGEN_MAXIMO = 999.99 // DecimalField(max_digits=5, decimal_places=2)
 const MARGEN_STEP = 0.01
 const CANTIDAD_MINIMA_MINIMO = 0
 
+const crearPreciosListasIniciales = (stock) => {
+  const precios = {
+    lista0: {
+      precio: stock?.precio_lista_0 ?? "",
+      manual: Boolean(stock?.precio_lista_0_manual),
+    },
+    lista1: { precio: "", manual: false },
+    lista2: { precio: "", manual: false },
+    lista3: { precio: "", manual: false },
+    lista4: { precio: "", manual: false },
+  }
+
+  if (!Array.isArray(stock?.precios_listas)) return precios
+
+  stock.precios_listas.forEach((precioLista) => {
+    const key = `lista${precioLista.lista_numero}`
+    if (key in precios && key !== "lista0") {
+      precios[key] = {
+        precio: precioLista.precio ?? "",
+        manual: Boolean(precioLista.precio_manual),
+      }
+    }
+  })
+
+  return precios
+}
+
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKey }) => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
@@ -84,13 +111,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
         if (saved) return JSON.parse(saved)
       } catch (_) { }
     }
-    return {
-      lista0: { precio: "", manual: false },
-      lista1: { precio: "", manual: false },
-      lista2: { precio: "", manual: false },
-      lista3: { precio: "", manual: false },
-      lista4: { precio: "", manual: false },
-    }
+    return crearPreciosListasIniciales(stock)
   })
 
   // Guardar borrador de precios
@@ -179,7 +200,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // VAT Percentage calculation
   const alicuotaSeleccionada = alicuotas.find(a => String(a.id) === String(form.idaliiva))
-  const porcentajeIVA = alicuotaSeleccionada ? Number(alicuotaSeleccionada.porce) : 0
+  const porcentajeIVA = Number(
+    alicuotaSeleccionada?.porce ??
+    (String(stock?.idaliiva?.id) === String(form.idaliiva) ? stock.idaliiva.porce : 0)
+  )
 
   // Callback cuando el modal cambia el código
   const handleCodigoBarrasChange = (codigo, tipo) => {
@@ -193,45 +217,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
 
   // La obtencion del ID temporal en modo nuevo la maneja useStockForm.js (evitar duplicado)
-
-  // Efecto para inicializar precios de listas cuando se carga el producto (modo edición)
-  useEffect(() => {
-    if (!stock) return
-
-    // Si ya hay datos en preciosListas (cargados del borrador), no sobreescribir con el stock original
-    // a menos que sea la primera vez que se carga este producto en la sesión
-    const tienePrecios = Object.values(preciosListas).some(p => p.precio !== '')
-    if (tienePrecios) return
-
-    // Inicializar precio Lista 0 desde el producto
-    const precioLista0 = stock.precio_lista_0 || ''
-    const esManualLista0 = stock.precio_lista_0_manual || false
-
-    // Inicializar precios de listas 1-4 desde precios_listas
-    const preciosListasIniciales = {
-      lista0: { precio: precioLista0, manual: esManualLista0 },
-      lista1: { precio: '', manual: false },
-      lista2: { precio: '', manual: false },
-      lista3: { precio: '', manual: false },
-      lista4: { precio: '', manual: false },
-    }
-
-    // Cargar precios existentes de listas 1-4
-    if (Array.isArray(stock.precios_listas)) {
-      stock.precios_listas.forEach(pl => {
-        const key = `lista${pl.lista_numero}`
-        if (preciosListasIniciales[key]) {
-          preciosListasIniciales[key] = {
-            precio: pl.precio || '',
-            manual: pl.precio_manual || false,
-          }
-        }
-      })
-    }
-
-    setPreciosListas(preciosListasIniciales)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock])
 
   // Obtener costo del proveedor habitual
   const obtenerCostoProveedorHabitual = useCallback(() => {

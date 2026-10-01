@@ -383,7 +383,8 @@ export const BotonConfirmar = ({ onClick, title = 'Marcar como revisada', ...pro
     {...props}
   >
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 4.5 4.5 10.5-10.5" />
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m8 12 3 3 5-6" />
     </svg>
   </button>
 );
@@ -397,7 +398,7 @@ export const BotonPausar = ({ onClick, title = 'Desactivar', ...props }) => (
     {...props}
   >
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-      <path strokeLinecap="round" d="M9.75 6.75v10.5m4.5-10.5v10.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 21 12a10 10 0 0 1-4.1 5.1M6.2 6.2A10 10 0 0 0 3 12a10 10 0 0 0 12.5 6.8" />
     </svg>
   </button>
 );
