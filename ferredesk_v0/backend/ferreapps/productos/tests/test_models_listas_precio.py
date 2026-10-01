@@ -3,13 +3,14 @@ Tests para los modelos del sistema de listas de precios.
 """
 from decimal import Decimal
 
+
 from ferreapps.productos.models import ListaPrecio
 from ferreapps.productos.tests.mixins import ProductoTenantTestCase
 
 
 class ListaPrecioModelTest(ProductoTenantTestCase):
     """Tests para el modelo ListaPrecio."""
-    
+
     def test_listas_iniciales_existen(self):
         """Verifica que las 5 listas iniciales fueron creadas por la migración."""
         listas = ListaPrecio.objects.all().order_by('numero')

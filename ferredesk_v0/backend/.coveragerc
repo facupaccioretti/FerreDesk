@@ -1,0 +1,21 @@
+[run]
+branch = True
+source =
+    acceso_publico
+    ferredesk_backend
+    ferreapps
+    tenants
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    */test_*.py
+    */manage.py
+
+[report]
+show_missing = True
+skip_covered = True
+precision = 2
+
+[xml]
+output = coverage.xml

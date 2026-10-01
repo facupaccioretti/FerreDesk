@@ -243,6 +243,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("888.00"),
+            tipo_operacion=PagoVenta.TIPO_COBRO_RECIBO,
         )
 
         proveedor = TestDataHelper.crear_proveedor(razon="Proveedor OP Anulada")
@@ -259,6 +260,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=self.metodo_transferencia,
             cuenta_banco=self.banco,
             monto=Decimal("777.00"),
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
         )
 
         payload = build_control_fondos_payload()
@@ -313,6 +315,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
             metodo_pago=metodo_efectivo,
             monto=Decimal("30.00"),
             es_vuelto=True,
+            tipo_operacion=PagoVenta.TIPO_VUELTO_VENTA,
         )
         MovimientoCaja.objects.create(
             sesion_caja=sesion_abierta,

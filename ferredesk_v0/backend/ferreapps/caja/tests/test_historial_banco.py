@@ -32,9 +32,32 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
             activo=True
         )
 
+    def _crear_venta(self, numero):
+        from ferreapps.ventas.models import Venta
+
+        base_data = TestDataHelper.setup_base_venta_data()
+        return Venta.objects.create(
+            ven_sucursal=1,
+            ven_fecha=timezone.now().date(),
+            comprobante=base_data['comprobante'],
+            ven_punto=1,
+            ven_numero=numero,
+            ven_descu1=0,
+            ven_descu2=0,
+            ven_descu3=0,
+            ven_vdocomvta=0,
+            ven_vdocomcob=0,
+            ven_estado='CO',
+            ven_idcli=base_data['cliente'],
+            ven_idpla=base_data['plazo'],
+            ven_idvdo=base_data['vendedor'],
+            ven_copia=1,
+        )
+
     def test_no_puede_eliminar_banco_con_pagos(self):
         """No se puede eliminar un banco que tiene registros en PagoVenta."""
         PagoVenta.objects.create(
+            venta=self._crear_venta(9001),
             metodo_pago=self.metodo_transfer,
             cuenta_banco=self.banco,
             monto=Decimal('100.00')
@@ -117,7 +140,8 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
         )
         PagoVenta.objects.create(
             recibo=recibo, metodo_pago=self.metodo_transfer, cuenta_banco=self.banco,
-            monto=Decimal('500.00'), fecha_hora=ahora
+            monto=Decimal('500.00'), fecha_hora=ahora,
+            tipo_operacion=PagoVenta.TIPO_COBRO_RECIBO,
         )
         
         # 3. Orden de Pago (EGRESO)
@@ -132,7 +156,8 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
         )
         PagoVenta.objects.create(
             orden_pago=op, metodo_pago=self.metodo_transfer, cuenta_banco=self.banco,
-            monto=Decimal('300.00'), fecha_hora=ahora
+            monto=Decimal('300.00'), fecha_hora=ahora,
+            tipo_operacion=PagoVenta.TIPO_PAGO_ORDEN_PAGO,
         )
         
         # 4. Cheque acreditado (INGRESO)
@@ -163,9 +188,11 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
         """El historial debe respetar los query params de fecha."""
         ahora = timezone.now()
         ahora_local = timezone.localtime(ahora)
+        venta = self._crear_venta(9002)
         
         # Movimiento hoy
         PagoVenta.objects.create(
+            venta=venta,
             metodo_pago=self.metodo_transfer, cuenta_banco=self.banco, 
             monto=Decimal('100.00'), fecha_hora=ahora
         )
@@ -173,6 +200,7 @@ class HistorialBancoTests(CajaTenantAPITestCase, CajaTestMixin):
         # Movimiento antiguo
         antiguo = ahora - timedelta(days=40)
         p_antiguo = PagoVenta.objects.create(
+            venta=venta,
             metodo_pago=self.metodo_transfer, cuenta_banco=self.banco, 
             monto=Decimal('200.00')
         )
