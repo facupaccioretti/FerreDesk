@@ -151,12 +151,12 @@ class VentaDetalleItemQuerySet(models.QuerySet):
             output_field=dinero,
         )
         subtotal_neto_final = Case(
-            When(es_linea_promocion, then=Coalesce(promo_neto_subquery, Value(0, output_field=dinero))),
+            When(es_linea_promocion, then=promo_neto_subquery),
             default=subtotal_neto_calculado,
             output_field=dinero,
         )
         iva_monto_final = Case(
-            When(es_linea_promocion, then=Coalesce(promo_iva_subquery, Value(0, output_field=dinero))),
+            When(es_linea_promocion, then=promo_iva_subquery),
             default=iva_monto_calculado,
             output_field=dinero,
         )

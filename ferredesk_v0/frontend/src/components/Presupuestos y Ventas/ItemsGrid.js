@@ -10,6 +10,7 @@
 import { useImperativeHandle, forwardRef } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useItemsGridState } from "./hooks/useItemsGridState"
+import { calcularImporteConDescuentos } from "./herramientasforms/useCalculosFormulario"
 
 import { BotonDuplicar, BotonEliminar, BotonEditar } from "../Botones"
 
@@ -287,21 +288,13 @@ const ItemsGridPresupuesto = forwardRef(
                       : (row.precio !== "" && row.precio !== undefined
                         ? Number((Number.parseFloat(row.precio) * (1 + aliPorcRow / 100)).toFixed(2))
                         : 0)
-                  const bonifParticular = Number.parseFloat(row.bonificacion)
-                  const bonifGeneral = Number.parseFloat(bonificacionGeneral) || 0
-                  // Una promocion tiene precio fijo: nunca se le aplica bonificacion
-                  // general ni particular (igual que resuelve el backend al vender).
-                  const bonifEfectiva = row.tipo === "promocion"
-                    ? 0
-                    : (Number.isFinite(bonifParticular) && bonifParticular > 0)
-                      ? bonifParticular
-                      : bonifGeneral
-                  const precioBonificado = precioConIVA * (1 - (bonifEfectiva / 100))
-
-                  let precioConDescuentos = precioBonificado
-                  if (descu1 > 0) precioConDescuentos *= (1 - descu1 / 100)
-                  if (descu2 > 0) precioConDescuentos *= (1 - descu2 / 100)
-                  if (descu3 > 0) precioConDescuentos *= (1 - descu3 / 100)
+                  const precioBonificado = calcularImporteConDescuentos(row, precioConIVA, { bonificacionGeneral })
+                  const precioConDescuentos = calcularImporteConDescuentos(row, precioConIVA, {
+                    bonificacionGeneral,
+                    descu1,
+                    descu2,
+                    descu3,
+                  })
 
                   return (
                     <tr

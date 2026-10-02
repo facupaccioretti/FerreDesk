@@ -72,6 +72,13 @@ describe("crearItemDesdePromocion", () => {
     const item = crearItemDesdePromocion(promocionConGrupo, { eleccionesGrupos: [], cantidad: 1 });
     expect(item.resumenComponentes).toBe("Vodka x1 · Bebida (sin elegir) x2");
   });
+
+  test.each([0, "no-es-un-numero"])("rechaza el precio promocional invalido %p", (precioPromocional) => {
+    expect(() => crearItemDesdePromocion({
+      ...promocionConGrupo,
+      precio_promocional: precioPromocional,
+    })).toThrow("El precio promocional debe ser mayor a cero.");
+  });
 });
 
 describe("crearItemDesdeBackend con una linea de promocion ya vendida", () => {
@@ -99,6 +106,49 @@ describe("crearItemDesdeBackend con una linea de promocion ya vendida", () => {
     // El snapshot vendido no trae la promocion completa: reconfigurar debe
     // ir a buscarla aparte, nunca asumir que esta disponible aca.
     expect(item.promocion).toBeNull();
+  });
+
+  test("volver a normalizar una promocion conserva sus datos para grilla y borrador", () => {
+    const itemBackend = {
+      id: 555,
+      vdi_promocion: 5,
+      promocion_nombre: "Combo historico",
+      vdi_cantidad: 2,
+      vdi_precio_unitario_final: "15000.00",
+      componentes_promocion: [
+        { stock_id: 100, denominacion: "Vodka", codigo: "VODKA", cantidad: "1.00" },
+      ],
+    };
+
+    const normalizado = crearItemDesdeBackend(itemBackend);
+    const renormalizado = crearItemDesdeBackend(normalizado);
+
+    expect(renormalizado).toMatchObject({
+      tipo: "promocion",
+      promocionId: 5,
+      promocionNombre: "Combo historico",
+      denominacion: "Combo historico",
+      resumenComponentes: "Vodka x1.00",
+      componentesPromocion: itemBackend.componentes_promocion,
+      cantidad: 2,
+      precioFinal: 15000,
+    });
+  });
+
+  test("bloquea una promocion al fiscalizar una cotizacion", () => {
+    const item = crearItemDesdeBackend({
+      id: 555,
+      vdi_promocion: 5,
+      promocion_nombre: "Combo historico",
+      vdi_cantidad: 2,
+      vdi_precio_unitario_final: "15000.00",
+    }, { esConversionFacturaI: true });
+
+    expect(item).toMatchObject({
+      esBloqueado: true,
+      noDescontarStock: true,
+      idOriginal: 555,
+    });
   });
 
   test("un item con vdi_idsto normal sigue tomando la rama de producto (no se rompe nada existente)", () => {

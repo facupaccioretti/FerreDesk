@@ -328,7 +328,10 @@ class VentaSerializer(serializers.ModelSerializer):
         if not items_data:
             return items_data
         from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
-        return expandir_items_promocion(items_data)
+        return expandir_items_promocion(
+            items_data,
+            permitir_snapshot_interno=self.context.get('origen_postventa') is True,
+        )
 
     def _obtener_items_para_update(self, instance):
         items_data = getattr(self, 'initial_data', {}).get('items', [])

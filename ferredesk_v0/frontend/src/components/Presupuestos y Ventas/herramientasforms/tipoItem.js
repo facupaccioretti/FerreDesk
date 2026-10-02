@@ -263,6 +263,15 @@ export function crearItemDesdeProducto(producto, {
 export function crearItemDesdeBackend(item, { aliMap = {}, esConversionFacturaI = false } = {}) {
     const itemId = item.id || generarIdTemporal()
 
+    if (esConversionFacturaI) {
+        item = {
+            ...item,
+            esBloqueado: true,
+            noDescontarStock: true,
+            idOriginal: itemId,
+        }
+    }
+
     // Una linea de promocion nunca es generica ni de stock: es su propio tipo
     // de fila, resuelta aparte para no forzarla por las ramas de abajo.
     if (item.vdi_promocion || item.tipo === 'promocion') {
@@ -443,6 +452,11 @@ export function construirResumenDesdeComponentes(componentes = []) {
  * @returns {ItemCanonicoShape}
  */
 export function crearItemDesdePromocion(promocion, { eleccionesGrupos = [], cantidad = 1 } = {}) {
+    const precioPromocional = Number(promocion.precio_promocional)
+    if (!Number.isFinite(precioPromocional) || precioPromocional <= 0) {
+        throw new Error('El precio promocional debe ser mayor a cero.')
+    }
+
     return {
         id: generarIdTemporal(),
         tipo: 'promocion',
@@ -458,7 +472,7 @@ export function crearItemDesdePromocion(promocion, { eleccionesGrupos = [], cant
         unidad: '-',
         cantidad,
         precio: '',
-        precioFinal: Number(promocion.precio_promocional) || 0,
+        precioFinal: precioPromocional,
         bonificacion: 0,
         idaliiva: null,
         vdi_costo: null,
@@ -511,20 +525,26 @@ export function resolverEleccionesDesdeComponentes(promocion, componentes = []) 
  * @returns {ItemCanonicoShape}
  */
 function crearItemPromocionDesdeBackend(item, itemId) {
-    const componentes = Array.isArray(item.componentes_promocion) ? item.componentes_promocion : []
-    const nombre = valorNoVacio(item.promocion_nombre) ?? valorNoVacio(item.vdi_detalle1) ?? ''
+    const componentes = Array.isArray(item.componentes_promocion)
+        ? item.componentes_promocion
+        : (Array.isArray(item.componentesPromocion) ? item.componentesPromocion : [])
+    const nombre = valorNoVacio(item.promocion_nombre)
+        ?? valorNoVacio(item.promocionNombre)
+        ?? valorNoVacio(item.denominacion)
+        ?? valorNoVacio(item.vdi_detalle1)
+        ?? ''
     return {
         id: itemId,
         tipo: 'promocion',
         producto: null,
-        promocionId: item.vdi_promocion,
-        promocion: null, // no viaja con la linea vendida; se resuelve al reconfigurar (fetch por id)
+        promocionId: item.vdi_promocion ?? item.promocionId,
+        promocion: item.promocion ?? null, // no viaja con la linea vendida; se resuelve al reconfigurar (fetch por id)
         promocionNombre: nombre,
-        eleccionesGrupos: [],
+        eleccionesGrupos: Array.isArray(item.eleccionesGrupos) ? item.eleccionesGrupos : [],
         componentesPromocion: componentes,
         codigo: 'PROMO',
         denominacion: nombre,
-        resumenComponentes: construirResumenDesdeComponentes(componentes),
+        resumenComponentes: valorNoVacio(item.resumenComponentes) ?? construirResumenDesdeComponentes(componentes),
         unidad: valorNoVacio(item.unidad) ?? item.vdi_detalle2 ?? '-',
         cantidad: Number(item.cantidad ?? item.vdi_cantidad ?? 1),
         precio: '',

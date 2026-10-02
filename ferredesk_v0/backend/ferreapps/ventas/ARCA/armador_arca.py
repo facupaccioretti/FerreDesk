@@ -298,7 +298,10 @@ def _construir_alicuotas_afip(alicuotas_venta):
             27: 6,     # 27% → ID 6
             2.5: 9     # 2.5% → ID 9
         }
-        return mapeo_alicuotas.get(float(porcentaje), 5)  # Default a 21% si no se encuentra
+        try:
+            return mapeo_alicuotas[float(porcentaje)]
+        except (TypeError, ValueError, KeyError) as exc:
+            raise ValueError(f'Porcentaje de IVA no reconocido por ARCA: {porcentaje}.') from exc
     
     alicuotas_afip = []
     for alicuota in alicuotas_venta:

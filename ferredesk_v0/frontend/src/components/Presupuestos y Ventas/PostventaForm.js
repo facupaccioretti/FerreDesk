@@ -166,7 +166,7 @@ export const buildItemsNuevosPayload = (rows = []) => (
         return {
           promocion_id: promocionId,
           cantidad: cantidad.toFixed(2),
-          elecciones_grupos: item.eleccionesGrupos || [],
+          elecciones_grupos: item.eleccionesGrupos ?? item.elecciones_grupos ?? [],
         }
       }
 

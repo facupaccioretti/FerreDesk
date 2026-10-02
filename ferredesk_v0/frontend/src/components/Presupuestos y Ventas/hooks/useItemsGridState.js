@@ -652,8 +652,15 @@ export function useItemsGridState({
         (promocion, eleccionesGrupos = [], cantidad = 1) => {
             if (readOnly || !promocion) return
 
+            let nuevoItem
+            try {
+                nuevoItem = crearItemDesdePromocion(promocion, { eleccionesGrupos, cantidad })
+            } catch (error) {
+                window.alert(error.message)
+                return
+            }
+
             setRows((prevRows) => {
-                const nuevoItem = crearItemDesdePromocion(promocion, { eleccionesGrupos, cantidad })
                 const lastRow = prevRows[prevRows.length - 1]
 
                 if (lastRow && !lastRow.producto && !lastRow.codigo && lastRow.tipo !== 'promocion') {

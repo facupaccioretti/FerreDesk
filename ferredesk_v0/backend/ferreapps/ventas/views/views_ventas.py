@@ -878,28 +878,9 @@ class VentaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class VentaDetalleItemViewSet(viewsets.ModelViewSet):
+class VentaDetalleItemViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaDetalleItem.objects.all()
     serializer_class = VentaDetalleItemSerializer
-
-    def perform_create(self, serializer):
-        venta = serializer.validated_data['vdi_idve']
-        if venta.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden agregar items a un comprobante cerrado.'})
-        serializer.save()
-
-    def perform_update(self, serializer):
-        if serializer.instance.vdi_idve.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden modificar items de un comprobante cerrado.'})
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        if instance.vdi_idve.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden eliminar items de un comprobante cerrado.'})
-        instance.delete()
 
 
 class VentaDetalleManViewSet(viewsets.ModelViewSet):

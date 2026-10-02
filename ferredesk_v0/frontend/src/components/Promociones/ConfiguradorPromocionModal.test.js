@@ -122,6 +122,35 @@ describe("ConfiguradorPromocionModal", () => {
     expect(cantidad).toBe(1);
   });
 
+  test.each(["0", "1.5", ""])("bloquea la cantidad de linea invalida %p", async (cantidadInvalida) => {
+    const onConfirmar = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <ConfiguradorPromocionModal
+          abierto
+          modo="agregar"
+          promocion={promocionDosGrupos}
+          onConfirmar={onConfirmar}
+          onCancelar={() => {}}
+        />
+      );
+    });
+
+    await cambiarCantidad(inputCantidad("Redbull"), "2");
+    await cambiarCantidad(inputCantidad("Papas fritas"), "1");
+    await cambiarCantidad(document.body.querySelector('input[type="number"][min="1"]'), cantidadInvalida);
+
+    const botonConfirmar = botonPorTexto("Confirmar");
+    expect(botonConfirmar.disabled).toBe(true);
+
+    await act(async () => {
+      botonConfirmar.click();
+    });
+
+    expect(onConfirmar).not.toHaveBeenCalled();
+  });
+
   test("en modo reconfigurar precompleta las cantidades elegidas", async () => {
     await act(async () => {
       root.render(

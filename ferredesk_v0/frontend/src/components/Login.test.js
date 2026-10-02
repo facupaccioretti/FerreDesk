@@ -70,7 +70,7 @@ describe("Login", () => {
   }
 
   test("en dominio publico usa el hook de bridge", async () => {
-    setWindowLocation("http://localhost:3000/login");
+    setWindowLocation("http://lvh.me:3000/login");
     mockLoginPublicoConBridge.mockResolvedValue({
       redirectTo: "http://ferretest.lvh.me:3000/setup",
     });
@@ -95,14 +95,28 @@ describe("Login", () => {
     expect(window.location.assign).not.toHaveBeenCalled();
   });
 
-  test("en subdominio redirige al dominio publico sin renderizar el formulario", async () => {
-    setWindowLocation("http://ferretest.lvh.me:3000/login");
+  test("en localhost inicia sesion directa sin volver a la landing", async () => {
+    setWindowLocation("http://localhost:3000/login");
+    mockLoginTenantDirecto.mockResolvedValue({ redirectTo: "/home" });
 
     await renderLogin();
 
-    expect(container.querySelector("form")).toBeNull();
-    expect(mockLoginTenantDirecto).not.toHaveBeenCalled();
-    expect(window.location.assign).toHaveBeenCalledWith("http://lvh.me:3000/");
+    const [usernameInput, passwordInput] = container.querySelectorAll("input");
+    const form = container.querySelector("form");
+
+    await act(async () => {
+      usernameInput.value = "admin@ferretest.com";
+      usernameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      passwordInput.value = "testpass123";
+      passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(mockLoginTenantDirecto).toHaveBeenCalledWith({
+      username: "admin@ferretest.com",
+      password: "testpass123",
+    });
+    expect(window.location.assign).toHaveBeenCalledWith("/home");
   });
 
   test("en staging publico renderiza el formulario y no redirige al root inexistente", async () => {

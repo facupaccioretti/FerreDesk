@@ -15,7 +15,7 @@ from rest_framework import serializers as drf_serializers
 
 from ferreapps.compras.models import Compra, OrdenCompra
 from ferreapps.clientes.models import Cliente, Plazo, TipoIVA, Vendedor
-from ferreapps.caja.models import ESTADO_CAJA_ABIERTA, MetodoPago, PagoVenta, SesionCaja
+from ferreapps.caja.models import CuentaBanco, ESTADO_CAJA_ABIERTA, MetodoPago, PagoVenta, SesionCaja
 from ferreapps.productos.models import AlicuotaIVA, Ferreteria, PrecioProveedorExcel, Proveedor, Stock, StockProve
 from ferreapps.promos.models import PromocionGrupo
 from ferreapps.promos.services.aplicar_promocion_venta import (
@@ -34,6 +34,7 @@ from tenants.services import inicializar_datos_tenant
 
 ENDPOINT_VENTAS = "/api/ventas/"
 ENDPOINT_CONVERTIR_PRESUPUESTO = "/api/convertir-presupuesto/"
+ENDPOINT_CONVERTIR_FACTURA_INTERNA = "/api/convertir-factura-interna/"
 
 
 class TestPrecioUnitarioField(SimpleTestCase):
@@ -519,6 +520,291 @@ class TestConversionPresupuestoARCA(VentasTenantTestCase):
         self.assertTrue(VentaDetalleItem.objects.filter(pk=item.pk, vdi_idve=presupuesto).exists())
         self.assertEqual(Venta.objects.count(), ventas_antes)
 
+    @patch("ferreapps.ventas.views.views_conversiones.asignar_comprobante")
+    def test_conversion_sin_caja_registra_transferencia(self, asignar_comprobante):
+        self.sesion_caja.delete()
+        presupuesto, item = self.crear_presupuesto(912)
+        metodo, _ = MetodoPago.objects.get_or_create(
+            codigo="transferencia",
+            defaults={"nombre": "Transferencia", "activo": True},
+        )
+        cuenta = CuentaBanco.objects.create(nombre="Banco conversion", activo=True)
+        asignar_comprobante.return_value = self.comprobante_asignado()
+        payload = self.payload_conversion(presupuesto, item)
+        payload.update({
+            "tipo_comprobante": "factura_interna",
+            "comprobante_pagado": True,
+            "monto_pago": "100.00",
+            "pagos": [{
+                "metodo_pago_id": metodo.id,
+                "monto": "100.00",
+                "cuenta_banco_id": cuenta.id,
+            }],
+        })
+
+        respuesta = self.client.post(
+            ENDPOINT_CONVERTIR_PRESUPUESTO,
+            payload,
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        venta = Venta.objects.get(ven_id=respuesta.json()["venta"]["ven_id"])
+        pago = PagoVenta.objects.get(venta=venta)
+        self.assertIsNone(venta.sesion_caja_id)
+        self.assertIsNone(pago.sesion_caja_id)
+        self.assertEqual(pago.metodo_pago_id, metodo.id)
+        self.assertEqual(pago.cuenta_banco_id, cuenta.id)
+
+
+class TestConversionPromocionSnapshot(VentasTenantTestCase):
+    def setUp(self):
+        super().setUp()
+        usuario = get_user_model().objects.get(username="admin@ventas.test")
+        SesionCaja.objects.create(
+            usuario=usuario,
+            sucursal=1,
+            saldo_inicial=Decimal("0.00"),
+            estado=ESTADO_CAJA_ABIERTA,
+        )
+        ferreteria = Ferreteria.objects.first()
+        ferreteria.nombre = "Ferreteria Conversion Promo"
+        ferreteria.razon_social = "Ferreteria Conversion Promo SA"
+        ferreteria.cuit_cuil = "30111111118"
+        ferreteria.situacion_iva = "RI"
+        ferreteria.direccion = "Calle Conversion 1"
+        ferreteria.telefono = "123456"
+        ferreteria.punto_venta_arca = "1"
+        ferreteria.permitir_stock_negativo = False
+        ferreteria.save()
+
+        self.proveedor = Proveedor.objects.create(
+            razon="Proveedor Conversion Promo",
+            fantasia="Proveedor Conversion Promo",
+            domicilio="Calle Proveedor 1",
+            cuit="20999111456",
+            impsalcta=Decimal("0.00"),
+            fecsalcta=date.today(),
+            sigla="PCP",
+        )
+        self.alicuota_iva_10_5 = AlicuotaIVA.objects.filter(porce=Decimal("10.50")).first()
+        if self.alicuota_iva_10_5 is None:
+            self.alicuota_iva_10_5 = AlicuotaIVA.objects.create(
+                codigo="10.5",
+                deno="IVA 10.5%",
+                porce=Decimal("10.50"),
+            )
+        self.stock_21 = self._crear_stock("PROMO-21", self.alicuota_iva_21)
+        self.stock_10_5 = self._crear_stock("PROMO-105", self.alicuota_iva_10_5)
+        self.promocion = crear_promocion(
+            datos={
+                "nombre": "Promo conversion mixta",
+                "precio_promocional": Decimal("231.50"),
+            },
+            items_data=[
+                {"stock_id": self.stock_21.id, "cantidad": Decimal("1.00")},
+                {"stock_id": self.stock_10_5.id, "cantidad": Decimal("2.00")},
+            ],
+        )
+        self.comprobante_interno = Comprobante.objects.filter(
+            tipo="factura_interna",
+            activo=True,
+        ).first()
+        if self.comprobante_interno is None:
+            self.comprobante_interno = Comprobante.objects.create(
+                codigo_afip="9999",
+                nombre="Factura interna",
+                letra="I",
+                tipo="factura_interna",
+                activo=True,
+            )
+
+    def _crear_stock(self, codigo, alicuota):
+        stock_id = (Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0) + 1
+        stock = Stock.objects.create(
+            id=stock_id,
+            codvta=codigo,
+            codigo_barras=f"779901{stock_id:07d}",
+            deno=f"Producto {codigo}",
+            unidad="UN",
+            margen=Decimal("20.00"),
+            cantmin=1,
+            idaliiva=alicuota,
+            proveedor_habitual=self.proveedor,
+            acti="S",
+            precio_lista_0=Decimal("100.00"),
+        )
+        StockProve.objects.create(
+            stock=stock,
+            proveedor=self.proveedor,
+            cantidad=Decimal("10.00"),
+            costo=Decimal("50.00"),
+        )
+        return stock
+
+    def _crear_detalle_promocion(self, venta):
+        item = expandir_item_promocion({
+            "vdi_promocion": self.promocion.id,
+            "vdi_cantidad": Decimal("2.00"),
+        })
+        snapshot = item.pop("_promo_snapshot")
+        item["vdi_orden"] = 1
+        item["vdi_bonifica"] = Decimal("0.00")
+        for campo in ("vdi_idsto", "vdi_idpro", "vdi_idaliiva", "vdi_promocion"):
+            valor = item.pop(campo)
+            if valor is not None:
+                item[f"{campo}_id"] = valor
+        detalle = VentaDetalleItem.objects.create(vdi_idve=venta, **item)
+        crear_snapshot_promocion(detalle, snapshot)
+        recalcular_totales_venta_si_hace_falta(
+            venta.pk,
+            hubo_snapshot_promocion=True,
+        )
+        return detalle
+
+    def _snapshot(self, detalle):
+        return {
+            "componentes": sorted(
+                (
+                    componente.stock_id,
+                    componente.proveedor_id,
+                    componente.cantidad_por_promo,
+                    componente.costo_unitario,
+                )
+                for componente in detalle.componentes_promocion.all()
+            ),
+            "alicuotas": sorted(
+                (alicuota.alicuota_id, alicuota.neto, alicuota.iva_monto)
+                for alicuota in detalle.promo_alicuotas.all()
+            ),
+        }
+
+    def _payload_base(self, tipo_comprobante):
+        return {
+            "tipo_comprobante": tipo_comprobante,
+            "ven_sucursal": 1,
+            "ven_fecha": "2026-09-10",
+            "ven_punto": 1,
+            "ven_idcli": self.cliente.id,
+            "ven_idpla": self.plazo.id,
+            "ven_idvdo": self.vendedor.id,
+            "ven_copia": 1,
+        }
+
+    def _desactivar_promocion(self):
+        self.promocion.activa = False
+        self.promocion.precio_promocional = Decimal("999.00")
+        self.promocion.save(update_fields=["activa", "precio_promocional"])
+
+    def test_presupuesto_con_promo_conserva_snapshot_y_descuenta_componentes(self):
+        presupuesto = self.crear_venta(
+            comprobante=self.comprobante_presupuesto,
+            numero=920,
+            fecha=date(2026, 9, 10),
+        )
+        presupuesto.ven_estado = "AB"
+        presupuesto.save(update_fields=["ven_estado"])
+        detalle_origen = self._crear_detalle_promocion(presupuesto)
+        snapshot_origen = self._snapshot(detalle_origen)
+        costo_origen = detalle_origen.vdi_costo
+        precio_origen = detalle_origen.vdi_precio_unitario_final
+        cantidades_esperadas = {
+            componente.stock_id: componente.cantidad_por_promo * detalle_origen.vdi_cantidad
+            for componente in detalle_origen.componentes_promocion.all()
+        }
+        self._desactivar_promocion()
+
+        payload = self._payload_base("factura_interna")
+        payload.update({
+            "presupuesto_origen": presupuesto.ven_id,
+            "items_seleccionados": [detalle_origen.id],
+        })
+        respuesta = self.client.post(
+            ENDPOINT_CONVERTIR_PRESUPUESTO,
+            payload,
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        venta = Venta.objects.get(pk=respuesta.json()["venta"]["ven_id"])
+        detalle_convertido = venta.items.get()
+        self.assertEqual(detalle_convertido.vdi_promocion_id, self.promocion.id)
+        self.assertEqual(detalle_convertido.vdi_cantidad, Decimal("2.00"))
+        self.assertEqual(detalle_convertido.vdi_costo, costo_origen)
+        self.assertEqual(detalle_convertido.vdi_precio_unitario_final, precio_origen)
+        self.assertEqual(self._snapshot(detalle_convertido), snapshot_origen)
+        for stock_id, cantidad in cantidades_esperadas.items():
+            self.assertEqual(
+                StockProve.objects.get(stock_id=stock_id, proveedor=self.proveedor).cantidad,
+                Decimal("10.00") - cantidad,
+            )
+
+    @patch("ferreapps.ventas.views.views_conversiones.emitir_arca_automatico")
+    def test_factura_interna_con_promo_conserva_snapshot_sin_redescontar_stock(self, emitir_arca):
+        factura_interna = self.crear_venta(
+            comprobante=self.comprobante_interno,
+            numero=921,
+            fecha=date(2026, 9, 10),
+        )
+        detalle_origen = self._crear_detalle_promocion(factura_interna)
+        snapshot_origen = self._snapshot(detalle_origen)
+        costo_origen = detalle_origen.vdi_costo
+        precio_origen = detalle_origen.vdi_precio_unitario_final
+        total_origen = Venta.objects.con_calculos().get(pk=factura_interna.pk).ven_total
+        for componente in detalle_origen.componentes_promocion.all():
+            stockprove = StockProve.objects.get(
+                stock_id=componente.stock_id,
+                proveedor_id=componente.proveedor_id,
+            )
+            stockprove.cantidad -= componente.cantidad_por_promo * detalle_origen.vdi_cantidad
+            stockprove.save(update_fields=["cantidad"])
+        stock_antes_conversion = {
+            stockprove.stock_id: stockprove.cantidad
+            for stockprove in StockProve.objects.filter(proveedor=self.proveedor)
+        }
+        self._desactivar_promocion()
+        emitir_arca.return_value = {
+            "resultado": {
+                "cae": "12345678901234",
+                "cae_vencimiento": "20260920",
+                "qr_generado": True,
+                "observaciones": [],
+            }
+        }
+
+        payload = self._payload_base("factura")
+        payload.update({
+            "comprobante_id": self.comprobante_factura.codigo_afip,
+            "factura_interna_origen": factura_interna.ven_id,
+            "tipo_conversion": "factura_i_factura",
+        })
+        respuesta = self.client.post(
+            ENDPOINT_CONVERTIR_FACTURA_INTERNA,
+            payload,
+            content_type="application/json",
+        )
+
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        factura_fiscal = Venta.objects.get(pk=respuesta.json()["ven_id"])
+        detalle_convertido = factura_fiscal.items.get()
+        self.assertEqual(detalle_convertido.vdi_promocion_id, self.promocion.id)
+        self.assertEqual(detalle_convertido.vdi_cantidad, Decimal("2.00"))
+        self.assertEqual(detalle_convertido.vdi_costo, costo_origen)
+        self.assertEqual(detalle_convertido.vdi_precio_unitario_final, precio_origen)
+        self.assertEqual(detalle_convertido.vdi_detalle1, detalle_origen.vdi_detalle1)
+        self.assertEqual(
+            Venta.objects.con_calculos().get(pk=factura_fiscal.pk).ven_total,
+            total_origen,
+        )
+        self.assertEqual(self._snapshot(detalle_convertido), snapshot_origen)
+        self.assertEqual(
+            {
+                stockprove.stock_id: stockprove.cantidad
+                for stockprove in StockProve.objects.filter(proveedor=self.proveedor)
+            },
+            stock_antes_conversion,
+        )
+
 
 class TestVentaViewSetPaginacion(VentasTenantTestCase):
     def setUp(self):
@@ -770,27 +1056,14 @@ class TestDenormalizacionTotalesVenta(TestCase):
             self.assertEqual(update_kwargs['neto_guardado'].as_tuple().exponent, -2)
             self.assertEqual(update_kwargs['iva_guardado'].as_tuple().exponent, -2)
 
-    def test_error_en_recalculo_no_propaga_excepcion(self):
-        """
-        Si hay un error en el recálculo (ej. venta no encontrada), la señal
-        debe registrar el error en el logger pero NO propagar la excepción,
-        para no romper el save() original del ítem.
-        """
+    def test_error_en_recalculo_propaga_excepcion(self):
         from ferreapps.ventas.signals import _recalcular_totales_venta
 
-        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls, \
-             patch('ferreapps.ventas.signals.logger') as mock_logger:
-
+        with patch('ferreapps.ventas.models.VentaDetalleItem') as mock_item_cls:
             mock_item_cls.objects.filter.side_effect = Exception("Error de base de datos simulado")
 
-            # No debe lanzar excepción
-            try:
+            with self.assertRaisesRegex(Exception, "Error de base de datos simulado"):
                 _recalcular_totales_venta(999)
-            except Exception:
-                self.fail("_recalcular_totales_venta propagó una excepción cuando no debería")
-
-            # Debe haber loggeado el error
-            mock_logger.error.assert_called()
 
     def test_recalculo_agrega_subtotal_desde_anotacion_segura(self):
         from django.db.models import Sum

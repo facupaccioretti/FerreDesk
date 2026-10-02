@@ -139,7 +139,15 @@ def actualizar_promocion(*, promocion, datos, items_data=None, grupos_data=None)
             for grupo in promocion.grupos.all()
         ]
 
-    validar_componentes_promocion(items_para_validar, grupos_para_validar)
+    es_desactivacion_sin_cambios_comerciales = (
+        promocion.activa
+        and datos.get('activa') is False
+        and 'precio_promocional' not in datos
+        and items_data is None
+        and grupos_data is None
+    )
+    if not es_desactivacion_sin_cambios_comerciales:
+        validar_componentes_promocion(items_para_validar, grupos_para_validar)
 
     reviso_precio_o_componentes = (
         'precio_promocional' in datos or items_data is not None or grupos_data is not None

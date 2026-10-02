@@ -33,6 +33,19 @@ function validarFormulario({ nombre, precioPromocional, items, grupos, fechaInic
   if (items.length === 0 && grupos.length === 0) {
     return "La promocion debe tener al menos un componente fijo o un grupo de eleccion."
   }
+  const productos = [
+    ...items,
+    ...grupos.flatMap((grupo) => grupo.alternativas || []),
+  ]
+  const productosVistos = new Set()
+  for (const producto of productos) {
+    const stockId = String(producto.stock_id)
+    if (productosVistos.has(stockId)) {
+      const nombreProducto = producto.denominacion || producto.codigo || stockId
+      return `El producto "${nombreProducto}" esta repetido en la promocion.`
+    }
+    productosVistos.add(stockId)
+  }
   for (const it of items) {
     const cantidad = Number.parseFloat(it.cantidad)
     if (!Number.isFinite(cantidad) || cantidad <= 0) {

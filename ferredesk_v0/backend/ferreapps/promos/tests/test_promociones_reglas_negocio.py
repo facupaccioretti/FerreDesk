@@ -22,6 +22,7 @@ from ferreapps.promos.services.aplicar_promocion_venta import (
     _costos_habituales,
     crear_snapshot_promocion,
     expandir_item_promocion,
+    expandir_items_promocion,
     resolver_operaciones_stock,
 )
 from ferreapps.promos.services.gestionar_promocion import (
@@ -259,6 +260,100 @@ class PromocionesReglasNegocioTestCase(TenantTestCase):
 
         promo.refresh_from_db()
         self.assertEqual(promo.nombre, "Promo valida")
+
+    def test_desactivar_promo_invalida_no_relaja_su_reactivacion(self):
+        promo = crear_promocion(
+            datos={"nombre": "Promo para desactivar", "precio_promocional": Decimal("100.00")},
+            items_data=[{"stock_id": self.vodka.id, "cantidad": Decimal("1.00")}],
+        )
+        self.vodka.acti = "N"
+        self.vodka.save(update_fields=["acti"])
+
+        actualizar_promocion(promocion=promo, datos={"activa": False})
+        promo.refresh_from_db()
+        self.assertFalse(promo.activa)
+
+        with self.assertRaisesRegex(ValidationError, self.vodka.codvta):
+            actualizar_promocion(promocion=promo, datos={"activa": True})
+
+    def test_snapshot_externo_se_reconstruye_y_el_interno_se_conserva(self):
+        promo = crear_promocion(
+            datos={"nombre": "Promo segura", "precio_promocional": Decimal("100.00")},
+            items_data=[{"stock_id": self.vodka.id, "cantidad": Decimal("1.00")}],
+        )
+        snapshot_falso = {
+            "componentes": [{
+                "stock_id": self.pincel.id,
+                "proveedor_id": self.proveedor.id,
+                "cantidad_por_promo": Decimal("99.00"),
+                "costo_unitario": Decimal("0.01"),
+            }],
+            "alicuotas": [{
+                "alicuota_id": self.iva_10_5.id,
+                "neto": Decimal("0.01"),
+                "iva_monto": Decimal("0.00"),
+            }],
+        }
+        payload = {
+            "vdi_promocion": promo.id,
+            "vdi_cantidad": "1.00",
+            "_promo_snapshot": snapshot_falso,
+        }
+
+        externo = expandir_items_promocion([payload])[0]
+        interno = expandir_items_promocion(
+            [payload], permitir_snapshot_interno=True
+        )[0]
+        linea_comun = expandir_items_promocion([{
+            "vdi_cantidad": "1.00",
+            "_promo_snapshot": snapshot_falso,
+        }])[0]
+
+        self.assertEqual(
+            [componente["stock_id"] for componente in externo["_promo_snapshot"]["componentes"]],
+            [self.vodka.id],
+        )
+        self.assertEqual(interno["_promo_snapshot"], snapshot_falso)
+        self.assertNotIn("_promo_snapshot", linea_comun)
+
+    def test_snapshot_sin_alicuotas_se_rechaza_antes_de_persistir(self):
+        detalle, snapshot = self._crear_detalle_promocional()
+        snapshot["alicuotas"] = []
+
+        with self.assertRaisesRegex(ValidationError, "sin desglose de IVA"):
+            crear_snapshot_promocion(detalle, snapshot)
+
+        self.assertFalse(detalle.promo_alicuotas.exists())
+
+    def test_endpoint_directo_de_detalle_es_solo_lectura(self):
+        detalle, _ = self._crear_detalle_promocional()
+
+        response = self.client.patch(
+            f"/api/venta-detalle-item/{detalle.pk}/",
+            {"vdi_costo": "0.01"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 405)
+        detalle.refresh_from_db()
+        self.assertNotEqual(detalle.vdi_costo, Decimal("0.01"))
+
+    def test_descuentos_generales_y_bonificacion_no_afectan_promo(self):
+        detalle, snapshot = self._crear_detalle_promocional()
+        crear_snapshot_promocion(detalle, snapshot)
+        detalle.vdi_bonifica = Decimal("25.00")
+        detalle.save(update_fields=["vdi_bonifica"])
+        venta = detalle.vdi_idve
+        venta.ven_descu1 = Decimal("10.00")
+        venta.ven_descu2 = Decimal("20.00")
+        venta.ven_descu3 = Decimal("30.00")
+        venta.save(update_fields=["ven_descu1", "ven_descu2", "ven_descu3"])
+
+        detalle_calculado = VentaDetalleItem.objects.filter(
+            pk=detalle.pk
+        ).con_calculos().get()
+
+        self.assertEqual(detalle_calculado.total_item, Decimal("100.00"))
 
     def test_mezcla_de_alternativas_guarda_solo_la_distribucion_elegida(self):
         promo = self._crear_promo_con_grupo()

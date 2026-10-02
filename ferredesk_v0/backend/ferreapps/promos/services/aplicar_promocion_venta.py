@@ -350,16 +350,30 @@ def expandir_item_promocion(item_payload):
     return item_real
 
 
-def expandir_items_promocion(items):
+def expandir_items_promocion(items, *, permitir_snapshot_interno=False):
     """Reemplaza cada pseudo-item de promo de la lista por su item real
     expandido (con snapshot adjunto). El resto de los items pasa sin tocar.
     Debe llamarse antes de cualquier logica de stock o de creacion de venta,
     para que ambas vean items ya normalizados.
+
+    Un snapshot recibido desde una venta comun nunca es confiable. Solo los
+    flujos internos de postventa pueden conservar el snapshot historico que
+    construyeron desde la venta original.
     """
-    return [
-        expandir_item_promocion(item) if item.get('vdi_promocion') and '_promo_snapshot' not in item else item
-        for item in items
-    ]
+    resultado = []
+    for item in items:
+        item_normalizado = dict(item)
+        snapshot_interno = (
+            permitir_snapshot_interno
+            and item_normalizado.get('vdi_promocion')
+            and '_promo_snapshot' in item_normalizado
+        )
+        if not snapshot_interno:
+            item_normalizado.pop('_promo_snapshot', None)
+        if item_normalizado.get('vdi_promocion') and '_promo_snapshot' not in item_normalizado:
+            item_normalizado = expandir_item_promocion(item_normalizado)
+        resultado.append(item_normalizado)
+    return resultado
 
 
 def resolver_items_nuevos_cambio(items):
@@ -537,6 +551,8 @@ def crear_snapshot_promocion(detalle, snapshot):
     promos, hace que el recalculo intermedio ignore las que todavia no
     llegaron a este punto del loop.
     """
+    if detalle.vdi_promocion_id and not (snapshot or {}).get('alicuotas'):
+        raise ValidationError({'items': [f'Linea de promocion {detalle.pk} sin desglose de IVA.']})
     if not snapshot:
         return
 
@@ -621,12 +637,16 @@ def construir_item_devolucion_promocion(detalle_original, cantidad_devuelta, can
         Decimal('0.01'), rounding=ROUND_HALF_UP
     )
     peso_total = sum((grupo.neto + grupo.iva_monto for grupo in alicuotas_originales), Decimal('0'))
+    if peso_total <= 0:
+        raise ValidationError({
+            'items': ['La linea de promocion original tiene un peso fiscal no positivo.']
+        })
 
     desglose = []
     restante = monto_total_devuelto
     ultimo_indice = len(alicuotas_originales) - 1
     for idx, grupo in enumerate(alicuotas_originales):
-        if idx == ultimo_indice or peso_total <= 0:
+        if idx == ultimo_indice:
             monto_final = restante
         else:
             proporcion = (grupo.neto + grupo.iva_monto) / peso_total
