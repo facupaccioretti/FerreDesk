@@ -3,6 +3,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAppShellContext } from "../contexts/AppShellContext"
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme"
+import NovedadesNavbar from "./NovedadesNavbar"
 
 // Icono de cada item de navegacion
 const NAV_ITEMS = [
@@ -257,6 +258,8 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
 
         {/* Derecha: configuracion, usuario, salir, hamburguesa mobile */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+
+          <NovedadesNavbar user={user} />
 
           {/* Configuracion — siempre visible */}
           <div className="relative group">
