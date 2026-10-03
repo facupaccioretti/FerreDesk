@@ -34,7 +34,7 @@ def recalcular_precios_lista(lista_numero, margen_descuento):
 
 
 @transaction.atomic
-def recalcular_precio_lista_0(stock_id):
+def recalcular_precio_lista_0(stock_id, forzar=False):
     """Recalcula precio_lista_0 final desde costo, margen e IVA."""
     from .models import Stock, StockProve
     
@@ -43,7 +43,7 @@ def recalcular_precio_lista_0(stock_id):
     except Stock.DoesNotExist:
         return False
     
-    if producto.precio_lista_0_manual:
+    if producto.precio_lista_0_manual and not forzar:
         return False
     
     if not producto.proveedor_habitual_id:
@@ -68,7 +68,8 @@ def recalcular_precio_lista_0(stock_id):
     )
     
     producto.precio_lista_0 = precio_lista_0
-    producto.save(update_fields=['precio_lista_0'])
+    producto.precio_lista_0_manual = False
+    producto.save(update_fields=['precio_lista_0', 'precio_lista_0_manual'])
     
     return True
 
@@ -145,13 +146,14 @@ def obtener_precio_lista_sin_iva(stock, lista_numero=0):
     return calcular_precio_desde_lista_0(precio_base, margen_lista or 0)
 
 
-def calcular_margen_desde_precios(precio_venta, costo):
+def calcular_margen_desde_precios(precio_venta, costo, alicuota_iva=0):
     """
     Calcula el margen de ganancia dado un precio de venta y un costo.
     
     Args:
         precio_venta: Precio de venta
         costo: Costo del producto
+        alicuota_iva: Porcentaje de IVA incluido en el precio de venta
     
     Returns:
         Decimal: Porcentaje de margen, o 0 si el costo es 0
@@ -161,6 +163,41 @@ def calcular_margen_desde_precios(precio_venta, costo):
     
     precio_venta = Decimal(str(precio_venta))
     costo = Decimal(str(costo))
-    
-    margen = ((precio_venta - costo) / costo) * Decimal('100')
-    return margen.quantize(Decimal('0.01'))
+    factor_iva = Decimal('1') + Decimal(str(alicuota_iva or 0)) / Decimal('100')
+    if factor_iva <= 0:
+        return Decimal('0')
+
+    precio_neto = precio_venta / factor_iva
+    margen = ((precio_neto - costo) / costo) * Decimal('100')
+    return margen.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+@transaction.atomic
+def recalcular_margen_lista_0(stock_id):
+    """Conserva el precio manual y deriva su margen desde costo e IVA."""
+    from .models import Stock, StockProve
+
+    try:
+        producto = Stock.objects.select_related('idaliiva').get(id=stock_id)
+        costo = StockProve.objects.get(
+            stock_id=stock_id,
+            proveedor_id=producto.proveedor_habitual_id,
+        ).costo
+    except (Stock.DoesNotExist, StockProve.DoesNotExist):
+        return False
+
+    if not producto.precio_lista_0 or not costo:
+        return False
+
+    margen = calcular_margen_desde_precios(
+        producto.precio_lista_0,
+        costo,
+        producto.idaliiva.porce,
+    )
+    if abs(margen) > Decimal('999.99'):
+        return False
+
+    producto.margen = margen
+    producto.precio_lista_0_manual = True
+    producto.save(update_fields=['margen', 'precio_lista_0_manual'])
+    return True

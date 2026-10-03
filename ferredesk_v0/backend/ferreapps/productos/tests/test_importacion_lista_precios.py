@@ -18,6 +18,7 @@ from ferreapps.productos.models import (
     Stock,
     StockProve,
 )
+from ferreapps.productos.utils_precios import calcular_precio_lista_0_final
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from ferreapps.usuarios.models import Usuario
 from tenants.models import EmpresaTenant
@@ -130,6 +131,10 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
         IMPORTACION_LISTA_MAX_FILAS_SYNC=100,
     )
     def test_importacion_actualiza_costos_con_bulk_update_y_usa_ultimo_duplicado(self):
+        self.stock_a.precio_lista_0 = Decimal("13.00")
+        self.stock_a.save(update_fields=["precio_lista_0"])
+        self.stock_b.precio_lista_0 = Decimal("26.00")
+        self.stock_b.save(update_fields=["precio_lista_0"])
         contenido_csv = (
             "codigo,precio,denominacion\n"
             "COD-001,100.50,Producto A nuevo\n"
@@ -175,6 +180,22 @@ class ImportacionListaPreciosProveedorTestCase(TenantTestCase):
 
         self.assertEqual(self.stock_prove_a.costo, Decimal("150.75"))
         self.assertEqual(self.stock_prove_b.costo, Decimal("200.00"))
+        self.stock_a.refresh_from_db()
+        self.stock_b.refresh_from_db()
+        self.assertEqual(
+            self.stock_a.precio_lista_0,
+            calcular_precio_lista_0_final(
+                "150.75", self.stock_a.margen, self.alicuota.porce
+            ),
+        )
+        self.assertEqual(
+            self.stock_b.precio_lista_0,
+            calcular_precio_lista_0_final(
+                "200.00", self.stock_b.margen, self.alicuota.porce
+            ),
+        )
+        self.assertFalse(self.stock_a.precio_lista_0_manual)
+        self.assertFalse(self.stock_b.precio_lista_0_manual)
 
         precios_excel = PrecioProveedorExcel.objects.filter(proveedor=self.proveedor).order_by("codigo_producto_excel")
         self.assertEqual(precios_excel.count(), 3)

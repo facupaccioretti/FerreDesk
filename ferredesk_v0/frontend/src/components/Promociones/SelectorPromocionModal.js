@@ -10,7 +10,7 @@
 // el resto del selector (buscador, cierre, estados vacios) sigue el mismo
 // lenguaje visual que los demas selectores del proyecto.
 
-import { Fragment, useMemo, useState, useEffect } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { usePromocionesVigentesAPI } from "./hooks/usePromocionesAPI"
 
@@ -27,17 +27,25 @@ export default function SelectorPromocionModal({
   onSeleccionar = () => {},
 }) {
   const [termino, setTermino] = useState("")
-  const { datos: promociones, cargando } = usePromocionesVigentesAPI({ itemsPorPagina: 100, search: termino })
+  const [busqueda, setBusqueda] = useState("")
+  const { datos: promociones, cargando, actualizando } = usePromocionesVigentesAPI({
+    itemsPorPagina: 10,
+    search: busqueda,
+  })
 
   useEffect(() => {
-    if (abierto) setTermino("")
+    if (abierto) {
+      setTermino("")
+      setBusqueda("")
+    }
   }, [abierto])
 
-  const promocionesFiltradas = useMemo(() => {
-    const buscado = termino.trim().toLowerCase()
-    if (!buscado) return promociones
-    return promociones.filter((p) => (p.nombre || "").toLowerCase().includes(buscado))
-  }, [promociones, termino])
+  useEffect(() => {
+    const timer = setTimeout(() => setBusqueda(termino.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [termino])
+
+  const buscando = cargando || actualizando || termino.trim() !== busqueda
 
   return (
     <Transition show={abierto} as={Fragment} appear>
@@ -83,20 +91,25 @@ export default function SelectorPromocionModal({
                   placeholder="Buscar promoción por nombre..."
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
+                {!termino.trim() && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Mostrando las 10 promociones mas recientes. Usa el buscador para encontrar otras.
+                  </p>
+                )}
               </div>
 
               <div className="px-6 pb-6 max-h-[55vh] overflow-y-auto space-y-2">
-                {cargando ? (
+                {buscando ? (
                   <div className="text-center py-10 text-slate-400">
                     <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-orange-600 mx-auto mb-2" />
-                    Cargando promociones...
+                    {termino ? "Buscando promociones..." : "Cargando promociones..."}
                   </div>
-                ) : promocionesFiltradas.length === 0 ? (
+                ) : promociones.length === 0 ? (
                   <div className="text-center py-10 text-slate-400">
                     {termino ? "Sin promociones que coincidan con la búsqueda." : "No hay promociones activas."}
                   </div>
                 ) : (
-                  promocionesFiltradas.map((p) => (
+                  promociones.map((p) => (
                     <button
                       key={p.id}
                       type="button"

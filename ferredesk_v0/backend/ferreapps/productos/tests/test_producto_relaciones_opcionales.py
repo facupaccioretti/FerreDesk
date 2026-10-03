@@ -14,6 +14,10 @@ from ferreapps.productos.models import (
     Stock,
     StockProve,
 )
+from ferreapps.productos.utils_precios import (
+    calcular_margen_desde_precios,
+    calcular_precio_lista_0_final,
+)
 from tenants.models import EmpresaTenant
 from tenants.services import inicializar_datos_tenant
 
@@ -351,7 +355,7 @@ class ProductoRelacionesOpcionalesTestCase(TenantTestCase):
                 "stock_proveedores": [{
                     "proveedor_id": self.proveedor.id,
                     "cantidad": "3.00",
-                    "costo": "10.00",
+                    "costo": "50.00",
                     "codigo_producto_proveedor": "",
                 }],
             }),
@@ -368,7 +372,7 @@ class ProductoRelacionesOpcionalesTestCase(TenantTestCase):
                 "stock_proveedores": [{
                     "proveedor_id": self.proveedor.id,
                     "cantidad": "3.00",
-                    "costo": "10.00",
+                    "costo": "50.00",
                     "codigo_producto_proveedor": "",
                 }],
             }),
@@ -383,6 +387,10 @@ class ProductoRelacionesOpcionalesTestCase(TenantTestCase):
             Decimal("234.56"),
         )
         self.assertTrue(recarga.data["precio_lista_0_manual"])
+        self.assertEqual(
+            Stock.objects.get(pk=producto_id).margen,
+            calcular_margen_desde_precios("234.56", "50.00", self.alicuota.porce),
+        )
 
     def test_lista_0_automatica_se_recalcula_en_backend(self):
         alicuota_21 = AlicuotaIVA.objects.filter(porce=Decimal("21.00")).first()
@@ -412,6 +420,151 @@ class ProductoRelacionesOpcionalesTestCase(TenantTestCase):
         self.assertEqual(response.status_code, 201, response.content)
         producto = Stock.objects.get(pk=response.json()["producto_id"])
         self.assertEqual(producto.precio_lista_0, Decimal("145.20"))
+
+    def test_cambios_de_fuente_recalculan_lista_0_manual(self):
+        alicuota_alternativa = AlicuotaIVA.objects.exclude(pk=self.alicuota.pk).first()
+        self.assertIsNotNone(alicuota_alternativa)
+
+        escenarios = (
+            ("MARGEN", {"margen": "50.00"}, "100.00", self.proveedor.id),
+            ("IVA", {"idaliiva_id": alicuota_alternativa.id}, "100.00", self.proveedor.id),
+            ("COSTO", {}, "200.00", self.proveedor.id),
+            (
+                "PROVEEDOR",
+                {"proveedor_habitual_id": self.proveedor_dos.id},
+                "50.00",
+                self.proveedor_dos.id,
+            ),
+        )
+
+        for nombre, cambios, costo, proveedor_id in escenarios:
+            with self.subTest(nombre=nombre):
+                payload = self._producto_payload(f"MAN-{nombre}")
+                payload.update({
+                    "margen": "147.93",
+                    "precio_lista_0": "300.00",
+                    "precio_lista_0_manual": True,
+                })
+                alta = self.client.post(
+                    "/api/productos/crear-producto-con-relaciones/",
+                    data=json.dumps({
+                        "producto": payload,
+                        "stock_proveedores": [{
+                            "proveedor_id": self.proveedor.id,
+                            "cantidad": "3.00",
+                            "costo": "100.00",
+                            "codigo_producto_proveedor": "",
+                        }],
+                    }),
+                    content_type="application/json",
+                )
+                self.assertEqual(alta.status_code, 201, alta.content)
+
+                producto_id = alta.json()["producto_id"]
+                payload["margen"] = str(Stock.objects.get(pk=producto_id).margen)
+                payload.update({"id": producto_id, **cambios})
+                edicion = self.client.put(
+                    "/api/productos/editar-producto-con-relaciones/",
+                    data=json.dumps({
+                        "producto": payload,
+                        "stock_proveedores": [{
+                            "proveedor_id": proveedor_id,
+                            "cantidad": "3.00",
+                            "costo": costo,
+                            "codigo_producto_proveedor": "",
+                        }],
+                    }),
+                    content_type="application/json",
+                )
+                self.assertEqual(edicion.status_code, 200, edicion.content)
+
+                producto = Stock.objects.get(pk=producto_id)
+                relacion = StockProve.objects.get(
+                    stock=producto,
+                    proveedor=producto.proveedor_habitual,
+                )
+                self.assertEqual(
+                    producto.precio_lista_0,
+                    calcular_precio_lista_0_final(
+                        relacion.costo,
+                        producto.margen,
+                        producto.idaliiva.porce,
+                    ),
+                )
+                self.assertFalse(producto.precio_lista_0_manual)
+
+    def test_patch_stock_recalcula_combinacion_contradictoria(self):
+        payload = self._producto_payload("PATCH-CONTRAD")
+        payload.update({
+            "margen": "147.93",
+            "precio_lista_0": "300.00",
+            "precio_lista_0_manual": True,
+        })
+        producto = Stock.objects.create(**payload)
+        StockProve.objects.create(
+            stock=producto,
+            proveedor=self.proveedor,
+            cantidad=Decimal("3.00"),
+            costo=Decimal("100.00"),
+        )
+
+        response = self.client.patch(
+            f"/api/productos/stock/{producto.id}/",
+            data=json.dumps({"margen": "50.00"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        producto.refresh_from_db()
+        self.assertEqual(producto.margen, Decimal("50.00"))
+        self.assertEqual(
+            producto.precio_lista_0,
+            calcular_precio_lista_0_final("100.00", "50.00", self.alicuota.porce),
+        )
+        self.assertFalse(producto.precio_lista_0_manual)
+
+    def test_put_stockprove_recalcula_precio_automatico(self):
+        payload = self._producto_payload("STP-SIN-RECALC")
+        payload.update({
+            "margen": "20.00",
+            "precio_lista_0": "999.99",
+            "precio_lista_0_manual": False,
+        })
+        alta = self.client.post(
+            "/api/productos/crear-producto-con-relaciones/",
+            data=json.dumps({
+                "producto": payload,
+                "stock_proveedores": [{
+                    "proveedor_id": self.proveedor.id,
+                    "cantidad": "3.00",
+                    "costo": "100.00",
+                    "codigo_producto_proveedor": "",
+                }],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(alta.status_code, 201, alta.content)
+        producto = Stock.objects.get(pk=alta.json()["producto_id"])
+        relacion = StockProve.objects.get(stock=producto, proveedor=self.proveedor)
+        response = self.client.put(
+            f"/api/productos/stockprove/{relacion.id}/",
+            data=json.dumps({
+                "stock": producto.id,
+                "proveedor_id": self.proveedor.id,
+                "cantidad": "3.00",
+                "costo": "200.00",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        producto.refresh_from_db()
+        relacion.refresh_from_db()
+        self.assertEqual(relacion.costo, Decimal("200.00"))
+        self.assertEqual(
+            producto.precio_lista_0,
+            calcular_precio_lista_0_final("200.00", "20.00", self.alicuota.porce),
+        )
 
     def test_edita_misma_relacion_agrega_codigo_y_no_lo_borra_si_vuelve_vacio(self):
         producto_data = self._producto_payload("PROD-OPT-2")

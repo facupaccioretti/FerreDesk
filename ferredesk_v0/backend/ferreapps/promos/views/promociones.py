@@ -32,6 +32,9 @@ class PromocionViewSet(viewsets.ModelViewSet):
         activa = self.request.query_params.get('activa')
         if activa is not None:
             queryset = queryset.filter(activa=activa.lower() == 'true')
+        busqueda = self.request.query_params.get('search', '').strip()
+        if busqueda:
+            queryset = queryset.filter(nombre__icontains=busqueda)
         return queryset
 
     def destroy(self, request, *args, **kwargs):
@@ -48,7 +51,7 @@ class PromocionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='desactualizadas')
     def desactualizadas(self, request):
-        pagina = self.paginate_queryset(promociones_desactualizadas())
+        pagina = self.paginate_queryset(promociones_desactualizadas(request.query_params.get('search', '')))
         serializer = self.get_serializer(pagina, many=True)
         return self.get_paginated_response(serializer.data)
 

@@ -36,6 +36,7 @@ function PromocionesSection({ onNuevaPromocion, onEditarPromocion }) {
   const [tabActiva, setTabActiva] = useState("activas")
   const [pagina, setPagina] = useState(1)
   const [itemsPorPagina, setItemsPorPagina] = useState(10)
+  const [busqueda, setBusqueda] = useState("")
 
   const {
     datos: promociones,
@@ -44,7 +45,7 @@ function PromocionesSection({ onNuevaPromocion, onEditarPromocion }) {
     activarPromocion,
     desactivarPromocion,
     revisarPromocion,
-  } = usePromocionesAPI({ estado: tabActiva, pagina, itemsPorPagina })
+  } = usePromocionesAPI({ estado: tabActiva, pagina, itemsPorPagina, search: busqueda })
 
   const cambiarTab = (key) => {
     setTabActiva(key)
@@ -155,7 +156,14 @@ function PromocionesSection({ onNuevaPromocion, onEditarPromocion }) {
       <Tabla
         columnas={columnas}
         datos={promociones}
-        mostrarBuscador={false}
+        mostrarBuscador
+        valorBusqueda={busqueda}
+        onCambioBusqueda={(valor) => {
+          setBusqueda(valor)
+          setPagina(1)
+        }}
+        busquedaRemota
+        placeholderBuscador="Buscar promociones..."
         paginacionControlada
         paginaActual={pagina}
         onPageChange={setPagina}

@@ -1,8 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useState, memo } from "react"
 import EditorComponentesPromo from "./EditorComponentesPromo"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
+
+// Constantes de clases para un estilo consistente con ClienteForm
+const CLASES_INPUT = "w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+const CLASES_SECCION_TITULO = "flex items-center gap-2 text-[12px] font-semibold text-slate-700"
+const CLASES_SECCION_WRAPPER = "p-2 bg-slate-50 rounded-lg border border-slate-200 min-w-[260px] overflow-visible"
+
+// Contenedor de sección estilo lista (idéntico a ClienteForm)
+const SeccionLista = memo(({ titulo, subtitulo, icono, children, headerRight }) => (
+  <div className={CLASES_SECCION_WRAPPER}>
+    <div className="mb-1.5">
+      <div className="flex items-center justify-between">
+        <h5 className={CLASES_SECCION_TITULO}>
+          {icono} {titulo}
+        </h5>
+        {headerRight}
+      </div>
+      {subtitulo && (
+        <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">{subtitulo}</p>
+      )}
+    </div>
+    <div className="divide-y divide-slate-200">
+      {children}
+    </div>
+  </div>
+))
+
+// Fila editable con etiqueta e input (idéntico a ClienteForm)
+const FilaEditable = memo(({ etiqueta, children, inputProps, value, onChange }) => (
+  <div className="flex items-center justify-between py-1.5">
+    <div className="flex items-center gap-1.5">
+      <span className="text-[12px] text-slate-700 whitespace-nowrap">{etiqueta}</span>
+    </div>
+    <div className="min-w-[150px] flex-1 text-right ml-2">
+      {children ? children : (
+        <input className={`${CLASES_INPUT} text-right`} {...inputProps} value={value ?? ""} onChange={onChange} />
+      )}
+    </div>
+  </div>
+))
 
 function mapearItemsParaEditar(promocion) {
   return (promocion?.items || []).map((it) => ({
@@ -71,7 +110,6 @@ function validarFormulario({ nombre, precioPromocional, items, grupos, fechaInic
 function PromocionForm({ promocion, onGuardar, onCancelar, guardando = false }) {
   const theme = useFerreDeskTheme()
   const esEdicion = !!promocion?.id
-  const inputClass = "w-full h-8 rounded-sm border border-slate-300 bg-white px-2 text-xs text-slate-800 placeholder-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
 
   const [nombre, setNombre] = useState(promocion?.nombre || "")
   const [descripcion, setDescripcion] = useState(promocion?.descripcion || "")
@@ -118,84 +156,117 @@ function PromocionForm({ promocion, onGuardar, onCancelar, guardando = false }) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3 overflow-visible">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">
-          {error}
+        <div className="p-2 bg-red-50 border-l-4 border-red-500 text-red-800 rounded text-xs flex items-center gap-2">
+          <svg className="w-4 h-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{error}</span>
         </div>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <div className="mb-3">
-          <h4 className="text-sm font-semibold text-slate-700">Datos de la promocion</h4>
-          <p className="text-xs text-slate-500">Defini el nombre, precio y periodo de vigencia.</p>
+      {/* Header compacto con nombre/identificador estilo ClienteForm */}
+      <div className="flex items-center justify-between pb-1">
+        <div className="text-sm font-semibold text-slate-800 truncate" title={nombre}>
+          {nombre || (esEdicion ? "Editar Promoción" : "Nueva Promoción")}
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Nombre</label>
+        {esEdicion && promocion?.activa !== undefined && (
+          <span className={`px-2 py-0.5 rounded-full text-[11px] ${promocion.activa ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+            {promocion.activa ? "Activa" : "Inactiva"}
+          </span>
+        )}
+      </div>
+
+      {/* Secciones en grid compacto estilo ClienteForm */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 items-start overflow-visible">
+        {/* Tarjeta 1: Datos de la promoción */}
+        <SeccionLista
+          titulo="Datos de la Promoción"
+          subtitulo="Definí el nombre, precio y período de vigencia."
+          icono={
+            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        >
+          <FilaEditable etiqueta={<>Nombre <span className="text-red-500">*</span></>}>
             <input
               type="text"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className={inputClass}
+              className={`${CLASES_INPUT} text-left`}
               required
               autoFocus
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Precio promocional</label>
+          </FilaEditable>
+
+          <FilaEditable etiqueta={<>Precio Promocional <span className="text-red-500">*</span></>}>
             <input
               type="number"
               min="0.01"
               step="0.01"
               value={precioPromocional}
               onChange={(e) => setPrecioPromocional(e.target.value)}
-              className={inputClass}
+              className={`${CLASES_INPUT} text-right font-medium`}
+              placeholder="0.00"
               required
             />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Descripcion <span className="font-normal text-slate-400">(opcional)</span></label>
-            <textarea
+          </FilaEditable>
+
+          <FilaEditable etiqueta={<>Descripción <span className="text-[10px] font-normal text-slate-400">(opcional)</span></>}>
+            <input
+              type="text"
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              rows={2}
-              className={`${inputClass} h-auto py-2`}
+              className={`${CLASES_INPUT} text-left`}
+              placeholder="Opcional"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Vigencia desde <span className="font-normal text-slate-400">(opcional)</span></label>
+          </FilaEditable>
+
+          <FilaEditable etiqueta={<>Vigencia Desde <span className="text-[10px] font-normal text-slate-400">(opcional)</span></>}>
             <input
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className={inputClass}
+              className={CLASES_INPUT}
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Vigencia hasta <span className="font-normal text-slate-400">(opcional)</span></label>
+          </FilaEditable>
+
+          <FilaEditable etiqueta={<>Vigencia Hasta <span className="text-[10px] font-normal text-slate-400">(opcional)</span></>}>
             <input
               type="date"
               value={fechaFin}
               onChange={(e) => setFechaFin(e.target.value)}
-              className={inputClass}
+              className={CLASES_INPUT}
             />
-          </div>
-        </div>
-      </section>
+          </FilaEditable>
+        </SeccionLista>
 
-      <EditorComponentesPromo items={items} setItems={setItems} grupos={grupos} setGrupos={setGrupos} />
+        {/* Tarjetas 2 y 3: Componentes fijos y Grupos de alternativas */}
+        <EditorComponentesPromo
+          items={items}
+          setItems={setItems}
+          grupos={grupos}
+          setGrupos={setGrupos}
+        />
+      </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+      {/* Botones de acción compactos */}
+      <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
         <button
           type="button"
           onClick={handleCancelar}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium text-xs transition-colors shadow-sm"
         >
           Cancelar
         </button>
-        <button type="submit" disabled={guardando} className={`${theme.botonPrimario} disabled:opacity-60`}>
-          {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear promocion"}
+        <button
+          type="submit"
+          disabled={guardando}
+          className={`${theme.botonPrimario} disabled:opacity-60 text-xs py-2 px-5`}
+        >
+          {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear promoción"}
         </button>
       </div>
     </form>

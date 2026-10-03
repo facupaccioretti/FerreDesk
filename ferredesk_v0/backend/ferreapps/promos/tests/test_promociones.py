@@ -7,6 +7,10 @@ from rest_framework.exceptions import ValidationError
 
 from ferreapps.productos.models import AlicuotaIVA, Proveedor, Stock, StockProve
 from ferreapps.promos.models import Promocion, PromocionGrupo, PromocionItem
+from ferreapps.promos.selectors.promociones_activas import (
+    promociones_activas,
+    promociones_desactualizadas,
+)
 from ferreapps.promos.services.aplicar_promocion_venta import expandir_item_promocion
 from ferreapps.promos.services.gestionar_promocion import crear_promocion
 from ferreapps.promos.services.invalidacion import marcar_promos_desactualizadas
@@ -120,6 +124,27 @@ class PromocionesTestCase(TenantTestCase):
                     ],
                 }
             ],
+        )
+
+    def test_selectores_filtran_por_nombre_y_ordenan_por_id_descendente(self):
+        antigua = crear_promocion(
+            datos={"nombre": "Promo buscada antigua", "precio_promocional": Decimal("100.00")},
+            items_data=[{"stock_id": self.vodka.id, "cantidad": Decimal("1")}],
+        )
+        reciente = crear_promocion(
+            datos={"nombre": "Promo buscada reciente", "precio_promocional": Decimal("200.00")},
+            items_data=[{"stock_id": self.redbull.id, "cantidad": Decimal("1")}],
+        )
+        reciente.desactualizada = True
+        reciente.save(update_fields=["desactualizada"])
+
+        self.assertEqual(
+            list(promociones_activas("buscada").values_list("id", flat=True)),
+            [reciente.id, antigua.id],
+        )
+        self.assertEqual(
+            list(promociones_desactualizadas("reciente").values_list("id", flat=True)),
+            [reciente.id],
         )
 
     # --- Validaciones ---

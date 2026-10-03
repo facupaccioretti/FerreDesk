@@ -11,8 +11,10 @@ from django.utils import timezone
 from ferreapps.productos.models import (
     ImportacionListaPreciosProveedor,
     PrecioProveedorExcel,
+    Stock,
     StockProve,
 )
+from ferreapps.productos.utils_precios import calcular_precio_lista_0_final
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from ferreapps.promos.services.invalidacion import marcar_promos_desactualizadas
 from ferredesk_backend.utils.observability import medir_proceso
@@ -174,6 +176,31 @@ def importar_lista_precios_proveedor(
                         ["costo", "fecha_actualizacion"],
                         batch_size=500,
                     )
+                    stock_ids_costo_modificado_set = set(stock_ids_costo_modificado)
+                    costos_por_stock = {
+                        stock_prove.stock_id: stock_prove.costo
+                        for stock_prove in stock_proves_modificados
+                        if stock_prove.stock_id in stock_ids_costo_modificado_set
+                    }
+                    stocks = list(
+                        Stock.objects.filter(
+                            id__in=stock_ids_costo_modificado,
+                            proveedor_habitual=proveedor,
+                        ).select_related("idaliiva")
+                    )
+                    for stock in stocks:
+                        stock.precio_lista_0 = calcular_precio_lista_0_final(
+                            costos_por_stock[stock.id],
+                            stock.margen,
+                            stock.idaliiva.porce,
+                        )
+                        stock.precio_lista_0_manual = False
+                    if stocks:
+                        Stock.objects.bulk_update(
+                            stocks,
+                            ["precio_lista_0", "precio_lista_0_manual"],
+                            batch_size=500,
+                        )
                     registros_actualizados = len(stock_proves_modificados)
                     marcar_promos_desactualizadas(stock_ids_costo_modificado)
 

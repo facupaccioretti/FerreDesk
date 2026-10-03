@@ -212,4 +212,44 @@ describe('StockForm', () => {
 
     expect(Array.from(container.querySelectorAll('input[type="number"]')).some((input) => Number(input.value) === 1000)).toBe(true)
   })
+
+  test('cambiar una fuente desactiva el precio manual antes de guardar', async () => {
+    const stock = {
+      precio_lista_0: 1000,
+      precio_lista_0_manual: true,
+      precios_listas: [],
+      margen: '20.00',
+      idaliiva: { id: 1, porce: '21.00' },
+      proveedor_habitual: { id: 1 },
+      stock_proveedores: [{ proveedor: 1, costo: 200 }],
+    }
+
+    await act(async () => {
+      root.render(
+        <StockForm
+          key="editar-77-fuente"
+          stock={stock}
+          onSave={jest.fn()}
+          onCancel={jest.fn()}
+          proveedores={[]}
+          familias={[]}
+          modo="editar"
+          tabKey="editar-77-fuente"
+        />
+      )
+    })
+
+    await act(async () => {
+      const margen = container.querySelector('input[name="margen"]')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(margen, '30')
+      margen.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      container.querySelector('form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      )
+    })
+
+    expect(mockGuardarProductoAtomico.mock.calls.at(-1)[0].precio_lista_0_manual).toBe(false)
+  })
 })

@@ -21,13 +21,15 @@ const CLAVE_CACHE_VIGENTES = 'promociones-vigentes'
  * @param {number} opciones.pagina
  * @param {number} opciones.itemsPorPagina
  */
-export function usePromocionesAPI({ estado = 'activas', pagina = 1, itemsPorPagina = 20 } = {}) {
+export function usePromocionesAPI({ estado = 'activas', pagina = 1, itemsPorPagina = 20, search = '' } = {}) {
   const queryClient = useQueryClient()
 
   const esDesactualizadas = estado === 'desactualizadas'
   const urlListado = esDesactualizadas ? `${URL_BASE}desactualizadas/` : URL_BASE
   const claveListado = esDesactualizadas ? CLAVE_CACHE_DESACTUALIZADAS : CLAVE_CACHE
-  const filtros = esDesactualizadas ? {} : { activa: estado === 'inactivas' ? 'false' : 'true' }
+  const filtros = esDesactualizadas
+    ? { search }
+    : { activa: estado === 'inactivas' ? 'false' : 'true', search }
 
   const listado = usePaginacionAPI(claveListado, urlListado, filtros, pagina, itemsPorPagina)
 
@@ -88,7 +90,7 @@ export function usePromocionesAPI({ estado = 'activas', pagina = 1, itemsPorPagi
  * desactivadas ni fuera de su rango de fechas: eso lo filtra el backend
  * (selectors/promociones_activas.py), no hay que repetir la regla aca.
  */
-export function usePromocionesVigentesAPI({ pagina = 1, itemsPorPagina = 50, search = '' } = {}) {
+export function usePromocionesVigentesAPI({ pagina = 1, itemsPorPagina = 10, search = '' } = {}) {
   return usePaginacionAPI(CLAVE_CACHE_VIGENTES, `${URL_BASE}activas/`, { search }, pagina, itemsPorPagina)
 }
 

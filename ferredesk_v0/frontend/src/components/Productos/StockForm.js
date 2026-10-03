@@ -122,6 +122,18 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     } catch (_) { }
   }, [preciosListas, claveBorrador, modo])
 
+  const desactivarPrecioLista0Manual = useCallback(() => {
+    setPreciosListas(prev => prev.lista0.manual
+      ? { ...prev, lista0: { ...prev.lista0, manual: false } }
+      : prev
+    )
+  }, [])
+
+  const handleFuentePrecioChange = (e) => {
+    handleChange(e)
+    desactivarPrecioLista0Manual()
+  }
+
   const {
     handleEditStockProve,
     handleEditCostoStockProve,
@@ -146,6 +158,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     stockProve,
     form,
     updateForm,
+    onFuentePrecioChange: desactivarPrecioLista0Manual,
     alert,
   })
 
@@ -178,6 +191,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     form,
     proveedores,
     updateForm,
+    onFuentePrecioChange: desactivarPrecioLista0Manual,
     alert
   })
 
@@ -449,17 +463,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   useEffect(() => {
     if (unProveedor && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
       setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
+      desactivarPrecioLista0Manual()
     }
-  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id, setForm])
-
-
-
-  // Al asociar stock, autocompletar proveedor habitual si hay uno solo
-  useEffect(() => {
-    if (proveedoresAsociados.length === 1 && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
-      setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
-    }
-  }, [proveedoresAsociados, form.proveedor_habitual_id, setForm])
+  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id, setForm, desactivarPrecioLista0Manual])
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
@@ -850,7 +856,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <select
                         name="proveedor_habitual_id"
                         value={form.proveedor_habitual_id ?? ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         disabled={proveedoresAsociados.length === 1}
                         required={proveedoresAsociados.length > 1}
@@ -949,7 +955,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         type="number"
                         name="margen"
                         value={form.margen ?? ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         step={MARGEN_STEP}
                         min={MARGEN_MINIMO}
@@ -1316,7 +1322,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <select
                         name="idaliiva"
                         value={typeof form.idaliiva === "number" || typeof form.idaliiva === "string" ? form.idaliiva : ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         required
                       >

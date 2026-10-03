@@ -47,6 +47,23 @@ class CalculosPreciosTest(SimpleTestCase):
     def test_calcular_precio_lista_0_redondea_medio_centavo_hacia_arriba(self):
         precio = calcular_precio_lista_0_final('10.00', '0.05', '0.00')
         self.assertEqual(precio, Decimal('10.01'))
+
+    def test_precio_y_margen_coinciden_en_varios_escenarios(self):
+        casos = (
+            ('1000.00', '40.00', '21.00', '1694.00'),
+            ('200.00', '15.00', '10.50', '254.15'),
+            ('50.00', '0.00', '21.00', '60.50'),
+            ('123.45', '10.00', '0.00', '135.80'),
+        )
+
+        for costo, margen, iva, precio_esperado in casos:
+            with self.subTest(costo=costo, margen=margen, iva=iva):
+                precio = calcular_precio_lista_0_final(costo, margen, iva)
+                self.assertEqual(precio, Decimal(precio_esperado))
+                self.assertEqual(
+                    calcular_margen_desde_precios(precio, costo, iva),
+                    Decimal(margen),
+                )
     
     def test_calcular_margen_desde_precios(self):
         """Verifica el cálculo de margen desde precio y costo."""

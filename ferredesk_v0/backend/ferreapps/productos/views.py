@@ -18,7 +18,7 @@ from .serializers import (
     VistaStockProductoSerializer
 )
 from .serializers_listas_precio import PrecioListaGuardadoSerializer
-from .utils_precios import recalcular_precio_lista_0
+from .utils_precios import recalcular_margen_lista_0, recalcular_precio_lista_0
 from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
@@ -108,6 +108,45 @@ class ProveedorViewSet(viewsets.ModelViewSet):
                 },
                 status=400
             )
+
+def _estado_precio_lista_0(stock):
+    costo = StockProve.objects.filter(
+        stock=stock,
+        proveedor_id=stock.proveedor_habitual_id,
+    ).values_list('costo', flat=True).first()
+    return {
+        'precio': stock.precio_lista_0,
+        'manual': stock.precio_lista_0_manual,
+        'margen': stock.margen,
+        'iva': stock.idaliiva_id,
+        'proveedor': stock.proveedor_habitual_id,
+        'costo': costo,
+    }
+
+
+def _sincronizar_precio_lista_0_editado(stock, anterior):
+    actual = _estado_precio_lista_0(stock)
+    precio_manual_cambio = actual['manual'] and actual['precio'] != anterior['precio']
+    fuentes_cambiaron = any(
+        actual[campo] != anterior[campo]
+        for campo in ('margen', 'iva', 'proveedor', 'costo')
+    )
+    paso_a_automatico = anterior['manual'] and not actual['manual']
+    precio_automatico_cambio = not actual['manual'] and actual['precio'] != anterior['precio']
+
+    if precio_manual_cambio:
+        if not recalcular_margen_lista_0(stock.id):
+            raise serializers.ValidationError(
+                {'detail': 'El precio manual requiere un costo habitual y un margen validos.'}
+            )
+        stock.refresh_from_db()
+    elif fuentes_cambiaron or paso_a_automatico or precio_automatico_cambio:
+        if not recalcular_precio_lista_0(stock.id, forzar=True):
+            raise serializers.ValidationError(
+                {'detail': 'No se pudo calcular Lista 0: falta un costo habitual mayor que cero.'}
+            )
+        stock.refresh_from_db()
+
 
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
@@ -298,7 +337,9 @@ class StockViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_update(self, serializer):
-        serializer.save()
+        anterior = _estado_precio_lista_0(serializer.instance)
+        stock = serializer.save()
+        _sincronizar_precio_lista_0_editado(stock, anterior)
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -483,6 +524,18 @@ class StockProveViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['stock', 'proveedor']
     pagination_class = PaginacionPorPaginaConLimite
+
+    def perform_update(self, serializer):
+        costo_anterior = serializer.instance.costo
+        stock_prove = serializer.save()
+        if (
+            stock_prove.costo != costo_anterior
+            and stock_prove.stock.proveedor_habitual_id == stock_prove.proveedor_id
+            and not recalcular_precio_lista_0(stock_prove.stock_id, forzar=True)
+        ):
+            raise serializers.ValidationError(
+                {'detail': 'No se pudo calcular Lista 0: el costo habitual debe ser mayor que cero.'}
+            )
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related('proveedor', 'stock')
@@ -1105,7 +1158,13 @@ def crear_producto_con_relaciones(request):
                 sp_serializer.is_valid(raise_exception=True)
                 sp_serializer.save()
 
-            recalcular_precio_lista_0(stock.id)
+            if stock.precio_lista_0_manual:
+                if not recalcular_margen_lista_0(stock.id):
+                    raise serializers.ValidationError({
+                        'detail': 'El precio manual requiere un costo habitual y un margen validos.',
+                    })
+            else:
+                recalcular_precio_lista_0(stock.id)
             _guardar_precios_listas(stock, precios_listas, request.user)
 
         return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
@@ -1154,6 +1213,7 @@ def editar_producto_con_relaciones(request):
             stock = Stock.objects.filter(id=producto_id).first()
             if not stock:
                 raise Exception('Producto no encontrado.')
+            estado_precio_anterior = _estado_precio_lista_0(stock)
             stock_serializer = StockSerializer(stock, data=producto_data, partial=True)
             if not stock_serializer.is_valid():
                 raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
@@ -1212,7 +1272,7 @@ def editar_producto_con_relaciones(request):
                     StockProve.objects.create(**create_kwargs)
 
             # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
-            recalcular_precio_lista_0(stock.id)
+            _sincronizar_precio_lista_0_editado(stock, estado_precio_anterior)
             _guardar_precios_listas(stock, precios_listas, request.user)
         return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
     except serializers.ValidationError as ve:

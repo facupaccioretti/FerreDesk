@@ -68,7 +68,7 @@ export function usePaginacionAPI(claveCacheBase, urlBase, filtros = {}, pagina =
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: claveQuery,
-    queryFn: () => clienteAPI(url),
+    queryFn: ({ signal }) => clienteAPI(url, { signal }),
     enabled: opciones.enabled ?? true,
     ...withQueryProfile("warmCatalog", {
       // Mantener datos anteriores mientras llegan los nuevos (evita el parpadeo al cambiar de página)

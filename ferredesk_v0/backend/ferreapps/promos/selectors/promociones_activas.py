@@ -16,13 +16,14 @@ def promociones_activas(busqueda=''):
     )
     if busqueda:
         promociones = promociones.filter(nombre__icontains=busqueda)
-    return promociones.prefetch_related('items__stock', 'grupos__alternativas__stock')
+    return promociones.prefetch_related('items__stock', 'grupos__alternativas__stock').order_by('-id')
 
 
-def promociones_desactualizadas():
+def promociones_desactualizadas(busqueda=''):
     """Promociones activas marcadas para revision por cambio de costo de
     algun componente.
     """
-    return Promocion.objects.filter(activa=True, desactualizada=True).prefetch_related(
-        'items__stock', 'grupos__alternativas__stock'
-    ).order_by('-id')
+    promociones = Promocion.objects.filter(activa=True, desactualizada=True)
+    if busqueda:
+        promociones = promociones.filter(nombre__icontains=busqueda.strip())
+    return promociones.prefetch_related('items__stock', 'grupos__alternativas__stock').order_by('-id')

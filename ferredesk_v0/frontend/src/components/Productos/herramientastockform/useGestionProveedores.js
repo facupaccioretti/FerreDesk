@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react"
 
-const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, alert, fetchStockProve }) => {
+const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, updateForm, onFuentePrecioChange, alert, fetchStockProve }) => {
   const isEdicion = !!stock?.id
 
   // Estados para edición de stock (cantidad y costo)
@@ -73,6 +73,17 @@ const useGestionProveedores = ({ stock, modo, proveedores, stockProve, form, upd
         return sp
       })
     })
+
+    if (field === "costo") {
+      const relacion = (form.stock_proveedores || []).find(sp => {
+        const spId = sp.id || `temp-${sp.proveedor_id}`
+        return spId === id
+      })
+      const proveedorId = relacion?.proveedor_id || relacion?.proveedor?.id || relacion?.proveedor
+      if (String(proveedorId) === String(form.proveedor_habitual_id)) {
+        onFuentePrecioChange?.()
+      }
+    }
 
     handleEditCancel()
   }
