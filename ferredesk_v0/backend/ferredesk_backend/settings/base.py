@@ -42,6 +42,7 @@ TENANT_APPS = (
     'ferreapps.clientes',
     'ferreapps.ventas',
     'ferreapps.reservas',
+    'ferreapps.promos',
     'ferreapps.notas',
     'ferreapps.alertas',
     'ferreapps.informes',

@@ -255,7 +255,10 @@ const ConVentaForm = ({
         ? (facturaInternaOrigen?.ven_idcli ?? facturaInternaOrigen?.clienteId ?? '')
         : (presupuestoOrigen?.ven_idcli ?? presupuestoOrigen?.clienteId ?? '');
       const coincideCliente = String(saved?.clienteId ?? '') === String(clienteOrigen ?? '');
-      return coincideOrigen && coincideCliente;
+      const promocionesValidas = !Array.isArray(saved?.items) || saved.items.every(
+        (item) => item?.tipo !== 'promocion' || item?.promocionId != null || item?.vdi_promocion != null
+      );
+      return coincideOrigen && coincideCliente && promocionesValidas;
     }
   });
 

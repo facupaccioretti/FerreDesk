@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCookie } from '../utils/csrf';
 
-export function useProductosAPI() {
+export function useProductosAPI({ cargarInicial = true, refrescarTrasMutacion = true } = {}) {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,12 +58,12 @@ export function useProductosAPI() {
         } catch {}
         throw new Error(msg);
       }
-      await fetchProductos();
+      if (refrescarTrasMutacion) await fetchProductos();
     } catch (err) {
       setError(err.message);
       throw err;
     }
-  }, [csrftoken, fetchProductos]);
+  }, [csrftoken, fetchProductos, refrescarTrasMutacion]);
 
   const updateProducto = useCallback(async (id, updated) => {
     setError(null);
@@ -103,12 +103,12 @@ export function useProductosAPI() {
         }
         throw new Error(errorMsg);
       }
-      await fetchProductos();
+      if (refrescarTrasMutacion) await fetchProductos();
     } catch (err) {
       setError(err.message);
       throw err;
     }
-  }, [csrftoken, fetchProductos]);
+  }, [csrftoken, fetchProductos, refrescarTrasMutacion]);
 
   const deleteProducto = useCallback(async (id) => {
     setError(null);
@@ -131,16 +131,16 @@ export function useProductosAPI() {
         } catch (e) {}
         throw new Error(errorMsg);
       }
-      await fetchProductos();
+      if (refrescarTrasMutacion) await fetchProductos();
     } catch (err) {
       setError(err.message);
       throw err;
     }
-  }, [csrftoken, fetchProductos]);
+  }, [csrftoken, fetchProductos, refrescarTrasMutacion]);
 
   useEffect(() => {
-    fetchProductos({}, 1, 10);
-  }, [fetchProductos]);
+    if (cargarInicial) fetchProductos({}, 1, 10);
+  }, [cargarInicial, fetchProductos]);
 
   return { productos, total, loading, error, fetchProductos, addProducto, updateProducto, deleteProducto, setProductos };
 }

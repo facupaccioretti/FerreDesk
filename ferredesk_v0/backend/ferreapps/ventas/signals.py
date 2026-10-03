@@ -175,40 +175,40 @@ def _recalcular_totales_venta(venta_id: int) -> None:
     from django.db.models import Sum
     from ferreapps.ventas.models import Venta, VentaDetalleItem
 
-    try:
-        items_qs = VentaDetalleItem.objects.filter(vdi_idve_id=venta_id).con_calculos()
-        agregados = items_qs.aggregate(
-            total=Sum('total_item'),
-            neto=Sum('subtotal_neto'),
-            iva=Sum('iva_monto'),
-            subtotal=Sum('subtotal_bruto_item')
-        )
+    items = VentaDetalleItem.objects.filter(vdi_idve_id=venta_id)
+    for item in items.filter(vdi_promocion__isnull=False).prefetch_related('promo_alicuotas'):
+        item.obtener_alicuotas_promocion()
+    items_qs = items.con_calculos()
+    agregados = items_qs.aggregate(
+        total=Sum('total_item'),
+        neto=Sum('subtotal_neto'),
+        iva=Sum('iva_monto'),
+        subtotal=Sum('subtotal_bruto_item')
+    )
 
-        ajuste = Venta.objects.filter(pk=venta_id).values_list('ajuste_redondeo', flat=True).first() or Decimal('0')
-        total = ((agregados['total'] or Decimal('0')) + ajuste).quantize(Decimal('0.01'))
-        neto = (agregados['neto'] or Decimal('0')).quantize(Decimal('0.01'))
-        iva = (agregados['iva'] or Decimal('0')).quantize(Decimal('0.01'))
-        subtotal_bruto = (agregados['subtotal'] or Decimal('0')).quantize(Decimal('0.01'))
+    ajuste = Venta.objects.filter(pk=venta_id).values_list('ajuste_redondeo', flat=True).first() or Decimal('0')
+    total = ((agregados['total'] or Decimal('0')) + ajuste).quantize(Decimal('0.01'))
+    neto = (agregados['neto'] or Decimal('0')).quantize(Decimal('0.01'))
+    iva = (agregados['iva'] or Decimal('0')).quantize(Decimal('0.01'))
+    subtotal_bruto = (agregados['subtotal'] or Decimal('0')).quantize(Decimal('0.01'))
 
-        Venta.objects.filter(pk=venta_id).update(
-            total_guardado=total,
-            neto_guardado=neto,
-            iva_guardado=iva,
-            subtotal_bruto_guardado=subtotal_bruto,
-        )
-        logger.debug("Totales recalculados para Venta %s: total=%s neto=%s iva=%s", venta_id, total, neto, iva)
-    except Exception as e:
-        logger.error("Error recalculando totales para Venta %s: %s", venta_id, e)
+    Venta.objects.filter(pk=venta_id).update(
+        total_guardado=total,
+        neto_guardado=neto,
+        iva_guardado=iva,
+        subtotal_bruto_guardado=subtotal_bruto,
+    )
+    logger.debug("Totales recalculados para Venta %s: total=%s neto=%s iva=%s", venta_id, total, neto, iva)
 
 
 
 @receiver(post_save, sender='ventas.VentaDetalleItem')
 def actualizar_totales_al_guardar_item(sender, instance, **kwargs):
     """
-    Dispara el recálculo de totales de la Venta cuando se guarda un ítem de venta.
-    Aplica tanto a creaciones (created=True) como a actualizaciones (created=False).
+    Recalcula lineas comunes al guardarlas. Las promos se recalculan una sola
+    vez al final del serializer, despues de persistir su snapshot fiscal.
     """
-    if instance.vdi_idve_id:
+    if instance.vdi_idve_id and not instance.vdi_promocion_id:
         _recalcular_totales_venta(instance.vdi_idve_id)
 
 

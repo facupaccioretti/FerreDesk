@@ -1,7 +1,11 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "react-toastify"
 import Navbar from "../Navbar"
 import StockForm from "./StockForm"
 import ProductosTable from "./ProductosTable"
+import PromocionesSection from "../Promociones/PromocionesSection"
+import PromocionFormTab from "../Promociones/PromocionFormTab"
 import FiltrosProductos from "./FiltrosProductos"
 import { useProductosAPI } from "../../utils/useProductosAPI"
 import { useFamiliasAPI } from "../../utils/useFamiliasAPI"
@@ -23,17 +27,19 @@ import { ImprimirEtiquetasModal } from "./codigoBarras"
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { leerConsultaPersistida, guardarConsultaPersistida } from "../../utils/consultaPersistida"
+import { invalidarCachesProductos } from "../../core/query/queryKeys"
 
 const ProductosManager = () => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     document.title = "Productos FerreDesk"
   }, [])
 
-  // Hooks API: mutaciones (alta, baja, modificación) siguen usando useProductosAPI
-  const { addProducto, updateProducto, deleteProducto } = useProductosAPI()
+  // La baja conserva el hook legacy sin sus consultas automaticas
+  const { deleteProducto } = useProductosAPI({ cargarInicial: false, refrescarTrasMutacion: false })
   const { familias, addFamilia, updateFamilia, deleteFamilia } = useFamiliasAPI()
   const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useProveedoresAPI()
   const { stockProve, updateStockProve } = useStockProveAPI()
@@ -65,6 +71,17 @@ const ProductosManager = () => {
       currentTabs.splice(listaIndex + 1, 0, { key: "inactivos", label: "Productos Inactivos", closable: false })
     }
 
+    // Aseguramos que "Promociones" este presente y no sea cerrable. No es un
+    // producto del catalogo: vive aca como subseccion, no como entrada propia
+    // del Navbar (ver spec del modulo de promociones).
+    let promocionesTab = currentTabs.find((t) => t.key === "promociones")
+    if (promocionesTab) {
+      promocionesTab.closable = false
+    } else {
+      const inactivosIndex = currentTabs.findIndex((t) => t.key === "inactivos")
+      currentTabs.splice(inactivosIndex + 1, 0, { key: "promociones", label: "Promociones", closable: false })
+    }
+
     return currentTabs
   })
 
@@ -94,6 +111,25 @@ const ProductosManager = () => {
   const [searchProductos, setSearchProductos] = useState(() => leerConsultaPersistida("productos_search", ""))
   const [searchVal, setSearchVal] = useState(() => leerConsultaPersistida("productos_search", ""))
 
+  useEffect(() => {
+    const termino = searchVal.trim()
+
+    if (termino.length < 2) {
+      setSearchProductos("")
+      if (!termino) guardarConsultaPersistida("productos_search", "")
+      setPagina(1)
+      return undefined
+    }
+
+    const timer = setTimeout(() => {
+      setSearchProductos(termino)
+      guardarConsultaPersistida("productos_search", termino)
+      setPagina(1)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchVal])
+
   const handleBuscarProductos = useCallback(() => {
     if (!searchVal || searchVal.trim() === "") return
     setSearchProductos(searchVal)
@@ -118,6 +154,8 @@ const ProductosManager = () => {
   // Toggle para buscar por código de proveedor en lugar de código de venta/denominación
   const [buscarPorCodigoProveedor, setBuscarPorCodigoProveedor] = useState(false)
 
+  const [estadoDetalleEdicion, setEstadoDetalleEdicion] = useState({})
+
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
     localStorage.setItem("productosTabs", JSON.stringify(tabs))
@@ -137,17 +175,22 @@ const ProductosManager = () => {
   }
   const closeTab = (key) => {
     setTabs((prev) => prev.filter((t) => t.key !== key))
-    if (activeTab === key) setActiveTab("lista")
+    if (activeTab === key) {
+      // Las tabs de promocion vuelven a la seccion de Promociones, no a Lista
+      setActiveTab(key.startsWith("nueva-promo") || key.startsWith("editar-promo") ? "promociones" : "lista")
+    }
     setEditStates((prev) => {
       const newStates = { ...prev }
       delete newStates[key]
       return newStates
     })
-    // También limpiar el borrador del form
+    setEstadoDetalleEdicion((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
     // También limpiar el borrador del form y estados relacionados
-    const claveBorrador = key.startsWith("editar-")
-      ? `stockFormDraft_${key.split("-")[1]}`
-      : `stockFormDraft_${key}`
+    const claveBorrador = `stockFormDraft_${key}`
     try {
       localStorage.removeItem(claveBorrador)
       localStorage.removeItem(`${claveBorrador}_precios`)
@@ -160,37 +203,88 @@ const ProductosManager = () => {
 
   // Guardar producto (alta o edición)
   const handleSaveProducto = async (data, key) => {
+    const esNuevo = key.startsWith("nuevo")
+
     try {
-      if (key.startsWith("editar-") && editStates[key] && editStates[key].id) {
-        await updateProducto(editStates[key].id, data)
-      } else if (!data.id) {
-        // Solo crear si NO tiene id (es decir, si no fue creado por el endpoint atómico)
-        await addProducto(data)
-      }
-      // Invalidar caché para que la tabla se refresque sin recargar la página
-      invalidarCache()
-      closeTab(key)
+      await invalidarCachesProductos(queryClient)
     } catch (err) {
-      // Mostrar el error como alerta nativa del navegador
-      alert(err.message)
-      throw err
+      console.error("No se pudieron invalidar los caches de productos:", err)
     }
+
+    if (esNuevo) {
+      const codigo = String(data?.codvta || "").trim()
+      const denominacion = String(data?.deno || "").trim()
+      const termino = codigo.length >= 2 ? codigo : denominacion
+
+      setFam1Filtro("")
+      setFam2Filtro("")
+      setFam3Filtro("")
+      setBuscarPorCodigoProveedor(false)
+      setSearchVal(termino)
+      setSearchProductos(termino)
+      guardarConsultaPersistida("productos_search", termino)
+      setPagina(1)
+    }
+
+    closeTab(key)
+
+    const producto = [data?.codvta, data?.deno].filter(Boolean).join(" - ")
+    toast.success(`Producto${producto ? ` ${producto}` : ""} ${esNuevo ? "creado" : "actualizado"} correctamente.`)
   }
 
   // Editar producto
-  const handleEditProducto = async (producto) => {
+  const handleEditProducto = (producto) => {
     const editKey = `editar-${producto.id}-${Date.now()}`
-    // Abrir tab con placeholder rápido
-    openTab(editKey, `Editar Producto: ${producto.deno.substring(0, 15)}...`, producto)
-    try {
-      // Cargar DETALLE optimizado (incluye stock_proveedores con proveedor)
-      const res = await fetch(`/api/productos/stock/${producto.id}/`, { credentials: 'include' })
-      if (res.ok) {
-        const detalle = await res.json()
-        setEditStates((prev) => ({ ...prev, [editKey]: detalle }))
-      }
-    } catch (_) { }
+    openTab(editKey, `Editar Producto: ${producto.deno.substring(0, 15)}...`)
   }
+
+  // ---- Promociones: apertura de subtabs ----
+  const handleNuevaPromocion = () => {
+    const key = `nueva-promo-${Date.now()}`
+    setTabs((prev) => {
+      if (prev.find((t) => t.key === key)) return prev
+      return [...prev, { key, label: "Nueva Promoción", closable: true }]
+    })
+    setActiveTab(key)
+  }
+
+  const handleEditarPromocion = (promocion) => {
+    const key = `editar-promo-${promocion.id}`
+    const label = `Promo: ${(promocion.nombre || "").substring(0, 20)}`
+    setTabs((prev) => {
+      if (prev.find((t) => t.key === key)) {
+        return prev
+      }
+      return [...prev, { key, label, closable: true, promoData: promocion }]
+    })
+    setActiveTab(key)
+    setEditStates((prev) => ({ ...prev, [key]: promocion }))
+  }
+
+  const cargarDetalleProducto = useCallback(async (editKey, productoId) => {
+    setEstadoDetalleEdicion((prev) => ({ ...prev, [editKey]: { estado: "cargando" } }))
+
+    try {
+      const res = await fetch(`/api/productos/stock/${productoId}/`, { credentials: "include" })
+      if (!res.ok) throw new Error("No se pudo cargar el producto")
+      const detalle = await res.json()
+      setEditStates((prev) => ({ ...prev, [editKey]: detalle }))
+      setEstadoDetalleEdicion((prev) => ({ ...prev, [editKey]: { estado: "listo" } }))
+    } catch (error) {
+      setEstadoDetalleEdicion((prev) => ({
+        ...prev,
+        [editKey]: { estado: "error", mensaje: error.message },
+      }))
+    }
+  }, [])
+
+  useEffect(() => {
+    tabs.forEach((tab) => {
+      if (!tab.key.startsWith("editar-") || estadoDetalleEdicion[tab.key]) return
+      const productoId = Number(tab.key.split("-")[1])
+      if (productoId) cargarDetalleProducto(tab.key, productoId)
+    })
+  }, [cargarDetalleProducto, estadoDetalleEdicion, tabs])
 
   // Actualizar stock de un proveedor específico
   const handleUpdateStock = (stockId, providerId) => {
@@ -214,9 +308,15 @@ const ProductosManager = () => {
         cantidad: Number.parseFloat(cantidad),
         costo: Number.parseFloat(costo),
       })
+      await invalidarCachesProductos(queryClient)
     }
     setUpdateStockModal({ show: false, stockId: null, providerId: null })
   }
+
+  const handleDeleteProducto = useCallback(async (id) => {
+    await deleteProducto(id)
+    await invalidarCachesProductos(queryClient)
+  }, [deleteProducto, queryClient])
 
   const handleLogout = () => {
     logout().finally(() => {
@@ -266,13 +366,16 @@ const ProductosManager = () => {
   }, [fam1Filtro, fam2Filtro, fam3Filtro, activeTab, searchProductos, buscarPorCodigoProveedor, ordenamiento])
 
   // Hook genérico para consultar datos paginados con caché de TanStack Query
-  const { datos: productos, total, cargando: loadingProductos, invalidarCache } = usePaginacionAPI(
+  const { datos: productos, total, cargando: loadingProductos } = usePaginacionAPI(
     'productos',
     '/api/productos/stock/',
     filtrosProductos,
     pagina,
     itemsPorPagina,
-    { enabled: !!(searchProductos && searchProductos.trim() !== "") }
+    {
+      enabled: (activeTab === "lista" || activeTab === "inactivos")
+        && !!(searchProductos && searchProductos.trim() !== ""),
+    }
   )
 
   // Filtrar productos activos/inactivos con memo para rendimiento
@@ -404,7 +507,7 @@ const ProductosManager = () => {
                     addProveedor={addProveedor}
                     updateProveedor={updateProveedor}
                     deleteProveedor={deleteProveedor}
-                    deleteProducto={deleteProducto}
+                    deleteProducto={handleDeleteProducto}
                     onEdit={handleEditProducto}
                     onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                     onUpdateStock={handleUpdateStock}
@@ -439,7 +542,7 @@ const ProductosManager = () => {
                     addProveedor={addProveedor}
                     updateProveedor={updateProveedor}
                     deleteProveedor={deleteProveedor}
-                    deleteProducto={deleteProducto}
+                    deleteProducto={handleDeleteProducto}
                     onEdit={handleEditProducto}
                     onImprimirCodigoBarras={setProductoParaImprimirEtiquetas}
                     onUpdateStock={handleUpdateStock}
@@ -460,17 +563,50 @@ const ProductosManager = () => {
                     cargando={loadingProductos}
                   />
                 )}
-                {activeTab !== "lista" && activeTab !== "inactivos" && (
-                  <StockForm
-                    key={activeTab}
-                    stock={editStates[activeTab]}
-                    modo={activeTab.startsWith("nuevo") ? "nuevo" : "editar"}
-                    tabKey={activeTab}
-                    onSave={(data) => handleSaveProducto(data, activeTab)}
-                    onCancel={() => closeTab(activeTab)}
-                    proveedores={proveedores.filter((p) => !!p.id)}
-                    familias={familias.filter((f) => !!f.id)}
+                {activeTab === "promociones" && (
+                  <PromocionesSection
+                    onNuevaPromocion={handleNuevaPromocion}
+                    onEditarPromocion={handleEditarPromocion}
                   />
+                )}
+                {(activeTab.startsWith("nueva-promo") || activeTab.startsWith("editar-promo")) && (
+                  <PromocionFormTab
+                    key={activeTab}
+                    promocion={editStates[activeTab] || null}
+                    onGuardado={() => closeTab(activeTab)}
+                    onCancelar={() => closeTab(activeTab)}
+                  />
+                )}
+                {activeTab !== "lista" &&
+                  activeTab !== "inactivos" &&
+                  activeTab !== "promociones" &&
+                  !activeTab.startsWith("nueva-promo") &&
+                  !activeTab.startsWith("editar-promo") && (
+                  activeTab.startsWith("nuevo") || estadoDetalleEdicion[activeTab]?.estado === "listo" ? (
+                    <StockForm
+                      key={activeTab}
+                      stock={editStates[activeTab]}
+                      modo={activeTab.startsWith("nuevo") ? "nuevo" : "editar"}
+                      tabKey={activeTab}
+                      onSave={(data) => handleSaveProducto(data, activeTab)}
+                      onCancel={() => closeTab(activeTab)}
+                      proveedores={proveedores.filter((p) => !!p.id)}
+                      familias={familias.filter((f) => !!f.id)}
+                    />
+                  ) : estadoDetalleEdicion[activeTab]?.estado === "error" ? (
+                    <div className="flex flex-col items-center gap-3 py-12 text-slate-600">
+                      <p>{estadoDetalleEdicion[activeTab].mensaje}</p>
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-md bg-orange-600 text-white hover:bg-orange-700"
+                        onClick={() => cargarDetalleProducto(activeTab, Number(activeTab.split("-")[1]))}
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center text-slate-500">Cargando producto...</div>
+                  )
                 )}
               </div>
             </div>

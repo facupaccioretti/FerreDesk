@@ -9,6 +9,7 @@ from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from ferreapps.productos.models import AlicuotaIVA, Proveedor, Stock, StockProve
+from ferreapps.productos.utils_precios import calcular_precio_lista_0_final
 from ferreapps.proveedores.models import (
     HistorialImportacionProveedor,
     SolicitudCargaInicialProveedor,
@@ -163,6 +164,11 @@ class CargaInicialProveedorDiferidaTestCase(TenantTestCase):
         stock = Stock.objects.get(codvta="CRG001")
         self.assertEqual(stock.deno, "Producto carga")
         self.assertEqual(stock.proveedor_habitual, self.proveedor)
+        self.assertEqual(
+            stock.precio_lista_0,
+            calcular_precio_lista_0_final("100.50", "30.00", self.alicuota.porce),
+        )
+        self.assertFalse(stock.precio_lista_0_manual)
         stock_prove = StockProve.objects.get(stock=stock, proveedor=self.proveedor)
         self.assertEqual(stock_prove.codigo_producto_proveedor, "COD-001")
         self.assertEqual(stock_prove.costo, Decimal("100.50"))

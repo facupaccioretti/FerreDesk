@@ -1,4 +1,5 @@
 import re
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import BaseTenantRequestFactory
 from rest_framework.test import APIClient
@@ -34,6 +35,7 @@ class ProductoTenantTestCase(TenantTestCase):
     def get_test_tenant_domain(cls):
         host_label = cls.get_test_schema_name().replace("_", "-")
         return f"{host_label}.localhost"
+
 
 class ProductoTenantAPITestCase(ProductoTenantTestCase):
     """Base tenant-aware con APIClient configurado al dominio del tenant."""

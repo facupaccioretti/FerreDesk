@@ -4,7 +4,7 @@ import { useSessionUserQuery } from "../domains/session/useSessionUserQuery";
 import { useSetupStatusQuery } from "../domains/setup/useSetupStatusQuery";
 import AppShell from "../layouts/AppShell";
 
-const HOSTS_PUBLICOS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const HOSTS_PUBLICOS = new Set(["127.0.0.1", "::1", "[::1]"]);
 const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
     "www",
     "staging",
@@ -40,6 +40,10 @@ export function esHostTenantValido(hostname) {
     }
 
     const hostnameNormalizado = hostname.toLowerCase();
+    if (hostnameNormalizado === "localhost") {
+        return true;
+    }
+
     if (HOSTS_PUBLICOS.has(hostnameNormalizado)) {
         return false;
     }

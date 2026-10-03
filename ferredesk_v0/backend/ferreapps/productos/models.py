@@ -507,7 +507,7 @@ class Stock(models.Model):
         null=True,
         blank=True,
         db_column='PRECIO_VENTA_LISTA_CERO_SIN_IVA',
-        help_text='Precio de venta base (Lista 0) sin IVA'
+        help_text='Precio de venta final (Lista 0) con IVA incluido'
     )
     precio_lista_0_manual = models.BooleanField(
         default=False,

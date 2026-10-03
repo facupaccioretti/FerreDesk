@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import ItemsGrid from "./ItemsGrid"
-import BuscadorProducto from "../BuscadorProducto"
+import SelectorItemVenta from "./SelectorItemVenta"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
@@ -208,6 +208,7 @@ const VentaForm = ({
   })
 
   const itemsGridRef = useRef()
+  const selectorItemVentaRef = useRef()
   // Temporizador para mostrar overlay ARCA solo si la espera es real (evita condiciones de carrera)
   const temporizadorArcaRef = useRef(null)
   const stockProveedores = useMemo(() => getStockProveedoresMap(productosDisponibles), [productosDisponibles])
@@ -776,6 +777,18 @@ const VentaForm = ({
     }
   }
 
+  // Agregar/reconfigurar una promocion desde SelectorItemVenta (ver su docstring:
+  // toda la logica de seleccion/configuracion vive ahi, esto solo delega a la grilla).
+  const handleAgregarPromocionAGrid = (promocion, eleccionesGrupos, cantidad) => {
+    itemsGridRef.current?.handleAddPromocion(promocion, eleccionesGrupos, cantidad)
+  }
+  const handleReconfigurarPromocionEnGrid = (idx, promocion, eleccionesGrupos) => {
+    itemsGridRef.current?.handleReconfigurarPromocion(idx, promocion, eleccionesGrupos)
+  }
+  const handleAbrirReconfigurarPromocion = (idx, row) => {
+    selectorItemVentaRef.current?.iniciarReconfiguracion(idx, row)
+  }
+
   // Efecto para seleccionar automáticamente Cliente Mostrador (ID 1)
   // Se ejecuta solo una vez después de que los clientes se cargan y si no hay un cliente ya seleccionado.
   useEffect(() => {
@@ -1077,8 +1090,11 @@ const VentaForm = ({
                   {/* Buscador */}
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                    <BuscadorProducto
-                      onSelect={handleAddItemToGrid}
+                    <SelectorItemVenta
+                      ref={selectorItemVentaRef}
+                      onSelectProducto={handleAddItemToGrid}
+                      onAgregarPromocion={handleAgregarPromocionAGrid}
+                      onReconfigurarPromocion={handleReconfigurarPromocionEnGrid}
                       disabled={isReadOnly}
                       readOnly={isReadOnly}
                       className="w-full"
@@ -1156,6 +1172,7 @@ const VentaForm = ({
                 initialItems={formulario.items}
                 listaPrecioId={listaPrecioId}
                 listasPrecio={listasPrecioDisponibles}
+                onReconfigurarPromocion={handleAbrirReconfigurarPromocion}
               />
             </div>
 

@@ -15,7 +15,7 @@ from django.db.models import Sum
 import logging
 
 from ..models import (
-    Comprobante, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+    Comprobante, ComprobanteAsociacion, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
 )
 from ..serializers import (
     VentaSerializer, VentaDetalleItemSerializer, VentaDetalleManSerializer,
@@ -27,11 +27,10 @@ from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
 from .utils_stock import (
-    _obtener_proveedor_habitual_stock,
     _obtener_codigo_venta,
     _descontar_distribuyendo,
 )
-from ferreapps.caja.models import SesionCaja, ESTADO_CAJA_ABIERTA
+from ferreapps.caja.models import PagoVenta, SesionCaja, ESTADO_CAJA_ABIERTA
 from ferreapps.productos.setup import requerir_setup_completo
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from ferredesk_backend.utils.observability import medir_proceso
@@ -136,8 +135,19 @@ class VentaViewSet(viewsets.ModelViewSet):
     • otras -> continúan usando el modelo base `Venta`.
     """
 
-    # Configuración por defecto (para acciones distintas de list)
-    queryset = Venta.objects.all()
+    # Configuracion por defecto (para acciones distintas de list).
+    # El prefetch de 'items' trae de una vez vdi_promocion y sus componentes
+    # congelados (VentaPromocionComponente): sin esto, abrir un documento con
+    # lineas de promo para editar dispara una query extra por cada linea
+    # (VentaDetalleItemSerializer.componentes_promocion/promocion_nombre).
+    queryset = Venta.objects.all().prefetch_related(
+        models.Prefetch(
+            'items',
+            queryset=VentaDetalleItem.objects.select_related('vdi_promocion').prefetch_related(
+                'componentes_promocion__stock'
+            ),
+        ),
+    )
     serializer_class = VentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
@@ -149,7 +159,25 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
             # Usamos el manager personalizado con todas las anotaciones necesarias
-            return Venta.objects.con_calculos().order_by('-ven_fecha', '-ven_id')
+            return Venta.objects.con_calculos().select_related(
+                'factura_fiscal_convertida__comprobante',
+                'factura_fiscal_convertida__sesion_caja__usuario',
+            ).prefetch_related(
+                models.Prefetch(
+                    'pagos',
+                    queryset=PagoVenta.objects.select_related('metodo_pago', 'cuenta_banco'),
+                ),
+                models.Prefetch(
+                    'notas_de_credito_recibidas',
+                    queryset=ComprobanteAsociacion.objects.select_related('nota_credito__comprobante'),
+                    to_attr='_notas_credito_recibidas_prefetch',
+                ),
+                models.Prefetch(
+                    'facturas_anuladas',
+                    queryset=ComprobanteAsociacion.objects.select_related('factura_afectada__comprobante'),
+                    to_attr='_facturas_anuladas_prefetch',
+                ),
+            ).order_by('-ven_fecha', '-ven_id')
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
         return super().get_queryset()
@@ -164,9 +192,20 @@ class VentaViewSet(viewsets.ModelViewSet):
         Inyecta 'is_list' en el contexto del serializer.
         VentaCalculadaSerializer lo usa para evitar la query N+1 de
         iva_desglose en listados masivos (solo se calcula en retrieve/detalle).
+
+        Tambien reenvia 'items_expandidos' cuando create()/update() ya
+        resolvieron las promos de la request (ver _items_promocion_expandidos):
+        asi VentaSerializer no depende de que su mutacion sobre data['items']
+        se propague por referencia hasta self.initial_data -- se lo pasamos
+        explicito. VentaSerializer sigue expandiendo por su cuenta cuando no
+        hay nada en el contexto (por ejemplo, cuando se instancia directo
+        desde crear_documento_venta_desde_payload, fuera de este viewset).
         """
         context = super().get_serializer_context()
         context['is_list'] = getattr(self, 'action', None) == 'list'
+        items_expandidos = getattr(self, '_items_promocion_expandidos', None)
+        if items_expandidos is not None:
+            context['items_expandidos'] = items_expandidos
         return context
 
     def get_filterset_class(self):
@@ -213,6 +252,27 @@ class VentaViewSet(viewsets.ModelViewSet):
         if not items and tipo_comprobante not in ['nota_debito', 'nota_debito_interna']:
             return Response({'detail': 'El campo items es requerido y no puede estar vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Una promo se vende y se descuenta por componentes (ver aplicar_promocion_venta);
+        # una NC/ND creada directamente aca no tiene una linea de venta origen de la que
+        # tomar el snapshot de componentes, asi que por ahora no se acepta acá. Las
+        # devoluciones/cambios de promos se hacen por el flujo de postventa.
+        if any(item.get('vdi_promocion') for item in items) and tipo_comprobante in [
+            'nota_credito', 'nota_credito_interna', 'nota_debito', 'nota_debito_interna'
+        ]:
+            return Response(
+                {'detail': 'Una promoción no puede cargarse directamente en una Nota de Crédito/Débito. Use el flujo de postventa.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if items:
+            from ferreapps.promos.services.aplicar_promocion_venta import expandir_items_promocion
+            items = expandir_items_promocion(items)
+            data['items'] = items
+            # Se guarda para que get_serializer_context() se lo pase a VentaSerializer
+            # de forma explicita (ver docstring de get_serializer_context): la vista
+            # necesita los items expandidos ya aca, antes del create() del serializer,
+            # para el descuento de stock de abajo.
+            self._items_promocion_expandidos = items
+
         # === OBTENER SESIÓN DE CAJA ===
         # Obtenemos la sesión para registrar los pagos si existiera.
         # La validación de caja requerida ocurre transaccionalmente en caja/utils.py 
@@ -226,6 +286,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         except Exception:
             bonif_general = 0
         for item in items:
+            if item.get('_promo_snapshot'):
+                # El precio de una promo es fijo (definido al crearla); no se le
+                # aplica bonificación general ni particular por línea.
+                item['vdi_bonifica'] = Decimal('0')
+                continue
             bonif = item.get('vdi_bonifica')
             if not bonif or float(bonif) == 0:
                 item['vdi_bonifica'] = bonif_general
@@ -241,23 +306,18 @@ class VentaViewSet(viewsets.ModelViewSet):
         errores_stock = []
         stock_actualizado = []
         if not es_presupuesto:
-            items_stock = sorted(items, key=lambda item: str(item.get('vdi_idsto') or 0).zfill(20))
-            for item in items_stock:
-                id_stock = item.get('vdi_idsto')
-                cantidad = Decimal(str(item.get('vdi_cantidad', 0)))
+            # Resolver_operaciones_stock aplana productos sueltos y componentes de
+            # promo en una unica lista ordenada por stock_id, para bloquear StockProve
+            # siempre en el mismo orden global (ver docstring del service).
+            from ferreapps.promos.services.aplicar_promocion_venta import resolver_operaciones_stock
+            operaciones_stock, errores_resolucion = resolver_operaciones_stock(items)
+            errores_stock.extend(errores_resolucion)
 
-                # Si el ítem no tiene un ID de stock, es genérico y no participa en la lógica de inventario.
-                if not id_stock:
-                    continue
+            for operacion in operaciones_stock:
+                id_stock = operacion['stock_id']
+                id_proveedor = operacion['proveedor_id']
+                cantidad = operacion['cantidad']
 
-                # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                # El frontend solo debe enviar vdi_idsto, el backend maneja toda la lógica
-                id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
-                if not id_proveedor:
-                    cod = _obtener_codigo_venta(id_stock)
-                    errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
-                    continue
-                    
                 if es_nota_credito:
                     # Para notas de crédito, el stock se devuelve (suma) SOLO al proveedor indicado
                     try:
@@ -272,15 +332,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # Notas de débito: no tocan stock (no hay ItemsGrid de productos)
                 elif es_nota_debito:
                     continue
-                    try:
-                        stockprove = StockProve.objects.select_for_update().get(stock_id=id_stock, proveedor_id=id_proveedor)
-                    except StockProve.DoesNotExist:
-                        cod = _obtener_codigo_venta(id_stock)
-                        errores_stock.append(f"No existe stock para el producto {cod}")
-                        continue
-                    stockprove.cantidad += cantidad
-                    stockprove.save()
-                    stock_actualizado.append((id_stock, id_proveedor, stockprove.cantidad))
                 else:
                     # Venta: descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
@@ -697,37 +748,25 @@ class VentaViewSet(viewsets.ModelViewSet):
                 # === OBTENER SESIÓN DE CAJA ===
                 sesion_caja = obtener_sesion_caja_activa(request.user)
                 
-                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id).order_by('vdi_idsto_id', 'pk')
+                items = VentaDetalleItem.objects.filter(vdi_idve=venta.ven_id).prefetch_related(
+                    'componentes_promocion'
+                ).order_by('vdi_idsto_id', 'pk')
                 # Obtener configuración de la ferretería para determinar política de stock negativo
                 ferreteria = Ferreteria.objects.first()
                 # Usar configuración de la ferretería, con posibilidad de override desde el frontend
                 permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
-                errores_stock = []
                 stock_actualizado = []
-                for item in items:
-                    # Usar _id para obtener el entero, no el objeto FK
-                    id_stock = item.vdi_idsto_id
-                    cantidad = Decimal(str(item.vdi_cantidad))
-                    if not id_stock:
-                        errores_stock.append(f"Falta stock en item: {item.id}")
-                        continue
-                    
-                    # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                    id_proveedor = _obtener_proveedor_habitual_stock(id_stock)
-                    if not id_proveedor:
-                        cod = _obtener_codigo_venta(id_stock)
-                        errores_stock.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock})")
-                        continue
 
-                    if not item.vdi_idpro_id:
-                        item.vdi_idpro_id = id_proveedor
-                        item.save(update_fields=['vdi_idpro'])
-                    
+                from ferreapps.promos.services.aplicar_promocion_venta import (
+                    resolver_operaciones_stock_desde_detalles,
+                )
+                operaciones_stock, errores_stock = resolver_operaciones_stock_desde_detalles(items)
+                for operacion in operaciones_stock:
                     # Descontar distribuyendo entre proveedores si hace falta
                     _descontar_distribuyendo(
-                        stock_id=id_stock,
-                        proveedor_preferido_id=id_proveedor,
-                        cantidad=cantidad,
+                        stock_id=operacion['stock_id'],
+                        proveedor_preferido_id=operacion['proveedor_id'],
+                        cantidad=operacion['cantidad'],
                         permitir_stock_negativo=permitir_stock_negativo,
                         errores_stock=errores_stock,
                         stock_actualizado=stock_actualizado,
@@ -778,7 +817,17 @@ class VentaViewSet(viewsets.ModelViewSet):
         self.perform_update(serializer)
 
         items_data = request.data.get('items', None)
-        if items_data is not None:
+        # Si hay una linea de promo, este bloque no la sabe manejar: no convierte
+        # 'vdi_promocion' a la forma _id ni entiende '_promo_snapshot', así que
+        # crear el VentaDetalleItem de esa linea con datos crudos falla. El
+        # perform_update() de arriba (VentaSerializer.update() ->
+        # _actualizar_items_venta_inteligente) ya dejo los items -- promo incluida,
+        # con su snapshot -- correctamente actualizados; para ese caso no hace
+        # falta (ni es seguro) que este bloque los borre y recree de nuevo.
+        tiene_linea_promocion = items_data is not None and any(
+            item.get('vdi_promocion') for item in items_data
+        )
+        if items_data is not None and not tiene_linea_promocion:
             try:
                 # ATENCIÓN: No calcular totales ni campos calculados aquí.
                 # Solo actualizar los ítems base.
@@ -829,28 +878,9 @@ class VentaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class VentaDetalleItemViewSet(viewsets.ModelViewSet):
+class VentaDetalleItemViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaDetalleItem.objects.all()
     serializer_class = VentaDetalleItemSerializer
-
-    def perform_create(self, serializer):
-        venta = serializer.validated_data['vdi_idve']
-        if venta.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden agregar items a un comprobante cerrado.'})
-        serializer.save()
-
-    def perform_update(self, serializer):
-        if serializer.instance.vdi_idve.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden modificar items de un comprobante cerrado.'})
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        if instance.vdi_idve.ven_estado != 'AB':
-            from rest_framework.exceptions import ValidationError as DRFValidationError
-            raise DRFValidationError({'detail': 'No se pueden eliminar items de un comprobante cerrado.'})
-        instance.delete()
 
 
 class VentaDetalleManViewSet(viewsets.ModelViewSet):
@@ -873,7 +903,9 @@ class VentaDetalleItemCalculadoFilter(FilterSet):
 
 class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para ver detalles con cálculos (reemplaza a la antigua vista SQL)"""
-    queryset = VentaDetalleItem.objects.con_calculos()
+    queryset = VentaDetalleItem.objects.con_calculos().select_related(
+        'vdi_promocion'
+    ).prefetch_related('componentes_promocion__stock')
     serializer_class = VentaDetalleItemCalculadoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter

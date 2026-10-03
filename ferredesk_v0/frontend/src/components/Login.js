@@ -14,7 +14,7 @@ function resolverBasePublica(hostname) {
     hostnameNormalizado === "::1" ||
     hostnameNormalizado === "[::1]"
   ) {
-    return "http://localhost:3000";
+    return "http://lvh.me:3000";
   }
 
   if (hostnameNormalizado === "lvh.me") {
@@ -49,12 +49,6 @@ function Login() {
   const hostname = window.location.hostname;
   const isPublicDomain = !esHostTenantValido(hostname);
 
-  React.useEffect(() => {
-    if (!isPublicDomain) {
-      redirigirA(`${resolverBasePublica(hostname)}/`);
-    }
-  }, [isPublicDomain, hostname]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -80,10 +74,6 @@ function Login() {
       setLoading(false);
     }
   };
-
-  if (!isPublicDomain) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative flex flex-col font-sans">

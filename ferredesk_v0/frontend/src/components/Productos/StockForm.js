@@ -8,7 +8,7 @@ import DenominacionSugerenciasTooltip from "./DenominacionSugerenciasTooltip"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
-import { useListasPrecioAPI, usePreciosProductoListaAPI } from "../../utils/useListasPrecioAPI"
+import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 import { calcularPrecioLista, calcularPrecioLista0, calcularMargenDesdePrecios } from "../../utils/calcularPrecioLista"
 
 // Importar hooks modulares
@@ -36,6 +36,33 @@ const MARGEN_MAXIMO = 999.99 // DecimalField(max_digits=5, decimal_places=2)
 const MARGEN_STEP = 0.01
 const CANTIDAD_MINIMA_MINIMO = 0
 
+const crearPreciosListasIniciales = (stock) => {
+  const precios = {
+    lista0: {
+      precio: stock?.precio_lista_0 ?? "",
+      manual: Boolean(stock?.precio_lista_0_manual),
+    },
+    lista1: { precio: "", manual: false },
+    lista2: { precio: "", manual: false },
+    lista3: { precio: "", manual: false },
+    lista4: { precio: "", manual: false },
+  }
+
+  if (!Array.isArray(stock?.precios_listas)) return precios
+
+  stock.precios_listas.forEach((precioLista) => {
+    const key = `lista${precioLista.lista_numero}`
+    if (key in precios && key !== "lista0") {
+      precios[key] = {
+        precio: precioLista.precio ?? "",
+        manual: Boolean(precioLista.precio_manual),
+      }
+    }
+  })
+
+  return precios
+}
+
 const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKey }) => {
   // Hook del tema de FerreDesk
   const theme = useFerreDeskTheme()
@@ -59,7 +86,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // Hooks para listas de precios
   const { listas: listasPrecio } = useListasPrecioAPI()
-  const { guardarPreciosProducto } = usePreciosProductoListaAPI()
 
 
   // Estado para tooltips de precios manuales
@@ -79,25 +105,34 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   // Estados para precios de listas
   const [preciosListas, setPreciosListas] = useState(() => {
     const clavePrecios = `${claveBorrador}_precios`
-    try {
-      const saved = localStorage.getItem(clavePrecios)
-      if (saved) return JSON.parse(saved)
-    } catch (_) { }
-    return {
-      lista0: { precio: "", manual: false },
-      lista1: { precio: "", manual: false },
-      lista2: { precio: "", manual: false },
-      lista3: { precio: "", manual: false },
-      lista4: { precio: "", manual: false },
+    if (modo === "nuevo") {
+      try {
+        const saved = localStorage.getItem(clavePrecios)
+        if (saved) return JSON.parse(saved)
+      } catch (_) { }
     }
+    return crearPreciosListasIniciales(stock)
   })
 
   // Guardar borrador de precios
   useEffect(() => {
+    if (modo !== "nuevo") return
     try {
       localStorage.setItem(`${claveBorrador}_precios`, JSON.stringify(preciosListas))
     } catch (_) { }
-  }, [preciosListas, claveBorrador])
+  }, [preciosListas, claveBorrador, modo])
+
+  const desactivarPrecioLista0Manual = useCallback(() => {
+    setPreciosListas(prev => prev.lista0.manual
+      ? { ...prev, lista0: { ...prev.lista0, manual: false } }
+      : prev
+    )
+  }, [])
+
+  const handleFuentePrecioChange = (e) => {
+    handleChange(e)
+    desactivarPrecioLista0Manual()
+  }
 
   const {
     handleEditStockProve,
@@ -123,6 +158,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     stockProve,
     form,
     updateForm,
+    onFuentePrecioChange: desactivarPrecioLista0Manual,
     alert,
   })
 
@@ -155,10 +191,11 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     form,
     proveedores,
     updateForm,
+    onFuentePrecioChange: desactivarPrecioLista0Manual,
     alert
   })
 
-  const { guardarProductoAtomico } = useGuardadoAtomico({ modo, stock, onSave })
+  const { guardarProductoAtomico } = useGuardadoAtomico({ stock })
 
   const { esValido, errores, erroresCampo } = useValidaciones({
     form,
@@ -177,7 +214,10 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // VAT Percentage calculation
   const alicuotaSeleccionada = alicuotas.find(a => String(a.id) === String(form.idaliiva))
-  const porcentajeIVA = alicuotaSeleccionada ? Number(alicuotaSeleccionada.porce) : 0
+  const porcentajeIVA = Number(
+    alicuotaSeleccionada?.porce ??
+    (String(stock?.idaliiva?.id) === String(form.idaliiva) ? stock.idaliiva.porce : 0)
+  )
 
   // Callback cuando el modal cambia el código
   const handleCodigoBarrasChange = (codigo, tipo) => {
@@ -191,45 +231,6 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
 
   // La obtencion del ID temporal en modo nuevo la maneja useStockForm.js (evitar duplicado)
-
-  // Efecto para inicializar precios de listas cuando se carga el producto (modo edición)
-  useEffect(() => {
-    if (!stock) return
-
-    // Si ya hay datos en preciosListas (cargados del borrador), no sobreescribir con el stock original
-    // a menos que sea la primera vez que se carga este producto en la sesión
-    const tienePrecios = Object.values(preciosListas).some(p => p.precio !== '')
-    if (tienePrecios) return
-
-    // Inicializar precio Lista 0 desde el producto
-    const precioLista0 = stock.precio_lista_0 || ''
-    const esManualLista0 = stock.precio_lista_0_manual || false
-
-    // Inicializar precios de listas 1-4 desde precios_listas
-    const preciosListasIniciales = {
-      lista0: { precio: precioLista0, manual: esManualLista0 },
-      lista1: { precio: '', manual: false },
-      lista2: { precio: '', manual: false },
-      lista3: { precio: '', manual: false },
-      lista4: { precio: '', manual: false },
-    }
-
-    // Cargar precios existentes de listas 1-4
-    if (Array.isArray(stock.precios_listas)) {
-      stock.precios_listas.forEach(pl => {
-        const key = `lista${pl.lista_numero}`
-        if (preciosListasIniciales[key]) {
-          preciosListasIniciales[key] = {
-            precio: pl.precio || '',
-            manual: pl.precio_manual || false,
-          }
-        }
-      })
-    }
-
-    setPreciosListas(preciosListasIniciales)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock])
 
   // Obtener costo del proveedor habitual
   const obtenerCostoProveedorHabitual = useCallback(() => {
@@ -429,26 +430,19 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
       precio_lista_0_manual: preciosListas.lista0.manual,
     }
 
-    // Usar el hook de guardado atómico (maneja todo internamente)
-    const resultado = await guardarProductoAtomico(formConPrecios)
+    const preciosAGuardar = [1, 2, 3, 4].map(i => ({
+      lista_numero: i,
+      precio: Number(preciosListas[`lista${i}`].precio) || 0,
+      precio_manual: preciosListas[`lista${i}`].manual,
+    }))
+
+    // Guardar producto, relaciones y precios en la misma operacion
+    const resultado = await guardarProductoAtomico(formConPrecios, preciosAGuardar)
 
     if (resultado.success) {
-      const productoId = resultado.data?.id || form.id
-      if (productoId) {
-        try {
-          const preciosAGuardar = [1, 2, 3, 4].map(i => ({
-            lista_numero: i,
-            precio: Number(preciosListas[`lista${i}`].precio) || 0,
-            precio_manual: preciosListas[`lista${i}`].manual,
-          }))
-
-          await guardarPreciosProducto(productoId, preciosAGuardar)
-        } catch (errorPrecios) {
-          console.error('Error al guardar precios de listas:', errorPrecios)
-        }
-      }
-
       try { localStorage.removeItem(claveBorrador) } catch (_) { }
+      try { localStorage.removeItem(`${claveBorrador}_precios`) } catch (_) { }
+      if (onSave) await onSave(resultado.data)
     }
   }
 
@@ -469,17 +463,9 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   useEffect(() => {
     if (unProveedor && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
       setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
+      desactivarPrecioLista0Manual()
     }
-  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id, setForm])
-
-
-
-  // Al asociar stock, autocompletar proveedor habitual si hay uno solo
-  useEffect(() => {
-    if (proveedoresAsociados.length === 1 && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
-      setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
-    }
-  }, [proveedoresAsociados, form.proveedor_habitual_id, setForm])
+  }, [unProveedor, proveedoresAsociados, form.proveedor_habitual_id, setForm, desactivarPrecioLista0Manual])
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50/30 p-4">
@@ -870,7 +856,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <select
                         name="proveedor_habitual_id"
                         value={form.proveedor_habitual_id ?? ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         disabled={proveedoresAsociados.length === 1}
                         required={proveedoresAsociados.length > 1}
@@ -969,7 +955,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                         type="number"
                         name="margen"
                         value={form.margen ?? ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         step={MARGEN_STEP}
                         min={MARGEN_MINIMO}
@@ -1336,7 +1322,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
                       <select
                         name="idaliiva"
                         value={typeof form.idaliiva === "number" || typeof form.idaliiva === "string" ? form.idaliiva : ""}
-                        onChange={handleChange}
+                        onChange={handleFuentePrecioChange}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1 text-xs h-8 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         required
                       >

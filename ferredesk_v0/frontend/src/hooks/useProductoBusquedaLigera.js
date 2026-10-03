@@ -50,7 +50,6 @@ export function useProductoBusquedaLigera({
     enabled: enabled && terminoDebounced.length >= MINIMO_CARACTERES_BUSQUEDA_PRODUCTO,
     staleTime,
     gcTime,
-    placeholderData: (previos) => previos,
   })
 
   const invalidarCache = useCallback(() => {

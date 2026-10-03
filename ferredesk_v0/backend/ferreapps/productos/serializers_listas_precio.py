@@ -2,6 +2,8 @@
 Serializers para el sistema de listas de precios.
 """
 from rest_framework import serializers
+from decimal import Decimal
+
 from .models import ListaPrecio, PrecioProductoLista, ActualizacionListaDePrecios
 
 
@@ -23,6 +25,11 @@ class ListaPrecioSerializer(serializers.ModelSerializer):
 
 class PrecioProductoListaSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.CharField(source='usuario_carga_manual.username', read_only=True, default=None)
+    precio = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=Decimal('0.01'),
+    )
     
     class Meta:
         model = PrecioProductoLista
@@ -53,6 +60,23 @@ class PrecioProductoListaLecturaSerializer(serializers.ModelSerializer):
             'usuario_carga_manual',
             'usuario_nombre',
         ]
+
+
+class PrecioListaGuardadoSerializer(serializers.Serializer):
+    lista_numero = serializers.ChoiceField(choices=(1, 2, 3, 4))
+    precio = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+    )
+    precio_manual = serializers.BooleanField()
+
+    def validate(self, attrs):
+        if attrs['precio_manual'] and attrs['precio'] <= 0:
+            raise serializers.ValidationError({
+                'precio': 'El precio manual debe ser mayor que cero.',
+            })
+        return attrs
 
 
 class ActualizacionListaDePreciosSerializer(serializers.ModelSerializer):

@@ -16,3 +16,14 @@ export const queryKeys = {
     ],
   },
 }
+
+export function invalidarCachesProductos(queryClient) {
+  const tenantScope = obtenerTenantScope()
+
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.resources.all("productos") }),
+    queryClient.invalidateQueries({ queryKey: ["producto-busqueda-ligera", tenantScope] }),
+    queryClient.invalidateQueries({ queryKey: ["producto-lookup-rapido", tenantScope] }),
+    queryClient.invalidateQueries({ queryKey: ["producto-lookup-compra", tenantScope] }),
+  ])
+}

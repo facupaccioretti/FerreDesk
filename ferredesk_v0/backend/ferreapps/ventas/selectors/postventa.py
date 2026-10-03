@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from ferreapps.cuenta_corriente.models import Imputacion
 from ferreapps.productos.models import Stock
 from ferreapps.productos.utils_precios import obtener_precio_lista_sin_iva
+from ferreapps.promos.services.aplicar_promocion_venta import resolver_items_nuevos_cambio
 from ferreapps.ventas.models import VentaDetalleItem
 from ferreapps.ventas.validators.postventa import (
     ZERO,
@@ -128,6 +129,7 @@ def previsualizar_devolucion(payload):
             {
                 "venta_detalle_item_id": detalle.id,
                 "stock_id": detalle.vdi_idsto_id,
+                "promocion_id": detalle.vdi_promocion_id,
                 "detalle": detalle.vdi_detalle1 or "",
                 "cantidad_original": _money(cantidad_original),
                 "cantidad_ya_devuelta": _money(cantidad_devuelta),
@@ -135,7 +137,9 @@ def previsualizar_devolucion(payload):
                 "cantidad_solicitada": _money(cantidad),
                 "precio_unitario_origen": _money(precio),
                 "subtotal_credito": _money(subtotal),
-                "toca_stock": bool(detalle.vdi_idsto_id),
+                # Una promo toca stock por sus componentes (VentaPromocionComponente),
+                # no por un vdi_idsto propio.
+                "toca_stock": bool(detalle.vdi_idsto_id or detalle.vdi_promocion_id),
             }
         )
 
@@ -167,12 +171,15 @@ def previsualizar_devolucion(payload):
     }
 
 
-def previsualizar_cambio(payload):
+def previsualizar_cambio(payload, *, items_nuevos_resueltos=None):
     venta = obtener_venta_origen(payload["venta_id"])
+    if items_nuevos_resueltos is None:
+        items_nuevos_resueltos = resolver_items_nuevos_cambio(payload["items_nuevos"])
     detalles, devueltas = validar_items_cambio(
         venta,
         payload["items_devueltos"],
         payload["items_nuevos"],
+        items_nuevos_resueltos=items_nuevos_resueltos,
     )
 
     venta_calculada = venta.__class__.objects.con_calculos().filter(pk=venta.pk).first() or venta
@@ -194,9 +201,11 @@ def previsualizar_cambio(payload):
             {
                 "venta_detalle_item_id": detalle.id,
                 "stock_id": detalle.vdi_idsto_id,
+                "promocion_id": detalle.vdi_promocion_id,
                 "detalle": detalle.vdi_detalle1 or "",
                 "cantidad_original": _money(cantidad_original),
                 "cantidad_ya_devuelta": _money(cantidad_devuelta),
+                "cantidad_disponible_para_devolver": _money(max(cantidad_original - cantidad_devuelta, ZERO)),
                 "cantidad_solicitada": _money(cantidad),
                 "precio_unitario_origen": _money(precio),
                 "subtotal_credito": _money(subtotal),
@@ -205,27 +214,40 @@ def previsualizar_cambio(payload):
 
     stock_map = {
         stock.id: stock
-        for stock in Stock.objects.filter(id__in=[item["stock_id"] for item in payload["items_nuevos"]]).select_related(
+        for stock in Stock.objects.filter(
+            id__in=[item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
+        ).select_related(
             "idaliiva", "proveedor_habitual"
         )
     }
     items_nuevos = []
     total_debito = ZERO
-    for item in payload["items_nuevos"]:
-        stock = stock_map[item["stock_id"]]
+    for item in items_nuevos_resueltos:
         cantidad = Decimal(str(item["cantidad"])).quantize(Decimal("0.01"))
         precio = Decimal(str(item["precio_unitario"])).quantize(Decimal("0.01"))
         subtotal = (cantidad * precio).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total_debito += subtotal
-        items_nuevos.append(
-            {
-                "stock_id": stock.id,
-                "detalle": getattr(stock, "deno", None) or getattr(stock, "nombre", None) or stock.codvta,
-                "cantidad": _money(cantidad),
-                "precio_unitario_actual": _money(precio),
-                "subtotal_debito": _money(subtotal),
-            }
-        )
+        if item["tipo"] == "promocion":
+            items_nuevos.append(
+                {
+                    "promocion_id": item["promocion_id"],
+                    "detalle": item["detalle"],
+                    "cantidad": _money(cantidad),
+                    "precio_unitario_actual": _money(precio),
+                    "subtotal_debito": _money(subtotal),
+                }
+            )
+        else:
+            stock = stock_map[item["stock_id"]]
+            items_nuevos.append(
+                {
+                    "stock_id": stock.id,
+                    "detalle": getattr(stock, "deno", None) or getattr(stock, "nombre", None) or stock.codvta,
+                    "cantidad": _money(cantidad),
+                    "precio_unitario_actual": _money(precio),
+                    "subtotal_debito": _money(subtotal),
+                }
+            )
 
     diferencia = (total_debito - total_credito).quantize(Decimal("0.01"))
     direccion_diferencia = obtener_direccion_diferencia(diferencia)

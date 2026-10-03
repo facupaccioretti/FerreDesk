@@ -1,5 +1,19 @@
 import { useMemo, useCallback } from 'react';
 
+export function calcularImporteConDescuentos(item, importe, { bonificacionGeneral = 0, descu1 = 0, descu2 = 0, descu3 = 0 } = {}) {
+  if (item.tipo === 'promocion') return importe;
+
+  const bonifParticular = Number.parseFloat(item.bonificacion ?? item.vdi_bonifica);
+  const bonificacion = Number.isFinite(bonifParticular) && bonifParticular > 0
+    ? bonifParticular
+    : (Number.parseFloat(bonificacionGeneral) || 0);
+  let total = importe * (1 - bonificacion / 100);
+  if (descu1 > 0) total *= (1 - descu1 / 100);
+  if (descu2 > 0) total *= (1 - descu2 / 100);
+  if (descu3 > 0) total *= (1 - descu3 / 100);
+  return total;
+}
+
 /**
  * Hook que centraliza la lógica de cálculos compartida entre formularios (VentaForm, PresupuestoForm, etc.)
  * @param {Array} items - Array de items del formulario
@@ -59,63 +73,45 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
     return cantidad * precioBase;
   }, [obtenerPrecioBaseSinIVA]);
 
-  // Cálculo de bonificación particular
-  const obtenerBonifParticular = (item) => {
-    const bonif =
-      item.bonificacion !== undefined ? parseFloat(item.bonificacion) :
-        item.vdi_bonifica !== undefined ? parseFloat(item.vdi_bonifica) :
-          0;
-    return (!isNaN(bonif) && bonif > 0) ? bonif : null;
-  };
-
   // Cálculo de bonificación
   const calcularBonificacion = useCallback((item) => {
     const subtotal = calcularSubtotal(item);
-    const bonifParticular = obtenerBonifParticular(item);
-    const bonif = bonifParticular !== null ? bonifParticular : (parseFloat(bonificacionGeneral) || 0);
-    return subtotal * (bonif / 100);
+    return subtotal - calcularImporteConDescuentos(item, subtotal, { bonificacionGeneral });
   }, [calcularSubtotal, bonificacionGeneral]);
 
   // Subtotal neto tras bonificación
   const calcularSubtotalNeto = useCallback((item) => {
     const subtotal = calcularSubtotal(item);
-    const bonificacion = calcularBonificacion(item);
-    return subtotal - bonificacion;
-  }, [calcularSubtotal, calcularBonificacion]);
+    return calcularImporteConDescuentos(item, subtotal, { bonificacionGeneral });
+  }, [calcularSubtotal, bonificacionGeneral]);
+
+  const calcularSubtotalConDescuentos = useCallback((item) => {
+    return calcularImporteConDescuentos(item, calcularSubtotal(item), {
+      bonificacionGeneral,
+      descu1,
+      descu2,
+      descu3,
+    });
+  }, [calcularSubtotal, bonificacionGeneral, descu1, descu2, descu3]);
 
   // Cálculo de descuentos escalonados sobre el subtotal neto
   const calcularDescuento = (item) => {
-    let subtotalNeto = calcularSubtotalNeto(item);
-    if (descu1 > 0) subtotalNeto *= (1 - descu1 / 100);
-    if (descu2 > 0) subtotalNeto *= (1 - descu2 / 100);
-    if (descu3 > 0) subtotalNeto *= (1 - descu3 / 100);
-    return calcularSubtotalNeto(item) - subtotalNeto;
+    return calcularSubtotalNeto(item) - calcularSubtotalConDescuentos(item);
   };
 
   // Cálculo de alícuota de IVA robusto (reutiliza obtenerAliId)
 
   // Cálculo de IVA
-  const calcularIVA = useCallback((item, subtotalSinIva, subtotalConDescuentos) => {
+  const calcularIVA = useCallback((item) => {
     const aliId = obtenerAliId(item);
     const aliPorc = alicuotas[aliId] || 0;
-    const lineaSubtotal = calcularSubtotal(item);
-    const proporcion = (lineaSubtotal) / (subtotalSinIva || 1);
-    const itemSubtotalConDescuentos = subtotalConDescuentos * proporcion;
-    return itemSubtotalConDescuentos * (aliPorc / 100);
-  }, [alicuotas, calcularSubtotal, obtenerAliId]);
+    return calcularSubtotalConDescuentos(item) * (aliPorc / 100);
+  }, [alicuotas, calcularSubtotalConDescuentos, obtenerAliId]);
 
   // Cálculo de total por línea
-  const calcularTotal = (item, subtotalSinIva, subtotalConDescuentos) => {
-    const subtotal = calcularSubtotal(item);
-    const bonificacion = calcularBonificacion(item);
-    const subtotalNeto = subtotal - bonificacion;
-    let precioConDescuento = subtotalNeto;
-    if (descu1 > 0) precioConDescuento *= (1 - descu1 / 100);
-    if (descu2 > 0) precioConDescuento *= (1 - descu2 / 100);
-    if (descu3 > 0) precioConDescuento *= (1 - descu3 / 100);
-    const iva = calcularIVA(item, subtotalSinIva, subtotalConDescuentos);
-    return precioConDescuento + iva;
-  };
+  const calcularTotal = useCallback((item) => {
+    return calcularSubtotalConDescuentos(item) + calcularIVA(item);
+  }, [calcularSubtotalConDescuentos, calcularIVA]);
 
   // Cálculo de totales generales
   const calcularTotalesGenerales = useCallback(() => {
@@ -123,15 +119,9 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
     // Sumar netos tras bonificación
     const subtotalNeto = items.reduce((sum, item) => sum + calcularSubtotalNeto(item), 0);
     // Sumar descuentos sobre netos
-    let subtotalConDescuentos = items.reduce((sum, item) => {
-      let precioConDescuento = calcularSubtotalNeto(item);
-      if (descu1 > 0) precioConDescuento *= (1 - descu1 / 100);
-      if (descu2 > 0) precioConDescuento *= (1 - descu2 / 100);
-      if (descu3 > 0) precioConDescuento *= (1 - descu3 / 100);
-      return sum + precioConDescuento;
-    }, 0);
-    const ivaTotal = items.reduce((sum, item) => sum + calcularIVA(item, subtotalSinIva, subtotalConDescuentos), 0);
-    const total = subtotalConDescuentos + ivaTotal;
+    const subtotalConDescuentos = items.reduce((sum, item) => sum + calcularSubtotalConDescuentos(item), 0);
+    const ivaTotal = items.reduce((sum, item) => sum + calcularIVA(item), 0);
+    const total = items.reduce((sum, item) => sum + calcularTotal(item), 0);
     return {
       subtotal: subtotalSinIva,
       subtotalNeto,
@@ -139,7 +129,7 @@ export const useCalculosFormulario = (items, { bonificacionGeneral, descu1, desc
       iva: ivaTotal,
       total
     };
-  }, [items, descu1, descu2, descu3, calcularSubtotal, calcularSubtotalNeto, calcularIVA]);
+  }, [items, calcularSubtotal, calcularSubtotalNeto, calcularSubtotalConDescuentos, calcularIVA, calcularTotal]);
 
   // Memoizar cálculos
   const totales = useMemo(() => calcularTotalesGenerales(), [calcularTotalesGenerales]);

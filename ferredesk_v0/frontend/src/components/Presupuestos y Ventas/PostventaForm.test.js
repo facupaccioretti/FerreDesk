@@ -58,6 +58,19 @@ describe("PostventaForm payloads", () => {
     }])
   })
 
+  test("conserva las elecciones de grupos serializadas por la grilla", () => {
+    expect(buildItemsNuevosPayload([{
+      tipo: "promocion",
+      vdi_promocion: 12,
+      vdi_cantidad: "1",
+      elecciones_grupos: [{ grupo_id: 4, stock_id: 8 }],
+    }])).toEqual([{
+      promocion_id: 12,
+      cantidad: "1.00",
+      elecciones_grupos: [{ grupo_id: 4, stock_id: 8 }],
+    }])
+  })
+
   test("envia el cobro de diferencia y su medio de pago", () => {
     const payload = buildConfirmPayload({
       modo: "cambio",

@@ -223,29 +223,6 @@ const ClienteForm = ({
   const [modalForm, setModalForm] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-
-    const cargarCatalogoSiFalta = async (listaActual, setLista, url, mensajeError) => {
-      if (!Array.isArray(listaActual) || listaActual.length > 0 || typeof setLista !== "function") return
-      try {
-        const res = await fetch(url, { credentials: "include" })
-        if (!res.ok) throw new Error(mensajeError)
-        const data = await res.json()
-        if (!cancelled) {
-          setLista(Array.isArray(data) ? data : data.results || [])
-        }
-      } catch (_) { }
-    }
-
-    cargarCatalogoSiFalta(barrios, setBarrios, "/api/clientes/barrios/", "Error al obtener barrios")
-    cargarCatalogoSiFalta(localidades, setLocalidades, "/api/clientes/localidades/", "Error al obtener localidades")
-
-    return () => {
-      cancelled = true
-    }
-  }, [barrios, localidades, setBarrios, setLocalidades])
-
   // Hook para el tema de FerreDesk
   const theme = useFerreDeskTheme()
 

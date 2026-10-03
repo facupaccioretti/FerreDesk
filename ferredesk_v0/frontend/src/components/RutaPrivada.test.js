@@ -87,7 +87,7 @@ describe("RutaPrivada", () => {
         expect(esHostTenantValido("qa-a.staging.ferredesk.xyz")).toBe(true);
         expect(esHostTenantValido("staging.ferredesk.xyz")).toBe(false);
         expect(esHostTenantValido("preview.ferredesk.xyz")).toBe(false);
-        expect(esHostTenantValido("localhost")).toBe(false);
+        expect(esHostTenantValido("localhost")).toBe(true);
         expect(esHostTenantValido("127.0.0.1")).toBe(false);
     });
 
@@ -158,7 +158,7 @@ describe("RutaPrivada", () => {
         await vista.desmontar();
     });
 
-    test("no toma localhost publico como host valido para rutas tenant", async () => {
+    test("no toma 127.0.0.1 publico como host valido para rutas tenant", async () => {
         mockUseSessionUserQuery.mockReturnValue({
             isLoading: false,
             isAuthenticated: false,
@@ -170,7 +170,7 @@ describe("RutaPrivada", () => {
 
         const vista = await renderRutaPrivada({
             rutaInicial: "/home",
-            hostnameActual: "localhost",
+            hostnameActual: "127.0.0.1",
         });
 
         expect(vista.container.textContent).toContain("redirigido:/");

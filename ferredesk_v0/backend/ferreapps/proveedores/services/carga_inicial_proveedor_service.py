@@ -11,6 +11,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from ferreapps.productos.models import AlicuotaIVA, ProductoTempID, Stock, StockProve
+from ferreapps.productos.utils_precios import calcular_precio_lista_0_final
 from ferreapps.proveedores.models import (
     HistorialImportacionProveedor,
     SolicitudCargaInicialProveedor,
@@ -303,6 +304,12 @@ def procesar_carga_inicial_proveedor(*, proveedor, nombre_archivo, parametros_lo
                 idaliiva=fila["alicuota"],
                 proveedor_habitual=proveedor,
                 acti="S",
+                precio_lista_0=calcular_precio_lista_0_final(
+                    fila["costo"],
+                    fila["margen"],
+                    fila["alicuota"].porce,
+                ),
+                precio_lista_0_manual=False,
             )
             if fila["unidad"]:
                 stock.unidad = fila["unidad"]

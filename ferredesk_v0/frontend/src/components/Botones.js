@@ -359,3 +359,60 @@ export const BotonAcreditar = ({ onClick, title = 'Acreditar', ...props }) => (
     </svg>
   </button>
 );
+
+export const BotonRevisar = ({ onClick, title = 'Marcar como revisada', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-yellow-600 hover:text-yellow-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-8.25 3.75h.008v.008h-.008v-.008Z" />
+    </svg>
+  </button>
+);
+
+export const BotonConfirmar = ({ onClick, title = 'Marcar como revisada', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-amber-600 hover:text-amber-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m8 12 3 3 5-6" />
+    </svg>
+  </button>
+);
+
+export const BotonPausar = ({ onClick, title = 'Desactivar', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-slate-500 hover:text-slate-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 21 12a10 10 0 0 1-4.1 5.1M6.2 6.2A10 10 0 0 0 3 12a10 10 0 0 0 12.5 6.8" />
+    </svg>
+  </button>
+);
+
+export const BotonReanudar = ({ onClick, title = 'Reactivar', ...props }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="transition-colors px-1 py-1 text-emerald-600 hover:text-emerald-800"
+    {...props}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865A8.25 8.25 0 0 1 17.834 6.165l3.181 3.182" />
+    </svg>
+  </button>
+);

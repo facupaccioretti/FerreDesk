@@ -12,8 +12,14 @@ class ItemDevolucionInputSerializer(serializers.Serializer):
     )
 
 
-class ItemNuevoCambioInputSerializer(serializers.Serializer):
+class EleccionGrupoPromocionInputSerializer(serializers.Serializer):
+    grupo_id = serializers.IntegerField()
     stock_id = serializers.IntegerField()
+
+
+class ItemNuevoCambioInputSerializer(serializers.Serializer):
+    stock_id = serializers.IntegerField(required=False, min_value=1)
+    promocion_id = serializers.IntegerField(required=False, min_value=1)
     cantidad = serializers.DecimalField(
         max_digits=9,
         decimal_places=2,
@@ -23,7 +29,20 @@ class ItemNuevoCambioInputSerializer(serializers.Serializer):
         max_digits=15,
         decimal_places=2,
         min_value=Decimal("0.01"),
+        required=False,
     )
+    # Solo aplica si promocion_id tiene grupos de eleccion; expandir_item_promocion
+    # valida que este completa contra los grupos reales de la promo.
+    elecciones_grupos = EleccionGrupoPromocionInputSerializer(many=True, required=False)
+
+    def validate(self, data):
+        tiene_stock = data.get("stock_id") is not None
+        tiene_promocion = data.get("promocion_id") is not None
+        if tiene_stock == tiene_promocion:
+            raise serializers.ValidationError("Debe indicar un producto o una promocion.")
+        if tiene_stock and data.get("precio_unitario") is None:
+            raise serializers.ValidationError({"precio_unitario": "Es requerido para un producto."})
+        return data
 
 
 class MedioPostventaInputSerializer(serializers.Serializer):

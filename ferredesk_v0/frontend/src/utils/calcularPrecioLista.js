@@ -2,6 +2,32 @@
  * Utilidades para cálculos de precios de listas.
  */
 
+const enteroGrande = window.BigInt;
+const ESCALA_PORCENTAJE = enteroGrande(10000);
+
+function decimalAEntero(value) {
+  const numero = Number(value);
+  if (!Number.isFinite(numero)) return enteroGrande(0);
+  const [entero, fraccion] = Math.abs(numero).toFixed(2).split('.');
+  const valor = enteroGrande(entero) * enteroGrande(100) + enteroGrande(fraccion);
+  return numero < 0 ? -valor : valor;
+}
+
+function calcularPrecioConPorcentajes(precio, porcentajes) {
+  let numerador = decimalAEntero(precio);
+  let denominador = enteroGrande(1);
+
+  porcentajes.forEach((porcentaje) => {
+    numerador *= ESCALA_PORCENTAJE + decimalAEntero(porcentaje);
+    denominador *= ESCALA_PORCENTAJE;
+  });
+
+  const negativo = numerador < 0;
+  const absoluto = negativo ? -numerador : numerador;
+  const centavos = (absoluto + denominador / enteroGrande(2)) / denominador;
+  return Number(negativo ? -centavos : centavos) / 100;
+}
+
 /**
  * Calcula el precio de una lista (1-4) desde el precio de Lista 0.
  * 
@@ -14,11 +40,7 @@
  * calcularPrecioLista(1000, 15)  // Recargo 15% -> 1150
  */
 export function calcularPrecioLista(precioLista0, margenDescuento) {
-  const precio = Number(precioLista0) || 0;
-  const margen = Number(margenDescuento) || 0;
-
-  const resultado = precio * (1 + margen / 100);
-  return Math.round(resultado * 100) / 100;
+  return calcularPrecioConPorcentajes(precioLista0, [margenDescuento]);
 }
 
 /**
@@ -33,14 +55,7 @@ export function calcularPrecioLista(precioLista0, margenDescuento) {
  * calcularPrecioLista0(1000, 40, 21) // Costo 1000, Margen 40%, IVA 21% -> 1000 * 1.4 * 1.21 = 1694
  */
 export function calcularPrecioLista0(costo, margenGanancia, porcentajeIVA = 0) {
-  const costoNum = Number(costo) || 0;
-  const margenNum = Number(margenGanancia) || 0;
-  const ivaNum = Number(porcentajeIVA) || 0;
-
-  // Precio Neto = Costo * (1 + Margen/100)
-  // Precio Final = Precio Neto * (1 + IVA/100)
-  const resultado = costoNum * (1 + margenNum / 100) * (1 + ivaNum / 100);
-  return Math.round(resultado * 100) / 100;
+  return calcularPrecioConPorcentajes(costo, [margenGanancia, porcentajeIVA]);
 }
 
 /**

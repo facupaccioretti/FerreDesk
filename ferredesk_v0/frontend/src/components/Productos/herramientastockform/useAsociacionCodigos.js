@@ -8,6 +8,7 @@ const useAsociacionCodigos = ({
   form,
   proveedores,
   updateForm,
+  onFuentePrecioChange,
   alert
 }) => {
   const [selectedProveedor, setSelectedProveedor] = useState("")
@@ -198,6 +199,9 @@ const useAsociacionCodigos = ({
     }
 
     updateForm({ stock_proveedores: nuevaLista })
+    if (String(pId) === String(form.proveedor_habitual_id)) {
+      onFuentePrecioChange?.()
+    }
 
     setMessageAsociar("Proveedor asociado correctamente.")
     setSelectedProveedor("")

@@ -13,6 +13,7 @@ from ferreapps.caja.models import (
     MetodoPago,
 )
 from ferreapps.productos.models import Ferreteria, Stock, StockProve
+from ferreapps.promos.services.aplicar_promocion_venta import resolver_items_nuevos_cambio
 from ferreapps.ventas.models import PostventaOperacion, PostventaOperacionItem, Venta, VentaDetalleItem
 
 
@@ -170,7 +171,7 @@ def validar_items_devolucion(venta, items, *, modo):
         detalle.id: detalle
         for detalle in VentaDetalleItem.objects.filter(vdi_idve=venta, id__in=item_ids).select_related(
             "vdi_idsto", "vdi_idpro", "vdi_idaliiva"
-        )
+        ).prefetch_related("componentes_promocion")
     }
     if len(detalles) != len(item_ids):
         raise ValidationError({"items": "Hay items que no pertenecen a la venta indicada"})
@@ -205,7 +206,7 @@ def validar_items_devolucion(venta, items, *, modo):
     return detalles, devueltas
 
 
-def validar_items_cambio(venta, items_devueltos, items_nuevos):
+def validar_items_cambio(venta, items_devueltos, items_nuevos, *, items_nuevos_resueltos=None):
     detalles, devueltas = validar_items_devolucion(
         venta,
         items_devueltos,
@@ -214,34 +215,50 @@ def validar_items_cambio(venta, items_devueltos, items_nuevos):
     if not items_nuevos:
         raise ValidationError({"items_nuevos": "Debe agregar al menos un item nuevo"})
 
-    stock_ids = [item["stock_id"] for item in items_nuevos]
-    repetidos = {stock_id for stock_id in stock_ids if stock_ids.count(stock_id) > 1}
+    if items_nuevos_resueltos is None:
+        items_nuevos_resueltos = resolver_items_nuevos_cambio(items_nuevos)
+    stock_ids_directos = [item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
+    repetidos = {stock_id for stock_id in stock_ids_directos if stock_ids_directos.count(stock_id) > 1}
     if repetidos:
         raise ValidationError({"items_nuevos": "No puede repetir el mismo stock en el cambio"})
 
+    operaciones_nuevas = [
+        operacion
+        for item in items_nuevos_resueltos
+        for operacion in item["operaciones_stock"]
+    ]
+    stock_ids = [operacion["stock_id"] for operacion in operaciones_nuevas]
     stocks_existentes = set(Stock.objects.filter(id__in=stock_ids).values_list("id", flat=True))
     faltantes = sorted(set(stock_ids) - stocks_existentes)
     if faltantes:
         raise ValidationError({"items_nuevos": f"Producto inexistente {faltantes[0]}"})
 
     cantidades_por_stock = {}
-    for item in items_nuevos:
-        cantidad = _to_decimal(item["cantidad"], "cantidad")
+    for operacion in operaciones_nuevas:
+        cantidad = _to_decimal(operacion["cantidad"], "cantidad")
         if cantidad <= ZERO:
             raise ValidationError({"items_nuevos": "La cantidad del item nuevo debe ser mayor que cero"})
-        cantidades_por_stock[item["stock_id"]] = cantidad
+        stock_id = operacion["stock_id"]
+        cantidades_por_stock[stock_id] = cantidades_por_stock.get(stock_id, ZERO) + cantidad
 
     if permitir_stock_negativo_habilitado():
         return detalles, devueltas
 
     reposiciones_por_stock = {}
+
+    def _sumar_reposicion(stock_id, cantidad):
+        reposiciones_por_stock[stock_id] = reposiciones_por_stock.get(stock_id, ZERO) + cantidad
+
     for item in items_devueltos:
         detalle = detalles[item["venta_detalle_item_id"]]
-        if detalle.vdi_idsto_id:
-            reposiciones_por_stock[detalle.vdi_idsto_id] = (
-                reposiciones_por_stock.get(detalle.vdi_idsto_id, ZERO)
-                + _to_decimal(item["cantidad"], "cantidad")
-            )
+        cantidad_devuelta = _to_decimal(item["cantidad"], "cantidad")
+        if detalle.vdi_promocion_id:
+            # Una promo repone stock por cada componente de su snapshot congelado,
+            # no por un vdi_idsto propio (no tiene).
+            for componente in detalle.componentes_promocion.all():
+                _sumar_reposicion(componente.stock_id, componente.cantidad_por_promo * cantidad_devuelta)
+        elif detalle.vdi_idsto_id:
+            _sumar_reposicion(detalle.vdi_idsto_id, cantidad_devuelta)
 
     disponibles = {
         row["stock_id"]: Decimal(str(row["total"] or ZERO))

@@ -44,24 +44,25 @@ CLIENTE_GENERICO_ID = 1
 # FUNCIONES AUXILIARES PARA REDUCIR ANIDAMIENTO
 # ============================================================================
 
-def _preparar_items_conversion(factura_interna):
+def _preparar_items_conversion(items_originales, *, no_descontar_stock=False):
     """
-    Obtiene y prepara items de factura interna para conversión.
+    Copia items historicos para una conversion sin resolver promociones actuales.
     
     Args:
-        factura_interna: Instancia de Venta (factura interna)
+        items_originales: Detalles persistidos del comprobante origen
+        no_descontar_stock: Marca items cuyo stock ya fue descontado
     
     Returns:
         list: Lista de diccionarios con datos de items preparados
     """
-    items_originales = VentaDetalleItem.objects.filter(vdi_idve=factura_interna)
     items = []
     
     for item_original in items_originales:
         item_data = {
             'vdi_orden': item_original.vdi_orden,
-            'vdi_idsto': item_original.vdi_idsto,
-            'vdi_idpro': item_original.vdi_idpro,
+            'vdi_idsto': item_original.vdi_idsto_id,
+            'vdi_idpro': item_original.vdi_idpro_id,
+            'vdi_promocion': item_original.vdi_promocion_id,
             'vdi_cantidad': item_original.vdi_cantidad,
             'vdi_costo': item_original.vdi_costo,
             'vdi_margen': item_original.vdi_margen,
@@ -69,15 +70,42 @@ def _preparar_items_conversion(factura_interna):
             'vdi_bonifica': item_original.vdi_bonifica,
             'vdi_detalle1': item_original.vdi_detalle1,
             'vdi_detalle2': item_original.vdi_detalle2,
-            'vdi_idaliiva': item_original.vdi_idaliiva,
-            # Marcar como item original para que no descuente stock
-            'idOriginal': item_original.id,
-            'noDescontarStock': True,
-            'esBloqueado': True,
+            'vdi_idaliiva': item_original.vdi_idaliiva_id,
         }
+        if item_original.vdi_promocion_id:
+            componentes = list(item_original.componentes_promocion.all())
+            alicuotas = list(item_original.promo_alicuotas.all())
+            if not componentes or not alicuotas:
+                raise ValidationError(
+                    f'La linea de promocion {item_original.id} no tiene snapshot historico completo.'
+                )
+            item_data['_promo_snapshot'] = {
+                'componentes': [
+                    {
+                        'stock_id': componente.stock_id,
+                        'proveedor_id': componente.proveedor_id,
+                        'cantidad_por_promo': componente.cantidad_por_promo,
+                        'costo_unitario': componente.costo_unitario,
+                    }
+                    for componente in componentes
+                ],
+                'alicuotas': [
+                    {
+                        'alicuota_id': alicuota.alicuota_id,
+                        'neto': alicuota.neto,
+                        'iva_monto': alicuota.iva_monto,
+                    }
+                    for alicuota in alicuotas
+                ],
+            }
+        if no_descontar_stock:
+            item_data.update({
+                'idOriginal': item_original.id,
+                'noDescontarStock': True,
+                'esBloqueado': True,
+            })
         items.append(item_data)
-    
-    print(f"LOG: Obtenidos {len(items)} items originales de la factura interna {factura_interna.ven_id}")
+
     return items
 
 
@@ -498,16 +526,10 @@ def convertir_presupuesto_a_venta(request):
                 print(f"DEBUG - Error de validación: {error_msg}")
                 raise ValidationError(error_msg)
 
-            # === VALIDACIÓN DE CAJA ABIERTA ===
             sesion_caja = SesionCaja.objects.filter(
                 usuario=request.user,
                 estado=ESTADO_CAJA_ABIERTA
             ).first()
-            if not sesion_caja:
-                return Response({
-                    'detail': 'Debe abrir una caja para convertir el presupuesto a venta.',
-                    'error_code': 'CAJA_NO_ABIERTA'
-                }, status=status.HTTP_400_BAD_REQUEST)
 
             print("DEBUG - INICIO BLOQUE ATOMICO")
             # Obtener el presupuesto con bloqueo
@@ -528,7 +550,12 @@ def convertir_presupuesto_a_venta(request):
                 raise Exception('Solo se pueden convertir presupuestos (estado AB).')
 
             # Obtener items del presupuesto
-            items_presupuesto = list(presupuesto.items.all().order_by('vdi_idsto_id', 'pk'))
+            items_presupuesto = list(
+                presupuesto.items.prefetch_related(
+                    'componentes_promocion',
+                    'promo_alicuotas',
+                ).order_by('vdi_idsto_id', 'pk')
+            )
             ids_items_presupuesto = [str(item.id) for item in items_presupuesto]
             print("DEBUG - IDs items presupuesto:", ids_items_presupuesto)
             # Validar que los ítems seleccionados pertenecen al presupuesto
@@ -537,27 +564,11 @@ def convertir_presupuesto_a_venta(request):
                 raise Exception('Algunos ítems seleccionados no pertenecen al presupuesto.')
 
             # === COPIAR ITEMS SELECCIONADOS DEL PRESUPUESTO A venta_data ===
-            # Convertir items del presupuesto al formato que espera el serializer
-            items_para_venta = []
-            for item_presupuesto in items_presupuesto:
-                if str(item_presupuesto.id) in [str(i) for i in items_seleccionados]:
-                    # Convertir el item del presupuesto al formato del serializer
-                    # CORRECCIÓN: vdi_idsto, vdi_idpro, vdi_idaliiva son ForeignKey,
-                    # acceder sin _id devuelve el objeto relacionado en vez del ID numérico
-                    item_data = {
-                        'vdi_idsto': item_presupuesto.vdi_idsto_id if item_presupuesto.vdi_idsto_id else None,
-                        'vdi_idpro': item_presupuesto.vdi_idpro_id if item_presupuesto.vdi_idpro_id else None,
-                        'vdi_cantidad': float(item_presupuesto.vdi_cantidad),
-                        'vdi_precio_unitario_final': float(item_presupuesto.vdi_precio_unitario_final),
-                        'vdi_idaliiva': item_presupuesto.vdi_idaliiva_id if item_presupuesto.vdi_idaliiva_id else None,
-                        'vdi_orden': item_presupuesto.vdi_orden or 1,
-                        'vdi_bonifica': float(item_presupuesto.vdi_bonifica) if item_presupuesto.vdi_bonifica else 0,
-                        'vdi_costo': float(item_presupuesto.vdi_costo) if item_presupuesto.vdi_costo else 0,
-                        'vdi_margen': float(item_presupuesto.vdi_margen) if item_presupuesto.vdi_margen else 0,
-                        'vdi_detalle1': item_presupuesto.vdi_detalle1 or '',
-                        'vdi_detalle2': item_presupuesto.vdi_detalle2 or ''
-                    }
-                    items_para_venta.append(item_data)
+            ids_seleccionados = {str(item_id) for item_id in items_seleccionados}
+            detalles_seleccionados = [
+                item for item in items_presupuesto if str(item.id) in ids_seleccionados
+            ]
+            items_para_venta = _preparar_items_conversion(detalles_seleccionados)
             
             print(f"DEBUG - Items copiados del presupuesto: {len(items_para_venta)} items")
             # Agregar los items a venta_data para que el serializer los procese
@@ -568,17 +579,25 @@ def convertir_presupuesto_a_venta(request):
             # Usar configuración de la ferretería, con posibilidad de override desde el frontend
             permitir_stock_negativo = bool(getattr(ferreteria, 'permitir_stock_negativo', False))
             
+            from ferreapps.promos.services.aplicar_promocion_venta import (
+                resolver_operaciones_stock_desde_detalles,
+            )
+            detalles_con_stock = [
+                item for item in detalles_seleccionados
+                if item.vdi_promocion_id or item.vdi_idsto_id
+            ]
+            operaciones_stock, errores_stock = resolver_operaciones_stock_desde_detalles(
+                detalles_con_stock
+            )
+            if errores_stock:
+                raise Exception({'detail': 'Error de stock', 'errores': errores_stock})
+
             # Validar stock si es necesario (sumando entre TODOS los proveedores del producto)
             if not permitir_stock_negativo:
                 errores_stock = []
-                for item in venta_data.get('items', []):
-                    stock_id = item.get('vdi_idsto')
-                    if not stock_id:
-                        continue
-                    try:
-                        cantidad_req = Decimal(str(item.get('vdi_cantidad', 0)))
-                    except Exception:
-                        cantidad_req = Decimal('0')
+                for operacion in operaciones_stock:
+                    stock_id = operacion['stock_id']
+                    cantidad_req = operacion['cantidad']
                     total_disponible, _ = _total_disponible_en_proveedores(stock_id)
                     if total_disponible < cantidad_req:
                         cod = _obtener_codigo_venta(stock_id)
@@ -658,16 +677,19 @@ def convertir_presupuesto_a_venta(request):
                 try:
                     # === REPLICAR PATRÓN DE VENTAFORM.CREATE() ===
                     # 1. Crear venta usando serializer
-                    serializer = VentaSerializer(data=venta_data)
+                    serializer = VentaSerializer(
+                        data=venta_data,
+                        context={'items_expandidos': items_para_venta},
+                    )
                     serializer.is_valid(raise_exception=True)
                     venta = serializer.save()
                     
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     venta_creada = Venta.objects.get(ven_id=venta.ven_id)
                     
-                    # === ASIGNAR SESIÓN DE CAJA ===
-                    venta_creada.sesion_caja = sesion_caja
-                    venta_creada.save(update_fields=['sesion_caja'])
+                    if sesion_caja:
+                        venta_creada.sesion_caja = sesion_caja
+                        venta_creada.save(update_fields=['sesion_caja'])
                     
                     print(f"LOG: Venta creada con ID {venta_creada.ven_id}")
                     
@@ -690,7 +712,7 @@ def convertir_presupuesto_a_venta(request):
                         )
                     
                     # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA (flujo unificado) ===
-                    if sesion_caja and comprobante_pagado:
+                    if comprobante_pagado:
                         from ferreapps.caja.utils import normalizar_cobro, registrar_pagos_venta
                         from ferreapps.caja.models import MetodoPago, CODIGO_EFECTIVO
                         pagos_data = list(data.get('pagos') or [])
@@ -924,25 +946,11 @@ def convertir_presupuesto_a_venta(request):
             # Actualizar stock: aplicar EXACTAMENTE lo mismo que se validó arriba (sobre los items enviados)
             stock_actualizado = []
             errores_en_descuento = []
-            for item in venta_data.get('items', []):
-                id_stock_conv = item.get('vdi_idsto')
-                if not id_stock_conv:
-                    continue
-                
-                # NUEVO: El backend obtiene automáticamente el proveedor habitual del stock
-                # El frontend solo debe enviar vdi_idsto, el backend maneja toda la lógica
-                id_prov_conv = _obtener_proveedor_habitual_stock(id_stock_conv)
-                if not id_prov_conv:
-                    cod = _obtener_codigo_venta(id_stock_conv)
-                    errores_en_descuento.append(f"No se pudo obtener el proveedor habitual para el producto {cod} (ID: {id_stock_conv})")
-                    continue
-                
-                cantidad_conv = item.get('vdi_cantidad', 0)
-                
+            for operacion in operaciones_stock:
                 ok = _descontar_distribuyendo(
-                    stock_id=id_stock_conv,
-                    proveedor_preferido_id=id_prov_conv,
-                    cantidad=cantidad_conv,
+                    stock_id=operacion['stock_id'],
+                    proveedor_preferido_id=operacion['proveedor_id'],
+                    cantidad=operacion['cantidad'],
                     permitir_stock_negativo=permitir_stock_negativo,
                     errores_stock=errores_en_descuento,
                     stock_actualizado=stock_actualizado,
@@ -1025,16 +1033,10 @@ def convertir_factura_interna_a_fiscal(request):
         except Venta.DoesNotExist:
             return Response({'detail': 'Factura interna no encontrada'}, status=status.HTTP_404_NOT_FOUND)
         
-        # === VALIDACIÓN DE CAJA ABIERTA ===
         sesion_caja = SesionCaja.objects.filter(
             usuario=request.user,
             estado=ESTADO_CAJA_ABIERTA
         ).first()
-        if not sesion_caja:
-            return Response({
-                'detail': 'Debe abrir una caja para convertir la cotización a factura fiscal.',
-                'error_code': 'CAJA_NO_ABIERTA'
-            }, status=status.HTTP_400_BAD_REQUEST)
         
         # === VALIDACIÓN: CLIENTE NO PUEDE CAMBIAR ===
         cliente_original = factura_interna.ven_idcli.id
@@ -1075,7 +1077,11 @@ def convertir_factura_interna_a_fiscal(request):
         venta_data['ven_estado'] = 'CE'
 
         # Obtener items usando función auxiliar
-        items = _preparar_items_conversion(factura_interna)
+        detalles = factura_interna.items.prefetch_related(
+            'componentes_promocion',
+            'promo_alicuotas',
+        ).order_by('vdi_idsto_id', 'pk')
+        items = _preparar_items_conversion(detalles, no_descontar_stock=True)
 
         # === CREAR NUEVA FACTURA FISCAL Y ELIMINAR ORIGINAL EN TRANSACCIÓN PRINCIPAL ===
         with transaction.atomic():
@@ -1146,16 +1152,19 @@ def convertir_factura_interna_a_fiscal(request):
                 try:
                     # === REPLICAR PATRÓN DE VENTAFORM.CREATE() ===
                     # 1. Crear venta usando serializer
-                    serializer = VentaSerializer(data=venta_data)
+                    serializer = VentaSerializer(
+                        data=venta_data,
+                        context={'items_expandidos': items},
+                    )
                     serializer.is_valid(raise_exception=True)
                     nueva_factura = serializer.save()
                     
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     nueva_factura = Venta.objects.get(ven_id=nueva_factura.ven_id)
                     
-                    # === ASIGNAR SESIÓN DE CAJA ===
-                    nueva_factura.sesion_caja = sesion_caja
-                    nueva_factura.save(update_fields=['sesion_caja'])
+                    if sesion_caja:
+                        nueva_factura.sesion_caja = sesion_caja
+                        nueva_factura.save(update_fields=['sesion_caja'])
                     
                     print(f"LOG: Factura fiscal creada con ID {nueva_factura.ven_id}")
                     

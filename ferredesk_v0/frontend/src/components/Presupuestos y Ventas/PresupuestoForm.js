@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import ItemsGrid from "./ItemsGrid"
-import BuscadorProducto from "../BuscadorProducto"
+import SelectorItemVenta from "./SelectorItemVenta"
 import ComprobanteDropdown from "../ComprobanteDropdown"
 import { manejarCambioFormulario, manejarSeleccionClienteObjeto, validarDocumentoCliente, esDocumentoEditable } from "./herramientasforms/manejoFormulario"
 import { mapearCamposItem } from "./herramientasforms/mapeoItems"
@@ -144,6 +144,7 @@ const PresupuestoForm = ({
   // (eliminada memoización de stock_proveedores no utilizada)
 
   const itemsGridRef = useRef()
+  const selectorItemVentaRef = useRef()
 
   // Estado local para documento (CUIT/DNI) sin lógica fiscal
   const [documentoInfo, setDocumentoInfo] = useState({
@@ -241,6 +242,18 @@ const PresupuestoForm = ({
     if (itemsGridRef.current) {
       itemsGridRef.current.handleAddItem(producto)
     }
+  }
+
+  // Agregar/reconfigurar una promocion desde SelectorItemVenta (ver su docstring:
+  // toda la logica de seleccion/configuracion vive ahi, esto solo delega a la grilla).
+  const handleAgregarPromocionAGrid = (promocion, eleccionesGrupos, cantidad) => {
+    itemsGridRef.current?.handleAddPromocion(promocion, eleccionesGrupos, cantidad)
+  }
+  const handleReconfigurarPromocionEnGrid = (idx, promocion, eleccionesGrupos) => {
+    itemsGridRef.current?.handleReconfigurarPromocion(idx, promocion, eleccionesGrupos)
+  }
+  const handleAbrirReconfigurarPromocion = (idx, row) => {
+    selectorItemVentaRef.current?.iniciarReconfiguracion(idx, row)
   }
 
   const handleSubmit = async (e) => {
@@ -586,8 +599,11 @@ const PresupuestoForm = ({
               {/* Buscador */}
               <div>
                 <label className="block text-[12px] font-semibold text-slate-700 mb-1">Buscador de Producto</label>
-                <BuscadorProducto
-                  onSelect={handleAddItemToGrid}
+                <SelectorItemVenta
+                  ref={selectorItemVentaRef}
+                  onSelectProducto={handleAddItemToGrid}
+                  onAgregarPromocion={handleAgregarPromocionAGrid}
+                  onReconfigurarPromocion={handleReconfigurarPromocionEnGrid}
                   disabled={isReadOnly}
                   readOnly={isReadOnly}
                   className="w-full"
@@ -668,6 +684,7 @@ const PresupuestoForm = ({
             initialItems={formulario.items}
             listaPrecioId={listaPrecioId}
             listasPrecio={listasPrecio}
+            onReconfigurarPromocion={handleAbrirReconfigurarPromocion}
           />
         </div>
         <div className="mt-8 flex justify-end space-x-4">

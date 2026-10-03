@@ -13,6 +13,10 @@ from ferreapps.caja.services.postventa import (
 from ferreapps.caja.utils import normalizar_cobro, registrar_vuelto
 from ferreapps.cuenta_corriente.services.imputacion_service import imputar_deuda
 from ferreapps.productos.models import Stock, StockProve
+from ferreapps.promos.services.aplicar_promocion_venta import (
+    construir_item_devolucion_promocion,
+    resolver_items_nuevos_cambio,
+)
 from ferreapps.ventas.models import Comprobante, PostventaOperacion, PostventaOperacionItem
 from ferreapps.ventas.selectors.postventa import previsualizar_cambio
 from ferreapps.ventas.services.crear_venta import (
@@ -60,11 +64,18 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     detalles = {item["venta_detalle_item_id"]: item for item in payload["items_devueltos"]}
     items = []
     for idx, item_preview in enumerate(preview["items_devueltos"], start=1):
-        detalle = venta_origen.items.select_related("vdi_idaliiva").get(id=item_preview["venta_detalle_item_id"])
+        detalle = venta_origen.items.select_related("vdi_idaliiva").prefetch_related(
+            "promo_alicuotas__alicuota", "componentes_promocion"
+        ).get(id=item_preview["venta_detalle_item_id"])
         cantidad = Decimal(str(detalles[detalle.id]["cantidad"])).quantize(Decimal("0.01"))
-        items.append(
-            {
-                "vdi_orden": idx,
+        if detalle.vdi_promocion_id:
+            item = construir_item_devolucion_promocion(
+                detalle,
+                cantidad,
+                cantidad_disponible=item_preview["cantidad_disponible_para_devolver"],
+            )
+        else:
+            item = {
                 "vdi_idsto": detalle.vdi_idsto_id,
                 "vdi_idpro": detalle.vdi_idpro_id,
                 "vdi_cantidad": cantidad,
@@ -76,7 +87,8 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
                 "vdi_detalle2": detalle.vdi_detalle2,
                 "vdi_idaliiva": detalle.vdi_idaliiva_id,
             }
-        )
+        item["vdi_orden"] = idx
+        items.append(item)
     ajuste_redondeo = calcular_ajuste_nota_credito(
         items,
         preview["items_devueltos"],
@@ -111,15 +123,22 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     }
 
 
-def _build_nueva_venta_payload(venta_origen, payload, comprobante):
+def _build_nueva_venta_payload(venta_origen, items_nuevos, motivo, comprobante):
     stock_map = {
         stock.id: stock
-        for stock in Stock.objects.filter(id__in=[item["stock_id"] for item in payload["items_nuevos"]]).select_related(
+        for stock in Stock.objects.filter(
+            id__in=[item["stock_id"] for item in items_nuevos if item["tipo"] == "stock"]
+        ).select_related(
             "idaliiva", "proveedor_habitual"
         )
     }
     items = []
-    for idx, item in enumerate(payload["items_nuevos"], start=1):
+    for idx, item in enumerate(items_nuevos, start=1):
+        if item["tipo"] == "promocion":
+            item_venta = dict(item["item_venta"])
+            item_venta["vdi_orden"] = idx
+            items.append(item_venta)
+            continue
         stock = stock_map[item["stock_id"]]
         costo = (
             StockProve.objects.filter(stock=stock, proveedor=stock.proveedor_habitual)
@@ -163,7 +182,7 @@ def _build_nueva_venta_payload(venta_origen, payload, comprobante):
         "ven_idpla": venta_origen.ven_idpla_id,
         "ven_idvdo": venta_origen.ven_idvdo_id,
         "ven_copia": venta_origen.ven_copia,
-        "ven_observacion": payload["motivo"],
+        "ven_observacion": motivo,
         "ven_bonificacion_general": 0,
         "ven_idlpa": venta_origen.ven_idlpa,
         "items": items,
@@ -194,8 +213,22 @@ def confirmar_cambio(*, payload, usuario):
             if resultado_existente is not None:
                 return resultado_existente
 
-            preview = previsualizar_cambio(payload)
-            validar_items_cambio(venta_origen, payload["items_devueltos"], payload["items_nuevos"])
+            items_nuevos_resueltos = resolver_items_nuevos_cambio(payload["items_nuevos"])
+            operaciones_stock_nuevas = [
+                operacion
+                for item in items_nuevos_resueltos
+                for operacion in item["operaciones_stock"]
+            ]
+            preview = previsualizar_cambio(
+                payload,
+                items_nuevos_resueltos=items_nuevos_resueltos,
+            )
+            validar_items_cambio(
+                venta_origen,
+                payload["items_devueltos"],
+                payload["items_nuevos"],
+                items_nuevos_resueltos=items_nuevos_resueltos,
+            )
 
             total_credito = Decimal(str(preview["resumen_monetario"]["total_credito"]))
             total_debito = Decimal(str(preview["resumen_monetario"]["total_debito"]))
@@ -240,11 +273,16 @@ def confirmar_cambio(*, payload, usuario):
             comprobante_nc = _resolver_comprobante("nota_credito")
             comprobante_venta = _resolver_comprobante("factura")
 
-            detalles = {detalle.id: detalle for detalle in venta_origen.items.all().select_related("vdi_idaliiva")}
+            detalles = {
+                detalle.id: detalle
+                for detalle in venta_origen.items.all().select_related("vdi_idaliiva").prefetch_related(
+                    "componentes_promocion", "promo_alicuotas__alicuota"
+                )
+            }
             proveedores_repuestos = ajustar_stock_postventa(
                 items_devueltos=payload["items_devueltos"],
                 detalles=detalles,
-                items_nuevos=payload["items_nuevos"],
+                items_nuevos=operaciones_stock_nuevas,
                 permitir_stock_negativo=permitir_stock_negativo_habilitado(),
             )
 
@@ -256,7 +294,12 @@ def confirmar_cambio(*, payload, usuario):
                 origen_postventa=True,
             )
             nueva_venta, _ = crear_documento_venta_desde_payload(
-                payload=_build_nueva_venta_payload(venta_origen, payload, comprobante_venta),
+                payload=_build_nueva_venta_payload(
+                    venta_origen,
+                    items_nuevos_resueltos,
+                    payload["motivo"],
+                    comprobante_venta,
+                ),
                 usuario=usuario,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
@@ -285,15 +328,29 @@ def confirmar_cambio(*, payload, usuario):
                     detalle=detalle.vdi_detalle1 or "",
                 )
 
-            stock_map = {stock.id: stock for stock in Stock.objects.filter(id__in=[item["stock_id"] for item in payload["items_nuevos"]])}
-            for item in payload["items_nuevos"]:
+            stock_map = {
+                stock.id: stock
+                for stock in Stock.objects.filter(
+                    id__in=[item["stock_id"] for item in items_nuevos_resueltos if item["tipo"] == "stock"]
+                )
+            }
+            for item in items_nuevos_resueltos:
+                if item["tipo"] == "promocion":
+                    PostventaOperacionItem.objects.create(
+                        operacion=operacion,
+                        rol=PostventaOperacionItem.ROL_NUEVO,
+                        cantidad=item["cantidad"].quantize(Decimal("0.01")),
+                        precio_unitario=item["precio_unitario"].quantize(Decimal("0.01")),
+                        detalle=item["detalle"],
+                    )
+                    continue
                 stock = stock_map[item["stock_id"]]
                 PostventaOperacionItem.objects.create(
                     operacion=operacion,
                     rol=PostventaOperacionItem.ROL_NUEVO,
                     stock=stock,
-                    cantidad=Decimal(str(item["cantidad"])).quantize(Decimal("0.01")),
-                    precio_unitario=Decimal(str(item["precio_unitario"])).quantize(Decimal("0.01")),
+                    cantidad=item["cantidad"].quantize(Decimal("0.01")),
+                    precio_unitario=item["precio_unitario"].quantize(Decimal("0.01")),
                     detalle=stock.deno,
                 )
 

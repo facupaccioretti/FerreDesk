@@ -14,7 +14,7 @@ function resolverBasePublica(hostname) {
     hostnameNormalizado === "::1" ||
     hostnameNormalizado === "[::1]"
   ) {
-    return "http://localhost:3000";
+    return "http://lvh.me:3000";
   }
 
   if (hostnameNormalizado === "lvh.me") {

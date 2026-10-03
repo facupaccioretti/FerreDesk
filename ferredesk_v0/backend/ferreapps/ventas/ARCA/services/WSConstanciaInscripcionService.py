@@ -9,6 +9,7 @@ Mantiene compatibilidad con el manejo de errores del sistema original.
 
 import logging
 import json
+import time
 import urllib3
 from typing import Dict, Any
 from zeep import Client, exceptions
@@ -19,6 +20,8 @@ from zeep.transports import Transport
 from zeep.helpers import serialize_object
 from requests import Session
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError, RequestException
+from urllib3.util import Retry
 from urllib3.util.ssl_ import create_urllib3_context
 
 from ..auth.FerreDeskAuth import FerreDeskAuth
@@ -71,7 +74,7 @@ class WSConstanciaInscripcionService:
     
     def _inicializar_cliente(self) -> Client:
         """
-        Inicializa el cliente SOAP para el padrón.
+        Inicializa el cliente SOAP para el padrón con reintentos automáticos de transporte.
         
         Returns:
             Cliente SOAP configurado
@@ -86,25 +89,43 @@ class WSConstanciaInscripcionService:
             pass
         session = Session()
         session.timeout = self.constancia_config['timeout']
-        session.mount('https://', SSLContextAdapter(ssl_context=ssl_context))
+
+        # Reintentos automáticos a nivel de transporte para microcortes y timeouts
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            raise_on_status=False
+        )
+        session.mount('https://', SSLContextAdapter(ssl_context=ssl_context, max_retries=retry_strategy))
         # Desactivar verificación de certificado solo para AFIP (mitigación puntual)
         session.verify = False
         
         # Configurar transporte
         transport = Transport(session=session)
         
-        # Crear cliente
-        client = Client(
-            self.constancia_config['url'],
-            transport=transport
-        )
-        
-        logger.debug(f"Cliente SOAP inicializado para {self.constancia_config['url']}")
-        return client
+        # Crear cliente con reintento si AFIP corta al descargar el WSDL
+        max_intentos = 3
+        for intento in range(1, max_intentos + 1):
+            try:
+                client = Client(
+                    self.constancia_config['url'],
+                    transport=transport
+                )
+                logger.debug(f"Cliente SOAP inicializado para {self.constancia_config['url']}")
+                return client
+            except (ConnectionError, ConnectionResetError, RequestException) as e:
+                logger.warning(
+                    f"Microcorte obteniendo WSDL de AFIP (intento {intento}/{max_intentos}): {e}"
+                )
+                if intento < max_intentos:
+                    time.sleep(1)
+                else:
+                    raise
     
     def send_request(self, method: str, data: Dict[str, Any]) -> Any:
         """
-        Envía una solicitud al servicio web de AFIP.
+        Envía una solicitud al servicio web de AFIP con reintentos para fallas de conexión transitorias.
         
         Args:
             method: Nombre del método a llamar
@@ -140,21 +161,36 @@ class WSConstanciaInscripcionService:
                 else:
                     logger.info(f"   • {key}: {value}")
             
-            # Enviar solicitud usando el cliente ya inicializado
-            logger.info("ENVIANDO SOLICITUD...")
-            response = getattr(self.client.service, method)(**data)
-            
-            logger.info("RESPUESTA RECIBIDA EXITOSAMENTE")
-            logger.info(f"TIPO DE RESPUESTA: {type(response)}")
-            # Mostrar respuesta como lo hace consultar_padron_afip.py
-            logger.info("ESTRUCTURA COMPLETA DE ARCA:")
-            logger.info("-" * 40)
-            logger.info(str(response))
-            
-            return response
+            # Enviar solicitud usando el cliente ya inicializado con reintentos si AFIP corta el socket
+            max_intentos = 3
+            for intento in range(1, max_intentos + 1):
+                try:
+                    logger.info(f"ENVIANDO SOLICITUD (intento {intento}/{max_intentos})...")
+                    response = getattr(self.client.service, method)(**data)
+                    
+                    logger.info("RESPUESTA RECIBIDA EXITOSAMENTE")
+                    logger.info(f"TIPO DE RESPUESTA: {type(response)}")
+                    # Mostrar respuesta como lo hace consultar_padron_afip.py
+                    logger.info("ESTRUCTURA COMPLETA DE ARCA:")
+                    logger.info("-" * 40)
+                    logger.info(str(response))
+                    
+                    return response
+                    
+                except (ConnectionError, ConnectionResetError, RequestException) as e:
+                    logger.warning(
+                        f"Microcorte o interrupción de conexión con AFIP en intento {intento}/{max_intentos}: {e}"
+                    )
+                    if intento < max_intentos:
+                        time.sleep(1)
+                    else:
+                        logger.error(f"Se agotaron los {max_intentos} intentos de conexión con AFIP: {e}")
+                        raise
             
         except exceptions.Error as e:
             logger.error(f"ERROR SOAP: {e}")
+            raise
+        except (ConnectionError, ConnectionResetError, RequestException):
             raise
         except Exception as e:
             logger.error(f"ERROR GENERAL: {e}")
