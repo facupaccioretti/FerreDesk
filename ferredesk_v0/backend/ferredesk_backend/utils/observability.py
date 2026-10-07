@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-import tracemalloc
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -10,6 +9,8 @@ from django_tenants.utils import get_public_schema_name
 
 
 logger = logging.getLogger("ferredesk.observabilidad")
+DURACION_LENTA_MS = 1000
+MAX_QUERIES = 25
 
 
 class _ContadorQueries:
@@ -53,11 +54,6 @@ def medir_proceso(proceso, schema_name=None, **datos_iniciales):
     )
     contador_queries = _ContadorQueries()
 
-    tracing_previo = tracemalloc.is_tracing()
-    if not tracing_previo:
-        tracemalloc.start()
-
-    memoria_inicio_actual, memoria_inicio_peak = tracemalloc.get_traced_memory()
     inicio = time.perf_counter()
 
     try:
@@ -67,26 +63,37 @@ def medir_proceso(proceso, schema_name=None, **datos_iniciales):
         medicion.registrar_metricas(
             estado="error",
             tipo_error=exc.__class__.__name__,
-            error=str(exc),
         )
         raise
     else:
         medicion.registrar_metricas(estado="ok")
     finally:
         duracion_ms = round((time.perf_counter() - inicio) * 1000, 2)
-        memoria_fin_actual, memoria_fin_peak = tracemalloc.get_traced_memory()
 
         payload = {
             "proceso": proceso,
             "schema": schema,
             "duracion_ms": duracion_ms,
             "queries": contador_queries.total,
-            "memoria_actual_kb": max(0, memoria_fin_actual - memoria_inicio_actual) // 1024,
-            "memoria_peak_kb": max(0, memoria_fin_peak - memoria_inicio_peak) // 1024,
         }
         payload.update({k: _normalizar_valor(v) for k, v in medicion.datos.items()})
 
-        logger.info("OBSERVABILIDAD %s", json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        motivos = []
+        if duracion_ms > DURACION_LENTA_MS:
+            motivos.append("lenta")
+        if contador_queries.total > MAX_QUERIES:
+            motivos.append("muchas_queries")
+        if motivos:
+            payload["motivos"] = motivos
 
-        if not tracing_previo:
-            tracemalloc.stop()
+        if payload.get("estado") == "error":
+            logger.error(
+                "OBSERVABILIDAD_ERROR %s",
+                json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                exc_info=True,
+            )
+        elif motivos:
+            logger.warning(
+                "OBSERVABILIDAD_ALERTA %s",
+                json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            )
