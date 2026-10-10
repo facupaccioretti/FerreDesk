@@ -199,7 +199,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   const { esValido, errores, erroresCampo } = useValidaciones({
     form,
-    ferreteria
+    ferreteria,
+    proveedores
   })
 
   // Estados adicionales que no están en los hooks
@@ -461,7 +462,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
 
   // Si hay un solo proveedor, autocompletar y deshabilitar
   useEffect(() => {
-    if (unProveedor && form.proveedor_habitual_id !== String(proveedoresAsociados[0].id)) {
+    if (unProveedor && String(form.proveedor_habitual_id) !== String(proveedoresAsociados[0].id)) {
       setForm((prev) => ({ ...prev, proveedor_habitual_id: String(proveedoresAsociados[0].id) }))
       desactivarPrecioLista0Manual()
     }

@@ -43,7 +43,7 @@ jest.mock('./herramientastockform', () => ({
       unidad: 'UN',
       cantmin: 0,
       margen: stock?.margen ?? '20.00',
-      proveedor_habitual_id: stock?.proveedor_habitual?.id ? String(stock.proveedor_habitual.id) : '',
+      proveedor_habitual_id: stock?.proveedor_habitual?.id ?? '',
       idfam1: null,
       idfam2: null,
       idfam3: null,
@@ -58,7 +58,7 @@ jest.mock('./herramientastockform', () => ({
     handleCancel: jest.fn(),
     claveBorrador: 'stockFormDraft_test',
   }),
-  useGestionProveedores: ({ stock }) => ({
+  useGestionProveedores: ({ stock, proveedores }) => ({
     handleEditStockProve: jest.fn(),
     handleEditCostoStockProve: jest.fn(),
     handleEditCancel: jest.fn(),
@@ -66,7 +66,7 @@ jest.mock('./herramientastockform', () => ({
     handleEditCostoStockProveSave: jest.fn(),
     handleEliminarRelacion: jest.fn(),
     stockTotal: 0,
-    proveedoresAsociados: [],
+    proveedoresAsociados: proveedores.filter((proveedor) => stock?.stock_proveedores?.some((sp) => String(sp.proveedor) === String(proveedor.id))),
     stockProveParaMostrar: stock?.stock_proveedores ?? [],
     editandoCantidadId: null,
     nuevaCantidad: '',
@@ -251,5 +251,38 @@ describe('StockForm', () => {
     })
 
     expect(mockGuardarProductoAtomico.mock.calls.at(-1)[0].precio_lista_0_manual).toBe(false)
+  })
+  test('conserva el precio manual si el proveedor numerico ya es el habitual', async () => {
+    const stock = {
+      precio_lista_0: 1000,
+      precio_lista_0_manual: true,
+      precios_listas: [],
+      margen: '20.00',
+      idaliiva: { id: 1, porce: '21.00' },
+      proveedor_habitual: { id: 1 },
+      stock_proveedores: [{ proveedor: 1, costo: 0 }],
+    }
+
+    await act(async () => {
+      root.render(
+        <StockForm
+          key="editar-proveedor-numerico"
+          stock={stock}
+          onSave={jest.fn()}
+          onCancel={jest.fn()}
+          proveedores={[{ id: 1, razon: 'Proveedor' }]}
+          familias={[]}
+          modo="editar"
+          tabKey="editar-proveedor-numerico"
+        />
+      )
+    })
+    await act(async () => {
+      container.querySelector('form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      )
+    })
+
+    expect(mockGuardarProductoAtomico.mock.calls.at(-1)[0].precio_lista_0_manual).toBe(true)
   })
 })

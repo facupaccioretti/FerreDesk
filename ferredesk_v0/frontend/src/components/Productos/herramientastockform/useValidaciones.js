@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 
-const useValidaciones = ({ form, ferreteria }) => {
+const useValidaciones = ({ form, ferreteria, proveedores = [] }) => {
 
   const validaciones = useMemo(() => {
     const errores = []
@@ -31,7 +31,9 @@ const useValidaciones = ({ form, ferreteria }) => {
     }
 
     const codigosUsados = new Set()
-    stockProveedores.forEach((sp, index) => {
+    stockProveedores.forEach((sp) => {
+      const proveedorId = sp.proveedor_id || sp.proveedor?.id || sp.proveedor
+      const razonProveedor = sp.proveedor?.razon || proveedores.find((proveedor) => String(proveedor.id) === String(proveedorId))?.razon || "asociado"
       // Duplicados dentro del MISMO producto (no deberían pasar con la nueva arquitectura)
       if (sp.codigo_producto_proveedor) {
         if (codigosUsados.has(sp.codigo_producto_proveedor)) {
@@ -43,12 +45,12 @@ const useValidaciones = ({ form, ferreteria }) => {
 
       // Validar costo si hay código
       if (sp.codigo_producto_proveedor && (sp.costo === null || sp.costo === undefined || sp.costo === "" || parseFloat(sp.costo) === 0)) {
-        errores.push(`El proveedor ${index + 1} tiene un código asociado pero sin un costo válido.`)
+        errores.push(`El proveedor ${razonProveedor} tiene un codigo asociado pero sin un costo valido.`)
       }
 
       // Validar stock negativo
       if (sp.cantidad < 0 && !ferreteria?.permitir_stock_negativo) {
-        errores.push(`La cantidad del proveedor ${index + 1} no puede ser negativa.`)
+        errores.push(`La cantidad del proveedor ${razonProveedor} no puede ser negativa.`)
       }
     })
 
@@ -58,7 +60,7 @@ const useValidaciones = ({ form, ferreteria }) => {
       erroresCampo,
       cantidadErrores: errores.length + erroresCampo.length
     }
-  }, [form, ferreteria])
+  }, [form, ferreteria, proveedores])
 
   const validarCampo = (nombreCampo, valor) => {
     switch (nombreCampo) {

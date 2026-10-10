@@ -93,4 +93,44 @@ describe('useGuardadoAtomico', () => {
       precios_listas: precios,
     })
   })
+  test('muestra el detalle de validacion devuelto por el backend', async () => {
+    const aviso = jest.spyOn(window, 'alert').mockImplementation(() => {})
+    global.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        detail: 'Error de validacion',
+        errors: { detail: ['No se pudo calcular Lista 0: falta un costo habitual mayor que cero.'] },
+      }),
+    })
+
+    let resultado
+    await act(async () => {
+      resultado = await api.guardarProductoAtomico({ id: 77 })
+    })
+
+    expect(resultado.error).toBe('No se pudo calcular Lista 0: falta un costo habitual mayor que cero.')
+    expect(aviso).toHaveBeenCalledWith(resultado.error)
+  })
+
+  test('indica la lista que tiene un precio manual invalido', async () => {
+    const aviso = jest.spyOn(window, 'alert').mockImplementation(() => {})
+    global.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        detail: 'Error de validacion',
+        errors: [{}, { precio: ['El precio manual debe ser mayor que cero.'] }],
+      }),
+    })
+
+    let resultado
+    await act(async () => {
+      resultado = await api.guardarProductoAtomico(
+        { id: 77 },
+        [{ lista_numero: 1 }, { lista_numero: 2 }]
+      )
+    })
+
+    expect(resultado.error).toBe('Lista 2: El precio manual debe ser mayor que cero.')
+    expect(aviso).toHaveBeenCalledWith(resultado.error)
+  })
 })

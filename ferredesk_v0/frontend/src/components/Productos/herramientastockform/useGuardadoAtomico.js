@@ -16,6 +16,12 @@ function getCookie(name) {
   return cookieValue
 }
 
+const primerError = (value) => {
+  if (typeof value === "string") return value
+  if (Array.isArray(value)) return value.map(primerError).find(Boolean)
+  if (value && typeof value === "object") return primerError(value.errors ?? value.detail ?? Object.values(value)[0])
+  return null
+}
 const useGuardadoAtomico = ({ stock }) => {
   const [isSaving, setIsSaving] = useState(false)
 
@@ -77,14 +83,13 @@ const useGuardadoAtomico = ({ stock }) => {
 
       const data = await response.json()
       if (!response.ok) {
-        let errorMsg = "Error al guardar el producto."
-        if (data.errors?.errors?.codvta?.length > 0) {
-          errorMsg = data.errors.errors.codvta[0]
-        } else if (data.error) {
-          errorMsg = data.error
-        } else {
-          errorMsg = data.detail || JSON.stringify(data)
-        }
+        const errores = data.errors?.errors ?? data.errors
+        const indiceLista = Array.isArray(errores) ? errores.findIndex((error) => primerError(error)) : -1
+        const detalle = primerError(errores)
+        const numeroLista = preciosListas[indiceLista]?.lista_numero
+        const errorMsg = indiceLista >= 0 && numeroLista
+          ? `Lista ${numeroLista}: ${detalle}`
+          : detalle || data.error || data.detail || "Error al guardar el producto."
         alert(errorMsg)
         return { success: false, error: errorMsg }
       }
