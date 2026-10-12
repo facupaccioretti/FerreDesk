@@ -75,6 +75,7 @@ PUBLIC_SCHEMA_URLCONF = 'ferredesk_backend.urls_public'
 TENANT_MODEL = 'tenants.EmpresaTenant'
 TENANT_DOMAIN_MODEL = 'tenants.Dominio'
 DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+TENANT_LIMIT_SET_CALLS = True
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 
 # TEMPLATES — AHORA EN BASE.PY

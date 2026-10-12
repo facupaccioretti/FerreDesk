@@ -2,7 +2,9 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.db.models import Max
+from django.test.utils import CaptureQueriesContext
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -229,3 +231,41 @@ class PosProductoLookupAPITestCase(TenantTestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual([producto["id"] for producto in payload], [self.producto_busqueda.id])
+
+    def test_busqueda_ligera_mantiene_queries_constantes_al_crecer_resultados(self):
+        max_stock_id = Stock.objects.aggregate(max_id=Max("id"))["max_id"] or 0
+        Stock.objects.bulk_create([
+            Stock(
+                id=max_stock_id + indice,
+                codvta=f"MART{indice:03d}",
+                deno=f"Martillo adicional {indice}",
+                unidad="UN",
+                margen=Decimal("20.00"),
+                cantmin=Decimal("1.00"),
+                idaliiva=self.alicuota,
+                proveedor_habitual=self.proveedor,
+                acti="S",
+                precio_lista_0=Decimal("100.00"),
+            )
+            for indice in range(1, 6)
+        ])
+
+        with CaptureQueriesContext(connection) as consultas_un_resultado:
+            response_un_resultado = self.client.get(
+                "/api/pos/productos/search/",
+                {"q": "madera profesional"},
+            )
+        with CaptureQueriesContext(connection) as consultas_varios_resultados:
+            response_varios_resultados = self.client.get(
+                "/api/pos/productos/search/",
+                {"q": "martillo"},
+            )
+
+        self.assertEqual(response_un_resultado.status_code, 200)
+        self.assertEqual(response_varios_resultados.status_code, 200)
+        self.assertEqual(len(response_un_resultado.json()), 1)
+        self.assertEqual(len(response_varios_resultados.json()), 6)
+        self.assertLessEqual(
+            len(consultas_varios_resultados),
+            len(consultas_un_resultado) + 1,
+        )
