@@ -499,6 +499,13 @@ class PosProductoSearchAPIView(APIView):
                     Stock.objects
                     .con_stock_total()
                     .select_related('idaliiva', 'proveedor_habitual')
+                    .prefetch_related(
+                        Prefetch(
+                            'precios_listas',
+                            queryset=PrecioProductoLista.objects.filter(precio_manual=True).order_by('lista_numero'),
+                            to_attr='precios_listas_prefetch',
+                        )
+                    )
                     .annotate(
                         costo_habitual=Subquery(costo_habitual_subquery),
                         prioridad_busqueda=prioridad_busqueda,
