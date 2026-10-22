@@ -390,6 +390,7 @@ class ControlFondosServiceTests(CajaTenantTestCase, CajaTestMixin):
         
         # Simular flujo real que crea PagoVenta y MovimientoCaja
         registrar_pagos_venta(
+            usuario=self.usuario,
             venta=venta_abierta,
             sesion_caja=sesion_abierta,
             pagos=[{'metodo_pago_id': metodo_efectivo.id, 'monto': Decimal("200.00")}]

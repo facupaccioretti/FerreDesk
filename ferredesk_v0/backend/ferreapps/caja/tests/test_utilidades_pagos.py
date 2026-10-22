@@ -177,6 +177,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ..utils import registrar_pagos_venta
         
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[{
@@ -195,12 +196,32 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         self.assertEqual(movimientos.count(), 1)
         self.assertEqual(movimientos[0].tipo, TIPO_MOVIMIENTO_ENTRADA)
         self.assertEqual(movimientos[0].monto, Decimal('500.00'))
+
+    def test_registrar_pago_requiere_cuenta_explicita(self):
+        from ..utils import registrar_pagos_venta
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Debe indicar la cuenta que ejecuta el cobro de la venta.",
+        ):
+            registrar_pagos_venta(
+                venta=self.venta,
+                sesion_caja=self.sesion,
+                pagos=[{
+                    'metodo_pago_id': self.metodo_efectivo.id,
+                    'monto': Decimal('500.00'),
+                }],
+            )
+
+        self.assertFalse(PagoVenta.objects.filter(venta=self.venta).exists())
+        self.assertFalse(MovimientoCaja.objects.filter(sesion_caja=self.sesion).exists())
     
     def test_registrar_pago_transferencia_no_crea_movimiento_caja(self):
         """Pago por transferencia NO debe crear MovimientoCaja."""
         from ..utils import registrar_pagos_venta
         
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[{
@@ -221,6 +242,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ..utils import registrar_pagos_venta
 
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=None,
             pagos=[{
@@ -239,6 +261,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         metodo = MetodoPago.objects.get(codigo=CODIGO_DESCUENTO_HABERES)
         with self.assertRaisesMessage(ValidationError, 'solo puede utilizarse en recibos'):
             registrar_pagos_venta(
+                usuario=self.usuario,
                 venta=self.venta,
                 sesion_caja=self.sesion,
                 pagos=[{'metodo_pago_id': metodo.id, 'monto': Decimal('500.00')}],
@@ -252,6 +275,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
 
         # Usar self.venta (no es de Consumidor Final)
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=None,
             pagos=[{
@@ -285,6 +309,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
 
         with self.assertRaises(ValidationError):
             registrar_pagos_venta(
+                usuario=self.usuario,
                 venta=self.venta,
                 sesion_caja=None,
                 pagos=[{
@@ -298,6 +323,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ..utils import registrar_pagos_venta
         
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[
@@ -319,6 +345,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ..utils import registrar_pagos_venta
         
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=None,  # Sin lista de pagos
@@ -347,6 +374,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         from ..utils import registrar_pagos_venta
 
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[{
@@ -394,6 +422,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Intentar registrar pago con cheque debe lanzar ValidationError
         with self.assertRaises(ValidationError) as context:
             registrar_pagos_venta(
+                usuario=self.usuario,
                 venta=venta_consumidor_final,
                 sesion_caja=self.sesion,
                 pagos=[{
@@ -441,6 +470,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Intentar registrar pago con cuenta corriente debe lanzar ValidationError
         with self.assertRaises(ValidationError) as context:
             registrar_pagos_venta(
+                usuario=self.usuario,
                 venta=venta_consumidor_final,
                 sesion_caja=self.sesion,
                 pagos=[{
@@ -462,6 +492,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Usar self.venta que tiene self.cliente (no es ID 1)
         # Intentar registrar pago con cheque debe funcionar
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[{
@@ -533,6 +564,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Usar self.venta que tiene self.cliente (no es ID 1)
         # Intentar registrar pago con cuenta corriente debe funcionar
         pagos = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=[{
@@ -569,6 +601,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
             'monto_recibido': Decimal('20500.00'),
         }]
         pagos_creados = registrar_pagos_venta(
+            usuario=self.usuario,
             venta=self.venta,
             sesion_caja=self.sesion,
             pagos=pagos_normalizados,
@@ -652,6 +685,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Venta 1: $14.500, pagaron $20.500 con $6.000 de vuelto
         v1 = _crear_venta(101)
         registrar_pagos_venta(
+            usuario=self.usuario,
             venta=v1,
             sesion_caja=sesion,
             pagos=[{
@@ -669,6 +703,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Venta 2: $5.000 exacto
         v2 = _crear_venta(102)
         registrar_pagos_venta(
+            usuario=self.usuario,
             venta=v2,
             sesion_caja=sesion,
             pagos=[{
@@ -680,6 +715,7 @@ class RegistrarPagosVentaTests(CajaTenantTestCase, CajaTestMixin):
         # Venta 3: $42.000 exacto
         v3 = _crear_venta(103)
         registrar_pagos_venta(
+            usuario=self.usuario,
             venta=v3,
             sesion_caja=sesion,
             pagos=[{

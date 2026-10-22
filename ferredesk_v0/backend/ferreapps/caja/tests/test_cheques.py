@@ -447,7 +447,12 @@ class ChequeCustodiaTests(CajaTenantAPITestCase, CajaTestMixin):
                   'cuit_librador': CUIT_TEST_VALIDO, 'fecha_emision': str(timezone.now().date()),
                   'fecha_pago': str(timezone.now().date())}]
 
-        registrar_pagos_venta(venta, self.sesion, pagos)
+        registrar_pagos_venta(
+            venta=venta,
+            sesion_caja=self.sesion,
+            pagos=pagos,
+            usuario=self.usuario,
+        )
 
         cheque = Cheque.objects.get(numero='124')
         self.assertIsNotNone(cheque.movimiento_caja_entrada)

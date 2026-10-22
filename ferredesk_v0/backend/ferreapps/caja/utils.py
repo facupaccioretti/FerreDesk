@@ -504,12 +504,16 @@ def registrar_pagos_venta(
     sesion_caja: Optional[SesionCaja] = None,
     pagos: Optional[List[Dict[str, Any]]] = None,
     monto_pago_legacy: Optional[Decimal] = None,
-    descripcion_base: str = "Pago de venta"
+    descripcion_base: str = "Pago de venta",
+    usuario=None,
 ) -> List[PagoVenta]:
     """
     Registra los pagos de una venta y crea movimientos de caja si corresponde.
     Wrapper sobre registrar_valores_y_movimientos() para ventas.
     """
+    if usuario is None or getattr(usuario, "pk", None) is None:
+        raise ValidationError("Debe indicar la cuenta que ejecuta el cobro de la venta.")
+
     pagos_creados = []
 
     if not pagos and monto_pago_legacy and monto_pago_legacy > 0:
@@ -553,7 +557,7 @@ def registrar_pagos_venta(
             direccion='entrada',
             descripcion_comprobante=numero_venta,
             descripcion_base=descripcion_base,
-            usuario=sesion_caja.usuario if sesion_caja else getattr(venta, 'ven_idusu', None),
+            usuario=usuario,
         )
 
         for res in resultados:
@@ -580,7 +584,7 @@ def registrar_pagos_venta(
                     pago_venta=pago_venta,
                     venta=venta,
                     sesion_caja=sesion_caja,
-                    usuario=sesion_caja.usuario if sesion_caja else getattr(venta, 'ven_idusu', None),
+                    usuario=usuario,
                     descripcion_comprobante=numero_venta,
                 )
 

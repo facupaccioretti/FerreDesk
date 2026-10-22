@@ -504,7 +504,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                             venta=venta_creada,
                             sesion_caja=sesion_caja,
                             pagos=pagos_normalizados,
-                            descripcion_base="Pago de"
+                            descripcion_base="Pago de",
+                            usuario=request.user,
                         )
                         campos_actualizados = []
                         for clave, valor in metadata_cobro.items():

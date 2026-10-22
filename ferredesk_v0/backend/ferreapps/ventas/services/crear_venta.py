@@ -122,6 +122,7 @@ def crear_documento_venta_desde_payload(
                 sesion_caja=sesion_caja,
                 pagos=pagos_normalizados,
                 descripcion_base="Pago de",
+                usuario=usuario,
             )
         excedente_destino = (data.get("excedente_destino") or "").strip().lower()
         monto_excedente = metadata_cobro.get("vuelto_calculado") or 0
