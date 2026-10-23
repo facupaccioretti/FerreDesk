@@ -20,11 +20,12 @@ def hash_intencion(payload):
     return hashlib.sha256(contenido.encode()).hexdigest()
 
 
-def _resultado_existente(operacion, *, venta_origen_id, tipo, usuario, payload_hash):
+def _resultado_existente(operacion, *, venta_origen_id, tipo, usuario, actor, payload_hash):
     if (
         operacion.venta_origen_id != venta_origen_id
         or operacion.tipo != tipo
         or operacion.usuario_id != usuario.pk
+        or operacion.actor_perfil_id != getattr(actor.perfil, 'pk', None)
         or operacion.payload_hash != payload_hash
     ):
         raise ConflictoIdempotencia()
@@ -33,7 +34,7 @@ def _resultado_existente(operacion, *, venta_origen_id, tipo, usuario, payload_h
     return operacion.resultado_snapshot
 
 
-def recuperar_resultado(*, payload, tipo, usuario):
+def recuperar_resultado(*, payload, tipo, usuario, actor):
     operacion = PostventaOperacion.objects.filter(operacion_uid=payload["idempotency_key"]).first()
     if operacion is None:
         return None
@@ -42,13 +43,16 @@ def recuperar_resultado(*, payload, tipo, usuario):
         venta_origen_id=payload["venta_id"],
         tipo=tipo,
         usuario=usuario,
+        actor=actor,
         payload_hash=hash_intencion(payload),
     )
 
 
-def crear_o_recuperar_operacion(*, payload, venta_origen, tipo, usuario, **campos):
+def crear_o_recuperar_operacion(*, payload, venta_origen, tipo, usuario, actor, **campos):
     payload_hash = hash_intencion(payload)
-    resultado_existente = recuperar_resultado(payload=payload, tipo=tipo, usuario=usuario)
+    resultado_existente = recuperar_resultado(
+        payload=payload, tipo=tipo, usuario=usuario, actor=actor
+    )
     if resultado_existente is not None:
         return None, resultado_existente
     try:
@@ -59,6 +63,7 @@ def crear_o_recuperar_operacion(*, payload, venta_origen, tipo, usuario, **campo
                 tipo=tipo,
                 usuario=usuario,
                 payload_hash=payload_hash,
+                **actor.campos(incluir_usuario=False),
                 **campos,
             )
     except IntegrityError:
@@ -68,6 +73,7 @@ def crear_o_recuperar_operacion(*, payload, venta_origen, tipo, usuario, **campo
             venta_origen_id=venta_origen.pk,
             tipo=tipo,
             usuario=usuario,
+            actor=actor,
             payload_hash=payload_hash,
         )
     return operacion, None

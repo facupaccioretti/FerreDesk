@@ -5,6 +5,8 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from ferreapps.usuarios.services import resolver_actor
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from rest_framework import status, viewsets
@@ -34,6 +36,7 @@ from ferreapps.caja.utils import registrar_pagos_orden_pago
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 def cuenta_corriente_proveedor(request, proveedor_id):
     """Retorna los movimientos de cuenta corriente de un proveedor."""
@@ -77,6 +80,10 @@ def cuenta_corriente_proveedor(request, proveedor_id):
         )
 
 
+cuenta_corriente_proveedor.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 def compras_pendientes_proveedor(request, proveedor_id):
     """Retorna las compras con saldo pendiente de un proveedor."""
@@ -167,6 +174,10 @@ def compras_pendientes_proveedor(request, proveedor_id):
         )
 
 
+compras_pendientes_proveedor.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 def proveedores_con_movimientos(request):
     """Retorna la lista de proveedores que tienen movimientos en cuenta corriente."""
@@ -206,6 +217,10 @@ def proveedores_con_movimientos(request):
         )
 
 
+proveedores_con_movimientos.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.operar_proveedores')
 @api_view(['POST'])
 def crear_orden_pago(request):
     """
@@ -235,6 +250,7 @@ def crear_orden_pago(request):
         
         # La validaciÃ³n del medio contra caja se resuelve en la utilidad central.
         with transaction.atomic():
+            actor = resolver_actor(request)
             # Determinar el punto de venta (sucursal de la caja o fallback)
             # Usamos sucursal 1 si no hay sesión abierta (Pago Nominal)
             sucursal = sesion_caja.sucursal if sesion_caja else 1
@@ -260,6 +276,7 @@ def crear_orden_pago(request):
 
             # Crear la orden de pago (permite sesion_caja=None)
             orden_pago = OrdenPago.objects.create(
+                **actor.campos(incluir_usuario=False),
                 op_fecha=data['fecha'],
                 op_numero=numero_formateado, # Usar el generado secuencialmente
                 op_proveedor=proveedor,
@@ -323,6 +340,10 @@ def crear_orden_pago(request):
         )
 
 
+crear_orden_pago.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.anular')
 @api_view(['POST'])
 def anular_orden_pago(request, op_id):
     """Anula una orden de pago y revierte las imputaciones asociadas."""
@@ -363,6 +384,10 @@ def anular_orden_pago(request, op_id):
         )
 
 
+anular_orden_pago.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.operar_proveedores')
 @api_view(['POST'])
 def imputar_orden_pago(request):
     """
@@ -456,6 +481,10 @@ def imputar_orden_pago(request):
             {'detail': str(e)}, # Mostrar el error del servicio (validaciones de saldo)
             status=status.HTTP_400_BAD_REQUEST 
         )
+imputar_orden_pago.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 def detalle_comprobante_proveedor(request, comprobante_id):
     """
@@ -611,6 +640,10 @@ def detalle_comprobante_proveedor(request, comprobante_id):
         return Response({'detail': 'Error interno'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+detalle_comprobante_proveedor.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.operar_proveedores')
 @api_view(['POST'])
 def crear_ajuste_proveedor(request):
     """
@@ -637,7 +670,9 @@ def crear_ajuste_proveedor(request):
     
     try:
         with transaction.atomic():
+            actor = resolver_actor(request)
             ajuste = AjusteProveedor.objects.create(
+                **actor.campos(incluir_usuario=False),
                 aj_tipo=data['tipo'],
                 aj_proveedor=proveedor,
                 aj_fecha=data['fecha'],
@@ -664,6 +699,10 @@ def crear_ajuste_proveedor(request):
             {'detail': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+crear_ajuste_proveedor.corte_permisos = '3.4'
+
 
 def _get_total_imputable(obj):
     """Retorna el total de un objeto para mostrar en el detalle de CC."""

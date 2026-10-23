@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 from decimal import Decimal
 import logging
 
@@ -14,6 +15,7 @@ from ferreapps.ventas.models import Venta
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def detalle_comprobante(request, ven_id: int):
@@ -182,6 +184,10 @@ def detalle_comprobante(request, ven_id: int):
         return Response({'detail': 'Error interno'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+detalle_comprobante.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def obtener_imputacion_real(request, ven_id_venta, ven_id_recibo):
@@ -223,3 +229,6 @@ def obtener_imputacion_real(request, ven_id_venta, ven_id_recibo):
     except Exception as e:
         logger.error(f"Error al obtener imputación real: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+obtener_imputacion_real.corte_permisos = '3.4'

@@ -7,9 +7,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Imputacion
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 
 logger = logging.getLogger(__name__)
 
+@requiere_permiso_funcional('cuenta_corriente.anular')
 @api_view(['DELETE', 'POST'])
 @permission_classes([IsAuthenticated])
 def eliminar_imputacion(request, imp_id):
@@ -44,3 +46,6 @@ def eliminar_imputacion(request, imp_id):
     except Exception as e:
         logger.error(f"Error al eliminar imputación {imp_id}: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+eliminar_imputacion.corte_permisos = '3.4'

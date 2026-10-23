@@ -6,6 +6,7 @@ from .managers_ventas_calculos import VentaQuerySet, VentaDetalleItemQuerySet
 from decimal import Decimal
 from ferreapps.productos.models import Stock, Proveedor, AlicuotaIVA
 from ferreapps.clientes.models import Cliente, Vendedor, Plazo
+from ferreapps.usuarios.models import ActorPersistidoMixin, ActorSnapshotMixin, crear_constraint_actor
 
 # Create your models here.
 
@@ -47,7 +48,7 @@ class Comprobante(models.Model):
     def __str__(self):
         return f"{self.codigo_afip} - {self.nombre}"
 
-class Venta(models.Model):
+class Venta(ActorPersistidoMixin):
     ven_id = models.AutoField(primary_key=True, db_column='VEN_ID')
     ven_sucursal = models.SmallIntegerField(db_column='VEN_SUCURSAL')
     ven_fecha = models.DateField(db_column='VEN_FECHA')
@@ -337,7 +338,8 @@ class Venta(models.Model):
             models.CheckConstraint(
                 check=models.Q(ven_punto__gt=0),
                 name='ven_punto_positivo'
-            )
+            ),
+            crear_constraint_actor('ventas_venta_actor_valido'),
         ]
 
     def save(self, *args, **kwargs):
@@ -396,7 +398,7 @@ class Venta(models.Model):
         return Decimal('0.00')
 
 
-class PostventaOperacion(models.Model):
+class PostventaOperacion(ActorSnapshotMixin):
     TIPO_DEVOLUCION = "DEVOLUCION"
     TIPO_CAMBIO = "CAMBIO"
     TIPOS = [
@@ -457,6 +459,7 @@ class PostventaOperacion(models.Model):
             models.Index(fields=['venta_origen', 'tipo']),
             models.Index(fields=['created_at']),
         ]
+        constraints = [crear_constraint_actor('ventas_postventa_actor_valido')]
 
 
 class PostventaOperacionItem(models.Model):
@@ -808,6 +811,10 @@ class VentaCalculada(models.Model):
     factura_fiscal_id = models.IntegerField(null=True)
     fecha_conversion = models.DateTimeField(null=True)
     es_operacion_efectiva = models.BooleanField(default=True, null=True)
+    actor_tipo = models.CharField(max_length=8)
+    actor_perfil_id = models.BigIntegerField(null=True)
+    actor_usuario_id = models.IntegerField(null=True)
+    actor_etiqueta = models.CharField(max_length=160)
 
     class Meta:
         managed = False

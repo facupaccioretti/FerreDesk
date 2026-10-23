@@ -79,7 +79,8 @@ class CompraSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = [
             'comp_id', 'comp_hora_creacion', 'comp_verificacion_total',
-            'comp_fecha_anulacion'
+            'comp_fecha_anulacion', 'actor_tipo', 'actor_perfil', 'actor_usuario',
+            'actor_etiqueta',
         ]
     
     def get_proveedor_nombre(self, obj):

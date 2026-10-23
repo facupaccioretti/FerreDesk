@@ -55,6 +55,7 @@ from .services.importacion_lista_precios_service import (
     crear_importacion_pendiente_lista_precios,
     importar_lista_precios_proveedor,
 )
+from ferreapps.usuarios.services.actor_service import resolver_actor
 
 # Create your views here.
 
@@ -600,6 +601,7 @@ class UploadListaPreciosProveedor(APIView):
 
     @transaction.atomic
     def post_legado(self, request, proveedor_id):
+        actor = resolver_actor(request)
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
             return Response({'detail': 'Proveedor no encontrado.'}, status=404)
@@ -621,6 +623,7 @@ class UploadListaPreciosProveedor(APIView):
                 col_precio=col_precio,
                 col_denominacion=col_denominacion,
                 fila_inicio=fila_inicio,
+                actor=actor,
             )
             precios_cargados = resultado['precios_cargados']
             registros_actualizados = resultado['registros_actualizados']
@@ -657,15 +660,18 @@ class UploadListaPreciosProveedor(APIView):
                 return Response({'detail': 'No se enviÃ³ archivo.'}, status=400)
 
             try:
-                importacion = crear_importacion_pendiente_lista_precios(
-                    proveedor=proveedor,
-                    usuario=request.user if request.user.is_authenticated else None,
-                    excel_file=excel_file,
-                    col_codigo=col_codigo,
-                    col_precio=col_precio,
-                    col_denominacion=col_denominacion,
-                    fila_inicio=fila_inicio,
-                )
+                with transaction.atomic():
+                    actor = resolver_actor(request)
+                    importacion = crear_importacion_pendiente_lista_precios(
+                        proveedor=proveedor,
+                        usuario=request.user if request.user.is_authenticated else None,
+                        excel_file=excel_file,
+                        col_codigo=col_codigo,
+                        col_precio=col_precio,
+                        col_denominacion=col_denominacion,
+                        fila_inicio=fila_inicio,
+                        actor=actor,
+                    )
                 medicion.registrar_metricas(
                     importacion_id=importacion.id,
                     archivo_bytes=getattr(excel_file, 'size', None) or 0,
@@ -1080,7 +1086,7 @@ def _validar_precios_listas(precios_data):
     return precios
 
 
-def _guardar_precios_listas(stock, precios, usuario):
+def _guardar_precios_listas(stock, precios, usuario, actor):
     ahora = timezone.now()
     for precio in precios:
         lista_numero = precio['lista_numero']
@@ -1095,6 +1101,7 @@ def _guardar_precios_listas(stock, precios, usuario):
             stock=stock,
             lista_numero=lista_numero,
             defaults={
+                **actor.campos(),
                 'precio': precio['precio'],
                 'precio_manual': True,
                 'fecha_carga_manual': ahora,
@@ -1146,6 +1153,7 @@ def crear_producto_con_relaciones(request):
 
         # Si todo es válido, crear producto y relaciones en bloque atómico
         with transaction.atomic():
+            actor = resolver_actor(request)
             stock_serializer = StockSerializer(data=producto_data)
             if not stock_serializer.is_valid():
                 raise serializers.ValidationError({'detail': 'Datos de producto inválidos.', 'errors': stock_serializer.errors})
@@ -1165,7 +1173,7 @@ def crear_producto_con_relaciones(request):
                     })
             else:
                 recalcular_precio_lista_0(stock.id)
-            _guardar_precios_listas(stock, precios_listas, request.user)
+            _guardar_precios_listas(stock, precios_listas, request.user, actor)
 
         return Response({'detail': 'Producto y relaciones creados correctamente.', 'producto_id': stock.id}, status=201)
     except serializers.ValidationError as ve:
@@ -1273,7 +1281,8 @@ def editar_producto_con_relaciones(request):
 
             # No eliminar relaciones no enviadas para evitar pérdidas involuntarias de códigos
             _sincronizar_precio_lista_0_editado(stock, estado_precio_anterior)
-            _guardar_precios_listas(stock, precios_listas, request.user)
+            actor = resolver_actor(request)
+            _guardar_precios_listas(stock, precios_listas, request.user, actor)
         return Response({'detail': 'Producto y relaciones editados correctamente.', 'producto_id': stock.id}, status=200)
     except serializers.ValidationError as ve:
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)

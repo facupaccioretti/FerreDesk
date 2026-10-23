@@ -18,7 +18,9 @@ from django.db.models import Sum
 from django.core.exceptions import ValidationError
 
 from ferreapps.clientes.algoritmo_cuit_utils import validar_cuit
-from .services import invalidate_control_fondos_cache
+from .services.cheques import registrar_evento_cheque
+from .services.control_fondos import invalidate_control_fondos_cache
+from ferreapps.usuarios.services import actor_desde_raiz
 
 from .models import (
     PagoVenta,
@@ -90,11 +92,13 @@ def _registrar_cheque_recibido(
     sesion_caja: Optional[SesionCaja] = None,
     venta=None,
     recibo=None,
+    actor=None,
 ) -> Cheque:
     """
     Alta canónica de cheque recibido en un cobro y vinculación completa con su evento.
     """
     cheque = Cheque.objects.create(
+        **actor.campos(incluir_usuario=False),
         **datos_cheque,
         monto=monto,
         estado=Cheque.ESTADO_EN_CARTERA,
@@ -102,6 +106,13 @@ def _registrar_cheque_recibido(
         recibo=recibo,
         pago_venta=pago_venta,
         usuario_registro=usuario,
+    )
+    registrar_evento_cheque(
+        cheque=cheque,
+        evento='ALTA',
+        estado_anterior='',
+        estado_nuevo=cheque.estado,
+        actor=actor,
     )
     if not sesion_caja:
         return cheque
@@ -111,7 +122,8 @@ def _registrar_cheque_recibido(
         sesion_caja=sesion_caja,
         usuario=usuario or sesion_caja.usuario,
         tipo_movimiento=TIPO_MOVIMIENTO_ENTRADA,
-        motivo=f"Recibido en {descripcion_comprobante}"
+        motivo=f"Recibido en {descripcion_comprobante}",
+        actor=actor,
     )
     cheque.movimiento_caja_entrada = movimiento_custodia
     cheque.save(update_fields=['movimiento_caja_entrada'])
@@ -128,13 +140,15 @@ def _registrar_cheque_entregado(
     sesion_caja: Optional[SesionCaja] = None,
     datos_cheque: Optional[Dict[str, Any]] = None,
     cheque_existente: Optional[Cheque] = None,
+    actor=None,
 ) -> Cheque:
     """Alta o actualización canónica de cheque entregado en una orden de pago."""
     if bool(datos_cheque) == bool(cheque_existente):
         raise ValidationError('Debe informar un cheque nuevo o un cheque existente, pero no ambos.')
 
     if datos_cheque:
-        return Cheque.objects.create(
+        cheque = Cheque.objects.create(
+            **actor.campos(incluir_usuario=False),
             **datos_cheque,
             monto=monto,
             estado=Cheque.ESTADO_ENTREGADO,
@@ -144,6 +158,14 @@ def _registrar_cheque_entregado(
             origen_tipo=Cheque.ORIGEN_PROPIO,
             usuario_registro=usuario,
         )
+        registrar_evento_cheque(
+            cheque=cheque,
+            evento='ALTA',
+            estado_anterior='',
+            estado_nuevo=cheque.estado,
+            actor=actor,
+        )
+        return cheque
 
     movimiento_custodia = None
     if sesion_caja:
@@ -152,9 +174,11 @@ def _registrar_cheque_entregado(
             sesion_caja=sesion_caja,
             usuario=usuario or sesion_caja.usuario,
             tipo_movimiento=TIPO_MOVIMIENTO_SALIDA,
-            motivo=f"Entregado en {descripcion_comprobante}"
+            motivo=f"Entregado en {descripcion_comprobante}",
+            actor=actor,
         )
 
+    estado_anterior = cheque_existente.estado
     cheque_existente.estado = Cheque.ESTADO_ENTREGADO
     cheque_existente.proveedor = orden_pago.op_proveedor if orden_pago else None
     cheque_existente.orden_pago = orden_pago
@@ -168,6 +192,13 @@ def _registrar_cheque_entregado(
             'pago_venta',
             'movimiento_caja_salida',
         ]
+    )
+    registrar_evento_cheque(
+        cheque=cheque_existente,
+        evento='ENDOSO',
+        estado_anterior=estado_anterior,
+        estado_nuevo=cheque_existente.estado,
+        actor=actor,
     )
     return cheque_existente
 
@@ -301,6 +332,7 @@ def registrar_valores_y_movimientos(
     usuario=None,
     permitir_efectivo_insuficiente=False,
     permitir_descuento_haberes=False,
+    actor=None,
 ) -> List[Dict[str, Any]]:
     """
     Procesa una lista de medios de pago y genera los movimientos de caja y cheques
@@ -466,6 +498,7 @@ def registrar_valores_y_movimientos(
                 direccion == 'entrada' and metodo_pago.codigo == CODIGO_EFECTIVO and monto_recibido is not None
             ) else monto
             movimiento_obj = MovimientoCaja.objects.create(
+                **actor.campos(incluir_usuario=False),
                 sesion_caja=sesion_caja,
                 usuario=sesion_caja.usuario,
                 tipo=tipo_movimiento,
@@ -549,6 +582,7 @@ def registrar_pagos_venta(
             validar_metodo_pago_contra_caja(metodo_pago, sesion_caja)
 
     with transaction.atomic():
+        actor = actor_desde_raiz(venta)
         numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
 
         resultados = registrar_valores_y_movimientos(
@@ -558,6 +592,7 @@ def registrar_pagos_venta(
             descripcion_comprobante=numero_venta,
             descripcion_base=descripcion_base,
             usuario=usuario,
+            actor=actor,
         )
 
         for res in resultados:
@@ -586,6 +621,7 @@ def registrar_pagos_venta(
                     sesion_caja=sesion_caja,
                     usuario=usuario,
                     descripcion_comprobante=numero_venta,
+                    actor=actor,
                 )
 
     invalidate_control_fondos_cache(reason="registrar_pagos_venta")
@@ -621,6 +657,7 @@ def registrar_pagos_recibo(
             validar_metodo_pago_contra_caja(metodo_pago, sesion_caja)
 
     with transaction.atomic():
+        actor = actor_desde_raiz(recibo)
         numero_recibo = f"REC {recibo.rec_numero}"
 
         resultados = registrar_valores_y_movimientos(
@@ -631,6 +668,7 @@ def registrar_pagos_recibo(
             descripcion_base=descripcion_base,
             usuario=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
             permitir_descuento_haberes=True,
+            actor=actor,
         )
 
         for res in resultados:
@@ -659,6 +697,7 @@ def registrar_pagos_recibo(
                     sesion_caja=sesion_caja,
                     usuario=sesion_caja.usuario if sesion_caja else recibo.rec_usuario,
                     descripcion_comprobante=numero_recibo,
+                    actor=actor,
                 )
 
     invalidate_control_fondos_cache(reason="registrar_pagos_recibo")
@@ -700,6 +739,7 @@ def registrar_pagos_orden_pago(
         pago_data['proveedor_id'] = proveedor_id
 
     with transaction.atomic():
+        actor = actor_desde_raiz(orden_pago)
         resultados = registrar_valores_y_movimientos(
             pagos=pagos,
             sesion_caja=sesion_caja,
@@ -708,6 +748,7 @@ def registrar_pagos_orden_pago(
             descripcion_base=descripcion_base,
             orden_pago=orden_pago,
             usuario=orden_pago.op_usuario,
+            actor=actor,
         )
 
         for res in resultados:
@@ -735,6 +776,7 @@ def registrar_pagos_orden_pago(
                         sesion_caja=sesion_caja,
                         usuario=orden_pago.op_usuario,
                         descripcion_comprobante=f"OP {orden_pago.op_numero}",
+                        actor=actor,
                     )
                 elif res.get('cheque_obj'):
                     _registrar_cheque_entregado(
@@ -745,6 +787,7 @@ def registrar_pagos_orden_pago(
                         sesion_caja=sesion_caja,
                         usuario=orden_pago.op_usuario,
                         descripcion_comprobante=f"OP {orden_pago.op_numero}",
+                        actor=actor,
                     )
 
     invalidate_control_fondos_cache(reason="registrar_pagos_orden_pago")
@@ -790,6 +833,7 @@ def registrar_vuelto(
     validar_metodo_pago_contra_caja(metodo_pago, sesion_caja)
     
     with transaction.atomic():
+        actor = actor_desde_raiz(postventa_operacion or venta)
         sesion_caja = _bloquear_sesion_caja(sesion_caja, sesion_caja.usuario)
         if monto_vuelto > _saldo_efectivo_sesion(sesion_caja):
             raise ValidationError('El saldo de efectivo disponible es insuficiente para entregar vuelto.')
@@ -808,6 +852,7 @@ def registrar_vuelto(
             from .models import TIPO_MOVIMIENTO_SALIDA
             numero_venta = f"{venta.comprobante.letra} {venta.ven_punto:04d}-{venta.ven_numero:08d}"
             MovimientoCaja.objects.create(
+                **actor.campos(incluir_usuario=False),
                 sesion_caja=sesion_caja,
                 usuario=sesion_caja.usuario,
                 tipo=TIPO_MOVIMIENTO_SALIDA,
@@ -869,7 +914,8 @@ def registrar_movimiento_custodia_cheque(
     sesion_caja: SesionCaja,
     usuario,
     tipo_movimiento: str,
-    motivo: str
+    motivo: str,
+    actor,
 ) -> MovimientoCaja:
     """
     Registra un movimiento de caja (ingreso/egreso) para un cheque en custodia.
@@ -883,6 +929,7 @@ def registrar_movimiento_custodia_cheque(
     """
     descripcion = f"Cheque {motivo} - Nº {cheque.numero} ({cheque.banco_emisor}) - ${cheque.monto}"
     return MovimientoCaja.objects.create(
+        **actor.campos(incluir_usuario=False),
         sesion_caja=sesion_caja,
         usuario=usuario,
         tipo=tipo_movimiento,
@@ -897,7 +944,9 @@ def registrar_movimiento_custodia_cheque(
 # -----------------------------------------------------------------------------
 
 
-def registrar_contrasiento_cheque_depositado(cheque: 'Cheque', sesion_caja: SesionCaja, usuario) -> None:
+def registrar_contrasiento_cheque_depositado(
+    cheque: 'Cheque', sesion_caja: SesionCaja, usuario, actor
+) -> None:
     """
     Registra la reversión del depósito en la sesión de caja cuando un cheque
     que estaba DEPOSITADO se marca como rechazado (contrasiento negativo).
@@ -909,6 +958,7 @@ def registrar_contrasiento_cheque_depositado(cheque: 'Cheque', sesion_caja: Sesi
     """
     descripcion = f"Reversión depósito cheque rechazado Nº {cheque.numero}"
     MovimientoCaja.objects.create(
+        **actor.campos(incluir_usuario=False),
         sesion_caja=sesion_caja,
         usuario=usuario,
         tipo=TIPO_MOVIMIENTO_SALIDA,

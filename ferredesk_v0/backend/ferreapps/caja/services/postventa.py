@@ -4,6 +4,7 @@ from rest_framework.exceptions import ValidationError
 from ferreapps.caja.models import PagoVenta, SesionCaja
 from ferreapps.caja.services import invalidate_control_fondos_cache
 from ferreapps.caja.utils import registrar_valores_y_movimientos
+from ferreapps.usuarios.services.actor_service import actor_desde_raiz
 
 
 def _registrar_pago_postventa(
@@ -26,6 +27,7 @@ def _registrar_pago_postventa(
 
     descripcion = f"{venta_documento.comprobante.letra} {venta_documento.ven_punto:04d}-{venta_documento.ven_numero:08d}"
     with transaction.atomic():
+        actor = actor_desde_raiz(operacion_postventa)
         resultados = registrar_valores_y_movimientos(
             pagos=medios,
             sesion_caja=sesion_caja,
@@ -33,6 +35,7 @@ def _registrar_pago_postventa(
             descripcion_comprobante=descripcion,
             descripcion_base=descripcion_base,
             usuario=usuario,
+            actor=actor,
             permitir_efectivo_insuficiente=permitir_efectivo_insuficiente,
         )
         if not resultados:

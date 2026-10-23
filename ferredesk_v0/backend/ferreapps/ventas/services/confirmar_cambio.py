@@ -189,12 +189,13 @@ def _build_nueva_venta_payload(venta_origen, items_nuevos, motivo, comprobante):
     }
 
 
-def confirmar_cambio(*, payload, usuario):
+def confirmar_cambio(*, payload, usuario, actor):
     try:
         resultado_existente = recuperar_resultado(
             payload=payload,
             tipo=PostventaOperacion.TIPO_CAMBIO,
             usuario=usuario,
+            actor=actor,
         )
         if resultado_existente is not None:
             return resultado_existente
@@ -205,6 +206,7 @@ def confirmar_cambio(*, payload, usuario):
                 venta_origen=venta_origen,
                 tipo=PostventaOperacion.TIPO_CAMBIO,
                 usuario=usuario,
+                actor=actor,
                 resolucion_dinero=payload["resolucion_diferencia"],
                 motivo=payload["motivo"],
                 motivo_forzado=payload.get("motivo_forzado", ""),
@@ -289,6 +291,7 @@ def confirmar_cambio(*, payload, usuario):
             nota_credito, _ = crear_documento_venta_desde_payload(
                 payload=_build_nc_payload(venta_origen, payload, preview, comprobante_nc),
                 usuario=usuario,
+                actor=actor,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
                 origen_postventa=True,
@@ -301,6 +304,7 @@ def confirmar_cambio(*, payload, usuario):
                     comprobante_venta,
                 ),
                 usuario=usuario,
+                actor=actor,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
                 origen_postventa=True,

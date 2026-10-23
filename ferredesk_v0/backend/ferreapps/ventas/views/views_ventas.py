@@ -9,13 +9,19 @@ from django.core.exceptions import ValidationError
 from django.db import transaction, models
 from django.db import IntegrityError
 from django.utils import timezone
-from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
+from django_filters.rest_framework import ChoiceFilter, DjangoFilterBackend, FilterSet, DateFromToRangeFilter, NumberFilter, CharFilter
 from decimal import Decimal
 from django.db.models import Sum
 import logging
 
 from ..models import (
     Comprobante, ComprobanteAsociacion, Venta, VentaDetalleItem, VentaDetalleMan, VentaRemPed
+)
+from ..politicas_permisos import (
+    PERMISOS_VENTA_DETALLE_MAN_POR_ACCION,
+    PERMISOS_VENTA_POR_ACCION,
+    PERMISOS_VENTA_REM_PED_POR_ACCION,
+    seleccionar_permiso_venta,
 )
 from ..serializers import (
     VentaSerializer, VentaDetalleItemSerializer, VentaDetalleManSerializer,
@@ -25,7 +31,6 @@ from ferreapps.productos.models import Ferreteria, StockProve
 from ferreapps.clientes.models import Cliente
 from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
-from ..ARCA.settings_arca import COMPROBANTES_INTERNOS
 from .utils_stock import (
     _obtener_codigo_venta,
     _descontar_distribuyendo,
@@ -34,6 +39,10 @@ from ferreapps.caja.models import PagoVenta, SesionCaja, ESTADO_CAJA_ABIERTA
 from ferreapps.productos.setup import requerir_setup_completo
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from ferredesk_backend.utils.observability import medir_proceso
+from ferreapps.usuarios.models import ActorTipo
+from ferreapps.ventas.selectors.actores import filtrar_por_actor
+from ferreapps.usuarios.services import resolver_actor
+from ferredesk_backend.permissions import RequierePermisoFuncional
 
 logger = logging.getLogger(__name__)
 
@@ -74,20 +83,36 @@ class VentaFilter(FilterSet):
     ven_fecha = DateFromToRangeFilter(field_name='ven_fecha')
     ven_idcli = NumberFilter(field_name='ven_idcli')
     ven_idvdo = NumberFilter(field_name='ven_idvdo')
-    ven_estado = NumberFilter(field_name='ven_estado')
+    ven_estado = CharFilter(field_name='ven_estado')
     comprobante = NumberFilter(field_name='comprobante')
     comprobante_tipo = CharFilter(field_name='comprobante__tipo', lookup_expr='iexact')
     comprobante_letra = CharFilter(field_name='comprobante__letra', lookup_expr='iexact')
     ven_sucursal = NumberFilter(field_name='ven_sucursal')
     ven_punto = NumberFilter(field_name='ven_punto')
     ven_numero = NumberFilter(field_name='ven_numero')
+    actor_perfil_id = NumberFilter(method='filter_actor_noop')
+    actor_tipo = ChoiceFilter(choices=ActorTipo.choices, method='filter_actor_noop')
 
     class Meta:
         model = Venta
         fields = [
             'ven_fecha', 'ven_idcli', 'ven_idvdo', 'ven_estado', 'comprobante',
-            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_punto', 'ven_numero'
+            'comprobante_tipo', 'comprobante_letra', 'ven_sucursal', 'ven_punto', 'ven_numero',
+            'actor_perfil_id', 'actor_tipo',
         ]
+
+    def filter_actor_noop(self, queryset, name, value):
+        # La logica real vive en filter_queryset, sobre datos validados del form.
+        return queryset
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        datos = self.form.cleaned_data
+        return filtrar_por_actor(
+            queryset,
+            perfil_id=datos.get('actor_perfil_id'),
+            tipo=datos.get('actor_tipo'),
+        )
 
 
 class VentaCalculadaFilter(FilterSet):
@@ -96,6 +121,8 @@ class VentaCalculadaFilter(FilterSet):
     ven_idvdo = NumberFilter(field_name='ven_idvdo')
     comprobante_tipo = CharFilter(field_name='comprobante_tipo', lookup_expr='iexact')
     comprobante_letra = CharFilter(field_name='comprobante_letra', lookup_expr='iexact')
+    actor_perfil_id = NumberFilter(method='filter_actor_noop')
+    actor_tipo = ChoiceFilter(choices=ActorTipo.choices, method='filter_actor_noop')
     # NUEVO: Filtro para notas de crédito - solo facturas válidas
     para_nota_credito = CharFilter(method='filter_para_nota_credito', label='Para nota de crédito')
 
@@ -125,7 +152,23 @@ class VentaCalculadaFilter(FilterSet):
 
     class Meta:
         model = Venta  # Cambiamos de VentaCalculada a Venta
-        fields = ['ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra', 'para_nota_credito']
+        fields = [
+            'ven_fecha', 'ven_idcli', 'ven_idvdo', 'comprobante_tipo', 'comprobante_letra',
+            'para_nota_credito', 'actor_perfil_id', 'actor_tipo',
+        ]
+
+    def filter_actor_noop(self, queryset, name, value):
+        # La logica real vive en filter_queryset, sobre datos validados del form.
+        return queryset
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        datos = self.form.cleaned_data
+        return filtrar_por_actor(
+            queryset,
+            perfil_id=datos.get('actor_perfil_id'),
+            tipo=datos.get('actor_tipo'),
+        )
 
 
 class VentaViewSet(viewsets.ModelViewSet):
@@ -149,9 +192,20 @@ class VentaViewSet(viewsets.ModelViewSet):
         ),
     )
     serializer_class = VentaSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = PERMISOS_VENTA_POR_ACCION
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaFilter
     pagination_class = PaginacionPorPaginaConLimite
+
+    def get_permiso_requerido(self):
+        accion = getattr(self, 'action', None)
+        tipo_comprobante = None
+        if accion == 'create':
+            request = getattr(self, 'request', None)
+            tipo_comprobante = getattr(request, 'data', {}).get('tipo_comprobante')
+        return seleccionar_permiso_venta(accion, tipo_comprobante)
 
     # --- Selección dinámica de queryset / serializer / filterset --------
     def get_queryset(self):
@@ -241,10 +295,15 @@ class VentaViewSet(viewsets.ModelViewSet):
             medicion.registrar_metricas(registros_devueltos=len(serializer.data))
             return Response(serializer.data)
 
+    def perform_create(self, serializer):
+        actor = resolver_actor(self.request)
+        serializer.save(**actor.campos())
+
     @transaction.atomic
     @requerir_setup_completo
     def create(self, request, *args, **kwargs):
         data = request.data
+        actor = resolver_actor(request)
         items = data.get('items', [])
         tipo_comprobante = data.get('tipo_comprobante')
         # Para Notas de Débito y su equivalente interno permitimos items vacíos;
@@ -471,7 +530,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                         destino=venta_creada,     # La deuda (la misma factura)
                         imp_monto=monto_auto_imputacion, # Monto del pago (limitado al total)
                         imp_fecha=timezone.localdate(),         # Fecha actual (hora Argentina)
-                        imp_observacion='Factura Recibo - Auto-imputación'
+                        imp_observacion='Factura Recibo - Auto-imputación',
+                        **actor.campos(),
                     )
                     
                     response.data['auto_imputacion_creada'] = True
@@ -588,6 +648,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     
                     # Crear recibo
                     recibo = Venta.objects.create(
+                        **actor.campos(),
                         ven_sucursal=1,
                         ven_fecha=recibo_excedente_data.get('rec_fecha', timezone.localdate()),
                         comprobante=comprobante_recibo,
@@ -668,6 +729,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         )
 
                     recibo_parcial = Venta.objects.create(
+                        **actor.campos(),
                         ven_sucursal=1,
                         ven_fecha=recibo_parcial_data.get('rec_fecha', timezone.localdate()),
                         comprobante=comprobante_recibo,
@@ -710,6 +772,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         from datetime import datetime
                         fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
                     Imputacion.objects.create(
+                        **actor.campos(),
                         origen=recibo_parcial,
                         destino=venta_creada,
                         imp_monto=monto_recibo_parcial,
@@ -882,16 +945,28 @@ class VentaViewSet(viewsets.ModelViewSet):
 class VentaDetalleItemViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VentaDetalleItem.objects.all()
     serializer_class = VentaDetalleItemSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = {
+        'list': 'ventas.ver',
+        'retrieve': 'ventas.ver',
+    }
 
 
 class VentaDetalleManViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleMan.objects.all()
     serializer_class = VentaDetalleManSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = PERMISOS_VENTA_DETALLE_MAN_POR_ACCION
 
 
 class VentaRemPedViewSet(viewsets.ModelViewSet):
     queryset = VentaRemPed.objects.all()
     serializer_class = VentaRemPedSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = PERMISOS_VENTA_REM_PED_POR_ACCION
 
 
 class VentaDetalleItemCalculadoFilter(FilterSet):
@@ -908,6 +983,12 @@ class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
         'vdi_promocion'
     ).prefetch_related('componentes_promocion__stock')
     serializer_class = VentaDetalleItemCalculadoSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = {
+        'list': 'ventas.ver',
+        'retrieve': 'ventas.ver',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter
 
@@ -923,6 +1004,12 @@ class VentaIVAAlicuotaFilter(FilterSet):
 class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para ver desglose de IVA (reemplaza a la antigua vista SQL)"""
     queryset = VentaDetalleItem.objects.all()
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = {
+        'list': 'ventas.ver',
+        'retrieve': 'ventas.ver',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaIVAAlicuotaFilter
     
@@ -949,5 +1036,11 @@ class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet de compatibilidad para la antigua VentaCalculada"""
     queryset = Venta.objects.con_calculos()
     serializer_class = VentaCalculadaSerializer
+    permission_classes = [RequierePermisoFuncional]
+    corte_permisos = '3.1'
+    permisos_por_accion = {
+        'list': 'ventas.ver',
+        'retrieve': 'ventas.ver',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaCalculadaFilter

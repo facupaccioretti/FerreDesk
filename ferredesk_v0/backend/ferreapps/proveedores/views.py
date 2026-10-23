@@ -9,6 +9,7 @@ from .models import HistorialImportacionProveedor, SolicitudCargaInicialProveedo
 from .services.carga_inicial_proveedor_service import (
     crear_solicitud_carga_inicial_pendiente,
 )
+from ferreapps.usuarios.services.actor_service import resolver_actor
 # Importaciones para transacciones atómicas
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -332,6 +333,7 @@ class CargaInicialProveedorImportSincronicaLegacyAPIView(APIView):
 
     @transaction.atomic
     def post(self, request, proveedor_id):
+        actor = resolver_actor(request)
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
         if not proveedor:
             return Response({'detail': 'Proveedor no encontrado.'}, status=404)
@@ -529,6 +531,7 @@ class CargaInicialProveedorImportSincronicaLegacyAPIView(APIView):
         # Registrar historial de importación (procesados = len(filas), actualizados = creados)
         try:
             HistorialImportacionProveedor.objects.create(
+                **actor.campos(),
                 proveedor=proveedor,
                 nombre_archivo=data.get('nombre_archivo') or 'carga_inicial',
                 registros_procesados=len(filas),
@@ -572,14 +575,17 @@ class CargaInicialProveedorImportAPIView(APIView):
         except Exception:
             return Response({'detail': 'Margen invalido.'}, status=400)
 
-        solicitud, _creada = crear_solicitud_carga_inicial_pendiente(
-            proveedor=proveedor,
-            usuario=request.user,
-            nombre_archivo=data.get('nombre_archivo') or 'carga_inicial',
-            parametros_lote=params,
-            filas_validas=filas,
-            totales_preview=data.get('totales_preview') or data.get('totales') or {},
-        )
+        with transaction.atomic():
+            actor = resolver_actor(request)
+            solicitud, _creada = crear_solicitud_carga_inicial_pendiente(
+                proveedor=proveedor,
+                usuario=request.user,
+                nombre_archivo=data.get('nombre_archivo') or 'carga_inicial',
+                parametros_lote=params,
+                filas_validas=filas,
+                totales_preview=data.get('totales_preview') or data.get('totales') or {},
+                actor=actor,
+            )
         return Response({
             'message': 'Importacion iniciada.',
             'solicitud_id': solicitud.id,

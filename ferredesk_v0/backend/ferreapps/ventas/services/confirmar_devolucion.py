@@ -111,12 +111,13 @@ def _build_nc_payload(venta_origen, payload, preview, comprobante):
     }
 
 
-def confirmar_devolucion(*, payload, usuario):
+def confirmar_devolucion(*, payload, usuario, actor):
     try:
         resultado_existente = recuperar_resultado(
             payload=payload,
             tipo=PostventaOperacion.TIPO_DEVOLUCION,
             usuario=usuario,
+            actor=actor,
         )
         if resultado_existente is not None:
             return resultado_existente
@@ -128,6 +129,7 @@ def confirmar_devolucion(*, payload, usuario):
                 venta_origen=venta_origen,
                 tipo=PostventaOperacion.TIPO_DEVOLUCION,
                 usuario=usuario,
+                actor=actor,
                 resolucion_dinero=payload["resolucion_dinero"],
                 motivo=payload["motivo"],
                 motivo_forzado=payload.get("motivo_forzado", ""),
@@ -178,6 +180,7 @@ def confirmar_devolucion(*, payload, usuario):
             nota_credito, _ = crear_documento_venta_desde_payload(
                 payload=_build_nc_payload(venta_origen, payload, preview, comprobante),
                 usuario=usuario,
+                actor=actor,
                 sesion_caja=None,
                 permitir_registrar_pagos=False,
                 origen_postventa=True,

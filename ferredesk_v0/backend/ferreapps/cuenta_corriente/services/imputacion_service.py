@@ -10,6 +10,7 @@ from django.db.models import Model, Sum
 from django.utils import timezone
 
 from ..models import Imputacion
+from ferreapps.usuarios.services import actor_desde_raiz
 
 
 def imputar_deuda(
@@ -44,6 +45,7 @@ def imputar_deuda(
         destino["monto"] += monto
 
     with transaction.atomic():
+        actor = actor_desde_raiz(comprobante_pago)
         _bloquear_documentos([comprobante_pago, *(destino["factura"] for destino in destinos.values())])
         _validar_origen_venta(comprobante_pago, origen_ct, destinos.values())
 
@@ -113,6 +115,7 @@ def imputar_deuda(
                     continue
 
             imputacion = Imputacion.objects.create(
+                **actor.campos(),
                 origen_content_type=origen_ct,
                 origen_id=comprobante_pago.pk,
                 destino_content_type=destino_ct,

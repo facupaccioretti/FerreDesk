@@ -6,6 +6,7 @@ from .control_fondos import (
     resolve_recent_activity_range,
 )
 from .postventa import registrar_cobro_diferencia, registrar_devolucion_cliente
+from .cheques import registrar_evento_cheque
 
 __all__ = [
     "build_recent_activity_metrics",
@@ -13,6 +14,7 @@ __all__ = [
     "invalidate_control_fondos_cache",
     "registrar_cobro_diferencia",
     "registrar_devolucion_cliente",
+    "registrar_evento_cheque",
     "resolve_control_fondos_preset",
     "resolve_recent_activity_range",
 ]

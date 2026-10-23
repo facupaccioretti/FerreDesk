@@ -4,8 +4,9 @@ from django.db.models import Sum, F, DecimalField
 from django.db.models.functions import Coalesce
 from django.conf import settings
 from django.utils import timezone
+from ferreapps.usuarios.models import ActorPersistidoMixin, crear_constraint_actor
 
-class Compra(models.Model):
+class Compra(ActorPersistidoMixin):
     """
     Modelo principal que almacena las cabeceras de las compras (registro interno para trazabilidad).
     """
@@ -172,6 +173,7 @@ class Compra(models.Model):
         ]
         # Restricción única: número de factura único por proveedor
         unique_together = [['comp_numero_factura', 'comp_idpro']]
+        constraints = [crear_constraint_actor('compras_compra_actor_valido')]
 
     def __str__(self):
         return f"Compra {self.comp_id} - {self.comp_numero_factura} - {self.comp_razon_social}"
@@ -320,7 +322,7 @@ class CompraDetalleItem(models.Model):
             )
 
 
-class OrdenCompra(models.Model):
+class OrdenCompra(ActorPersistidoMixin):
     """
     Modelo principal que almacena las cabeceras de las órdenes de compra (documento interno para pedidos).
     """
@@ -388,6 +390,7 @@ class OrdenCompra(models.Model):
         ]
         # Restricción única: número de orden único por proveedor
         unique_together = [['ord_numero', 'ord_idpro']]
+        constraints = [crear_constraint_actor('compras_orden_actor_valido')]
 
     def __str__(self):
         return f"Orden {self.ord_id} - {self.ord_numero} - {self.ord_razon_social}"

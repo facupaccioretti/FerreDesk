@@ -4,6 +4,7 @@ Utilidades para conversión de comprobantes
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 from ferreapps.cuenta_corriente.models import Imputacion
+from ferreapps.usuarios.services import actor_desde_raiz
 import logging
 
 
@@ -21,6 +22,7 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
     """
     logger = logging.getLogger(__name__)
     venta_ct = ContentType.objects.get_for_model(factura_interna)
+    actor = actor_desde_raiz(nueva_factura)
     
     # Buscar imputaciones relacionadas
     imputaciones_relacionadas = Imputacion.objects.filter(
@@ -59,6 +61,7 @@ def transferir_imputaciones_conversion(factura_interna, nueva_factura):
         imp.delete()
         
         Imputacion.objects.create(
+            **actor.campos(),
             origen=nueva_factura,
             destino=nueva_factura,
             imp_monto=monto,

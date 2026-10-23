@@ -18,6 +18,7 @@ from ferreapps.productos.utils_precios import calcular_precio_lista_0_final
 from ferreapps.proveedores.models import HistorialImportacionProveedor
 from ferreapps.promos.services.invalidacion import marcar_promos_desactualizadas
 from ferredesk_backend.utils.observability import medir_proceso
+from ferreapps.usuarios.services.actor_service import crear_actor_sistema
 
 
 class LimiteImportacionSincronicaExcedido(Exception):
@@ -57,6 +58,8 @@ def importar_lista_precios_proveedor(
     col_denominacion="C",
     fila_inicio=2,
     validar_limites_sync=True,
+    actor=None,
+    solicitud=None,
 ):
     filename = excel_file.name
     with medir_proceso(
@@ -204,8 +207,13 @@ def importar_lista_precios_proveedor(
                     registros_actualizados = len(stock_proves_modificados)
                     marcar_promos_desactualizadas(stock_ids_costo_modificado)
 
+            actor = actor or crear_actor_sistema(
+                etiqueta='Sistema - importacion de lista de precios'
+            )
             HistorialImportacionProveedor.objects.create(
+                **actor.campos(),
                 proveedor=proveedor,
+                importacion_lista_precios=solicitud,
                 nombre_archivo=filename,
                 registros_procesados=len(to_create),
                 registros_actualizados=registros_actualizados,
@@ -231,11 +239,13 @@ def crear_importacion_pendiente_lista_precios(
     col_precio="B",
     col_denominacion="C",
     fila_inicio=2,
+    actor,
 ):
     if hasattr(excel_file, "seek"):
         excel_file.seek(0)
 
     importacion = ImportacionListaPreciosProveedor(
+        **actor.campos(),
         proveedor=proveedor,
         usuario=usuario,
         nombre_archivo=os.path.basename(getattr(excel_file, "name", "archivo")),
@@ -290,6 +300,10 @@ def procesar_importacion_pendiente_lista_precios(importacion_id):
             col_denominacion=importacion.col_denominacion,
             fila_inicio=importacion.fila_inicio,
             validar_limites_sync=False,
+            actor=crear_actor_sistema(
+                etiqueta='Sistema - worker de lista de precios'
+            ),
+            solicitud=importacion,
         )
         importacion.estado = ImportacionListaPreciosProveedor.ESTADO_COMPLETADA
         importacion.registros_procesados = resultado["precios_cargados"]

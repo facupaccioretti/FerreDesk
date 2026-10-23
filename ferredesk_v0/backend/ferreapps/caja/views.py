@@ -27,6 +27,7 @@ from .models import (
     PagoVenta,
     CuentaBanco,
     Cheque,
+    ChequeEvento,
     ESTADO_CAJA_ABIERTA,
     ESTADO_CAJA_CERRADA,
     TIPO_MOVIMIENTO_ENTRADA,
@@ -34,6 +35,12 @@ from .models import (
     CODIGO_TRANSFERENCIA,
     CODIGO_QR,
     CODIGO_DESCUENTO_HABERES,
+)
+from .politicas_permisos import (
+    PERMISOS_CHEQUE_POR_ACCION,
+    PERMISOS_CUENTA_BANCO_POR_ACCION,
+    PERMISOS_MOVIMIENTO_CAJA_POR_ACCION,
+    PERMISOS_SESION_CAJA_POR_ACCION,
 )
 from .serializers import (
     SesionCajaSerializer,
@@ -54,7 +61,10 @@ from .serializers import (
 from .services import (
     build_control_fondos_payload,
     invalidate_control_fondos_cache,
+    registrar_evento_cheque,
 )
+from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferredesk_backend.permissions import RequierePermisoFuncional
 
 
 class SesionCajaViewSet(viewsets.ModelViewSet):
@@ -71,7 +81,9 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
     
     queryset = SesionCaja.objects.all()
     serializer_class = SesionCajaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = PERMISOS_SESION_CAJA_POR_ACCION
 
     def create(self, request, *args, **kwargs):
         return Response(
@@ -525,7 +537,9 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
     
     queryset = MovimientoCaja.objects.all()
     serializer_class = MovimientoCajaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = PERMISOS_MOVIMIENTO_CAJA_POR_ACCION
     http_method_names = ['get', 'post', 'head', 'options']
     
     def get_queryset(self):
@@ -541,6 +555,7 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         """Crea un nuevo movimiento en la caja abierta del usuario."""
+        actor = resolver_actor(request)
         # Obtener la caja abierta del usuario
         sesion = SesionCaja.objects.select_for_update().filter(
             usuario=request.user,
@@ -558,6 +573,7 @@ class MovimientoCajaViewSet(viewsets.ModelViewSet):
         
         # Crear el movimiento
         movimiento = MovimientoCaja.objects.create(
+            **actor.campos(incluir_usuario=False),
             sesion_caja=sesion,
             usuario=request.user,
             tipo=serializer.validated_data['tipo'],
@@ -580,7 +596,12 @@ class MetodoPagoViewSet(viewsets.ReadOnlyModelViewSet):
     
     queryset = MetodoPago.objects.filter(activo=True)
     serializer_class = MetodoPagoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = {
+        'list': 'caja.ver',
+        'retrieve': 'caja.ver',
+    }
     
     def get_queryset(self):
         """Permite filtrar todos los métodos incluyendo inactivos."""
@@ -604,7 +625,12 @@ class PagoVentaViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = PagoVenta.objects.all()
     serializer_class = PagoVentaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = {
+        'list': 'caja.ver',
+        'retrieve': 'caja.ver',
+    }
 
     def get_queryset(self):
         """Filtra pagos por venta si se especifica."""
@@ -622,7 +648,9 @@ class CuentaBancoViewSet(viewsets.ModelViewSet):
 
     queryset = CuentaBanco.objects.all()
     serializer_class = CuentaBancoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = PERMISOS_CUENTA_BANCO_POR_ACCION
 
     def get_queryset(self):
         """Opcional: filtrar solo activas para listados de selección."""
@@ -816,7 +844,9 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
     queryset = Cheque.objects.all()
     serializer_class = ChequeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.2'
+    permisos_por_accion = PERMISOS_CHEQUE_POR_ACCION
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_serializer_class(self):
@@ -864,10 +894,12 @@ class ChequeViewSet(viewsets.ModelViewSet):
             origen_cliente = Cliente.objects.filter(id=data['origen_cliente_id']).first()
 
         with transaction.atomic():
+            actor = resolver_actor(request)
             desc_entrada = data.get('origen_descripcion') or 'Caja general'
             movimiento_entrada = None
             if sesion_caja:
                 movimiento_entrada = MovimientoCaja.objects.create(
+                    **actor.campos(incluir_usuario=False),
                     sesion_caja=sesion_caja,
                     usuario=request.user,
                     tipo=TIPO_MOVIMIENTO_ENTRADA,
@@ -880,6 +912,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 monto_efectivo = data['monto_efectivo_entregado']
                 desc_salida = data.get('origen_descripcion') or ''
                 movimiento_salida = MovimientoCaja.objects.create(
+                    **actor.campos(incluir_usuario=False),
                     sesion_caja=sesion_caja,
                     usuario=request.user,
                     tipo=TIPO_MOVIMIENTO_SALIDA,
@@ -887,6 +920,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
                     descripcion=f"Efectivo entregado por cambio de cheque - {desc_salida}",
                 )
             cheque = Cheque.objects.create(
+                **actor.campos(incluir_usuario=False),
                 numero=data['numero'],
                 banco_emisor=data['banco_emisor'],
                 monto=data['monto'],
@@ -903,6 +937,13 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 movimiento_caja_salida=movimiento_salida,
                 comision_cambio=data.get('comision_cambio'),
                 usuario_registro=request.user,
+            )
+            registrar_evento_cheque(
+                cheque=cheque,
+                evento=ChequeEvento.EVENTO_ALTA,
+                estado_anterior='',
+                estado_nuevo=Cheque.ESTADO_EN_CARTERA,
+                actor=actor,
             )
         invalidate_control_fondos_cache(reason='cheque_create')
         return Response(
@@ -970,18 +1011,28 @@ class ChequeViewSet(viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
+            actor = resolver_actor(request)
+            cheque = Cheque.objects.select_for_update().get(pk=cheque.pk)
             # Movimiento de egreso de custodia
             from .utils import registrar_movimiento_custodia_cheque
             registrar_movimiento_custodia_cheque(
                 cheque, sesion_abierta, request.user,
                 Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
-                "depositado"
+                "depositado",
+                actor,
             )
 
             cheque.estado = Cheque.ESTADO_DEPOSITADO
             cheque.fecha_presentacion = hoy
             cheque.fecha_deposito_real = timezone.now()
             cheque.save(update_fields=['estado', 'fecha_presentacion', 'fecha_deposito_real'])
+            registrar_evento_cheque(
+                cheque=cheque,
+                evento=ChequeEvento.EVENTO_DEPOSITO,
+                estado_anterior=Cheque.ESTADO_EN_CARTERA,
+                estado_nuevo=Cheque.ESTADO_DEPOSITADO,
+                actor=actor,
+            )
         invalidate_control_fondos_cache(reason='cheque_depositar')
         return Response(ChequeSerializer(cheque).data)
 
@@ -1007,10 +1058,20 @@ class ChequeViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Cuenta bancaria no encontrada o inactiva.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            actor = resolver_actor(request)
+            cheque = Cheque.objects.select_for_update().get(pk=cheque.pk)
             cheque.estado = Cheque.ESTADO_ACREDITADO
             cheque.cuenta_banco_deposito = cuenta
             cheque.fecha_acreditacion = timezone.now()
             cheque.save(update_fields=['estado', 'cuenta_banco_deposito', 'fecha_acreditacion'])
+            registrar_evento_cheque(
+                cheque=cheque,
+                evento=ChequeEvento.EVENTO_ACREDITACION,
+                estado_anterior=Cheque.ESTADO_DEPOSITADO,
+                estado_nuevo=Cheque.ESTADO_ACREDITADO,
+                actor=actor,
+                detalles={'cuenta_banco_id': cuenta.pk},
+            )
             
             # No genera movimiento de caja (ya salió de custodia al depositar)
             # No requiere caja abierta (es un registro de tesorería bancaria)
@@ -1050,19 +1111,33 @@ class ChequeViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Solo se pueden endosar cheques EN_CARTERA.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            actor = resolver_actor(request)
+            cheques = Cheque.objects.select_for_update().filter(
+                id__in=cheque_ids,
+                estado=Cheque.ESTADO_EN_CARTERA,
+            )
             from .utils import registrar_movimiento_custodia_cheque
             for cheque in cheques:
                 # Movimiento de egreso de custodia
                 movimiento = registrar_movimiento_custodia_cheque(
                     cheque, sesion_abierta, request.user,
                     Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
-                    f"endosado a {proveedor.razon}"
+                    f"endosado a {proveedor.razon}",
+                    actor,
                 )
                 
                 cheque.estado = Cheque.ESTADO_ENTREGADO
                 cheque.proveedor = proveedor
                 cheque.movimiento_caja_salida = movimiento
                 cheque.save(update_fields=['estado', 'proveedor', 'movimiento_caja_salida'])
+                registrar_evento_cheque(
+                    cheque=cheque,
+                    evento=ChequeEvento.EVENTO_ENDOSO,
+                    estado_anterior=Cheque.ESTADO_EN_CARTERA,
+                    estado_nuevo=Cheque.ESTADO_ENTREGADO,
+                    actor=actor,
+                    detalles={'proveedor_id': proveedor.pk},
+                )
         invalidate_control_fondos_cache(reason='cheque_endosar')
         return Response({'endosados': len(cheque_ids)})
 
@@ -1091,12 +1166,16 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
+                actor = resolver_actor(request)
+                cheque = Cheque.objects.select_for_update().get(pk=cheque.pk)
                 # Estado original para determinar lógica de movimientos
                 estado_original = cheque.estado
 
                 # 1. Si estaba depositado, revertimos el ingreso en la sesión de caja (movimiento de tesorería)
                 if estado_original == Cheque.ESTADO_DEPOSITADO:
-                    registrar_contrasiento_cheque_depositado(cheque, sesion_caja, request.user)
+                    registrar_contrasiento_cheque_depositado(
+                        cheque, sesion_caja, request.user, actor
+                    )
                 
                 # 2. Si estaba en cartera, sale de custodia física (egreso)
                 elif estado_original == Cheque.ESTADO_EN_CARTERA:
@@ -1104,7 +1183,8 @@ class ChequeViewSet(viewsets.ModelViewSet):
                     registrar_movimiento_custodia_cheque(
                         cheque, sesion_caja, request.user,
                         Cheque.TIPO_MOVIMIENTO_SALIDA if hasattr(Cheque, 'TIPO_MOVIMIENTO_SALIDA') else 'SALIDA',
-                        "rechazado"
+                        "rechazado",
+                        actor,
                     )
                 
                 # 3. Si estaba entregado (endosado), ya salió de custodia al endosarse. 
@@ -1114,6 +1194,13 @@ class ChequeViewSet(viewsets.ModelViewSet):
                 # Limpiamos la ND si ya tenía una vinculada por error antes
                 cheque.nota_debito_venta = None
                 cheque.save(update_fields=['estado', 'nota_debito_venta'])
+                registrar_evento_cheque(
+                    cheque=cheque,
+                    evento=ChequeEvento.EVENTO_RECHAZO,
+                    estado_anterior=estado_original,
+                    estado_nuevo=Cheque.ESTADO_RECHAZADO,
+                    actor=actor,
+                )
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         invalidate_control_fondos_cache(reason='cheque_rechazado')
@@ -1145,16 +1232,26 @@ class ChequeViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            actor = resolver_actor(request)
+            cheque = Cheque.objects.select_for_update().get(pk=cheque.pk)
             # Movimiento de ingreso de custodia
             from .utils import registrar_movimiento_custodia_cheque
             registrar_movimiento_custodia_cheque(
                 cheque, sesion_abierta, request.user,
                 Cheque.TIPO_MOVIMIENTO_ENTRADA if hasattr(Cheque, 'TIPO_MOVIMIENTO_ENTRADA') else 'ENTRADA',
-                "reactivado"
+                "reactivado",
+                actor,
             )
 
             cheque.estado = Cheque.ESTADO_EN_CARTERA
             cheque.save(update_fields=['estado'])
+            registrar_evento_cheque(
+                cheque=cheque,
+                evento=ChequeEvento.EVENTO_REACTIVACION,
+                estado_anterior=Cheque.ESTADO_RECHAZADO,
+                estado_nuevo=Cheque.ESTADO_EN_CARTERA,
+                actor=actor,
+            )
         invalidate_control_fondos_cache(reason='cheque_reactivar')
         data = ChequeSerializer(cheque).data
         data['mensaje_siguiente_paso'] = (
@@ -1222,7 +1319,9 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
 
 class ControlFondosAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'caja.ver'
+    corte_permisos = '3.2'
 
     def get(self, request):
         payload = build_control_fondos_payload(

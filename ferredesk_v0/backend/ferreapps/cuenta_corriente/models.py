@@ -4,8 +4,9 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from decimal import Decimal
+from ferreapps.usuarios.models import ActorPersistidoMixin, ActorSnapshotMixin, crear_constraint_actor
 
-class Imputacion(models.Model):
+class Imputacion(ActorPersistidoMixin):
     """
     Imputación genérica: vincula un documento ORIGEN (pago/crédito)
     con un documento DESTINO (deuda/débito) por un monto.
@@ -73,6 +74,7 @@ class Imputacion(models.Model):
                 fields=['origen_content_type', 'origen_id', 'destino_content_type', 'destino_id', 'imp_idempotency_key'],
                 name='imputacion_origen_destino_idempotency_unique',
             ),
+            crear_constraint_actor('cuenta_corriente_imputacion_actor_valido'),
         ]
 
     def __str__(self):
@@ -89,7 +91,7 @@ class Imputacion(models.Model):
 
 
 
-class OrdenPago(models.Model):
+class OrdenPago(ActorSnapshotMixin):
     """
     Orden de pago a proveedores (similar a Recibo pero para pagos salientes).
     Representa un comprobante de pago que puede incluir efectivo, cheques propios y/o de terceros.
@@ -181,13 +183,14 @@ class OrdenPago(models.Model):
                 check=models.Q(op_total__gt=0),
                 name='op_total_positivo'
             ),
+            crear_constraint_actor('cuenta_corriente_orden_pago_actor_valido'),
         ]
 
     def __str__(self):
         return f"OP {self.op_numero} - {self.op_proveedor} (${self.op_total})"
 
 
-class AjusteProveedor(models.Model):
+class AjusteProveedor(ActorSnapshotMixin):
     TIPO_DEBITO = 'DEBITO'
     TIPO_CREDITO = 'CREDITO'
     TIPOS_AJUSTE = [
@@ -271,6 +274,7 @@ class AjusteProveedor(models.Model):
                 check=models.Q(aj_monto__gt=0),
                 name='aj_monto_positivo'
             ),
+            crear_constraint_actor('cuenta_corriente_ajuste_actor_valido'),
         ]
 
     def __str__(self):
@@ -278,7 +282,7 @@ class AjusteProveedor(models.Model):
         return f"Ajuste {tipo_label} {self.aj_numero} - {self.aj_proveedor} (${self.aj_monto})"
 
 
-class Recibo(models.Model):
+class Recibo(ActorSnapshotMixin):
     """
     Recibo de cobro a clientes (similar a Orden de Pago pero para cobros entrantes).
     Representa un comprobante de cobro que puede incluir efectivo, cheques, etc.
@@ -370,6 +374,7 @@ class Recibo(models.Model):
                 check=models.Q(rec_total__gt=0),
                 name='rec_total_positivo'
             ),
+            crear_constraint_actor('cuenta_corriente_recibo_actor_valido'),
         ]
 
     def __str__(self):

@@ -1,11 +1,13 @@
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from ferreapps.usuarios.services import resolver_actor
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 from rest_framework import status
 from decimal import Decimal
 import logging
@@ -20,6 +22,7 @@ from ferreapps.caja.utils import registrar_pagos_recibo
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('cuenta_corriente.operar_clientes')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def imputar_existente(request):
@@ -72,6 +75,10 @@ def imputar_existente(request):
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+imputar_existente.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.operar_clientes')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def crear_recibo_con_imputaciones(request):
@@ -92,7 +99,9 @@ def crear_recibo_con_imputaciones(request):
         cliente = get_object_or_404(Cliente, id=data['cliente_id'])
         
         with transaction.atomic():
+            actor = resolver_actor(request)
             recibo = Recibo.objects.create(
+                **actor.campos(incluir_usuario=False),
                 rec_fecha=data['rec_fecha'],
                 rec_numero=f"{data['rec_pv']}-{data['rec_numero']}",
                 rec_cliente=cliente,
@@ -136,6 +145,10 @@ def crear_recibo_con_imputaciones(request):
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+crear_recibo_con_imputaciones.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.anular')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def anular_recibo(request):
@@ -181,6 +194,10 @@ def anular_recibo(request):
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+anular_recibo.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.anular')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def anular_autoimputacion(request):
@@ -209,6 +226,10 @@ def anular_autoimputacion(request):
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+anular_autoimputacion.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.operar_clientes')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def modificar_imputaciones(request):
@@ -246,3 +267,6 @@ def modificar_imputaciones(request):
     except Exception as e:
         logger.error(f"Error al modificar imputaciones: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+modificar_imputaciones.corte_permisos = '3.4'

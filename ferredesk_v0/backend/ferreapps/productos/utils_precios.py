@@ -6,8 +6,11 @@ from decimal import Decimal, ROUND_HALF_UP
 
 
 @transaction.atomic
-def recalcular_precios_lista(lista_numero, margen_descuento):
+def recalcular_precios_lista(lista_numero, margen_descuento, actor=None):
     from .models import PrecioProductoLista, Stock
+    from ferreapps.usuarios.services.actor_service import crear_actor_sistema
+
+    actor = actor or crear_actor_sistema(etiqueta='Sistema - recalculo de precios')
 
     lista_numero = int(lista_numero)
     if lista_numero not in range(1, 5):
@@ -27,7 +30,11 @@ def recalcular_precios_lista(lista_numero, margen_descuento):
         PrecioProductoLista.objects.update_or_create(
             stock=stock,
             lista_numero=lista_numero,
-            defaults={'precio': precio, 'precio_manual': False},
+            defaults={
+                **actor.campos(),
+                'precio': precio,
+                'precio_manual': False,
+            },
         )
         recalculados += 1
     return recalculados, manuales

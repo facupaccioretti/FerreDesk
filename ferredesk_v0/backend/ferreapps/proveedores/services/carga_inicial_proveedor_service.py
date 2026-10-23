@@ -17,6 +17,7 @@ from ferreapps.proveedores.models import (
     SolicitudCargaInicialProveedor,
 )
 from ferredesk_backend.utils.observability import medir_proceso
+from ferreapps.usuarios.services.actor_service import crear_actor_sistema
 
 
 def normalizar_codigo_proveedor(texto):
@@ -86,6 +87,7 @@ def crear_solicitud_carga_inicial_pendiente(
     parametros_lote,
     filas_validas,
     totales_preview=None,
+    actor,
 ):
     nombre_archivo = nombre_archivo or "carga_inicial"
     parametros_lote = parametros_lote or {}
@@ -119,6 +121,7 @@ def crear_solicitud_carga_inicial_pendiente(
             return existente, False
 
         solicitud = SolicitudCargaInicialProveedor.objects.create(
+            **actor.campos(),
             proveedor=proveedor,
             usuario=usuario if getattr(usuario, "is_authenticated", False) else None,
             nombre_archivo=nombre_archivo,
@@ -285,7 +288,9 @@ def _reservar_ids_producto(cantidad):
     return ids
 
 
-def procesar_carga_inicial_proveedor(*, proveedor, nombre_archivo, parametros_lote, filas):
+def procesar_carga_inicial_proveedor(
+    *, proveedor, nombre_archivo, parametros_lote, filas, actor, solicitud=None
+):
     filas_creables, saltados = _preparar_filas_para_creacion(
         proveedor, parametros_lote, filas
     )
@@ -331,7 +336,9 @@ def procesar_carga_inicial_proveedor(*, proveedor, nombre_archivo, parametros_lo
             StockProve.objects.bulk_create(stock_proves, batch_size=500)
 
         HistorialImportacionProveedor.objects.create(
+            **actor.campos(),
             proveedor=proveedor,
+            solicitud=solicitud,
             nombre_archivo=nombre_archivo or "carga_inicial",
             registros_procesados=len(filas),
             registros_actualizados=len(stocks),
@@ -386,6 +393,10 @@ def procesar_solicitud_carga_inicial(solicitud_id):
                 nombre_archivo=solicitud.nombre_archivo,
                 parametros_lote=parametros_lote,
                 filas=filas,
+                actor=crear_actor_sistema(
+                    etiqueta='Sistema - worker de carga inicial'
+                ),
+                solicitud=solicitud,
             )
             medicion.registrar_metricas(
                 filas_procesadas=resultado["procesados"],

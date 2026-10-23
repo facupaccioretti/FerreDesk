@@ -15,6 +15,7 @@ from .serializers_listas_precio import (
     PrecioProductoListaSerializer,
     ActualizacionListaDePreciosSerializer,
 )
+from ferreapps.usuarios.services.actor_service import resolver_actor
 class ListaPrecioViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de listas de precios.
@@ -37,6 +38,7 @@ class ListaPrecioViewSet(viewsets.ModelViewSet):
     
     @transaction.atomic
     def partial_update(self, request, *args, **kwargs):
+        actor = resolver_actor(request)
         instancia = self.get_object()
         margen_anterior = instancia.margen_descuento
         
@@ -55,6 +57,7 @@ class ListaPrecioViewSet(viewsets.ModelViewSet):
             ).count()
             
             ActualizacionListaDePrecios.objects.create(
+                **actor.campos(),
                 lista_numero=lista_numero,
                 porcentaje_anterior=margen_anterior,
                 porcentaje_nuevo=margen_nuevo,
@@ -216,6 +219,7 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
     
     @transaction.atomic
     def partial_update(self, request, *args, **kwargs):
+        actor = resolver_actor(request)
         instancia = self.get_object()
         
         if 'precio' in request.data:
@@ -229,12 +233,20 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
             instancia.precio_manual = True
             instancia.fecha_carga_manual = timezone.now()
             instancia.usuario_carga_manual = request.user if request.user.is_authenticated else None
+            instancia.actor_tipo = actor.tipo
+            instancia.actor_usuario = actor.usuario
+            instancia.actor_perfil = actor.perfil
+            instancia.actor_etiqueta = actor.etiqueta
             instancia.save()
             
             serializer = self.get_serializer(instancia)
             return Response(serializer.data)
         
         return super().partial_update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        # Cualquier mutacion por el camino generico tambien actualiza la atribucion.
+        serializer.save(**resolver_actor(self.request).campos())
     
     @action(detail=False, methods=['post'], url_path='guardar-precios-producto')
     def guardar_precios_producto(self, request):
@@ -269,6 +281,7 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
         resultados = []
         
         with transaction.atomic():
+            actor = resolver_actor(request)
             for precio_data in precios:
                 lista_numero = precio_data.get('lista_numero')
                 precio_manual = precio_data.get('precio_manual', False)
@@ -278,6 +291,7 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
                         stock_id=stock_id,
                         lista_numero=lista_numero,
                         defaults={
+                            **actor.campos(),
                             'precio': precio_data.get('precio'),
                             'precio_manual': True,
                             'fecha_carga_manual': ahora,

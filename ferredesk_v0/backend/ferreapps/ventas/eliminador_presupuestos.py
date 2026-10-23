@@ -5,11 +5,13 @@ from rest_framework import status
 from django.db import transaction
 from django.utils import timezone
 from .models import Venta
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('ventas.crear')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def eliminar_presupuestos_antiguos(request):
@@ -74,6 +76,10 @@ def eliminar_presupuestos_antiguos(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+eliminar_presupuestos_antiguos.corte_permisos = '3.1'
+
+
+@requiere_permiso_funcional('ventas.ver')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def vista_previa_presupuestos_antiguos(request):
@@ -128,4 +134,7 @@ def vista_previa_presupuestos_antiguos(request):
         return Response({
             'error': f'Error interno del servidor: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+vista_previa_presupuestos_antiguos.corte_permisos = '3.1'
 

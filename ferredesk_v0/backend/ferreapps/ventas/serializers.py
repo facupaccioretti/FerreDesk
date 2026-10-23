@@ -16,6 +16,23 @@ from datetime import timedelta
 from django.utils import timezone
 
 
+class ActorOutputMixin:
+    actor = serializers.SerializerMethodField()
+
+    def get_actor(self, obj):
+        return {
+            'tipo': obj.actor_tipo,
+            'perfil_id': obj.actor_perfil_id,
+            'etiqueta': obj.actor_etiqueta,
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for campo in ('actor_tipo', 'actor_perfil', 'actor_usuario', 'actor_etiqueta'):
+            data.pop(campo, None)
+        return data
+
+
 class PrecioUnitarioField(serializers.DecimalField):
     def run_validation(self, data=empty):
         if data is None or (isinstance(data, str) and not data.strip()):
@@ -156,7 +173,8 @@ class VentaDetalleItemCalculadoSerializer(serializers.ModelSerializer):
             'denominacion', 'cantidad', 'precioFinal', 'costo', 'margen', 'bonificacion', 'idaliiva',
         ]
 
-class VentaSerializer(serializers.ModelSerializer):
+class VentaSerializer(ActorOutputMixin, serializers.ModelSerializer):
+    actor = serializers.SerializerMethodField()
     comprobante = ComprobanteSerializer(read_only=True)
     comprobante_id = serializers.CharField(write_only=True, required=False)
     tipo = serializers.SerializerMethodField()
@@ -190,6 +208,10 @@ class VentaSerializer(serializers.ModelSerializer):
             'ven_descu3': {'required': False, 'default': 0},
             'ven_vdocomvta': {'required': False, 'default': 0},
             'ven_vdocomcob': {'required': False, 'default': 0},
+            'actor_tipo': {'read_only': True},
+            'actor_perfil': {'read_only': True},
+            'actor_usuario': {'read_only': True},
+            'actor_etiqueta': {'read_only': True},
         }
 
     def get_tipo(self, obj):
@@ -838,7 +860,8 @@ class VentaRemPedSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class VentaCalculadaSerializer(serializers.ModelSerializer):
+class VentaCalculadaSerializer(ActorOutputMixin, serializers.ModelSerializer):
+    actor = serializers.SerializerMethodField()
     iva_desglose = serializers.SerializerMethodField()
     comprobante = serializers.SerializerMethodField()
     comprobantes_asociados = serializers.SerializerMethodField()
@@ -877,6 +900,12 @@ class VentaCalculadaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Venta # Cambiamos de VentaCalculada a Venta
         fields = '__all__'
+        extra_kwargs = {
+            'actor_tipo': {'read_only': True},
+            'actor_perfil': {'read_only': True},
+            'actor_usuario': {'read_only': True},
+            'actor_etiqueta': {'read_only': True},
+        }
 
     def get_ven_qr(self, obj):
         """Convierte el BinaryField del QR a base64 para ReactPDF"""

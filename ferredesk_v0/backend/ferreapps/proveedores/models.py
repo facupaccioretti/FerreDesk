@@ -2,23 +2,42 @@ from django.db import models
 from django.conf import settings
 from ferreapps.productos.models import Proveedor
 from ferreapps.productos.utils.file_paths import upload_carga_inicial_proveedor_temporal
+from ferreapps.usuarios.models import (
+    ActorPersistidoMixin,
+    crear_constraint_actor,
+)
 
 
-class HistorialImportacionProveedor(models.Model):
+class HistorialImportacionProveedor(ActorPersistidoMixin):
     proveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE, related_name='historial_importaciones')
     fecha = models.DateTimeField(auto_now_add=True)
     nombre_archivo = models.CharField(max_length=255)
     registros_procesados = models.IntegerField(default=0)
     registros_actualizados = models.IntegerField(default=0)
+    solicitud = models.ForeignKey(
+        'SolicitudCargaInicialProveedor',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='historiales',
+    )
+    importacion_lista_precios = models.ForeignKey(
+        'productos.ImportacionListaPreciosProveedor',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='historiales',
+    )
 
     class Meta:
         ordering = ['-fecha']
+        constraints = [crear_constraint_actor('proveedores_historial_actor_valido')]
 
     def __str__(self):
         return f"{self.proveedor.razon} - {self.nombre_archivo} ({self.registros_actualizados} act.)"
 
 
-class SolicitudCargaInicialProveedor(models.Model):
+class SolicitudCargaInicialProveedor(ActorPersistidoMixin):
     ESTADO_PENDIENTE = "pendiente"
     ESTADO_PROCESANDO = "procesando"
     ESTADO_COMPLETADA = "completada"
@@ -73,6 +92,7 @@ class SolicitudCargaInicialProveedor(models.Model):
         ]
         verbose_name = "Solicitud de carga inicial de proveedor"
         verbose_name_plural = "Solicitudes de carga inicial de proveedor"
+        constraints = [crear_constraint_actor('proveedores_solicitud_actor_valido')]
 
     def __str__(self):
         return f"{self.proveedor.razon} - {self.nombre_archivo} ({self.estado})"

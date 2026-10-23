@@ -32,6 +32,8 @@ from .utils_stock import (
     _total_disponible_en_proveedores,
 )
 from .utils_conversion import transferir_imputaciones_conversion
+from ferreapps.usuarios.services import resolver_actor
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +214,7 @@ def _asignar_comprobante_conversion(venta_data, cliente, ferreteria):
             return None, str(e)
 
 
-def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
+def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data, actor):
     """
     Crea auto-imputación si la factura está marcada como pagada.
     
@@ -232,6 +234,7 @@ def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
     monto_auto_imputacion = min(monto_pago, total_venta)
     
     Imputacion.objects.create(
+        **actor.campos(),
         origen=nueva_factura,
         destino=nueva_factura,
         imp_monto=monto_auto_imputacion,
@@ -240,7 +243,7 @@ def _crear_auto_imputacion_si_necesario(nueva_factura, venta_data):
     )
 
 
-def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_caja=None):
+def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, actor, sesion_caja=None):
     """
     Crea recibo de excedente si existe.
     
@@ -326,7 +329,7 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_ca
     }
     if sesion_caja is not None:
         recibo_kw['sesion_caja'] = sesion_caja
-    recibo = Venta.objects.create(**recibo_kw)
+    recibo = Venta.objects.create(**actor.campos(), **recibo_kw)
     
     # Crear item genérico para el recibo
     VentaDetalleItem.objects.create(
@@ -345,7 +348,7 @@ def _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_ca
     )
 
 
-def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja=None):
+def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, actor, sesion_caja=None):
     """
     Crea recibo parcial e imputación a la factura si existe recibo_parcial en data.
 
@@ -412,7 +415,7 @@ def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja
     }
     if sesion_caja is not None:
         recibo_kw['sesion_caja'] = sesion_caja
-    recibo_parcial = Venta.objects.create(**recibo_kw)
+    recibo_parcial = Venta.objects.create(**actor.campos(), **recibo_kw)
 
     VentaDetalleItem.objects.create(
         vdi_idve=recibo_parcial,
@@ -434,6 +437,7 @@ def _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja
         from datetime import datetime
         fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
     Imputacion.objects.create(
+        **actor.campos(),
         origen=recibo_parcial,
         destino=nueva_factura,
         imp_monto=monto_recibo_parcial,
@@ -501,12 +505,14 @@ def _gestionar_emision_arca(nueva_factura, tipo_comprobante, factura_interna_id,
 # VISTAS DE CONVERSIÓN
 # ============================================================================
 
+@requiere_permiso_funcional('ventas.facturar')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @requerir_setup_completo
 def convertir_presupuesto_a_venta(request):
     try:
         with transaction.atomic():
+            actor = resolver_actor(request)
             print("DEBUG - request.data:", request.data)
             print("DEBUG - presupuesto_origen:", request.data.get('presupuesto_origen'), type(request.data.get('presupuesto_origen')))
             print("DEBUG - items_seleccionados:", request.data.get('items_seleccionados'), type(request.data.get('items_seleccionados')))
@@ -682,7 +688,7 @@ def convertir_presupuesto_a_venta(request):
                         context={'items_expandidos': items_para_venta},
                     )
                     serializer.is_valid(raise_exception=True)
-                    venta = serializer.save()
+                    venta = serializer.save(**actor.campos())
                     
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     venta_creada = Venta.objects.get(ven_id=venta.ven_id)
@@ -704,6 +710,7 @@ def convertir_presupuesto_a_venta(request):
                     if comprobante_pagado and monto_pago > 0 and not data.get('recibo_parcial'):
                         monto_auto_imputacion = min(monto_pago, total_venta)
                         Imputacion.objects.create(
+                            **actor.campos(),
                             origen=venta_creada,
                             destino=venta_creada,
                             imp_monto=monto_auto_imputacion,
@@ -792,6 +799,7 @@ def convertir_presupuesto_a_venta(request):
                         
                         # Crear recibo (vincular a la misma sesión de caja)
                         recibo = Venta.objects.create(
+                            **actor.campos(),
                             ven_sucursal=1,
                             ven_fecha=recibo_excedente_data.get('rec_fecha', timezone.localdate()),
                             comprobante=comprobante_recibo,
@@ -856,6 +864,7 @@ def convertir_presupuesto_a_venta(request):
                                 f'El número de recibo X {rec_pv:04d}-{rec_num:08d} ya existe'
                             )
                         recibo_parcial = Venta.objects.create(
+                            **actor.campos(),
                             ven_sucursal=1,
                             ven_fecha=recibo_parcial_data.get('rec_fecha', timezone.localdate()),
                             comprobante=comprobante_recibo,
@@ -894,6 +903,7 @@ def convertir_presupuesto_a_venta(request):
                             from datetime import datetime
                             fecha_imp = datetime.strptime(fecha_imp, '%Y-%m-%d').date()
                         Imputacion.objects.create(
+                            **actor.campos(),
                             origen=recibo_parcial,
                             destino=venta_creada,
                             imp_monto=monto_recibo_parcial,
@@ -1007,6 +1017,10 @@ def convertir_presupuesto_a_venta(request):
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+convertir_presupuesto_a_venta.corte_permisos = '3.1'
+
+
+@requiere_permiso_funcional('ventas.facturar')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
@@ -1017,6 +1031,7 @@ def convertir_factura_interna_a_fiscal(request):
     Diferencia clave: items originales NO descontan stock nuevamente.
     """
     try:
+        actor = resolver_actor(request)
         data = request.data
         factura_interna_id = data.get('factura_interna_origen')
         tipo_conversion = data.get('tipo_conversion')
@@ -1158,7 +1173,7 @@ def convertir_factura_interna_a_fiscal(request):
                         context={'items_expandidos': items},
                     )
                     serializer.is_valid(raise_exception=True)
-                    nueva_factura = serializer.save()
+                    nueva_factura = serializer.save(**actor.campos())
                     
                     # 2. Obtener venta recién creada (igual que VentaForm.create())
                     nueva_factura = Venta.objects.get(ven_id=nueva_factura.ven_id)
@@ -1171,7 +1186,7 @@ def convertir_factura_interna_a_fiscal(request):
                     
                     # Crear auto-imputación usando función auxiliar (no si hay recibo parcial)
                     if not data.get('recibo_parcial'):
-                        _crear_auto_imputacion_si_necesario(nueva_factura, venta_data)
+                        _crear_auto_imputacion_si_necesario(nueva_factura, venta_data, actor)
                     
                     # === REGISTRAR PAGOS Y MOVIMIENTOS DE CAJA ===
                     # NOTA: En la fiscalización (factura interna a fiscal) NO se crean nuevos 
@@ -1180,9 +1195,13 @@ def convertir_factura_interna_a_fiscal(request):
                     pass
                     
                     # Crear recibo de excedente usando función auxiliar
-                    _crear_recibo_excedente_si_existe(nueva_factura, data, venta_data, sesion_caja=sesion_caja)
+                    _crear_recibo_excedente_si_existe(
+                        nueva_factura, data, venta_data, actor, sesion_caja=sesion_caja
+                    )
                     # Crear recibo parcial e imputación si existe
-                    _crear_recibo_parcial_si_existe(nueva_factura, data, venta_data, sesion_caja=sesion_caja)
+                    _crear_recibo_parcial_si_existe(
+                        nueva_factura, data, venta_data, actor, sesion_caja=sesion_caja
+                    )
                     
                     break
                 except IntegrityError as e:
@@ -1234,6 +1253,10 @@ def convertir_factura_interna_a_fiscal(request):
         raise
 
 
+convertir_factura_interna_a_fiscal.corte_permisos = '3.1'
+
+
+@requiere_permiso_funcional('ventas.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def verificar_imputaciones_comprobante(request, comprobante_id):
@@ -1352,6 +1375,10 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+verificar_imputaciones_comprobante.corte_permisos = '3.1'
+
+
+@requiere_permiso_funcional('cuenta_corriente.anular')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def eliminar_auto_imputaciones_cliente_generico(request, comprobante_id):
@@ -1423,3 +1450,6 @@ def eliminar_auto_imputaciones_cliente_generico(request, comprobante_id):
             'success': False,
             'detail': f'Error al eliminar auto-imputaciones: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+eliminar_auto_imputaciones_cliente_generico.corte_permisos = '3.4'

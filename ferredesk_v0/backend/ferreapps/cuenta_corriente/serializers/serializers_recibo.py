@@ -12,6 +12,7 @@ class ReciboSerializer(serializers.ModelSerializer):
     class Meta:
         model = Recibo
         fields = '__all__'
+        read_only_fields = ('actor_tipo', 'actor_perfil', 'actor_etiqueta')
 
 
 class ImputacionItemSerializer(serializers.Serializer):

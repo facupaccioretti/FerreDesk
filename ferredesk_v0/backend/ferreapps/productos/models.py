@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.conf import settings
+from ferreapps.usuarios.models import ActorPersistidoMixin, crear_constraint_actor
 import logging
 from django.contrib.postgres.indexes import GinIndex
 from .managers_productos_stock import ProductosStockQuerySet
@@ -625,7 +626,7 @@ class PrecioProveedorExcel(models.Model):
         return f"{self.proveedor.razon} - {self.codigo_producto_excel}: {self.precio}"
 
 
-class ImportacionListaPreciosProveedor(models.Model):
+class ImportacionListaPreciosProveedor(ActorPersistidoMixin):
     ESTADO_PENDIENTE = "pendiente"
     ESTADO_PROCESANDO = "procesando"
     ESTADO_COMPLETADA = "completada"
@@ -676,6 +677,7 @@ class ImportacionListaPreciosProveedor(models.Model):
         verbose_name = "Importacion de lista de precios de proveedor"
         verbose_name_plural = "Importaciones de listas de precios de proveedor"
         ordering = ("-creado_en",)
+        constraints = [crear_constraint_actor('productos_importacion_actor_valido')]
 
     def __str__(self):
         return f"{self.proveedor.razon} - {self.nombre_archivo} ({self.estado})"
@@ -768,7 +770,7 @@ class ListaPrecio(models.Model):
         return f"Lista {self.numero} - {self.nombre}"
 
 
-class PrecioProductoLista(models.Model):
+class PrecioProductoLista(ActorPersistidoMixin):
     """
     Precio de un producto para una lista específica (1-4).
     La Lista 0 se almacena directamente en Stock.precio_lista_0.
@@ -815,13 +817,14 @@ class PrecioProductoLista(models.Model):
             models.Index(fields=['lista_numero']),
             models.Index(fields=['precio_manual']),
         ]
+        constraints = [crear_constraint_actor('productos_precio_lista_actor_valido')]
 
     def __str__(self):
         tipo = "Manual" if self.precio_manual else "Calculado"
         return f"{self.stock.codvta} - Lista {self.lista_numero}: ${self.precio} ({tipo})"
 
 
-class ActualizacionListaDePrecios(models.Model):
+class ActualizacionListaDePrecios(ActorPersistidoMixin):
     """
     Registro de auditoría para actualizaciones de márgenes de listas.
     Permite rastrear cuándo se actualizó una lista y cuántos productos
@@ -861,6 +864,7 @@ class ActualizacionListaDePrecios(models.Model):
         verbose_name = 'Actualización de Lista de Precios'
         verbose_name_plural = 'Actualizaciones de Listas de Precios'
         ordering = ['-fecha_actualizacion']
+        constraints = [crear_constraint_actor('productos_actualizacion_lista_actor_valido')]
 
     def __str__(self):
         return f"Lista {self.lista_numero}: {self.porcentaje_anterior}% → {self.porcentaje_nuevo}% ({self.fecha_actualizacion.strftime('%d/%m/%Y %H:%M')})"

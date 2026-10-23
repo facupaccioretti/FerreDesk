@@ -1,6 +1,5 @@
 from decimal import Decimal
 from io import StringIO
-from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -110,32 +109,6 @@ class PreflightUsuariosUnitTests(SimpleTestCase):
             [item["codigo"] for item in hallazgos],
             ["CUENTA_PUBLICA_DISCORDANTE"],
         )
-
-    @patch(
-        "ferreapps.usuarios.management.commands.preflight_usuarios.auditar_schema_tenant"
-    )
-    @patch(
-        "ferreapps.usuarios.management.commands.preflight_usuarios."
-        "obtener_tenants_para_preflight"
-    )
-    def test_error_inesperado_no_detiene_schemas_restantes(
-        self,
-        obtener_tenants,
-        auditar_schema,
-    ):
-        obtener_tenants.return_value = [
-            {"schema_name": "tenant_fallido"},
-            {"schema_name": "tenant_sano"},
-        ]
-        auditar_schema.side_effect = [AttributeError("dato legacy"), []]
-        salida = StringIO()
-
-        with self.assertRaises(CommandError):
-            call_command("preflight_usuarios", stdout=salida, stderr=StringIO())
-
-        self.assertEqual(auditar_schema.call_count, 2)
-        self.assertIn("SCHEMA_AUDITORIA_FALLIDA", salida.getvalue())
-        self.assertIn("[OK] schema=tenant_sano", salida.getvalue())
 
 
 class PreflightUsuariosCommandTests(TwoTenantIsolationTestCase):

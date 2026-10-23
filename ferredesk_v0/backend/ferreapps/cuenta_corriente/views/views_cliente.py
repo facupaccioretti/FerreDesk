@@ -6,6 +6,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
+from ferredesk_backend.permissions import RequierePermisoFuncional
 from decimal import Decimal
 import logging
 
@@ -20,6 +22,7 @@ from ferreapps.clientes.models import Cliente
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def cuenta_corriente_cliente(request, cliente_id):
@@ -63,6 +66,10 @@ def cuenta_corriente_cliente(request, cliente_id):
         )
 
 
+cuenta_corriente_cliente.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def facturas_pendientes_cliente(request, cliente_id):
@@ -94,6 +101,10 @@ def facturas_pendientes_cliente(request, cliente_id):
         )
 
 
+facturas_pendientes_cliente.corte_permisos = '3.4'
+
+
+@requiere_permiso_funcional('cuenta_corriente.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def clientes_con_movimientos(request):
@@ -126,7 +137,14 @@ def clientes_con_movimientos(request):
         )
 
 
+clientes_con_movimientos.corte_permisos = '3.4'
+
+
 class CuentaCorrienteAPIView(APIView):
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'cuenta_corriente.ver'
+    corte_permisos = '3.4'
+
     def get(self, request):
         return Response({
             'mensaje': 'API de Cuenta Corriente unificada funcionando',

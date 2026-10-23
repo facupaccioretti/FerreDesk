@@ -6,7 +6,7 @@ Base verificada: rama `arreglos-1210`, commit `43d5096862562ebb7d985aebc2ffd15ec
 
 ### Alcance de construccion
 
-Se implementan perfiles locales al schema tenant, PIN, permisos efectivos, actor operativo, auditoria de identidad, sesion operativa y cobertura automatica de URLs. No se crean usuarios empleados, roles compartidos, permisos JSON libres, `/me`, un motor generico por objeto ni el renombre `Ferreteria` a `Negocio`. Las reglas particulares permanecen en el modulo propietario. El backend es la autoridad y deniega por defecto.
+Se implementan perfiles locales al schema tenant, PIN, permisos efectivos, actor operativo, auditoria de identidad, sesion operativa y cobertura automatica de URLs. No se crean usuarios empleados, roles compartidos, permisos JSON libres, `/me`, un motor generico por objeto ni el renombre `Ferreteria` a `Negocio`. El catalogo, sus dependencias, las plantillas y el evaluador permanecen centralizados en `ferreapps/usuarios/permisos.py`; la asignacion de permisos a endpoints y acciones pertenece al modulo funcional. Las reglas particulares permanecen en el modulo propietario. El backend es la autoridad y deniega por defecto.
 
 `GET /api/user/` sigue siendo la unica lectura durable de la sesion. `login_view` solo abre la sesion de la cuenta; no se convierte en otra fuente de permisos. Antes de la adopcion, el actor es `TITULAR` y conserva el acceso actual. Despues de la adopcion, toda operacion humana exige un `Perfil` activo, incluido el Dueño.
 
@@ -96,6 +96,7 @@ La etapa 3 se entrega en cortes para limitar riesgo: `3.0` catalogo/evaluador/me
 | `ferreapps/usuarios/tests/` | Pruebas | En etapa 4 reemplaza `tests.py`; mover el test de cierre de `register` y separar modelos, servicios, API, permisos y migraciones. |
 | `ferreapps/usuarios/management/commands/preflight_usuarios.py` | Preflight | Recorrer tenants y reportar bloqueantes sin escribir. |
 | `ferreapps/usuarios/management/commands/verificar_cobertura_permisos.py` | Cobertura | Recorrer el resolver real, generar CSV/JSON y fallar ante operaciones API sin clasificar. |
+| `<app>/politicas_permisos.py` | Politica local opcional de asignacion | Alojar matrices extensas y funciones puras que seleccionan un permiso segun accion y datos minimos. Se crea solo cuando existe una matriz extensa, una decision dinamica o logica compartida; no reemplaza `ferreapps/usuarios/permisos.py`, no evalua actores y no contiene reglas comerciales, contables o fiscales. |
 | `ferreapps/login/views.py` | Login y sesion existente | Ampliar `user_view`; login solo autentica la cuenta; logout limpia ambos niveles; reforzar bridge en corte independiente. |
 | `ferredesk_backend/utils/exceptions.py` | Formato de errores API | Agregar una excepcion propia para errores funcionales nuevos y adaptar el handler para emitir `status`, `code`, `message` y `fields`, preservando las respuestas legacy no intervenidas. |
 | `ferredesk_backend/settings/base.py` | Infraestructura | Insertar middleware despues de `AuthenticationMiddleware`, retirar Basic Auth, fijar sesion de 60 dias sin guardado por request, `PERFIL_INACTIVIDAD_SEGUNDOS = 900` y agregar flag temporal global. |
@@ -257,7 +258,9 @@ La administracion frontend consume el listado sin `incluir_deshabilitados` y, po
 
 ### Declaracion y cobertura de permisos
 
-`RequierePermisoFuncional` llama al evaluador unico. APIViews declaran `permiso_requerido = "productos.ver"`; ViewSets declaran `permisos_por_accion = {"list": "productos.ver", ...}`. Una accion no incluida se deniega aunque conserve `IsAuthenticated`. Las FBV Django usan `@requiere_permiso_funcional("...")`. Las excepciones se marcan como `publica`, `sesion_exenta`, `infraestructura` o `deprecada`; no equivalen a permiso vacio. Reglas de objeto se ejecutan en selectors/validators/services del modulo propietario; objetos invisibles se filtran en queryset y devuelven `404`.
+`RequierePermisoFuncional` llama al evaluador unico. APIViews declaran `permiso_requerido = "productos.ver"`; ViewSets declaran `permisos_por_accion = {"list": "productos.ver", ...}` o importan una matriz desde `<app>/politicas_permisos.py`. En ambos casos, `permisos_por_accion` permanece expuesto como atributo de clase del ViewSet para que el adaptador y `verificar_cobertura_permisos` puedan inspeccionarlo. Una accion no incluida se deniega aunque conserve `IsAuthenticated`.
+
+Cuando la asignacion depende de datos minimos del request, `get_permiso_requerido` actua solo como adaptador: obtiene `action`, extrae esos valores y delega la decision a una funcion pura de la politica local. No evalua actores, perfiles ni permisos. Las FBV con un unico permiso estatico mantienen `@requiere_permiso_funcional("...")` junto al endpoint, y los `permiso_requerido` simples permanecen en la APIView. No se crea un mapa global de endpoints. Las excepciones se marcan como `publica`, `sesion_exenta`, `infraestructura` o `deprecada`; no equivalen a permiso vacio. Reglas de objeto se ejecutan en selectors/validators/services del modulo propietario; objetos invisibles se filtran en queryset y devuelven `404`.
 
 Los permisos son funcionales, no de propiedad. `ventas.ver` consulta todas las ventas visibles del tenant y `ventas.postventa` permite iniciar cualquier flujo de Postventa sobre cualquiera de ellas, sujeto a reglas comerciales y fiscales. No existen `ventas.anular` ni `ventas.anular_ajenas`. `cuenta_corriente.anular` conserva su significado propio y no compara el actor creador. `clientes.ver_restringidos` es una regla de objeto adicional y obligatoria para el Cliente y para toda su cuenta corriente; se aplica en querysets, lookups, POS, informes, exportaciones y acceso directo, pero no sustituye el permiso `cuenta_corriente.*` que corresponda.
 
@@ -314,6 +317,8 @@ El despliegue incluye un guion breve para soporte y clientes: la contraseña abr
 | 7 | Migraciones shared/tenant completas, postflight, E2E y piloto; flag en ambos estados; adopcion voluntaria; rollback operativo; observacion; retiro de compatibilidad y deprecados solo sin consumidores. |
 
 Todos los tests verifican comportamiento observable. Las pruebas sensibles ejecutan `transaction.atomic`, concurrencia real cuando corresponda y al menos dos schemas, ademas de `public` y un host sin tenant por `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True`.
+
+Las decisiones dinamicas de asignacion se prueban directamente como funciones puras, ademas de conservar pruebas HTTP con y sin permiso. Cada corte ejecuta `verificar_cobertura_permisos` y demuestra que las matrices importadas siguen siendo introspectables mediante el atributo `permisos_por_accion` del ViewSet.
 
 ### Estado de consolidacion
 

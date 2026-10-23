@@ -15,6 +15,11 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+from ferreapps.usuarios.models import (
+    ActorPersistidoMixin,
+    ActorSnapshotMixin,
+    crear_constraint_actor,
+)
 
 
 # =============================================================================
@@ -191,7 +196,7 @@ class SesionCaja(models.Model):
 # MODELO: MovimientoCaja
 # =============================================================================
 
-class MovimientoCaja(models.Model):
+class MovimientoCaja(ActorSnapshotMixin):
     """Registra movimientos manuales de efectivo (ingresos o egresos).
     
     Ejemplos de uso:
@@ -279,6 +284,7 @@ class MovimientoCaja(models.Model):
                 check=models.Q(tipo__in=[TIPO_MOVIMIENTO_ENTRADA, TIPO_MOVIMIENTO_SALIDA]),
                 name='caja_mov_tipo_valido',
             ),
+            crear_constraint_actor('caja_movimiento_actor_valido'),
         ]
 
     def __str__(self):
@@ -690,7 +696,7 @@ class CuentaBanco(models.Model):
 # MODELO: Cheque
 # =============================================================================
 
-class Cheque(models.Model):
+class Cheque(ActorSnapshotMixin):
     """Cheque físico ingresado como forma de cobro.
 
     Ciclo de vida:
@@ -934,6 +940,7 @@ class Cheque(models.Model):
             models.Index(fields=['recibo']),
             models.Index(fields=['estado', 'cuenta_banco_deposito'], name='caja_che_estado_cuenta_idx'),
         ]
+        constraints = [crear_constraint_actor('caja_cheque_actor_valido')]
 
     def __str__(self):
         return f"Cheque {self.numero} - ${self.monto}"
@@ -962,3 +969,35 @@ class Cheque(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+
+class ChequeEvento(ActorPersistidoMixin):
+    EVENTO_ALTA = 'ALTA'
+    EVENTO_DEPOSITO = 'DEPOSITO'
+    EVENTO_ACREDITACION = 'ACREDITACION'
+    EVENTO_ENDOSO = 'ENDOSO'
+    EVENTO_RECHAZO = 'RECHAZO'
+    EVENTO_REACTIVACION = 'REACTIVACION'
+    EVENTOS = [
+        (EVENTO_ALTA, 'Alta'),
+        (EVENTO_DEPOSITO, 'Deposito'),
+        (EVENTO_ACREDITACION, 'Acreditacion'),
+        (EVENTO_ENDOSO, 'Endoso'),
+        (EVENTO_RECHAZO, 'Rechazo'),
+        (EVENTO_REACTIVACION, 'Reactivacion'),
+    ]
+
+    cheque = models.ForeignKey(Cheque, on_delete=models.PROTECT, related_name='eventos')
+    evento = models.CharField(max_length=16, choices=EVENTOS)
+    estado_anterior = models.CharField(max_length=20, blank=True, default='')
+    estado_nuevo = models.CharField(max_length=20)
+    detalles = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'CHEQUE_EVENTO'
+        ordering = ['creado_en', 'id']
+        indexes = [
+            models.Index(fields=['cheque', 'creado_en'], name='caja_che_evento_fecha_idx'),
+        ]
+        constraints = [crear_constraint_actor('caja_cheque_evento_actor_valido')]

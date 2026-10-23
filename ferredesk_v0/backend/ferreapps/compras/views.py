@@ -27,6 +27,7 @@ from django.db import transaction
 from decimal import Decimal
 from django.db import IntegrityError
 from django.utils import timezone
+from ferreapps.usuarios.services import resolver_actor
 import logging
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -131,7 +132,8 @@ class CompraViewSet(viewsets.ModelViewSet):
         try:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            compra = serializer.save()
+            actor = resolver_actor(request)
+            compra = serializer.save(**actor.campos())
             
             return Response(
                 CompraSerializer(compra).data,
@@ -642,7 +644,8 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         try:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            orden = serializer.save()
+            actor = resolver_actor(request)
+            orden = serializer.save(**actor.campos())
             
             return Response(
                 OrdenCompraSerializer(orden).data,
@@ -731,6 +734,7 @@ def convertir_orden_compra_a_compra(request):
     """
     try:
         with transaction.atomic():
+            actor = resolver_actor(request)
             data = request.data
             orden_id = data.get('orden_origen')
             items_seleccionados = data.get('items_seleccionados', [])
@@ -828,7 +832,7 @@ def convertir_orden_compra_a_compra(request):
             # Crear la compra usando el serializer
             serializer = CompraCreateSerializer(data=compra_data, context={'es_conversion_orden_compra': True})
             serializer.is_valid(raise_exception=True)
-            compra = serializer.save()
+            compra = serializer.save(**actor.campos())
 
             # Manejar items de la orden con lógica de cantidades
             # Procesar cada item seleccionado

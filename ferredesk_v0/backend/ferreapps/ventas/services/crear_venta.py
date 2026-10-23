@@ -38,6 +38,7 @@ def crear_documento_venta_desde_payload(
     *,
     payload,
     usuario,
+    actor,
     sesion_caja=None,
     permitir_registrar_pagos=False,
     origen_postventa=False,
@@ -88,7 +89,7 @@ def crear_documento_venta_desde_payload(
         serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
-                venta = serializer.save()
+                venta = serializer.save(**actor.campos())
             break
         except IntegrityError as exc:
             if "unique" not in str(exc).lower() and "duplicate" not in str(exc).lower():
