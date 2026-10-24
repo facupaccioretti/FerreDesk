@@ -28,7 +28,11 @@ from ..serializers import (
     VentaRemPedSerializer, VentaCalculadaSerializer, VentaDetalleItemCalculadoSerializer
 )
 from ferreapps.productos.models import Ferreteria, StockProve
-from ferreapps.clientes.models import Cliente
+from ferreapps.clientes.selectors import (
+    cliente_visible_or_404,
+    clientes_visibles,
+    filtrar_por_cliente_visible,
+)
 from ..utils import asignar_comprobante, _construir_respuesta_comprobante
 from ..ARCA import emitir_arca_automatico, debe_emitir_arca, FerreDeskARCAError
 from .utils_stock import (
@@ -213,7 +217,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Aseguramos que el filtro use el modelo adecuado para la vista
             self.filterset_class = VentaCalculadaFilter
             # Usamos el manager personalizado con todas las anotaciones necesarias
-            return Venta.objects.con_calculos().select_related(
+            queryset = Venta.objects.con_calculos().select_related(
                 'factura_fiscal_convertida__comprobante',
                 'factura_fiscal_convertida__sesion_caja__usuario',
             ).prefetch_related(
@@ -232,9 +236,12 @@ class VentaViewSet(viewsets.ModelViewSet):
                     to_attr='_facturas_anuladas_prefetch',
                 ),
             ).order_by('-ven_fecha', '-ven_id')
+            return filtrar_por_cliente_visible(queryset, self.request, 'ven_idcli')
         # Restablecemos el filtro original para otras acciones
         self.filterset_class = VentaFilter
-        return super().get_queryset()
+        return filtrar_por_cliente_visible(
+            super().get_queryset(), self.request, 'ven_idcli'
+        )
 
     def get_serializer_class(self):
         if getattr(self, 'action', None) == 'list':
@@ -304,6 +311,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         actor = resolver_actor(request)
+        cliente = cliente_visible_or_404(request, id=data.get('ven_idcli'))
         items = data.get('items', [])
         tipo_comprobante = data.get('tipo_comprobante')
         # Para Notas de Débito y su equivalente interno permitimos items vacíos;
@@ -406,8 +414,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                 payload = {'detail': 'Error de stock', 'errores': errores_stock}
                 transaction.set_rollback(True)
                 return Response({'detail': str(payload)}, status=status.HTTP_400_BAD_REQUEST)
-        cliente_id = data.get('ven_idcli')
-        cliente = Cliente.objects.filter(id=cliente_id).first()
         situacion_iva_ferreteria = getattr(ferreteria, 'situacion_iva', None)
         tipo_iva_cliente = (cliente.iva.nombre if cliente and cliente.iva else '').strip().lower()
         
@@ -806,7 +812,12 @@ class VentaViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     @requerir_setup_completo
     def convertir_a_venta(self, request, pk=None):
-        venta = get_object_or_404(Venta.objects.select_for_update(), pk=pk)
+        venta = get_object_or_404(
+            filtrar_por_cliente_visible(
+                Venta.objects.select_for_update(), request, 'ven_idcli'
+            ),
+            pk=pk,
+        )
         try:
             if venta.comprobante and (venta.comprobante.tipo == 'presupuesto' or venta.comprobante.nombre.lower().startswith('presupuesto')):
                 # === OBTENER SESIÓN DE CAJA ===
@@ -933,7 +944,9 @@ class VentaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def ticket(self, request, pk=None):
         # Utilizamos con_calculos() para asegurarnos de traer los subtotales anotados
-        venta = Venta.objects.con_calculos().filter(pk=pk).first()
+        venta = filtrar_por_cliente_visible(
+            Venta.objects.con_calculos(), request, 'ven_idcli'
+        ).filter(pk=pk).first()
         if not venta:
             return Response({'detail': 'Venta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -952,6 +965,11 @@ class VentaDetalleItemViewSet(viewsets.ReadOnlyModelViewSet):
         'retrieve': 'ventas.ver',
     }
 
+    def get_queryset(self):
+        return filtrar_por_cliente_visible(
+            super().get_queryset(), self.request, 'vdi_idve__ven_idcli'
+        )
+
 
 class VentaDetalleManViewSet(viewsets.ModelViewSet):
     queryset = VentaDetalleMan.objects.all()
@@ -960,6 +978,12 @@ class VentaDetalleManViewSet(viewsets.ModelViewSet):
     corte_permisos = '3.1'
     permisos_por_accion = PERMISOS_VENTA_DETALLE_MAN_POR_ACCION
 
+    def get_queryset(self):
+        ventas = filtrar_por_cliente_visible(
+            Venta.objects.all(), self.request, 'ven_idcli'
+        ).values_list('ven_id', flat=True)
+        return super().get_queryset().filter(vdm_idve__in=ventas)
+
 
 class VentaRemPedViewSet(viewsets.ModelViewSet):
     queryset = VentaRemPed.objects.all()
@@ -967,6 +991,10 @@ class VentaRemPedViewSet(viewsets.ModelViewSet):
     permission_classes = [RequierePermisoFuncional]
     corte_permisos = '3.1'
     permisos_por_accion = PERMISOS_VENTA_REM_PED_POR_ACCION
+
+    def get_queryset(self):
+        clientes = clientes_visibles(self.request).values_list('id', flat=True)
+        return super().get_queryset().filter(vrp_idcli__in=clientes)
 
 
 class VentaDetalleItemCalculadoFilter(FilterSet):
@@ -992,6 +1020,11 @@ class VentaDetalleItemCalculadoViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaDetalleItemCalculadoFilter
 
+    def get_queryset(self):
+        return filtrar_por_cliente_visible(
+            super().get_queryset(), self.request, 'vdi_idve__ven_idcli'
+        )
+
 
 class VentaIVAAlicuotaFilter(FilterSet):
     vdi_idve = NumberFilter(field_name='vdi_idve')
@@ -1015,7 +1048,12 @@ class VentaIVAAlicuotaViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         # Replicamos la lógica de agrupación de la vista VENTAIVA_ALICUOTA
-        return VentaDetalleItem.objects.con_calculos().values(
+        queryset = filtrar_por_cliente_visible(
+            VentaDetalleItem.objects.con_calculos(),
+            self.request,
+            'vdi_idve__ven_idcli',
+        )
+        return queryset.values(
             'vdi_idve', 'ali_porce'
         ).annotate(
             neto_gravado=Sum('subtotal_neto'),
@@ -1044,3 +1082,8 @@ class VentaCalculadaViewSet(viewsets.ReadOnlyModelViewSet):
     }
     filter_backends = [DjangoFilterBackend]
     filterset_class = VentaCalculadaFilter
+
+    def get_queryset(self):
+        return filtrar_por_cliente_visible(
+            super().get_queryset(), self.request, 'ven_idcli'
+        )

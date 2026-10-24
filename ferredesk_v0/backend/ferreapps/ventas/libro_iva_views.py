@@ -13,12 +13,14 @@ import logging
 
 from .servicies.libro_iva_service import generar_libro_iva_ventas
 from .servicies.libro_iva_validator import validar_libro_iva, validar_periodo_libro_iva
+from ferreapps.clientes.selectors import puede_ver_clientes_restringidos
+from .permissions import DeniegaLibroIvaDeprecado
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def generar_libro_iva_ventas_endpoint(request):
     """
     Endpoint principal para generar el Libro IVA Ventas.
@@ -85,7 +87,14 @@ def generar_libro_iva_ventas_endpoint(request):
         usuario = request.user.username if request.user else None
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos, usuario)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            tipo_libro,
+            incluir_presupuestos,
+            usuario,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         
         # Validar integridad de los datos generados
         validaciones = validar_libro_iva(datos_libro)
@@ -119,7 +128,7 @@ def generar_libro_iva_ventas_endpoint(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def obtener_estadisticas_libro_iva(request):
     """
     Endpoint para obtener estadísticas básicas del libro IVA.
@@ -164,7 +173,11 @@ def obtener_estadisticas_libro_iva(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA (solo para obtener estadísticas)
-        datos_libro = generar_libro_iva_ventas(mes, anio)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         
         # Respuesta con estadísticas
         respuesta = {
@@ -190,4 +203,15 @@ def obtener_estadisticas_libro_iva(request):
         logger.error(f"Error obteniendo estadísticas libro IVA: {str(e)}", exc_info=True)
         return Response({
             'detail': 'Error interno del servidor al obtener estadísticas'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+generar_libro_iva_ventas_endpoint.exencion_permiso = 'deprecada'
+generar_libro_iva_ventas_endpoint.metodos_deprecados = ('POST',)
+generar_libro_iva_ventas_endpoint.retiro_deprecado_en = '7'
+generar_libro_iva_ventas_endpoint.corte_permisos = '3.11'
+
+obtener_estadisticas_libro_iva.exencion_permiso = 'deprecada'
+obtener_estadisticas_libro_iva.metodos_deprecados = ('GET',)
+obtener_estadisticas_libro_iva.retiro_deprecado_en = '7'
+obtener_estadisticas_libro_iva.corte_permisos = '3.11'

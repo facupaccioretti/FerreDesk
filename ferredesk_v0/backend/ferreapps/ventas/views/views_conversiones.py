@@ -2,6 +2,7 @@
 Funciones de conversión de comprobantes (presupuestos, facturas internas).
 """
 from django.shortcuts import get_object_or_404
+from django.http import Http404
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db import IntegrityError
@@ -17,7 +18,10 @@ import logging
 from ..models import Comprobante, PostventaOperacion, Venta, VentaDetalleItem
 from ..serializers import VentaSerializer
 from ferreapps.productos.models import Ferreteria, StockProve
-from ferreapps.clientes.models import Cliente
+from ferreapps.clientes.selectors import (
+    cliente_visible_or_404,
+    filtrar_por_cliente_visible,
+)
 from django.contrib.contenttypes.models import ContentType
 from ferreapps.cuenta_corriente.models import Imputacion
 from ..utils import asignar_comprobante, _construir_respuesta_comprobante
@@ -539,7 +543,9 @@ def convertir_presupuesto_a_venta(request):
 
             print("DEBUG - INICIO BLOQUE ATOMICO")
             # Obtener el presupuesto con bloqueo
-            presupuesto = Venta.objects.select_for_update().get(ven_id=presupuesto_id)
+            presupuesto = filtrar_por_cliente_visible(
+                Venta.objects.select_for_update(), request, 'ven_idcli'
+            ).get(ven_id=presupuesto_id)
             print("DEBUG - Presupuesto obtenido:", presupuesto)
             
             # === VALIDACIÓN: NO PERMITIR RECONVERSIÓN ===
@@ -625,7 +631,9 @@ def convertir_presupuesto_a_venta(request):
                 raise Exception('El tipo de comprobante es requerido')
 
             # Obtener la situación fiscal de la ferretería y el cliente
-            cliente = Cliente.objects.get(id=venta_data.get('ven_idcli'))
+            cliente = cliente_visible_or_404(
+                request, id=venta_data.get('ven_idcli')
+            )
             situacion_iva_ferreteria = ferreteria.situacion_iva
             tipo_iva_cliente = cliente.iva.nombre.strip().lower()
 
@@ -1012,6 +1020,13 @@ def convertir_presupuesto_a_venta(request):
             
             return Response(response_data)
 
+    except Http404:
+        raise
+    except Venta.DoesNotExist:
+        return Response(
+            {'detail': 'Presupuesto no encontrado'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
     except Exception as e:
         print("DEBUG - Error en convertir_presupuesto_a_venta:", str(e))
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1042,7 +1057,9 @@ def convertir_factura_interna_a_fiscal(request):
         
         # Obtener factura interna original
         try:
-            factura_interna = Venta.objects.select_for_update().get(
+            factura_interna = filtrar_por_cliente_visible(
+                Venta.objects.select_for_update(), request, 'ven_idcli'
+            ).get(
                 ven_id=factura_interna_id,
                 comprobante__tipo='factura_interna'
             )
@@ -1111,7 +1128,7 @@ def convertir_factura_interna_a_fiscal(request):
 
             # Asignar comprobante usando función auxiliar
             cliente_id = venta_data.get('ven_idcli')
-            cliente = Cliente.objects.filter(id=cliente_id).first()
+            cliente = cliente_visible_or_404(request, id=cliente_id)
             tipo_comprobante = venta_data.get('tipo_comprobante')
             
             comprobante, error = _asignar_comprobante_conversion(venta_data, cliente, ferreteria)
@@ -1297,7 +1314,9 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
             if (imp.origen_content_type == venta_ct and imp.origen_id == imp.destino_id and 
                 imp.origen_content_type == imp.destino_content_type):
                 # Auto-imputación
-                vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
+                vc = filtrar_por_cliente_visible(
+                    Venta.objects.con_calculos(), request, 'ven_idcli'
+                ).filter(ven_id=imp.destino_id).first()
                 if vc:
                     comprobantes_relacionados.append({
                         'tipo': 'auto_imputacion',
@@ -1310,7 +1329,9 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                 # Esta cotización está siendo pagada
                 # El origen es el recibo
                 if imp.origen_content_type == venta_ct:
-                    vc = Venta.objects.con_calculos().filter(ven_id=imp.origen_id).first()
+                    vc = filtrar_por_cliente_visible(
+                        Venta.objects.con_calculos(), request, 'ven_idcli'
+                    ).filter(ven_id=imp.origen_id).first()
                     if vc:
                         comprobantes_relacionados.append({
                             'tipo': 'recibo_pago',
@@ -1323,7 +1344,9 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                 # Esta cotización está pagando otra factura
                 # El destino es la factura pagada
                 if imp.destino_content_type == venta_ct:
-                    vc = Venta.objects.con_calculos().filter(ven_id=imp.destino_id).first()
+                    vc = filtrar_por_cliente_visible(
+                        Venta.objects.con_calculos(), request, 'ven_idcli'
+                    ).filter(ven_id=imp.destino_id).first()
                     if vc:
                         comprobantes_relacionados.append({
                             'tipo': 'factura_pagada',
@@ -1334,7 +1357,9 @@ def verificar_imputaciones_comprobante(request, comprobante_id):
                         })
         
         # Verificar si es cliente genérico
-        comprobante = Venta.objects.get(ven_id=comprobante_id)
+        comprobante = filtrar_por_cliente_visible(
+            Venta.objects.all(), request, 'ven_idcli'
+        ).get(ven_id=comprobante_id)
         es_cliente_generico = comprobante.ven_idcli.id == CLIENTE_GENERICO_ID
         tiene_solo_auto_imputaciones = len(otras_imputaciones) == 0
         
@@ -1389,7 +1414,9 @@ def eliminar_auto_imputaciones_cliente_generico(request, comprobante_id):
     try:
         with transaction.atomic():
             # Obtener comprobante
-            comprobante = Venta.objects.select_for_update().get(ven_id=comprobante_id)
+            comprobante = filtrar_por_cliente_visible(
+                Venta.objects.select_for_update(), request, 'ven_idcli'
+            ).get(ven_id=comprobante_id)
             
             # Validar que es cliente genérico
             if comprobante.ven_idcli.id != CLIENTE_GENERICO_ID:

@@ -226,7 +226,9 @@ def invalidate_control_fondos_cache(*, reason=None):
     transaction.on_commit(invalidar)
 
 
-def _build_control_fondos_payload_uncached(*, preset=None, include_bloque_reciente=False):
+def _build_control_fondos_payload_uncached(
+    *, preset=None, include_bloque_reciente=False, incluir_restringidos=False
+):
     preset_resuelto = resolve_control_fondos_preset(preset)
     caja_total, cajas_abiertas = _calcular_caja_actual()
     bancos_total = _calcular_bancos_actual()
@@ -354,32 +356,41 @@ def _build_control_fondos_payload_uncached(*, preset=None, include_bloque_recien
             "metricas_operativas": build_recent_activity_metrics(
                 fecha_desde=fecha_desde,
                 fecha_hasta=fecha_hasta,
+                incluir_restringidos=incluir_restringidos,
             ),
         }
 
     return payload
 
 
-def _control_fondos_cache_key(*, preset=None, include_bloque_reciente=False):
+def _control_fondos_cache_key(
+    *, preset=None, include_bloque_reciente=False, incluir_restringidos=False
+):
     schema_name = _control_fondos_schema_name()
     preset_resuelto = resolve_control_fondos_preset(preset)
     cache_version = get_control_fondos_cache_version()
     return (
         f"caja:control-fondos:{schema_name}:"
-        f"v:{cache_version}:preset:{preset_resuelto}:bloque:{int(bool(include_bloque_reciente))}"
+        f"v:{cache_version}:preset:{preset_resuelto}:bloque:{int(bool(include_bloque_reciente))}:"
+        f"restringidos:{int(bool(incluir_restringidos))}"
     )
 
 
-def build_control_fondos_payload(*, preset=None, include_bloque_reciente=False, use_cache=True):
+def build_control_fondos_payload(
+    *, preset=None, include_bloque_reciente=False, use_cache=True,
+    incluir_restringidos=False
+):
     if not use_cache:
         return _build_control_fondos_payload_uncached(
             preset=preset,
             include_bloque_reciente=include_bloque_reciente,
+            incluir_restringidos=incluir_restringidos,
         )
 
     cache_key = _control_fondos_cache_key(
         preset=preset,
         include_bloque_reciente=include_bloque_reciente,
+        incluir_restringidos=incluir_restringidos,
     )
     cached_payload = cache.get(cache_key)
     if cached_payload is not None:
@@ -388,12 +399,15 @@ def build_control_fondos_payload(*, preset=None, include_bloque_reciente=False, 
     payload = _build_control_fondos_payload_uncached(
         preset=preset,
         include_bloque_reciente=include_bloque_reciente,
+        incluir_restringidos=incluir_restringidos,
     )
     cache.set(cache_key, payload, CONTROL_FONDOS_CACHE_TTL_SECONDS)
     return payload
 
 
-def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
+def build_recent_activity_metrics(
+    *, fecha_desde, fecha_hasta, incluir_restringidos=False
+):
     pagos = (
         PagoVenta.objects.filter(
             fecha_hora__range=(fecha_desde, fecha_hasta),
@@ -417,6 +431,10 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
         )
         .order_by("-fecha_hora", "-id")
     )
+    if not incluir_restringidos:
+        pagos = pagos.exclude(venta__ven_idcli__restringido=True).exclude(
+            recibo__rec_cliente__restringido=True
+        )
 
     movimientos = (
         MovimientoCaja.objects.filter(
@@ -427,11 +445,20 @@ def build_recent_activity_metrics(*, fecha_desde, fecha_hasta):
         .order_by("-fecha_hora", "-id")
     )
 
+    cheques = Cheque.objects.filter(
+        movimiento_caja_entrada_id__in=movimientos.values_list('id', flat=True)
+    )
+    if not incluir_restringidos:
+        movimientos = movimientos.exclude(
+            id__in=cheques.filter(origen_cliente__restringido=True).values_list(
+                'movimiento_caja_entrada_id', flat=True
+            )
+        )
+        cheques = cheques.exclude(origen_cliente__restringido=True)
+
     cheques_por_movimiento = {
         cheque.movimiento_caja_entrada_id: cheque
-        for cheque in Cheque.objects.filter(
-            movimiento_caja_entrada_id__in=movimientos.values_list("id", flat=True)
-        ).select_related("origen_cliente")
+        for cheque in cheques.select_related("origen_cliente")
     }
 
     items = []

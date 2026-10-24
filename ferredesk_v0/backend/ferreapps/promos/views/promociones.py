@@ -4,24 +4,24 @@ from rest_framework.response import Response
 
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from ferreapps.promos.models import Promocion
+from ferreapps.promos.politicas_permisos import PERMISOS_PROMOCION_POR_ACCION
 from ferreapps.promos.selectors.promociones_activas import (
     promociones_activas,
     promociones_desactualizadas,
 )
 from ferreapps.promos.serializers.promociones import PromocionSerializer
 from ferreapps.promos.services.gestionar_promocion import revisar_promocion
+from ferredesk_backend.permissions import RequierePermisoFuncional
 
 
 class PromocionViewSet(viewsets.ModelViewSet):
-    # TODO(roles): el sistema todavia no maneja roles/permisos por grupo (confirmado
-    # con el equipo). Cuando existan, este CRUD administrativo (crear/editar/borrar
-    # promos, con precio libre) es candidato a requerir un permiso mas estricto que
-    # IsAuthenticated, igual que otras pantallas administrativas del sistema.
     queryset = Promocion.objects.all().prefetch_related(
         'items__stock', 'grupos__alternativas__stock'
     ).order_by('-creado_en')
     serializer_class = PromocionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.8'
+    permisos_por_accion = PERMISOS_PROMOCION_POR_ACCION
     pagination_class = PaginacionPorPaginaConLimite
 
     def get_queryset(self):

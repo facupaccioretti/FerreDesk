@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from ferredesk_backend.permissions import RequierePermisoFuncional
 
 from .models import (
     Stock,
@@ -31,12 +32,18 @@ from .services.codigo_barras import (
     TIPO_CODE128,
     TIPO_EXTERNO,
 )
+from .politicas_permisos import seleccionar_permiso_codigo_barras
 from .utils_precios import calcular_precio_desde_lista_0, calcular_precio_lista_0_final
 
 
 class CodigoBarrasProductoView(APIView):
     """API para gestionar el código de barras de un producto."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+
+    def get_permiso_requerido(self):
+        metodo = getattr(self, 'action', None) or self.request.method.lower()
+        return seleccionar_permiso_codigo_barras(metodo)
 
     def _get_producto_or_404(self, producto_id):
         if getattr(connection, "schema_name", None) == "public":
@@ -154,7 +161,9 @@ class CodigoBarrasProductoView(APIView):
 
 class ValidarCodigoBarrasView(APIView):
     """API para validar un código de barras."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.modificar'
+    corte_permisos = '3.3'
     
     def post(self, request):
         """Valida un código de barras y retorna información."""
@@ -184,7 +193,9 @@ class ValidarCodigoBarrasView(APIView):
 
 class ImprimirEtiquetasView(APIView):
     """API para generar PDF con etiquetas de códigos de barras."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.ver'
+    corte_permisos = '3.3'
     
     def post(self, request):
         """Genera un PDF con las etiquetas solicitadas."""

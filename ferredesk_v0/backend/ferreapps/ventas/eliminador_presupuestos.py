@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import Venta
 from ferreapps.usuarios.decorators import requiere_permiso_funcional
+from ferreapps.clientes.selectors import filtrar_por_cliente_visible
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,9 @@ def eliminar_presupuestos_antiguos(request):
         fecha_limite = timezone.now().date() - timedelta(days=int(dias_antiguedad))
         
         # Filtrar presupuestos antiguos (solo presupuestos abiertos)
-        presupuestos_antiguos = Venta.objects.filter(
+        presupuestos_antiguos = filtrar_por_cliente_visible(
+            Venta.objects.all(), request, 'ven_idcli'
+        ).filter(
             ven_estado='AB',  # Solo presupuestos abiertos
             ven_fecha__lte=fecha_limite,  # Menor o igual que la fecha límite
             comprobante__codigo_afip='9997'  # Solo presupuestos (código AFIP 9997)
@@ -109,7 +112,9 @@ def vista_previa_presupuestos_antiguos(request):
         fecha_limite = timezone.now().date() - timedelta(days=int(dias_antiguedad))
         
         # Filtrar presupuestos antiguos (solo presupuestos abiertos)
-        presupuestos_antiguos = Venta.objects.filter(
+        presupuestos_antiguos = filtrar_por_cliente_visible(
+            Venta.objects.all(), request, 'ven_idcli'
+        ).filter(
             ven_estado='AB',  # Solo presupuestos abiertos
             ven_fecha__lte=fecha_limite,  # Menor o igual que la fecha límite
             comprobante__codigo_afip='9997'  # Solo presupuestos

@@ -37,8 +37,13 @@ class RequierePermisoFuncional(BasePermission):
         )
 
     def has_permission(self, request, view):
-        permiso_id = self.get_permiso_requerido(view)
-        if not permiso_id:
+        permisos = self.get_permiso_requerido(view)
+        if not permisos:
             return False
+        if isinstance(permisos, str):
+            permisos = (permisos,)
         actor = resolver_actor_http(request)
-        return actor is not None and evaluar_permiso(actor, permiso_id)
+        return actor is not None and all(
+            evaluar_permiso(actor, permiso_id)
+            for permiso_id in permisos
+        )

@@ -41,7 +41,11 @@ def requiere_permiso_funcional(permiso_id):
             if usuario is None or not getattr(usuario, 'is_authenticated', False):
                 return redirect_to_login(request.get_full_path())
             actor = resolver_actor_http(request)
-            if actor is None or not evaluar_permiso(actor, permiso_id):
+            permisos = (permiso_id,) if isinstance(permiso_id, str) else permiso_id
+            if actor is None or not all(
+                evaluar_permiso(actor, permiso)
+                for permiso in permisos
+            ):
                 raise PermissionDenied('Permiso funcional insuficiente.')
             return vista(request, *args, **kwargs)
 

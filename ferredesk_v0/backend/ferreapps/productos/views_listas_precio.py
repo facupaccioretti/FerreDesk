@@ -16,6 +16,13 @@ from .serializers_listas_precio import (
     ActualizacionListaDePreciosSerializer,
 )
 from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferredesk_backend.permissions import RequierePermisoFuncional
+from .politicas_permisos import (
+    PERMISOS_LISTA_PRECIO_POR_ACCION,
+    PERMISOS_PRECIO_LISTA_POR_ACCION,
+)
+
+
 class ListaPrecioViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de listas de precios.
@@ -27,7 +34,9 @@ class ListaPrecioViewSet(viewsets.ModelViewSet):
     """
     queryset = ListaPrecio.objects.all().order_by('numero')
     serializer_class = ListaPrecioSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = PERMISOS_LISTA_PRECIO_POR_ACCION
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -146,7 +155,9 @@ class PrecioProductoListaViewSet(viewsets.ModelViewSet):
     """
     queryset = PrecioProductoLista.objects.all()
     serializer_class = PrecioProductoListaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = PERMISOS_PRECIO_LISTA_POR_ACCION
     
     @action(detail=False, methods=['get'], url_path='productos-desactualizados')
     def productos_desactualizados(self, request):
@@ -320,7 +331,12 @@ class ActualizacionListaDePreciosViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ActualizacionListaDePrecios.objects.all().order_by('-fecha_actualizacion')
     serializer_class = ActualizacionListaDePreciosSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = {
+        'list': 'productos.precios',
+        'retrieve': 'productos.precios',
+    }
     
     def get_queryset(self):
         """Permite filtrar por lista_numero."""

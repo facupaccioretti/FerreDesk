@@ -1,5 +1,7 @@
 from django.shortcuts import get_object_or_404
+from django.http import Http404
 from django.db import transaction
+from django.db.models import Q
 from ferreapps.usuarios.services import resolver_actor
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
@@ -15,8 +17,11 @@ import logging
 from ..models import Imputacion, Recibo
 from ..serializers import ReciboCreateSerializer
 from ..services.imputacion_service import imputar_deuda, validar_saldo_comprobante_pago
-from ferreapps.ventas.models import Venta, Comprobante
-from ferreapps.clientes.models import Cliente
+from ferreapps.ventas.models import Venta
+from ferreapps.clientes.selectors import (
+    cliente_visible_or_404,
+    filtrar_por_cliente_visible,
+)
 from ferreapps.caja.utils import registrar_pagos_recibo
 
 logger = logging.getLogger(__name__)
@@ -38,20 +43,37 @@ def imputar_existente(request):
             # Buscar el comprobante origen (Recibo o Venta/NC)
             if origen_tipo == 'recibo':
                 # Intentar buscar en Recibo primero (nuevo modelo)
-                comprobante = Recibo.objects.filter(rec_id=origen_id).first()
+                comprobante = filtrar_por_cliente_visible(
+                    Recibo.objects.all(), request, 'rec_cliente'
+                ).filter(rec_id=origen_id).first()
                 if not comprobante:
                     # Si no está en Recibo, podría ser un recibo legacy cargado como Venta
-                    comprobante = get_object_or_404(Venta, ven_id=origen_id)
+                    comprobante = get_object_or_404(
+                        filtrar_por_cliente_visible(
+                            Venta.objects.all(), request, 'ven_idcli'
+                        ),
+                        ven_id=origen_id,
+                    )
             else:
                 # Default a Venta (Facturas, NCs, etc)
-                comprobante = get_object_or_404(Venta, ven_id=origen_id)
+                comprobante = get_object_or_404(
+                    filtrar_por_cliente_visible(
+                        Venta.objects.all(), request, 'ven_idcli'
+                    ),
+                    ven_id=origen_id,
+                )
             
             # El servicio ya valida saldos y clientes
             facturas_a_imputar = []
             for imp in imputaciones_data:
                 # El destino siempre es una factura (Venta)
                 id_destino = imp.get('imp_id_venta') or imp.get('factura_id')
-                factura = get_object_or_404(Venta, ven_id=id_destino)
+                factura = get_object_or_404(
+                    filtrar_por_cliente_visible(
+                        Venta.objects.all(), request, 'ven_idcli'
+                    ),
+                    ven_id=id_destino,
+                )
                 facturas_a_imputar.append({
                     'factura': factura,
                     'monto': imp['imp_monto'] if 'imp_monto' in imp else imp['monto'],
@@ -70,6 +92,8 @@ def imputar_existente(request):
             
     except ValueError as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error al imputar comprobante existente: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -96,7 +120,7 @@ def crear_recibo_con_imputaciones(request):
                 estado=ESTADO_CAJA_ABIERTA,
             ).first()
 
-        cliente = get_object_or_404(Cliente, id=data['cliente_id'])
+        cliente = cliente_visible_or_404(request, id=data['cliente_id'])
         
         with transaction.atomic():
             actor = resolver_actor(request)
@@ -122,7 +146,12 @@ def crear_recibo_con_imputaciones(request):
             facturas_a_imputar = []
             for imp in data['imputaciones']:
                 # El serializer devuelve el ID de venta destino
-                factura_destino = get_object_or_404(Venta, ven_id=imp['imp_id_venta'])
+                factura_destino = get_object_or_404(
+                    filtrar_por_cliente_visible(
+                        Venta.objects.all(), request, 'ven_idcli'
+                    ),
+                    ven_id=imp['imp_id_venta'],
+                )
                 facturas_a_imputar.append({
                     'factura': factura_destino,
                     'monto': imp['imp_monto'],
@@ -140,6 +169,8 @@ def crear_recibo_con_imputaciones(request):
         if 'sesi' in detail.lower() and 'caja abierta' in detail.lower():
             payload['error_code'] = 'CAJA_NO_ABIERTA'
         return Response(payload, status=status.HTTP_400_BAD_REQUEST)
+    except Http404:
+        raise
     except Exception as e:
         logger.exception(f"Error al crear recibo: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -159,7 +190,9 @@ def anular_recibo(request):
         
         with transaction.atomic():
             # Intentar buscar en Recibo primero
-            recibo = Recibo.objects.filter(rec_id=recibo_id).first()
+            recibo = filtrar_por_cliente_visible(
+                Recibo.objects.all(), request, 'rec_cliente'
+            ).filter(rec_id=recibo_id).first()
             if recibo:
                 if recibo.rec_estado == Recibo.ESTADO_ANULADO:
                     return Response({'detail': 'El recibo ya se encuentra anulado'}, status=status.HTTP_400_BAD_REQUEST)
@@ -174,7 +207,12 @@ def anular_recibo(request):
                 return Response({'mensaje': 'Recibo anulado exitosamente'}, status=status.HTTP_200_OK)
             
             # Si no, buscar en Venta (legacy)
-            recibo_venta = get_object_or_404(Venta, ven_id=recibo_id)
+            recibo_venta = get_object_or_404(
+                filtrar_por_cliente_visible(
+                    Venta.objects.all(), request, 'ven_idcli'
+                ),
+                ven_id=recibo_id,
+            )
             if recibo_venta.comprobante.tipo != 'recibo':
                 return Response({'detail': 'Solo se pueden anular recibos'}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -189,6 +227,8 @@ def anular_recibo(request):
             
             return Response({'mensaje': 'Recibo (legacy) anulado exitosamente'}, status=status.HTTP_200_OK)
             
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error al anular recibo {recibo_id}: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -207,7 +247,12 @@ def anular_autoimputacion(request):
             return Response({'detail': 'ID de venta requerido'}, status=status.HTTP_400_BAD_REQUEST)
         
         with transaction.atomic():
-            venta = get_object_or_404(Venta, ven_id=venta_id)
+            venta = get_object_or_404(
+                filtrar_por_cliente_visible(
+                    Venta.objects.all(), request, 'ven_idcli'
+                ),
+                ven_id=venta_id,
+            )
             venta_ct = ContentType.objects.get_for_model(venta)
             
             autoimputacion = Imputacion.objects.filter(
@@ -221,6 +266,8 @@ def anular_autoimputacion(request):
             autoimputacion.delete()
             return Response({'mensaje': 'Autoimputación anulada'}, status=status.HTTP_200_OK)
             
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error al anular autoimputación: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -241,14 +288,29 @@ def modificar_imputaciones(request):
             return Response({'detail': 'Datos incompletos'}, status=status.HTTP_400_BAD_REQUEST)
         
         with transaction.atomic():
-            comprobante = get_object_or_404(Venta, ven_id=comprobante_id)
+            comprobante = get_object_or_404(
+                filtrar_por_cliente_visible(
+                    Venta.objects.all(), request, 'ven_idcli'
+                ),
+                ven_id=comprobante_id,
+            )
+            venta_ct = ContentType.objects.get_for_model(Venta)
             
             for imp_data in imputaciones:
                 imp_id = imp_data['imp_id']
                 nuevo_monto = Decimal(str(imp_data['nuevo_monto']))
                 
                 try:
-                    imputacion = Imputacion.objects.get(imp_id=imp_id)
+                    imputacion = Imputacion.objects.filter(
+                        Q(
+                            origen_content_type=venta_ct,
+                            origen_id=comprobante.pk,
+                        )
+                        | Q(
+                            destino_content_type=venta_ct,
+                            destino_id=comprobante.pk,
+                        )
+                    ).get(imp_id=imp_id)
                     if imputacion.es_postventa:
                         return Response(
                             {'detail': 'Una imputacion de postventa asentada no se puede modificar.'},
@@ -264,6 +326,8 @@ def modificar_imputaciones(request):
             
             return Response({'mensaje': 'Imputaciones modificadas exitosamente'}, status=status.HTTP_200_OK)
             
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error al modificar imputaciones: {e}")
         return Response({'detail': 'Error interno del servidor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

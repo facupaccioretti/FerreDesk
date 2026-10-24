@@ -11,13 +11,19 @@ from .serializers import (
     LocalidadSerializer, ProvinciaSerializer, BarrioSerializer, TipoIVASerializer, TransporteSerializer,
     VendedorSerializer, PlazoSerializer, CategoriaClienteSerializer, ClienteSerializer, ClienteBusquedaSerializer
 )
-from django.db import transaction
-from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Q, ProtectedError
 from .algoritmo_cuit_utils import validar_cuit
 from django.db.models.functions import Lower
+from django.shortcuts import get_object_or_404
+from ferredesk_backend.permissions import RequierePermisoFuncional
+from .politicas_permisos import (
+    PERMISOS_CLIENTE_POR_ACCION,
+    PERMISOS_CLIENTES_POR_ACCION,
+)
+from .selectors import clientes_visibles
+from .services import guardar_cliente
 
 # Create your views here.
 logger = logging.getLogger('ferredesk_arca.procesar_cuit_arca')
@@ -38,39 +44,65 @@ DESCRIPCIONES_IVA_RELEVANTES = {
 ESTADO_IMPUESTO_ACTIVO = 'AC'
 
 class LocalidadViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Localidad.objects.all()
     serializer_class = LocalidadSerializer
 
 class ProvinciaViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Provincia.objects.all()
     serializer_class = ProvinciaSerializer
 
 class BarrioViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Barrio.objects.all()
     serializer_class = BarrioSerializer
 
 class TipoIVAViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = TipoIVA.objects.all()
     serializer_class = TipoIVASerializer
 
 class TransporteViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Transporte.objects.all()
     serializer_class = TransporteSerializer
 
 class VendedorViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Vendedor.objects.all()
     serializer_class = VendedorSerializer
 
 class PlazoViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = Plazo.objects.all()
     serializer_class = PlazoSerializer
 
 class CategoriaClienteViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTES_POR_ACCION
     queryset = CategoriaCliente.objects.all()
     serializer_class = CategoriaClienteSerializer
 
-@method_decorator(transaction.atomic, name='dispatch')
 class ClienteViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.6'
+    permisos_por_accion = PERMISOS_CLIENTE_POR_ACCION
     serializer_class = ClienteSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = {
@@ -91,7 +123,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         """
         # Queryset base excluyendo el cliente por defecto (id=1)
         queryset = (
-            Cliente.objects
+            clientes_visibles(self.request)
             .exclude(id=1)
             .select_related(
                 'iva',
@@ -162,14 +194,17 @@ class ClienteViewSet(viewsets.ModelViewSet):
             return ClienteBusquedaSerializer
         return ClienteSerializer
 
+    def perform_create(self, serializer):
+        guardar_cliente(serializer=serializer, request=self.request, creando=True)
+
+    def perform_update(self, serializer):
+        guardar_cliente(serializer=serializer, request=self.request)
+
     @action(detail=False, methods=['get'])
     def cliente_por_defecto(self, request):
-        try:
-            cliente = Cliente.objects.get(id=1)
-            serializer = self.get_serializer(cliente)
-            return Response(serializer.data)
-        except Cliente.DoesNotExist:
-            return Response({'error': 'Cliente por defecto no encontrado'}, status=404)
+        cliente = get_object_or_404(clientes_visibles(request), id=1)
+        serializer = self.get_serializer(cliente)
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -223,7 +258,9 @@ class ValidarCUITAPIView(APIView):
     """
     API endpoint para validar CUITs usando el algoritmo de dígito verificador.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'clientes.ver'
+    corte_permisos = '3.6'
     
     def get(self, request):
         """
@@ -258,7 +295,9 @@ class ProcesarCuitArcaAPIView(APIView):
     """
     API endpoint para consultar datos de un contribuyente en ARCA usando su CUIT.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'clientes.ver'
+    corte_permisos = '3.6'
     
     def get(self, request):
         """

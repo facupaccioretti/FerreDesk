@@ -4,6 +4,7 @@ from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 from datetime import datetime, timedelta
 from ..models import Venta, VentaDetalleItem
+from ferreapps.clientes.selectors import filtrar_por_cliente_visible
 
 
 def productos_mas_vendidos(request):
@@ -12,7 +13,11 @@ def productos_mas_vendidos(request):
     
     try:
         if tipo == 'cantidad':
-            results = VentaDetalleItem.objects.con_calculos().filter(
+            results = filtrar_por_cliente_visible(
+                VentaDetalleItem.objects.con_calculos(),
+                request,
+                'vdi_idve__ven_idcli',
+            ).filter(
                 vdi_cantidad__gt=0
             ).values(
                 producto=Coalesce(F('vdi_detalle1'), Value('Producto sin nombre'))
@@ -20,7 +25,11 @@ def productos_mas_vendidos(request):
                 total=Sum('vdi_cantidad')
             ).order_by('-total')[:10]
         else:
-            results = VentaDetalleItem.objects.con_calculos().filter(
+            results = filtrar_por_cliente_visible(
+                VentaDetalleItem.objects.con_calculos(),
+                request,
+                'vdi_idve__ven_idcli',
+            ).filter(
                 total_item__gt=0
             ).values(
                 producto=Coalesce(F('vdi_detalle1'), Value('Producto sin nombre'))
@@ -70,7 +79,9 @@ def ventas_por_dia(request):
     
     try:
         # Usamos TruncDate para asegurar que agrupamos por día sin hora
-        results = Venta.objects.con_calculos().filter(
+        results = filtrar_por_cliente_visible(
+            Venta.objects.con_calculos(), request, 'ven_idcli'
+        ).filter(
             ven_fecha__range=[fecha_inicio, hoy]
         ).annotate(
             fecha_dia=TruncDate('ven_fecha')
@@ -128,7 +139,9 @@ def clientes_mas_ventas(request):
     
     try:
         if tipo == 'total':
-            results = Venta.objects.con_calculos().filter(
+            results = filtrar_por_cliente_visible(
+                Venta.objects.con_calculos(), request, 'ven_idcli'
+            ).filter(
                 _ven_total__gt=0
             ).values(
                 cliente=Coalesce(F('cliente_razon'), Value('Consumidor Final'))
@@ -136,7 +149,11 @@ def clientes_mas_ventas(request):
                 total=Sum('_ven_total')
             ).order_by('-total')[:10]
         elif tipo == 'cantidad':
-            results = VentaDetalleItem.objects.con_calculos().filter(
+            results = filtrar_por_cliente_visible(
+                VentaDetalleItem.objects.con_calculos(),
+                request,
+                'vdi_idve__ven_idcli',
+            ).filter(
                 vdi_cantidad__gt=0
             ).values(
                 cliente=Coalesce(F('vdi_idve__ven_idcli__razon'), Value('Consumidor Final'))
@@ -144,7 +161,9 @@ def clientes_mas_ventas(request):
                 total=Sum('vdi_cantidad')
             ).order_by('-total')[:10]
         else:  # frecuencia
-            results = Venta.objects.con_calculos().filter(
+            results = filtrar_por_cliente_visible(
+                Venta.objects.con_calculos(), request, 'ven_idcli'
+            ).filter(
                 _ven_total__gt=0
             ).values(
                 cliente=Coalesce(F('cliente_razon'), Value('Consumidor Final'))

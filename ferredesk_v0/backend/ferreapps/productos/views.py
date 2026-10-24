@@ -56,6 +56,10 @@ from .services.importacion_lista_precios_service import (
     importar_lista_precios_proveedor,
 )
 from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
+from ferredesk_backend.permissions import RequierePermisoFuncional
+from ferreapps.proveedores.politicas_permisos import PERMISOS_PROVEEDOR_POR_ACCION
+from .politicas_permisos import PERMISOS_PRODUCTO_POR_ACCION
 
 # Create your views here.
 
@@ -64,6 +68,9 @@ from ferreapps.usuarios.services.actor_service import resolver_actor
 # Aseguramos que cualquier operación sobre proveedores se realice dentro de una transacción atómica
 @method_decorator(transaction.atomic, name='dispatch')
 class ProveedorViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.7'
+    permisos_por_accion = PERMISOS_PROVEEDOR_POR_ACCION
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     filter_backends = [DjangoFilterBackend]
@@ -152,6 +159,9 @@ def _sincronizar_precio_lista_0_editado(stock, anterior):
 # Al decorar el ViewSet completo garantizamos la atomicidad en alta, baja y modificación
 @method_decorator(transaction.atomic, name='dispatch')
 class StockViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = PERMISOS_PRODUCTO_POR_ACCION
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
@@ -520,6 +530,9 @@ class PosProductoSearchAPIView(APIView):
 # Atomicidad para las relaciones entre productos y proveedores
 @method_decorator(transaction.atomic, name='dispatch')
 class StockProveViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = PERMISOS_PRODUCTO_POR_ACCION
     queryset = StockProve.objects.select_related('proveedor', 'stock').all()
     serializer_class = StockProveSerializer
     filter_backends = [DjangoFilterBackend]
@@ -586,18 +599,29 @@ class FamiliaFilter(FilterSet):
 # DESACTIVADO: Causaba que el modal de Familias no se actualice en tiempo real tras crear/editar.
 # @method_decorator(cache_page(60 * 60 * 12), name='list')
 class FamiliaViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = PERMISOS_PRODUCTO_POR_ACCION
     queryset = Familia.objects.all()
     serializer_class = FamiliaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = FamiliaFilter
 
 @method_decorator(cache_page(60 * 60 * 12), name='list')
-class AlicuotaIVAViewSet(viewsets.ModelViewSet):
+class AlicuotaIVAViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = {
+        'list': 'productos.ver',
+        'retrieve': 'productos.ver',
+    }
     queryset = AlicuotaIVA.objects.all()
     serializer_class = AlicuotaIVASerializer
 
 class UploadListaPreciosProveedor(APIView):
-    permission_classes = [permissions.IsAuthenticated]  # O ajusta según tu seguridad
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.precios'
+    corte_permisos = '3.3'
 
     @transaction.atomic
     def post_legado(self, request, proveedor_id):
@@ -766,7 +790,9 @@ class UploadListaPreciosProveedor(APIView):
 
 
 class ImportacionListaPreciosEstadoAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.precios'
+    corte_permisos = '3.3'
 
     def get(self, request, proveedor_id, importacion_id):
         importacion = ImportacionListaPreciosProveedor.objects.filter(
@@ -796,6 +822,10 @@ class PrecioProductoProveedorAPIView(APIView):
       - proveedor_id: ID del proveedor
       - codigo_producto: Código del producto (tal como está en el Excel del proveedor)
     """
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.precios'
+    corte_permisos = '3.3'
+
     def get(self, request):
         proveedor_id = request.GET.get('proveedor_id')
         codigo_producto = request.GET.get('codigo_producto')
@@ -852,7 +882,9 @@ class PrecioProductoProveedorAPIView(APIView):
             return Response({'detail': f'Error: {str(e)}'}, status=500)
 
 class HistorialListasProveedorAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.precios'
+    corte_permisos = '3.3'
 
     def get(self, request, proveedor_id):
         # Agrupar por nombre_archivo y fecha_carga, y contar productos únicos
@@ -879,6 +911,7 @@ class HistorialListasProveedorAPIView(APIView):
                 break
         return Response(historial)
 
+@requiere_permiso_funcional('productos.modificar')
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 @transaction.atomic
@@ -934,6 +967,10 @@ def asociar_codigo_proveedor(request):
         )
         return Response({'detail': 'Código de proveedor asociado (relación creada con cantidad y costo en 0).'}, status=201)
 
+asociar_codigo_proveedor.corte_permisos = '3.3'
+
+
+@requiere_permiso_funcional('productos.ver')
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def codigos_lista_proveedor(request, proveedor_id):
@@ -1048,6 +1085,10 @@ def codigos_lista_proveedor(request, proveedor_id):
         'productos': productos_con_denominacion,
     })
 
+codigos_lista_proveedor.corte_permisos = '3.3'
+
+
+@requiere_permiso_funcional('productos.modificar')
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def obtener_nuevo_id_temporal(request):
@@ -1109,6 +1150,10 @@ def _guardar_precios_listas(stock, precios, usuario, actor):
             },
         )
 
+obtener_nuevo_id_temporal.corte_permisos = '3.3'
+
+
+@requiere_permiso_funcional(('productos.modificar', 'productos.precios'))
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def crear_producto_con_relaciones(request):
@@ -1181,6 +1226,10 @@ def crear_producto_con_relaciones(request):
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
 
+crear_producto_con_relaciones.corte_permisos = '3.3'
+
+
+@requiere_permiso_funcional(('productos.modificar', 'productos.precios'))
 @api_view(['PUT'])
 @permission_classes([permissions.IsAuthenticated])
 def editar_producto_con_relaciones(request):
@@ -1288,6 +1337,9 @@ def editar_producto_con_relaciones(request):
         return Response({'detail': 'Error de validación', 'errors': ve.detail}, status=400)
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
+
+
+editar_producto_con_relaciones.corte_permisos = '3.3'
 
 class FerreteriaAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1477,6 +1529,12 @@ class EstadoSetupAPIView(APIView):
 class VistaStockProductoViewSet(viewsets.ReadOnlyModelViewSet):
     """Provee list y retrieve para la vista de stock total por producto anotado (reemplaza vista SQL)."""
     queryset = Stock.objects.con_stock_total()
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.3'
+    permisos_por_accion = {
+        'list': 'productos.ver',
+        'retrieve': 'productos.ver',
+    }
     serializer_class = VistaStockProductoSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigo_venta', 'denominacion', 'necesita_reposicion']
@@ -1559,7 +1617,9 @@ def servir_logo_empresa(request):
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
 
 class BuscarDenominacionesSimilaresAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.ver'
+    corte_permisos = '3.3'
     
     def get(self, request):
         denominacion = request.GET.get('denominacion', '').strip()
@@ -1727,5 +1787,4 @@ class BuscarDenominacionesSimilaresAPIView(APIView):
             return "Se encontraron productos similares. Te sugerimos revisar si alguno corresponde al producto que estás creando."
         
         return "Se encontraron productos con cierta similitud. Te sugerimos revisar antes de continuar."
-
 

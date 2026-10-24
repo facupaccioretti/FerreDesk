@@ -65,6 +65,11 @@ from .services import (
 )
 from ferreapps.usuarios.services.actor_service import resolver_actor
 from ferredesk_backend.permissions import RequierePermisoFuncional
+from ferreapps.clientes.selectors import (
+    cliente_visible_or_404,
+    filtrar_por_cliente_visible,
+    puede_ver_clientes_restringidos,
+)
 
 
 class SesionCajaViewSet(viewsets.ModelViewSet):
@@ -318,6 +323,12 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         ).exclude(
             orden_pago__op_estado='N'
         )
+        pagos_sesion = filtrar_por_cliente_visible(
+            pagos_sesion, self.request, 'venta__ven_idcli'
+        )
+        pagos_sesion = filtrar_por_cliente_visible(
+            pagos_sesion, self.request, 'recibo__rec_cliente'
+        )
         tipos_egreso = [
             PagoVenta.TIPO_VUELTO_VENTA,
             PagoVenta.TIPO_DEVOLUCION_CLIENTE,
@@ -389,7 +400,9 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         from ferreapps.ventas.models import Venta, Comprobante
 
         montos_ventas = dict(
-            Venta.objects.con_calculos()
+            filtrar_por_cliente_visible(
+                Venta.objects.con_calculos(), self.request, 'ven_idcli'
+            )
             .filter(sesion_caja=sesion)
             .values_list('ven_id', '_ven_total')
         )
@@ -397,7 +410,9 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         total_ventas = sum(montos_ventas.values(), Decimal('0.00'))
 
         # Excedentes no facturados (propina/redondeo) y vuelto pendiente por ventas de esta sesión
-        excedentes = Venta.objects.filter(
+        excedentes = filtrar_por_cliente_visible(
+            Venta.objects.all(), self.request, 'ven_idcli'
+        ).filter(
             sesion_caja=sesion,
             excedente_destino__in=['propina', 'vuelto_pendiente'],
         ).aggregate(
@@ -408,7 +423,9 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         excedente_vuelto_pendiente = excedentes.get('vuelto_pendiente') or Decimal('0.00')
 
         # Listado de ventas con excedente (para mostrar justificación en resumen/historial)
-        ventas_con_excedente_qs = Venta.objects.filter(
+        ventas_con_excedente_qs = filtrar_por_cliente_visible(
+            Venta.objects.all(), self.request, 'ven_idcli'
+        ).filter(
             sesion_caja=sesion,
             excedente_destino__in=['propina', 'vuelto_pendiente'],
         ).select_related('comprobante').order_by('ven_fecha', 'ven_id')
@@ -425,7 +442,9 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
 
         # Listado de trámites con observaciones (Ventas y Recibos)
         # 1. Ventas con justificación de excedente
-        ventas_obs = Venta.objects.filter(
+        ventas_obs = filtrar_por_cliente_visible(
+            Venta.objects.all(), self.request, 'ven_idcli'
+        ).filter(
             sesion_caja=sesion,
         ).filter(
             Q(justificacion_excedente__isnull=False) & ~Q(justificacion_excedente='') |
@@ -433,14 +452,18 @@ class SesionCajaViewSet(viewsets.ModelViewSet):
         ).select_related('comprobante', 'ven_idcli').order_by('ven_fecha', 'ven_id')
 
         # 2. Pagos de ventas con observaciones (faltantes o notas manuales)
-        pagos_ventas_obs = PagoVenta.objects.filter(
+        pagos_ventas_obs = filtrar_por_cliente_visible(
+            PagoVenta.objects.all(), self.request, 'venta__ven_idcli'
+        ).filter(
             venta__sesion_caja=sesion,
         ).filter(
             Q(observacion__isnull=False) & ~Q(observacion='')
         ).select_related('venta', 'venta__comprobante', 'venta__ven_idcli').order_by('fecha_hora')
 
         # 3. Pagos de recibos con observaciones
-        pagos_recibos_obs = PagoVenta.objects.filter(
+        pagos_recibos_obs = filtrar_por_cliente_visible(
+            PagoVenta.objects.all(), self.request, 'recibo__rec_cliente'
+        ).filter(
             recibo__sesion_caja=sesion,
         ).filter(
             Q(observacion__isnull=False) & ~Q(observacion='')
@@ -635,6 +658,12 @@ class PagoVentaViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Filtra pagos por venta si se especifica."""
         queryset = super().get_queryset().select_related('venta', 'metodo_pago')
+        queryset = filtrar_por_cliente_visible(
+            queryset, self.request, 'venta__ven_idcli'
+        )
+        queryset = filtrar_por_cliente_visible(
+            queryset, self.request, 'recibo__rec_cliente'
+        )
 
         venta_id = self.request.query_params.get('venta')
         if venta_id:
@@ -869,6 +898,12 @@ class ChequeViewSet(viewsets.ModelViewSet):
             'movimiento_caja_entrada',
             'movimiento_caja_salida',
         )
+        queryset = filtrar_por_cliente_visible(
+            queryset, self.request, 'venta__ven_idcli'
+        )
+        queryset = filtrar_por_cliente_visible(
+            queryset, self.request, 'origen_cliente'
+        )
         estado = self.request.query_params.get('estado')
         if estado:
             queryset = queryset.filter(estado=estado)
@@ -890,8 +925,9 @@ class ChequeViewSet(viewsets.ModelViewSet):
 
         origen_cliente = None
         if data.get('origen_cliente_id'):
-            from ferreapps.clientes.models import Cliente
-            origen_cliente = Cliente.objects.filter(id=data['origen_cliente_id']).first()
+            origen_cliente = cliente_visible_or_404(
+                request, id=data['origen_cliente_id']
+            )
 
         with transaction.atomic():
             actor = resolver_actor(request)
@@ -1327,5 +1363,6 @@ class ControlFondosAPIView(APIView):
         payload = build_control_fondos_payload(
             preset=request.query_params.get("preset"),
             include_bloque_reciente="preset" in request.query_params,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
         )
         return Response(payload)

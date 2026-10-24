@@ -35,6 +35,12 @@ from django_filters.rest_framework import DjangoFilterBackend, FilterSet, DateFr
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 from django.db.models import Subquery, OuterRef, Q, IntegerField, Value, Case, When
 from ferredesk_backend.utils.observability import medir_proceso
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
+from ferredesk_backend.permissions import RequierePermisoFuncional
+from .politicas_permisos import (
+    PERMISOS_COMPRA_CRUD_POR_ACCION,
+    PERMISOS_COMPRA_POR_ACCION,
+)
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -76,7 +82,9 @@ class CompraViewSet(viewsets.ModelViewSet):
     serializer_class = CompraSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = CompraFilter
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.5'
+    permisos_por_accion = PERMISOS_COMPRA_POR_ACCION
     pagination_class = PaginacionPorPaginaConLimite
     
     def get_queryset(self):
@@ -276,7 +284,9 @@ class CompraDetalleItemViewSet(viewsets.ModelViewSet):
     """ViewSet para items de detalle de compra"""
     queryset = CompraDetalleItem.objects.all()
     serializer_class = CompraDetalleItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.5'
+    permisos_por_accion = PERMISOS_COMPRA_CRUD_POR_ACCION
     
     def get_queryset(self):
         """Optimizar consultas"""
@@ -285,6 +295,7 @@ class CompraDetalleItemViewSet(viewsets.ModelViewSet):
         )
 
 
+@requiere_permiso_funcional('compras.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def proveedores_activos(request):
@@ -301,6 +312,10 @@ def proveedores_activos(request):
         )
 
 
+proveedores_activos.corte_permisos = '3.5'
+
+
+@requiere_permiso_funcional('compras.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def productos_por_proveedor(request, proveedor_id):
@@ -362,6 +377,10 @@ def productos_por_proveedor(request, proveedor_id):
             )
 
 
+productos_por_proveedor.corte_permisos = '3.5'
+
+
+@requiere_permiso_funcional('compras.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def buscar_producto_por_codigo_proveedor(request):
@@ -421,7 +440,9 @@ def buscar_producto_por_codigo_proveedor(request):
 
 
 class ProductoLookupCompraAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'compras.ver'
+    corte_permisos = '3.5'
 
     def get(self, request):
         codigo = (request.query_params.get('codigo') or '').strip()
@@ -496,6 +517,10 @@ class ProductoLookupCompraAPIView(APIView):
                 )
 
 
+buscar_producto_por_codigo_proveedor.corte_permisos = '3.5'
+
+
+@requiere_permiso_funcional('compras.ver')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def alicuotas_iva(request):
@@ -582,7 +607,9 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
     serializer_class = OrdenCompraSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = OrdenCompraFilter
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.5'
+    permisos_por_accion = PERMISOS_COMPRA_CRUD_POR_ACCION
     pagination_class = PaginacionPorPaginaConLimite
     
     def get_queryset(self):
@@ -713,7 +740,9 @@ class OrdenCompraDetalleItemViewSet(viewsets.ModelViewSet):
     """ViewSet para items de detalle de orden de compra"""
     queryset = OrdenCompraDetalleItem.objects.all()
     serializer_class = OrdenCompraDetalleItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.5'
+    permisos_por_accion = PERMISOS_COMPRA_CRUD_POR_ACCION
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['odi_idor']
     
@@ -724,6 +753,10 @@ class OrdenCompraDetalleItemViewSet(viewsets.ModelViewSet):
         )
 
 
+alicuotas_iva.corte_permisos = '3.5'
+
+
+@requiere_permiso_funcional('compras.gestionar')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
@@ -897,3 +930,6 @@ def convertir_orden_compra_a_compra(request):
 
     except Exception as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+convertir_orden_compra_a_compra.corte_permisos = '3.5'

@@ -11,6 +11,7 @@ import logging
 
 from ..models import Imputacion, Recibo
 from ferreapps.ventas.models import Venta
+from ferreapps.clientes.selectors import filtrar_por_cliente_visible
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,15 @@ def detalle_comprobante(request, ven_id: int):
     """
     try:
         # Detectar si es un Recibo (nuevo modelo) o Venta (legacy/factura)
-        cab = Venta.objects.con_calculos().filter(ven_id=ven_id).first()
+        cab = filtrar_por_cliente_visible(
+            Venta.objects.con_calculos(), request, 'ven_idcli'
+        ).filter(ven_id=ven_id).first()
         recibo_obj = None
         
         if not cab:
-            recibo_obj = Recibo.objects.filter(rec_id=ven_id).first()
+            recibo_obj = filtrar_por_cliente_visible(
+                Recibo.objects.all(), request, 'rec_cliente'
+            ).filter(rec_id=ven_id).first()
             if not recibo_obj:
                 return Response({'detail': 'Comprobante no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -57,7 +62,11 @@ def detalle_comprobante(request, ven_id: int):
                 did = f['destino_id']
                 dct = ContentType.objects.get_for_id(f['destino_content_type'])
                 if dct.model == 'venta':
-                    vcalc = Venta.objects.con_calculos().filter(ven_id=did).first()
+                    vcalc = filtrar_por_cliente_visible(
+                        Venta.objects.con_calculos(), request, 'ven_idcli'
+                    ).filter(ven_id=did).first()
+                    if vcalc is None:
+                        continue
                     asociados.append({
                         'id': did,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {did}"),
@@ -117,7 +126,11 @@ def detalle_comprobante(request, ven_id: int):
                 oid = f['origen_id']
                 oct = ContentType.objects.get_for_id(f['origen_content_type'])
                 if oct.model == 'recibo':
-                    robj = Recibo.objects.filter(rec_id=oid).first()
+                    robj = filtrar_por_cliente_visible(
+                        Recibo.objects.all(), request, 'rec_cliente'
+                    ).filter(rec_id=oid).first()
+                    if robj is None:
+                        continue
                     asociados.append({
                         'id': oid,
                         'numero_formateado': robj.rec_numero if robj else f"ID: {oid}",
@@ -128,7 +141,11 @@ def detalle_comprobante(request, ven_id: int):
                         'imp_id': f['imp_id']
                     })
                 elif oct.model == 'venta':
-                    vcalc = Venta.objects.con_calculos().filter(ven_id=oid).first()
+                    vcalc = filtrar_por_cliente_visible(
+                        Venta.objects.con_calculos(), request, 'ven_idcli'
+                    ).filter(ven_id=oid).first()
+                    if vcalc is None:
+                        continue
                     asociados.append({
                         'id': oid,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {oid}"),
@@ -149,7 +166,11 @@ def detalle_comprobante(request, ven_id: int):
                 did = f['destino_id']
                 dct = ContentType.objects.get_for_id(f['destino_content_type'])
                 if dct.model == 'venta':
-                    vcalc = Venta.objects.con_calculos().filter(ven_id=did).first()
+                    vcalc = filtrar_por_cliente_visible(
+                        Venta.objects.con_calculos(), request, 'ven_idcli'
+                    ).filter(ven_id=did).first()
+                    if vcalc is None:
+                        continue
                     asociados.append({
                         'id': did,
                         'numero_formateado': getattr(vcalc, 'numero_formateado', f"ID: {did}"),
@@ -199,6 +220,20 @@ def obtener_imputacion_real(request, ven_id_venta, ven_id_recibo):
         from ..models import Recibo
         venta_ct = ContentType.objects.get_for_model(Venta)
         recibo_ct = ContentType.objects.get_for_model(Recibo)
+        venta_visible = filtrar_por_cliente_visible(
+            Venta.objects.all(), request, 'ven_idcli'
+        ).filter(ven_id=ven_id_venta).exists()
+        recibo_visible = filtrar_por_cliente_visible(
+            Recibo.objects.all(), request, 'rec_cliente'
+        ).filter(rec_id=ven_id_recibo).exists()
+        recibo_legacy_visible = filtrar_por_cliente_visible(
+            Venta.objects.all(), request, 'ven_idcli'
+        ).filter(ven_id=ven_id_recibo).exists()
+        if not venta_visible or not (recibo_visible or recibo_legacy_visible):
+            return Response(
+                {'detail': 'Imputacion no encontrada'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         
         # Primero intentar buscar con Recibo como origen
         imputacion = Imputacion.objects.filter(

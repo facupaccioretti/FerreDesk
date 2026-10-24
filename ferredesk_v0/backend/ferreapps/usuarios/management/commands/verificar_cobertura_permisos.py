@@ -169,9 +169,11 @@ def _clasificar(callback, metodo, accion, corte):
     permiso_id = _permiso_declarado(callback, accion)
     if not permiso_id:
         return 'sin_clasificar', 'permiso_no_declarado'
-    if permiso_id not in CATALOGO_PERMISOS:
-        return 'error', f'permiso_desconocido:{permiso_id}'
-    return 'permiso', permiso_id
+    permisos = (permiso_id,) if isinstance(permiso_id, str) else tuple(permiso_id)
+    desconocidos = [permiso for permiso in permisos if permiso not in CATALOGO_PERMISOS]
+    if desconocidos:
+        return 'error', f'permiso_desconocido:{",".join(desconocidos)}'
+    return 'permiso', '+'.join(permisos)
 
 
 def _obtener_resolvers():

@@ -12,10 +12,12 @@ import logging
 from .models import OrdenCompra
 from .serializers import OrdenCompraSerializer
 from .servicies.orden_compra_export_service import exportar_orden_compra_pdf, obtener_nombre_archivo_orden_compra
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 
 logger = logging.getLogger(__name__)
 
 
+@requiere_permiso_funcional('compras.ver')
 @login_required
 @require_http_methods(["GET"])
 def exportar_orden_compra_pdf_endpoint(request, orden_id):
@@ -68,3 +70,6 @@ def exportar_orden_compra_pdf_endpoint(request, orden_id):
         return JsonResponse({
             'detail': 'Error interno del servidor al exportar PDF'
         }, status=500)
+
+
+exportar_orden_compra_pdf_endpoint.corte_permisos = '3.5'

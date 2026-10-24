@@ -138,6 +138,7 @@ class Cliente(models.Model):
     plazo = models.ForeignKey(Plazo, on_delete=models.PROTECT, db_column='CLI_IDPLA', blank=True, null=True)
     categoria = models.ForeignKey(CategoriaCliente, on_delete=models.PROTECT, db_column='CLI_IDCAC', blank=True, null=True)
     activo = models.CharField(max_length=1, blank=True, null=True, db_column='CLI_ACTI')
+    restringido = models.BooleanField(default=False, db_index=True)
     
     # Lista de precios asignada al cliente (0-4, default 0 = Lista base/minorista)
     lista_precio_id = models.IntegerField(

@@ -10,6 +10,8 @@ from .services.carga_inicial_proveedor_service import (
     crear_solicitud_carga_inicial_pendiente,
 )
 from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferredesk_backend.permissions import RequierePermisoFuncional
+from .politicas_permisos import PERMISOS_PROVEEDOR_POR_ACCION
 # Importaciones para transacciones atómicas
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -37,6 +39,9 @@ from ferreapps.productos.models import Stock, StockProve
 # Garantizamos atomicidad en todas las operaciones de este ViewSet
 @method_decorator(transaction.atomic, name='dispatch')
 class ProveedorViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    corte_permisos = '3.7'
+    permisos_por_accion = PERMISOS_PROVEEDOR_POR_ACCION
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
 
@@ -102,7 +107,9 @@ class ProveedorViewSet(viewsets.ModelViewSet):
 
 
 class HistorialImportacionesProveedorAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.ver'
+    corte_permisos = '3.7'
 
     def get(self, request, proveedor_id):
         try:
@@ -121,7 +128,9 @@ class HistorialImportacionesProveedorAPIView(APIView):
 
 
 class CargaInicialProveedorPreviaAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.ver'
+    corte_permisos = '3.7'
 
     def post(self, request, proveedor_id):
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
@@ -553,7 +562,9 @@ class CargaInicialProveedorImportSincronicaLegacyAPIView(APIView):
 # Nueva definicion activa: reemplaza el flujo sincronico anterior sin borrar el bloque
 # legacy, evitando ejecutar altas pesadas dentro del request web.
 class CargaInicialProveedorImportAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.modificar'
+    corte_permisos = '3.7'
 
     def post(self, request, proveedor_id):
         proveedor = Proveedor.objects.filter(id=proveedor_id).first()
@@ -595,7 +606,9 @@ class CargaInicialProveedorImportAPIView(APIView):
 
 
 class CargaInicialProveedorEstadoAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.ver'
+    corte_permisos = '3.7'
 
     def get(self, request, proveedor_id, solicitud_id):
         solicitud = SolicitudCargaInicialProveedor.objects.filter(
@@ -627,7 +640,9 @@ class ValidarCUITProveedorAPIView(APIView):
     """
     API endpoint para validar CUITs usando el algoritmo de dígito verificador.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.ver'
+    corte_permisos = '3.7'
     
     def get(self, request):
         """
@@ -692,7 +707,9 @@ class ProcesarCuitArcaProveedorAPIView(APIView):
     """
     API endpoint para consultar datos de un proveedor en ARCA usando su CUIT.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'proveedores.ver'
+    corte_permisos = '3.7'
     
     def get(self, request):
         """

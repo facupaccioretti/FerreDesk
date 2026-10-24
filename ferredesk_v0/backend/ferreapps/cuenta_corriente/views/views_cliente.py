@@ -1,4 +1,4 @@
-from django.shortcuts import get_object_or_404
+from django.http import Http404
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -18,6 +18,7 @@ from ..serializers import (
 )
 from ..services.cuenta_corriente_service import obtener_movimientos_cliente
 from ferreapps.clientes.models import Cliente
+from ferreapps.clientes.selectors import cliente_visible_or_404, clientes_visibles
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def cuenta_corriente_cliente(request, cliente_id):
     Utiliza el servicio ORM unificado.
     """
     try:
-        cliente = get_object_or_404(Cliente, id=cliente_id)
+        cliente = cliente_visible_or_404(request, id=cliente_id)
         
         fecha_desde = request.GET.get('fecha_desde')
         fecha_hasta = request.GET.get('fecha_hasta')
@@ -58,6 +59,8 @@ def cuenta_corriente_cliente(request, cliente_id):
             'total_items': len(movimientos)
         })
         
+    except Http404:
+        raise
     except Exception as e:
         logger.exception(f"Error al obtener cuenta corriente del cliente {cliente_id}: {e}")
         return Response(
@@ -77,7 +80,7 @@ def facturas_pendientes_cliente(request, cliente_id):
     Retorna las facturas con saldo pendiente de un cliente.
     """
     try:
-        cliente = get_object_or_404(Cliente, id=cliente_id)
+        cliente = cliente_visible_or_404(request, id=cliente_id)
         
         movimientos = obtener_movimientos_cliente(cliente_id=cliente_id, completo=False)
         
@@ -93,6 +96,8 @@ def facturas_pendientes_cliente(request, cliente_id):
             'total_pendiente': sum(Decimal(str(f['saldo_pendiente'])) for f in facturas)
         })
         
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error al obtener facturas pendientes del cliente {cliente_id}: {e}")
         return Response(
@@ -120,7 +125,9 @@ def clientes_con_movimientos(request):
         clientes_recibo = Recibo.objects.values_list('rec_cliente_id', flat=True).distinct()
         
         clientes_ids = set(clientes_venta) | set(clientes_recibo)
-        clientes = Cliente.objects.filter(id__in=clientes_ids).order_by('razon')
+        clientes = clientes_visibles(request).filter(
+            id__in=clientes_ids
+        ).order_by('razon')
         
         serializer = ClienteCuentaCorrienteSerializer(clientes, many=True)
         

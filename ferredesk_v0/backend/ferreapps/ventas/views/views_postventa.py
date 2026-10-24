@@ -15,6 +15,14 @@ from ferreapps.ventas.services.confirmar_cambio import confirmar_cambio
 from ferreapps.ventas.services.confirmar_devolucion import confirmar_devolucion
 from ferreapps.usuarios.services import resolver_actor
 from ferreapps.usuarios.decorators import requiere_permiso_funcional
+from ferreapps.clientes.selectors import objeto_con_cliente_visible_or_404
+from ferreapps.ventas.models import Venta
+
+
+def _validar_venta_visible(request, venta_id):
+    objeto_con_cliente_visible_or_404(
+        Venta.objects.all(), request, 'ven_idcli', ven_id=venta_id
+    )
 
 
 @requiere_permiso_funcional('ventas.postventa')
@@ -24,6 +32,7 @@ from ferreapps.usuarios.decorators import requiere_permiso_funcional
 def previsualizar_devolucion_view(request):
     serializer = serializers_postventa.PrevisualizarDevolucionInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    _validar_venta_visible(request, serializer.validated_data['venta_id'])
     return Response(previsualizar_devolucion(serializer.validated_data))
 
 
@@ -37,6 +46,7 @@ previsualizar_devolucion_view.corte_permisos = '3.1'
 def confirmar_devolucion_view(request):
     serializer = serializers_postventa.ConfirmarDevolucionInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    _validar_venta_visible(request, serializer.validated_data['venta_id'])
     with transaction.atomic():
         actor = resolver_actor(request)
         resultado = confirmar_devolucion(
@@ -55,6 +65,7 @@ confirmar_devolucion_view.corte_permisos = '3.1'
 def previsualizar_cambio_view(request):
     serializer = serializers_postventa.PrevisualizarCambioInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    _validar_venta_visible(request, serializer.validated_data['venta_id'])
     return Response(previsualizar_cambio(serializer.validated_data))
 
 
@@ -68,6 +79,7 @@ previsualizar_cambio_view.corte_permisos = '3.1'
 def confirmar_cambio_view(request):
     serializer = serializers_postventa.ConfirmarCambioInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    _validar_venta_visible(request, serializer.validated_data['venta_id'])
     with transaction.atomic():
         actor = resolver_actor(request)
         resultado = confirmar_cambio(
@@ -84,6 +96,7 @@ confirmar_cambio_view.corte_permisos = '3.1'
 @permission_classes([IsAuthenticated])
 @requerir_setup_completo
 def items_origen_postventa_view(request, venta_id):
+    _validar_venta_visible(request, venta_id)
     return Response(obtener_items_origen_postventa(venta_id))
 
 

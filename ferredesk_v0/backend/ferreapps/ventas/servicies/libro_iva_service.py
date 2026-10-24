@@ -32,7 +32,8 @@ def _mapear_condicion_iva_a_codigo(condicion_normalizada: str) -> str:
 
 
 def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convencional', 
-                            incluir_presupuestos: bool = False, usuario: Optional[str] = None) -> Dict[str, Any]:
+                            incluir_presupuestos: bool = False, usuario: Optional[str] = None,
+                            incluir_restringidos: bool = False) -> Dict[str, Any]:
     """
     Genera el Libro IVA Ventas para un período específico con opciones de filtrado.
     Solo consolida datos ya calculados por las vistas del sistema.
@@ -86,6 +87,8 @@ def generar_libro_iva_ventas(mes: int, anio: int, tipo_libro: str = 'convenciona
         ven_fecha__month=mes,
         **filtros_comprobante
     ).order_by('ven_fecha', 'ven_punto', 'ven_numero')
+    if not incluir_restringidos:
+        ventas_periodo = ventas_periodo.filter(ven_idcli__restringido=False)
     
     if not ventas_periodo.exists():
         return {
@@ -299,4 +302,4 @@ def validar_integridad_libro_iva(datos_libro: Dict[str, Any]) -> Dict[str, List[
     if not datos_libro['lineas']:
         advertencias.append("No hay comprobantes en el período seleccionado")
     
-    return {'errores': errores, 'advertencias': advertencias} 
+    return {'errores': errores, 'advertencias': advertencias}

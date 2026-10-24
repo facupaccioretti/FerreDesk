@@ -14,12 +14,14 @@ import logging
 from .servicies.libro_iva_service import generar_libro_iva_ventas
 from .servicies.libro_iva_export_service import exportar_libro_iva, obtener_nombre_archivo
 from .servicies.libro_iva_validator import validar_periodo_libro_iva
+from ferreapps.clientes.selectors import puede_ver_clientes_restringidos
+from .permissions import DeniegaLibroIvaDeprecado
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def exportar_libro_iva_pdf(request):
     """
     Endpoint para exportar el Libro IVA en formato PDF.
@@ -61,7 +63,13 @@ def exportar_libro_iva_pdf(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            tipo_libro,
+            incluir_presupuestos,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         
         # Generar archivo PDF
         archivo_pdf = exportar_libro_iva('pdf', datos_libro)
@@ -95,7 +103,7 @@ def exportar_libro_iva_pdf(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def exportar_libro_iva_excel(request):
     """
     Endpoint para exportar el Libro IVA en formato Excel.
@@ -137,7 +145,13 @@ def exportar_libro_iva_excel(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            tipo_libro,
+            incluir_presupuestos,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         
         # Generar archivo Excel
         archivo_excel = exportar_libro_iva('excel', datos_libro)
@@ -171,7 +185,7 @@ def exportar_libro_iva_excel(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def exportar_libro_iva_json(request):
     """
     Endpoint para exportar el Libro IVA en formato JSON.
@@ -213,7 +227,13 @@ def exportar_libro_iva_json(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Generar libro IVA
-        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            tipo_libro,
+            incluir_presupuestos,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         
         # Generar archivo JSON
         archivo_json = exportar_libro_iva('json', datos_libro)
@@ -247,7 +267,7 @@ def exportar_libro_iva_json(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DeniegaLibroIvaDeprecado])
 def exportar_libro_iva_txt(request):
     """
     Endpoint para exportar el Libro IVA en formato TXT (layout AFIP/ARCA).
@@ -283,7 +303,13 @@ def exportar_libro_iva_txt(request):
                 'errores': validaciones_periodo['errores']
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        datos_libro = generar_libro_iva_ventas(mes, anio, tipo_libro, incluir_presupuestos)
+        datos_libro = generar_libro_iva_ventas(
+            mes,
+            anio,
+            tipo_libro,
+            incluir_presupuestos,
+            incluir_restringidos=puede_ver_clientes_restringidos(request),
+        )
         archivo_txt = exportar_libro_iva('txt', datos_libro)
         nombre_archivo = obtener_nombre_archivo('txt', mes, anio, tipo_libro, incluir_presupuestos)
 
@@ -306,3 +332,24 @@ def exportar_libro_iva_txt(request):
         return Response({
             'detail': 'Error interno del servidor al exportar TXT'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+exportar_libro_iva_pdf.exencion_permiso = 'deprecada'
+exportar_libro_iva_pdf.metodos_deprecados = ('GET',)
+exportar_libro_iva_pdf.retiro_deprecado_en = '7'
+exportar_libro_iva_pdf.corte_permisos = '3.11'
+
+exportar_libro_iva_excel.exencion_permiso = 'deprecada'
+exportar_libro_iva_excel.metodos_deprecados = ('GET',)
+exportar_libro_iva_excel.retiro_deprecado_en = '7'
+exportar_libro_iva_excel.corte_permisos = '3.11'
+
+exportar_libro_iva_json.exencion_permiso = 'deprecada'
+exportar_libro_iva_json.metodos_deprecados = ('GET',)
+exportar_libro_iva_json.retiro_deprecado_en = '7'
+exportar_libro_iva_json.corte_permisos = '3.11'
+
+exportar_libro_iva_txt.exencion_permiso = 'deprecada'
+exportar_libro_iva_txt.metodos_deprecados = ('GET',)
+exportar_libro_iva_txt.retiro_deprecado_en = '7'
+exportar_libro_iva_txt.corte_permisos = '3.11'
