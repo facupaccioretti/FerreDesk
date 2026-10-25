@@ -23,6 +23,7 @@ from . import libro_iva_export_views
 from . import eliminador_presupuestos
 
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'comprobantes', ComprobanteViewSet)
 router.register(r'ventas', VentaViewSet)
 router.register(r'venta-detalle-item', VentaDetalleItemViewSet)

@@ -34,6 +34,35 @@ PERMISOS_CODIGO_BARRAS_POR_METODO = {
     'delete': 'productos.modificar',
 }
 
+CAMPOS_FISCALES_FERRETERIA = frozenset({
+    'situacion_iva',
+    'punto_venta_arca',
+    'cuit_cuil',
+    'razon_social',
+    'ingresos_brutos',
+    'inicio_actividad',
+    'certificado_arca',
+    'clave_privada_arca',
+    'modo_arca',
+    'arca_habilitado',
+    'arca_configurado',
+    'arca_ultima_validacion',
+    'arca_error_configuracion',
+})
+
 
 def seleccionar_permiso_codigo_barras(metodo):
     return PERMISOS_CODIGO_BARRAS_POR_METODO.get(metodo)
+
+
+def seleccionar_permisos_ferreteria(metodo, campos):
+    metodo = (metodo or '').lower()
+    if metodo == 'get':
+        return ('configuracion.negocio',)
+    if metodo not in {'patch', 'put'}:
+        return None
+
+    permisos = ['configuracion.negocio']
+    if CAMPOS_FISCALES_FERRETERIA.intersection(campos):
+        permisos.append('configuracion.fiscal')
+    return tuple(permisos)

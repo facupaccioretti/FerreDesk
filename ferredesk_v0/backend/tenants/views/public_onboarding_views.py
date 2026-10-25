@@ -37,6 +37,8 @@ class BaseOnboardingPublicoAPIView(APIView):
 
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    exencion_permiso = 'publica'
+    corte_permisos = '3.11'
 
 
 class ValidarSlugOnboardingAPIView(BaseOnboardingPublicoAPIView):

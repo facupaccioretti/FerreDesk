@@ -15,6 +15,7 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'sesiones', views.SesionCajaViewSet, basename='sesion-caja')
 router.register(r'movimientos', views.MovimientoCajaViewSet, basename='movimiento-caja')
 router.register(r'metodos-pago', views.MetodoPagoViewSet, basename='metodo-pago')

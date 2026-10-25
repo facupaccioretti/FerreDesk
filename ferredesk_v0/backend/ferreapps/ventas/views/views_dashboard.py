@@ -2,11 +2,15 @@ from django.http import JsonResponse
 from django.db.models import Sum, Count, F, Value, Q
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
+from django.views.decorators.http import require_GET
 from datetime import datetime, timedelta
 from ..models import Venta, VentaDetalleItem
 from ferreapps.clientes.selectors import filtrar_por_cliente_visible
+from ferreapps.usuarios.decorators import requiere_permiso_funcional
 
 
+@require_GET
+@requiere_permiso_funcional('dashboard.ver')
 def productos_mas_vendidos(request):
     """Endpoint para obtener los productos más vendidos usando ORM"""
     tipo = request.GET.get('tipo', 'cantidad')  # 'cantidad' o 'total'
@@ -69,6 +73,8 @@ def productos_mas_vendidos(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_GET
+@requiere_permiso_funcional('dashboard.ver')
 def ventas_por_dia(request):
     """Endpoint para obtener las ventas por día usando ORM"""
     periodo = request.GET.get('periodo', '7d')
@@ -133,6 +139,8 @@ def ventas_por_dia(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_GET
+@requiere_permiso_funcional('dashboard.ver')
 def clientes_mas_ventas(request):
     """Endpoint para obtener los clientes con más ventas usando ORM"""
     tipo = request.GET.get('tipo', 'total')  # 'total', 'cantidad', 'frecuencia'
@@ -201,6 +209,14 @@ def clientes_mas_ventas(request):
             
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+productos_mas_vendidos.corte_permisos = '3.10'
+productos_mas_vendidos.allowed_methods = ('GET',)
+ventas_por_dia.corte_permisos = '3.10'
+ventas_por_dia.allowed_methods = ('GET',)
+clientes_mas_ventas.corte_permisos = '3.10'
+clientes_mas_ventas.allowed_methods = ('GET',)
 
 
 

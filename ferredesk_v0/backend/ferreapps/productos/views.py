@@ -47,7 +47,6 @@ import base64
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
-from ferredesk_backend.permissions import EsAdminTenant
 from ferredesk_backend.utils.observability import medir_proceso
 from ferredesk_backend.views import serve_react_root_file
 from .services.importacion_lista_precios_service import (
@@ -55,11 +54,17 @@ from .services.importacion_lista_precios_service import (
     crear_importacion_pendiente_lista_precios,
     importar_lista_precios_proveedor,
 )
+from .services.configuracion_ferreteria import guardar_configuracion_ferreteria
 from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferreapps.usuarios.services.reautenticacion import verificar_contrasena_request
 from ferreapps.usuarios.decorators import requiere_permiso_funcional
 from ferredesk_backend.permissions import RequierePermisoFuncional
 from ferreapps.proveedores.politicas_permisos import PERMISOS_PROVEEDOR_POR_ACCION
-from .politicas_permisos import PERMISOS_PRODUCTO_POR_ACCION
+from .politicas_permisos import (
+    CAMPOS_FISCALES_FERRETERIA,
+    PERMISOS_PRODUCTO_POR_ACCION,
+    seleccionar_permisos_ferreteria,
+)
 
 # Create your views here.
 
@@ -381,7 +386,9 @@ class StockViewSet(viewsets.ModelViewSet):
 
 
 class PosProductoLookupAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.ver'
+    corte_permisos = '3.11'
 
     def get(self, request):
         codigo = (request.query_params.get('codigo') or '').strip()
@@ -446,7 +453,9 @@ class PosProductoLookupAPIView(APIView):
 
 
 class PosProductoSearchAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'productos.ver'
+    corte_permisos = '3.11'
     limite_por_defecto = 20
     limite_maximo = 50
 
@@ -1342,13 +1351,15 @@ def editar_producto_con_relaciones(request):
 editar_producto_con_relaciones.corte_permisos = '3.3'
 
 class FerreteriaAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+    corte_permisos = '3.9'
 
-    def get_permissions(self):
-        if self.request.method in ("PATCH", "PUT"):
-            return [EsAdminTenant()]
-        return [IsAuthenticated()]
+    def get_permiso_requerido(self):
+        request = getattr(self, 'request', None)
+        metodo = getattr(request, 'method', None) or getattr(self, 'action', None)
+        campos = request.data.keys() if request is not None else ()
+        return seleccionar_permisos_ferreteria(metodo, campos)
 
     def _build_configuracion_inicial(self):
         arca_permitir_homologacion_ui = getattr(settings, "ARCA_PERMITIR_HOMOLOGACION_UI", False)
@@ -1385,45 +1396,6 @@ class FerreteriaAPIView(APIView):
             "arca_permitir_homologacion_ui": arca_permitir_homologacion_ui,
         }
 
-    def get(self, request):
-        print('DEBUG FerreteriaAPIView GET:', request.user, 'is_authenticated:', request.user.is_authenticated)
-        ferreteria = Ferreteria.objects.first()
-        if not ferreteria:
-            # Devolver esqueleto para configuración inicial sin romper la UI
-            configuracion_inicial = {
-                'no_configurada': True,
-                'setup_completo': False,
-                'campos_setup_faltantes': [
-                    'nombre',
-                    'razon_social',
-                    'cuit_cuil',
-                    'situacion_iva',
-                    'direccion',
-                    'telefono',
-                ],
-                'nombre': '',
-                'direccion': '',
-                'telefono': '',
-                'email': None,
-                'situacion_iva': 'RI',
-                'punto_venta_arca': '',
-                'cuit_cuil': '',
-                'razon_social': '',
-                'ingresos_brutos': '',
-                'inicio_actividad': None,
-                'logo_empresa': None,
-                'certificado_arca': None,
-                'clave_privada_arca': None,
-                'modo_arca': 'HOM',
-                'arca_habilitado': False,
-                'arca_configurado': False,
-                'arca_ultima_validacion': None,
-                'arca_error_configuracion': None,
-                'permitir_stock_negativo': False,
-            }
-            return Response(configuracion_inicial, status=200)
-        return Response(FerreteriaSerializer(ferreteria, context={'request': request}).data)
-
     def patch(self, request):
         ferreteria = Ferreteria.objects.first()
         if not ferreteria:
@@ -1440,9 +1412,21 @@ class FerreteriaAPIView(APIView):
         ]:
             data.pop(legacy_key, None)
 
+        campos_fiscales = CAMPOS_FISCALES_FERRETERIA.intersection(data.keys())
+        if campos_fiscales:
+            contrasena = data.get('contrasena')
+            data.pop('contrasena', None)
+            verificar_contrasena_request(request, contrasena)
+        else:
+            data.pop('contrasena', None)
+
         serializer = FerreteriaSerializer(ferreteria, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            guardar_configuracion_ferreteria(
+                serializer=serializer,
+                request=request,
+                campos_fiscales=campos_fiscales,
+            )
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
@@ -1470,27 +1454,8 @@ class FerreteriaAPIView(APIView):
 
 class EstadoSetupAPIView(APIView):
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        ferreteria = Ferreteria.objects.first()
-        if not ferreteria:
-            return Response(
-                {
-                    'setup_completo': False,
-                    'campos_setup_faltantes': [
-                        'nombre',
-                        'razon_social',
-                        'cuit_cuil',
-                        'situacion_iva',
-                        'direccion',
-                        'telefono',
-                    ],
-                    'no_configurada': True,
-                },
-                status=200,
-            )
-
-        return Response(ferreteria.obtener_estado_setup(), status=200)
+    exencion_permiso = 'sesion_exenta'
+    corte_permisos = '3.11'
 
     def get(self, request):
         with medir_proceso(
@@ -1560,6 +1525,10 @@ def servir_logo_arca(request):
     except Exception as e:
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
 
+
+servir_logo_arca.exencion_permiso = 'publica'
+servir_logo_arca.corte_permisos = '3.11'
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def servir_logo_empresa(request):
@@ -1615,6 +1584,10 @@ def servir_logo_empresa(request):
     except Exception as e:
         print(f'ERROR: Error al servir logo empresa: {str(e)}')
         return Response({'detail': f'Error al servir logo: {str(e)}'}, status=500)
+
+
+servir_logo_empresa.exencion_permiso = 'publica'
+servir_logo_empresa.corte_permisos = '3.11'
 
 class BuscarDenominacionesSimilaresAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated, RequierePermisoFuncional]

@@ -1,5 +1,6 @@
 import logging
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import JsonResponse
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,12 +8,49 @@ from ferreapps.ventas.ARCA import FerreDeskARCAError
 
 logger = logging.getLogger(__name__)
 
+
+class ErrorFuncional(Exception):
+    def __init__(self, status_code, code, message, fields=None, headers=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        self.fields = fields or {}
+        self.headers = headers or {}
+
+
+def respuesta_error(status_code, code, message, fields=None, headers=None):
+    response = JsonResponse(
+        {
+            'status': 'error',
+            'code': code,
+            'message': message,
+            'fields': fields or {},
+        },
+        status=status_code,
+    )
+    for nombre, valor in (headers or {}).items():
+        response[nombre] = valor
+    return response
+
 def custom_exception_handler(exc, context):
     """
     Manejador de excepciones personalizado para Django REST Framework.
     Captura FerreDeskARCAError y retorna una respuesta JSON estructurada (400 Bad Request)
     en lugar de permitir que escale a un error 500 HTML.
     """
+    if isinstance(exc, ErrorFuncional):
+        return Response(
+            {
+                'status': 'error',
+                'code': exc.code,
+                'message': exc.message,
+                'fields': exc.fields,
+            },
+            status=exc.status_code,
+            headers=exc.headers,
+        )
+
     # Llamar al manejador por defecto de DRF primero
     response = exception_handler(exc, context)
 

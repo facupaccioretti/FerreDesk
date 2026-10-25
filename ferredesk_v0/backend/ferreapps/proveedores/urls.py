@@ -11,6 +11,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'', ProveedorViewSet, basename='proveedor')
 
 urlpatterns = [

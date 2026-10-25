@@ -17,6 +17,8 @@ class BaseAccesoPublicoAPIView(APIView):
 
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
+    exencion_permiso = 'publica'
+    corte_permisos = '3.11'
 
 
 def _esquema_publico_activo():

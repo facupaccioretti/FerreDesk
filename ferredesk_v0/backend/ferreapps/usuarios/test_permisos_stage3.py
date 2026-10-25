@@ -573,11 +573,11 @@ class CoberturaPermisosTests(SimpleTestCase):
         self.assertGreater(len(filas_csv), 0)
         self.assertEqual(filas_csv[0][0], 'corte')
 
-    def test_barrido_global_falla_por_operaciones_sin_clasificar(self):
-        with self.assertRaises(CommandError) as ctx:
-            call_command(
-                'verificar_cobertura_permisos',
-                '--fail-on-unclassified',
-                stdout=StringIO(),
-            )
-        self.assertIn('operaciones API sin clasificar', str(ctx.exception))
+    def test_barrido_global_cierre_etapa_3_sin_operaciones_sin_clasificar(self):
+        salida = StringIO()
+        call_command(
+            'verificar_cobertura_permisos',
+            '--fail-on-unclassified',
+            stdout=salida,
+        )
+        self.assertIn('corte\turlconf\truta', salida.getvalue())

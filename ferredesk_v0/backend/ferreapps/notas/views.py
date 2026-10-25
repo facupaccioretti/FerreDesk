@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import viewsets, status
+from rest_framework import permissions, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
@@ -7,11 +7,29 @@ from .models import Nota
 from .serializers import NotaSerializer
 from rest_framework.exceptions import NotFound
 from django.db import transaction  # Para transacciones atómicas
+from ferredesk_backend.permissions import DeniegaOperacionDeprecada
 
 # Create your views here.
 
 class NotaViewSet(viewsets.ModelViewSet):
     serializer_class = NotaSerializer
+    permission_classes = [permissions.IsAuthenticated, DeniegaOperacionDeprecada]
+    corte_permisos = '3.11'
+    exenciones_por_accion = {
+        'list': 'deprecada',
+        'create': 'deprecada',
+        'retrieve': 'deprecada',
+        'update': 'deprecada',
+        'partial_update': 'deprecada',
+        'destroy': 'deprecada',
+        'marcar_importante': 'deprecada',
+        'archivar': 'deprecada',
+        'restaurar': 'deprecada',
+        'eliminar': 'deprecada',
+        'estadisticas': 'deprecada',
+    }
+    metodos_deprecados = ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
+    retiro_deprecado_en = '7'
 
     def get_queryset(self):
         queryset = Nota.objects.filter(usuario=self.request.user)

@@ -6,18 +6,6 @@ from ferreapps.usuarios.permisos import evaluar_permiso
 from ferreapps.usuarios.services.actor_service import resolver_actor_http
 
 
-class EsAdminTenant(BasePermission):
-    message = "Solo un administrador del negocio puede realizar esta accion."
-
-    def has_permission(self, request, view):
-        user = getattr(request, "user", None)
-        return bool(
-            user
-            and user.is_authenticated
-            and getattr(user, "tipo_usuario", None) == "admin"
-        )
-
-
 class RequierePermisoFuncional(BasePermission):
     message = 'Permiso funcional insuficiente.'
 
@@ -47,3 +35,10 @@ class RequierePermisoFuncional(BasePermission):
             evaluar_permiso(actor, permiso_id)
             for permiso_id in permisos
         )
+
+
+class DeniegaOperacionDeprecada(BasePermission):
+    message = 'La operacion esta deprecada.'
+
+    def has_permission(self, request, view):
+        return False

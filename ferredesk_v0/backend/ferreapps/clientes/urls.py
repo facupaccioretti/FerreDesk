@@ -8,6 +8,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'localidades', LocalidadViewSet)
 router.register(r'provincias', ProvinciaViewSet)
 router.register(r'barrios', BarrioViewSet)
@@ -21,4 +22,4 @@ router.register(r'clientes', ClienteViewSet, basename='cliente')
 urlpatterns = [
     path('validar-cuit/', ValidarCUITAPIView.as_view(), name='validar-cuit'),
     path('procesar-cuit-arca/', ProcesarCuitArcaAPIView.as_view(), name='procesar-cuit-arca'),
-] + router.urls 
+] + router.urls

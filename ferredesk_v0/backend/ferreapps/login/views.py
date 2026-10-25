@@ -5,6 +5,7 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
 from django.utils.decorators import method_decorator
 from django.db import connection
 import json
@@ -18,8 +19,10 @@ from acceso_publico.services import validar_token_puente
 from ferreapps.login.password_reset_service import confirmar_reset_password_tenant, enviar_email_reset_tenant
 from ferreapps.login.serializers import PasswordResetConfirmSerializer, PasswordResetRequestSerializer
 from ferreapps.productos.setup import obtener_estado_setup_actual
-from ferreapps.usuarios.models import CliUsuario
-from ferreapps.usuarios.models import Usuario
+from ferreapps.usuarios.models import ActorTipo, CliUsuario, Usuario
+from ferreapps.usuarios.permisos import es_actor_dueno
+from ferreapps.usuarios.services.actor_service import resolver_actor_http
+from ferredesk_backend.utils.exceptions import respuesta_error
 
 # Create your views here.
 
@@ -75,11 +78,26 @@ def login_view(request):
 
 def logout_view(request):
     if request.method == 'POST':
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {'status': 'error', 'message': 'No autenticado'},
+                status=401,
+            )
+        actor = resolver_actor_http(request)
+        if actor is None or (
+            actor.tipo != ActorTipo.TITULAR and not es_actor_dueno(actor)
+        ):
+            return respuesta_error(
+                403,
+                'solo_dueno',
+                'Solo el Dueno puede cerrar la sesion del negocio.',
+            )
         logout(request)
         return JsonResponse({'status': 'success', 'message': 'Sesión cerrada'})
     return JsonResponse({'status': 'error', 'message': 'Método no permitido'}, status=405)
 
 @ensure_csrf_cookie
+@require_GET
 def get_csrf(request):
     """
     Endpoint para que el frontend obtenga la cookie CSRF.
@@ -91,6 +109,7 @@ def get_csrf(request):
     })
 
 @ensure_csrf_cookie
+@require_GET
 def user_view(request):
     if request.user.is_authenticated:
         return JsonResponse({
@@ -223,6 +242,8 @@ def password_reset_request_view(request):
 
 class PasswordResetConfirmAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    exencion_permiso = 'publica'
+    corte_permisos = '3.11'
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -242,3 +263,28 @@ class PasswordResetConfirmAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+login_view.allowed_methods = ('POST',)
+login_view.exencion_permiso = 'publica'
+login_view.corte_permisos = '3.11'
+
+login_bridge_view.allowed_methods = ('POST',)
+login_bridge_view.exencion_permiso = 'publica'
+login_bridge_view.corte_permisos = '3.11'
+
+logout_view.allowed_methods = ('POST',)
+logout_view.exencion_permiso = 'sesion_exenta'
+logout_view.corte_permisos = '3.11'
+
+get_csrf.allowed_methods = ('GET',)
+get_csrf.exencion_permiso = 'publica'
+get_csrf.corte_permisos = '3.11'
+
+user_view.allowed_methods = ('GET',)
+user_view.exencion_permiso = 'sesion_exenta'
+user_view.corte_permisos = '3.11'
+
+password_reset_request_view.allowed_methods = ('POST',)
+password_reset_request_view.exencion_permiso = 'publica'
+password_reset_request_view.corte_permisos = '3.11'

@@ -5,6 +5,7 @@ from .views_codigo_barras import CodigoBarrasProductoView, ValidarCodigoBarrasVi
 from django.urls import path
 
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'stock', StockViewSet, basename='stock')
 router.register(r'proveedores', ProveedorViewSet)
 router.register(r'stockprove', StockProveViewSet)

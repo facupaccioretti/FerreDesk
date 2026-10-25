@@ -7,7 +7,6 @@ Public platform routes live in ferredesk_backend.urls_public.
 
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
@@ -33,7 +32,6 @@ router.register(r"productos/familias", FamiliaViewSet, basename="familia")
 router.register(r"productos/alicuotasiva", AlicuotaIVAViewSet, basename="alicuotaiva")
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("api/usuarios/", include("ferreapps.usuarios.urls")),
     path("api/clientes/", include("ferreapps.clientes.urls")),
     path("api/productos/", include("ferreapps.productos.urls")),

@@ -5,6 +5,7 @@ from . import orden_compra_export_views
 
 # Configurar el router para las vistas
 router = DefaultRouter()
+router.include_root_view = False
 router.register(r'compras', views.CompraViewSet, basename='compra')
 router.register(r'items', views.CompraDetalleItemViewSet, basename='compra-item')
 router.register(r'ordenes-compra', views.OrdenCompraViewSet, basename='orden-compra')

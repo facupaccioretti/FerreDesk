@@ -14,6 +14,7 @@ from ferreapps.productos.models import Stock
 from django.db.models import Q, F
 from django.db.models.functions import Lower
 from rest_framework.permissions import IsAuthenticated
+from ferredesk_backend.permissions import RequierePermisoFuncional
 from ferreapps.productos.utils.paginacion import PaginacionPorPaginaConLimite
 
 # Create your views here.
@@ -23,7 +24,9 @@ def _es_true(valor):
 
 
 class _StockBajoBaseAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequierePermisoFuncional]
+    permiso_requerido = 'informes.ver'
+    corte_permisos = '3.10'
 
     def _get_queryset(self, request):
         queryset = (
