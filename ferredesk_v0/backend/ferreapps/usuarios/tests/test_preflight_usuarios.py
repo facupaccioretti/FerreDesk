@@ -44,6 +44,13 @@ class PreflightUsuariosUnitTests(SimpleTestCase):
 
 
 class PreflightUsuariosCommandTests(TwoTenantIsolationTestCase):
+    tenant_a_schema_name = "testpreflightaisloa"
+    tenant_b_schema_name = "testpreflightaislob"
+    tenant_a_domain = "testpreflightaisloa.lvh.me"
+    tenant_b_domain = "testpreflightaislob.lvh.me"
+    tenant_a_email = "admin@preflightaisloa.test"
+    tenant_b_email = "admin@preflightaislob.test"
+
     def _crear_tenant_consistente(self, tenant, email):
         datos = inicializar_datos_tenant(
             tenant=tenant,

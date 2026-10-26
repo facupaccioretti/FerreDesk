@@ -11,6 +11,7 @@ Fuentes normativas:
 3. usuarios/Usuarios - Relevamiento de endpoints y accesos.md (B.3, B.5, B.9, B.10)
 """
 
+import json
 from datetime import date
 from decimal import Decimal
 from django.contrib.auth.models import AnonymousUser
@@ -122,6 +123,8 @@ class BaseBloque3TenantTestCase(TenantTestCase):
 
         request.perfil_operativo = perfil
         request.perfiles_adoptados = True
+        if metodo_upper in {'POST', 'PUT', 'PATCH', 'DELETE'} and perfil is not None:
+            request.META['HTTP_X_PERFIL_ESPERADO'] = str(perfil.pk)
         return request
 
     def _crear_perfil_ordinario(self, nombre, permisos, habilitado=True):
@@ -409,10 +412,10 @@ class Corte35ComprasPermisosTenantTests(BaseBloque3TenantTestCase):
         self.assertNotEqual(convertir_orden_compra_a_compra(req_con).status_code, 403)
 
     def test_exportar_orden_compra_pdf_requiere_compras_ver(self):
-        from django.core.exceptions import PermissionDenied
         req_sin = self._crear_request("GET", "/api/ordenes-compra/1/export/pdf/", perfil=self.perfil_sin_compras)
-        with self.assertRaises(PermissionDenied):
-            exportar_orden_compra_pdf_endpoint(req_sin, orden_id=1)
+        response_sin = exportar_orden_compra_pdf_endpoint(req_sin, orden_id=1)
+        self.assertEqual(response_sin.status_code, 403)
+        self.assertEqual(json.loads(response_sin.content)['code'], 'permiso_insuficiente')
 
         req_con = self._crear_request("GET", "/api/ordenes-compra/1/export/pdf/", perfil=self.perfil_ver)
         response_con = exportar_orden_compra_pdf_endpoint(req_con, orden_id=1)

@@ -5,6 +5,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 
 from ferreapps.usuarios.models import ActorTipo, Perfil
+from ferreapps.usuarios.selectors.adopcion import perfiles_adoptados
 from ferreapps.usuarios.validators import validar_combinacion_actor
 
 
@@ -37,14 +38,7 @@ class ActorContext:
 
 
 def _perfiles_adoptados(request):
-    perfiles_adoptados = getattr(request, 'perfiles_adoptados', None)
-    if perfiles_adoptados is not None:
-        return perfiles_adoptados
-    return (
-        Perfil.objects.filter(tipo=Perfil.TIPO_DUENO, usuario__isnull=False)
-        .exclude(pin_hash='')
-        .exists()
-    )
+    return perfiles_adoptados(request)
 
 
 def resolver_actor(request):

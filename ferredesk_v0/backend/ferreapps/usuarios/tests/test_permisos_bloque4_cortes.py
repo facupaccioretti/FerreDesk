@@ -30,7 +30,6 @@ import math
 
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.db import SessionStore
-from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection, models
@@ -160,6 +159,12 @@ class BaseBloque4TenantTestCase(TenantTestCase):
 
         request.perfil_operativo = perfil
         request.perfiles_adoptados = perfiles_adoptados
+        if (
+            metodo_upper in {'POST', 'PUT', 'PATCH', 'DELETE'}
+            and perfiles_adoptados
+            and perfil is not None
+        ):
+            request.META['HTTP_X_PERFIL_ESPERADO'] = str(perfil.pk)
         return request
 
     def _crear_perfil_ordinario(self, nombre, permisos, habilitado=True):
@@ -615,8 +620,9 @@ class Corte310InformesYDashboardPermisosTenantTests(BaseBloque4TenantTestCase):
 
     def test_dashboard_productos_mas_vendidos_sin_dashboard_ver_responde_403(self):
         request = self._crear_request("GET", "/api/home/productos-mas-vendidos/", perfil=self.perfil_sin_permiso)
-        with self.assertRaises(PermissionDenied):
-            productos_mas_vendidos(request)
+        response = productos_mas_vendidos(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.content)['code'], 'permiso_insuficiente')
 
     def test_dashboard_productos_mas_vendidos_con_dashboard_ver_responde_200(self):
         request = self._crear_request("GET", "/api/home/productos-mas-vendidos/", perfil=self.perfil_dashboard)
@@ -625,8 +631,9 @@ class Corte310InformesYDashboardPermisosTenantTests(BaseBloque4TenantTestCase):
 
     def test_dashboard_ventas_por_dia_sin_dashboard_ver_responde_403(self):
         request = self._crear_request("GET", "/api/home/ventas-por-dia/", perfil=self.perfil_sin_permiso)
-        with self.assertRaises(PermissionDenied):
-            ventas_por_dia(request)
+        response = ventas_por_dia(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.content)['code'], 'permiso_insuficiente')
 
     def test_dashboard_ventas_por_dia_con_dashboard_ver_responde_200(self):
         request = self._crear_request("GET", "/api/home/ventas-por-dia/", perfil=self.perfil_dashboard)
@@ -635,8 +642,9 @@ class Corte310InformesYDashboardPermisosTenantTests(BaseBloque4TenantTestCase):
 
     def test_dashboard_clientes_mas_ventas_sin_dashboard_ver_responde_403(self):
         request = self._crear_request("GET", "/api/home/clientes-mas-ventas/", perfil=self.perfil_sin_permiso)
-        with self.assertRaises(PermissionDenied):
-            clientes_mas_ventas(request)
+        response = clientes_mas_ventas(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.content)['code'], 'permiso_insuficiente')
 
     def test_dashboard_clientes_mas_ventas_con_dashboard_ver_responde_200(self):
         request = self._crear_request("GET", "/api/home/clientes-mas-ventas/", perfil=self.perfil_dashboard)
@@ -916,7 +924,7 @@ class Corte311BootstrapYAuthTenantTests(BaseBloque4TenantTestCase):
         self.assertEqual(getattr(login_bridge_view, "exencion_permiso", None), "publica")
 
         self.assertEqual(getattr(logout_view, "corte_permisos", None), "3.11")
-        self.assertEqual(getattr(logout_view, "exencion_permiso", None), "sesion_exenta")
+        self.assertEqual(getattr(logout_view, "exencion_permiso", None), "requiere_dueno")
         self.assertEqual(getattr(logout_view, "allowed_methods", None), ("POST",))
 
         self.assertEqual(getattr(user_view, "corte_permisos", None), "3.11")

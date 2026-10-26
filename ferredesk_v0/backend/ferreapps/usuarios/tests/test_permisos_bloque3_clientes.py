@@ -137,6 +137,12 @@ class BaseClientesTenantTestCase(TenantTestCase):
 
         request.perfil_operativo = perfil
         request.perfiles_adoptados = perfiles_adoptados
+        if (
+            metodo_upper in {'POST', 'PUT', 'PATCH', 'DELETE'}
+            and perfiles_adoptados
+            and perfil is not None
+        ):
+            request.META['HTTP_X_PERFIL_ESPERADO'] = str(perfil.pk)
         return request
 
     def _crear_perfil_ordinario(self, nombre, permisos, habilitado=True):

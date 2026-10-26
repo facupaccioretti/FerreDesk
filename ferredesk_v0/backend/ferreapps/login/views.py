@@ -21,8 +21,11 @@ from ferreapps.login.serializers import PasswordResetConfirmSerializer, Password
 from ferreapps.productos.setup import obtener_estado_setup_actual
 from ferreapps.usuarios.models import ActorTipo, CliUsuario, Usuario
 from ferreapps.usuarios.permisos import es_actor_dueno
+from ferreapps.usuarios.selectors.sesion import construir_estado_sesion
 from ferreapps.usuarios.services.actor_service import resolver_actor_http
-from ferredesk_backend.utils.exceptions import respuesta_error
+from ferreapps.usuarios.services.sesion_operativa import fijar_expiracion_absoluta_cuenta
+from ferreapps.usuarios.validators.acceso_http import validar_perfil_esperado
+from ferredesk_backend.utils.exceptions import ErrorFuncional, respuesta_error
 
 # Create your views here.
 
@@ -49,6 +52,7 @@ def login_view(request):
                 except CliUsuario.DoesNotExist:
                     pass  # Si no es un usuario cliente, permitir el login normalmente
                 login(request, user)
+                fijar_expiracion_absoluta_cuenta(request.session)
                 return JsonResponse({
                     'status': 'success',
                     'message': 'Login exitoso',
@@ -79,9 +83,20 @@ def login_view(request):
 def logout_view(request):
     if request.method == 'POST':
         if not request.user.is_authenticated:
-            return JsonResponse(
-                {'status': 'error', 'message': 'No autenticado'},
-                status=401,
+            return respuesta_error(
+                401,
+                'cuenta_no_autenticada',
+                'La cuenta no esta autenticada.',
+            )
+        try:
+            validar_perfil_esperado(request)
+        except ErrorFuncional as exc:
+            return respuesta_error(
+                exc.status_code,
+                exc.code,
+                exc.message,
+                exc.fields,
+                exc.headers,
             )
         actor = resolver_actor_http(request)
         if actor is None or (
@@ -112,6 +127,7 @@ def get_csrf(request):
 @require_GET
 def user_view(request):
     if request.user.is_authenticated:
+        estado = construir_estado_sesion(request)
         return JsonResponse({
             'status': 'success',
             'user': {
@@ -119,10 +135,15 @@ def user_view(request):
                 'is_staff': request.user.is_staff,
                 'tipo_usuario': request.user.tipo_usuario,
                 'es_admin_tenant': request.user.tipo_usuario == "admin",
+                **estado,
             }
         })
     else:
-        return JsonResponse({'status': 'error', 'message': 'No autenticado'}, status=401)
+        return respuesta_error(
+            401,
+            'cuenta_no_autenticada',
+            'La cuenta no esta autenticada.',
+        )
 
 
 @csrf_exempt
@@ -174,6 +195,7 @@ def login_bridge_view(request):
         )
 
     login(request, usuario, backend="django.contrib.auth.backends.ModelBackend")
+    fijar_expiracion_absoluta_cuenta(request.session)
     token_puente.marcar_usado()
 
     estado_setup = obtener_estado_setup_actual()
@@ -274,7 +296,7 @@ login_bridge_view.exencion_permiso = 'publica'
 login_bridge_view.corte_permisos = '3.11'
 
 logout_view.allowed_methods = ('POST',)
-logout_view.exencion_permiso = 'sesion_exenta'
+logout_view.exencion_permiso = 'requiere_dueno'
 logout_view.corte_permisos = '3.11'
 
 get_csrf.allowed_methods = ('GET',)

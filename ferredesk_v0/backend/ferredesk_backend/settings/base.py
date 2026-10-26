@@ -2,6 +2,8 @@ from pathlib import Path
 import os
 from datetime import timedelta
 
+from corsheaders.defaults import default_headers
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key")
@@ -65,6 +67,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'ferreapps.usuarios.middleware.PerfilOperativoMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
@@ -118,6 +121,14 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@ferredesk.lo
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
 ARCA_PERMITIR_HOMOLOGACION_UI = env_bool("ARCA_PERMITIR_HOMOLOGACION_UI", False)
+PERFILES_ROLLOUT_HABILITADO = env_bool("PERFILES_ROLLOUT_HABILITADO", False)
+PERFIL_INACTIVIDAD_SEGUNDOS = 900
+
+SESSION_COOKIE_AGE = 60 * 24 * 60 * 60
+SESSION_SAVE_EVERY_REQUEST = False
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+CORS_ALLOW_HEADERS = (*default_headers, 'x-perfil-esperado')
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

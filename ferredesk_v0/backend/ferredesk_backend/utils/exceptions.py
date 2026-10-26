@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import NotAuthenticated
 from ferreapps.ventas.ARCA import FerreDeskARCAError
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,21 @@ def custom_exception_handler(exc, context):
             },
             status=exc.status_code,
             headers=exc.headers,
+        )
+
+    if isinstance(exc, NotAuthenticated):
+        headers = {}
+        if auth_header := getattr(exc, 'auth_header', None):
+            headers['WWW-Authenticate'] = auth_header
+        return Response(
+            {
+                'status': 'error',
+                'code': 'cuenta_no_autenticada',
+                'message': 'La cuenta no esta autenticada.',
+                'fields': {},
+            },
+            status=status.HTTP_401_UNAUTHORIZED,
+            headers=headers,
         )
 
     # Llamar al manejador por defecto de DRF primero

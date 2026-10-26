@@ -50,6 +50,7 @@ class LoginBridgeTestCase(TransactionTestCase):
 
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.url, "/setup")
+        self.assertIsInstance(client.session["_session_expiry"], str)
 
         user_response = client.get("/api/user/", HTTP_HOST=f"{slug}.lvh.me")
         self.assertEqual(user_response.status_code, 200)

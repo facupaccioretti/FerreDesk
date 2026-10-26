@@ -4,7 +4,7 @@ from io import StringIO
 from types import MappingProxyType
 
 from django.contrib.auth.models import AnonymousUser
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
@@ -395,7 +395,10 @@ class AdaptadoresPermisosTenantTests(TenantTestCase):
             'delete': 'destroy',
         })
         factory = APIRequestFactory()
-        request = factory.delete('/api/productos/1/')
+        request = factory.delete(
+            '/api/productos/1/',
+            HTTP_X_PERFIL_ESPERADO=str(self.perfil_con_permiso.pk),
+        )
         request.user = self.usuario
         force_authenticate(request, user=self.usuario)
         request.perfil_operativo = self.perfil_con_permiso
@@ -408,7 +411,10 @@ class AdaptadoresPermisosTenantTests(TenantTestCase):
     def test_viewset_accion_no_declarada_responde_403(self):
         callback = ProductosViewSetPrueba.as_view({'post': 'accion_sin_permiso'})
         factory = APIRequestFactory()
-        request = factory.post('/api/productos/')
+        request = factory.post(
+            '/api/productos/',
+            HTTP_X_PERFIL_ESPERADO=str(self.perfil_con_permiso.pk),
+        )
         request.user = self.usuario
         force_authenticate(request, user=self.usuario)
         request.perfil_operativo = self.perfil_con_permiso
@@ -423,14 +429,15 @@ class AdaptadoresPermisosTenantTests(TenantTestCase):
         response = callback(request, pk=1)
         self.assertEqual(response.status_code, 401)
 
-    def test_decorador_redirige_request_anonimo_a_login(self):
+    def test_decorador_responde_401_a_request_anonimo(self):
         @requiere_permiso('ventas.ver')
         def vista(request):
             return Response({'ok': True})
 
         request = self._crear_request(autenticado=False)
         response = vista(request)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(json.loads(response.content)['code'], 'cuenta_no_autenticada')
 
     def test_decorador_con_permiso_ejecuta_vista(self):
         @requiere_permiso('productos.ver')
@@ -447,8 +454,9 @@ class AdaptadoresPermisosTenantTests(TenantTestCase):
             return Response({'ok': True})
 
         request = self._crear_request(perfil=self.perfil_sin_permiso)
-        with self.assertRaises(PermissionDenied):
-            vista(request)
+        response = vista(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.content)['code'], 'permiso_insuficiente')
 
 
 class CoberturaPermisosTests(SimpleTestCase):

@@ -5,18 +5,18 @@ from collections.abc import Mapping
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import URLPattern, URLResolver, get_resolver
 
+from ferreapps.usuarios.metadatos import (
+    EXENCIONES_VALIDAS,
+    objetivos_callback,
+    obtener_exencion_permiso,
+    valor_atributo,
+)
 from ferreapps.usuarios.permisos import CATALOGO_PERMISOS
 from ferredesk_backend.permissions import RequierePermisoFuncional
 
 
 URLCONFS = ('ferredesk_backend.urls', 'ferredesk_backend.urls_public')
 CORTE_ACTUAL = '3.0'
-EXENCIONES_VALIDAS = frozenset({
-    'publica',
-    'sesion_exenta',
-    'infraestructura',
-    'deprecada',
-})
 CAMPOS = (
     'corte',
     'urlconf',
@@ -39,10 +39,7 @@ def _recorrer_patrones(patrones, prefijo=''):
 
 
 def _objetivos_callback(callback):
-    yield callback
-    clase = getattr(callback, 'cls', None) or getattr(callback, 'view_class', None)
-    if clase is not None:
-        yield clase
+    yield from objetivos_callback(callback)
 
 
 def _tiene_permission_class(callback):
@@ -60,11 +57,7 @@ def _tiene_permission_class(callback):
 
 
 def _valor_atributo(callback, nombre, default=None):
-    for objetivo in _objetivos_callback(callback):
-        valor = getattr(objetivo, nombre, None)
-        if valor is not None:
-            return valor
-    return default
+    return valor_atributo(callback, nombre, default)
 
 
 def _permiso_declarado(callback, accion):
@@ -96,13 +89,7 @@ def _permiso_declarado(callback, accion):
 
 
 def _obtener_exencion(callback, accion=None):
-    exenciones_por_accion = _valor_atributo(callback, 'exenciones_por_accion')
-    if accion and isinstance(exenciones_por_accion, Mapping):
-        exencion = exenciones_por_accion.get(accion)
-        if exencion in EXENCIONES_VALIDAS:
-            return exencion
-    exencion = _valor_atributo(callback, 'exencion_permiso')
-    return exencion if exencion in EXENCIONES_VALIDAS else None
+    return obtener_exencion_permiso(callback, accion=accion)
 
 
 def _nombre_callback(callback):

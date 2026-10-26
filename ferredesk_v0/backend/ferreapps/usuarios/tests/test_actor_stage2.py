@@ -199,7 +199,7 @@ class ActorConstraintTests(TenantTestCase):
         self.assertIs(primero, segundo)
         self.assertEqual(primero.tipo, ActorTipo.PERFIL)
         self.assertEqual(primero.perfil, self.dueno)
-        self.assertEqual(primero.etiqueta, "Dueno (Lautaro)")
+        self.assertEqual(primero.etiqueta, "Dueño (Lautaro)")
 
     def test_resolver_actor_previo_a_adopcion_devuelve_titular(self):
         self.dueno.delete()
@@ -277,7 +277,7 @@ class ActorTwoTenantIsolationTests(TwoTenantIsolationTestCase):
             self.assertTrue(Perfil.objects.filter(nombre="Lautaro B").exists())
             self.assertFalse(Perfil.objects.filter(nombre="Lautaro A").exists())
 
-        self.assertEqual(actor_a.etiqueta, "Dueno (Lautaro A)")
-        self.assertEqual(actor_b.etiqueta, "Dueno (Lautaro B)")
+        self.assertEqual(actor_a.etiqueta, "Dueño (Lautaro A)")
+        self.assertEqual(actor_b.etiqueta, "Dueño (Lautaro B)")
 
 

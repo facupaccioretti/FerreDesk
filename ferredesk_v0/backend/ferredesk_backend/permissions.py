@@ -2,8 +2,8 @@ from collections.abc import Mapping
 
 from rest_framework.permissions import BasePermission
 
-from ferreapps.usuarios.permisos import evaluar_permiso
-from ferreapps.usuarios.services.actor_service import resolver_actor_http
+from ferreapps.usuarios.metadatos import perfil_esperado_exento
+from ferreapps.usuarios.validators.acceso_http import validar_acceso_funcional
 
 
 class RequierePermisoFuncional(BasePermission):
@@ -26,15 +26,15 @@ class RequierePermisoFuncional(BasePermission):
 
     def has_permission(self, request, view):
         permisos = self.get_permiso_requerido(view)
-        if not permisos:
-            return False
-        if isinstance(permisos, str):
-            permisos = (permisos,)
-        actor = resolver_actor_http(request)
-        return actor is not None and all(
-            evaluar_permiso(actor, permiso_id)
-            for permiso_id in permisos
+        validar_acceso_funcional(
+            request,
+            permisos,
+            perfil_esperado_exento=perfil_esperado_exento(
+                view,
+                request.method,
+            ),
         )
+        return True
 
 
 class DeniegaOperacionDeprecada(BasePermission):

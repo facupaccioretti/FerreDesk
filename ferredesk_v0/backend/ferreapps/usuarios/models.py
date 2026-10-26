@@ -160,7 +160,7 @@ class Perfil(models.Model):
     @property
     def etiqueta(self):
         if self.tipo == self.TIPO_DUENO:
-            return f'Dueno ({self.nombre})'
+            return f'Dueño ({self.nombre})'
         return self.nombre
 
     def __str__(self):

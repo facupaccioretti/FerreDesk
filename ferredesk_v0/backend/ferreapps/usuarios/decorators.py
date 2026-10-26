@@ -1,11 +1,9 @@
 from functools import wraps
 
-from django.contrib.auth.views import redirect_to_login
-from django.core.exceptions import PermissionDenied
-
-from ferreapps.usuarios.permisos import evaluar_permiso
-from ferreapps.usuarios.services.actor_service import resolver_actor_http
+from ferreapps.usuarios.metadatos import perfil_esperado_exento
+from ferreapps.usuarios.validators.acceso_http import validar_acceso_funcional
 from ferredesk_backend.permissions import RequierePermisoFuncional
+from ferredesk_backend.utils.exceptions import ErrorFuncional, respuesta_error
 
 
 def _permission_class_para(permiso_id):
@@ -39,14 +37,28 @@ def requiere_permiso_funcional(permiso_id):
         def vista_protegida(request, *args, **kwargs):
             usuario = getattr(request, 'user', None)
             if usuario is None or not getattr(usuario, 'is_authenticated', False):
-                return redirect_to_login(request.get_full_path())
-            actor = resolver_actor_http(request)
-            permisos = (permiso_id,) if isinstance(permiso_id, str) else permiso_id
-            if actor is None or not all(
-                evaluar_permiso(actor, permiso)
-                for permiso in permisos
-            ):
-                raise PermissionDenied('Permiso funcional insuficiente.')
+                return respuesta_error(
+                    401,
+                    'cuenta_no_autenticada',
+                    'La cuenta no esta autenticada.',
+                )
+            try:
+                validar_acceso_funcional(
+                    request,
+                    permiso_id,
+                    perfil_esperado_exento=perfil_esperado_exento(
+                        vista_protegida,
+                        request.method,
+                    ),
+                )
+            except ErrorFuncional as exc:
+                return respuesta_error(
+                    exc.status_code,
+                    exc.code,
+                    exc.message,
+                    exc.fields,
+                    exc.headers,
+                )
             return vista(request, *args, **kwargs)
 
         vista_protegida.permiso_requerido = permiso_id
