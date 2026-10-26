@@ -1,7 +1,7 @@
 from django.db import transaction
 
-from ferreapps.usuarios.models import EventoSeguridad
 from ferreapps.usuarios.services.actor_service import resolver_actor
+from ferreapps.usuarios.services.auditoria import registrar_evento_seguridad
 
 from ferreapps.clientes.validators import validar_actor_cambio_restriccion
 
@@ -17,9 +17,9 @@ def guardar_cliente(*, serializer, request, creando=False):
     cliente = serializer.save()
 
     if actor is not None and anterior != cliente.restringido:
-        EventoSeguridad.objects.create(
+        registrar_evento_seguridad(
             evento='cliente_restriccion_cambiada',
-            **actor.campos(),
+            actor=actor,
             objeto_tipo='Cliente',
             objeto_id=str(cliente.pk),
             detalles={

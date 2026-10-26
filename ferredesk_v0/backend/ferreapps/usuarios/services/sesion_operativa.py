@@ -11,6 +11,10 @@ CLAVE_IDENTIFICADO_EN = 'perfil_identificado_en'
 CLAVE_ULTIMA_ACTIVIDAD = 'perfil_ultima_actividad_en'
 CLAVE_SALIDA_MOTIVO = 'perfil_salida_motivo'
 CLAVE_SALIDA_ID = 'perfil_salida_id'
+CLAVE_DUENO_INTENTOS = 'dueno_pin_intentos'
+CLAVE_DUENO_ESPERA_HASTA = 'dueno_pin_espera_hasta'
+CLAVE_DUENO_NIVEL = 'dueno_pin_nivel_espera'
+CLAVE_DUENO_VERSION = 'dueno_pin_credencial_version'
 
 CLAVES_IDENTIDAD_OPERATIVA = (
     CLAVE_PERFIL_ID,
@@ -44,3 +48,35 @@ def leer_instante_sesion(valor):
     if timezone.is_naive(valor):
         return timezone.make_aware(valor, timezone.get_current_timezone())
     return valor
+
+
+def identificar_sesion(session, perfil, *, ahora=None):
+    ahora = ahora or timezone.now()
+    session[CLAVE_PERFIL_ID] = perfil.pk
+    session[CLAVE_CREDENCIAL_VERSION] = perfil.credencial_version
+    session[CLAVE_IDENTIFICADO_EN] = ahora.isoformat()
+    session.pop(CLAVE_ULTIMA_ACTIVIDAD, None)
+    session.pop(CLAVE_SALIDA_MOTIVO, None)
+    session.pop(CLAVE_SALIDA_ID, None)
+
+
+def limpiar_intentos_dueno(session):
+    for clave in (
+        CLAVE_DUENO_INTENTOS,
+        CLAVE_DUENO_ESPERA_HASTA,
+        CLAVE_DUENO_NIVEL,
+        CLAVE_DUENO_VERSION,
+    ):
+        session.pop(clave, None)
+
+
+def registrar_actividad(session, *, ahora=None, intervalo_segundos=60):
+    ahora = ahora or timezone.now()
+    anterior = leer_instante_sesion(
+        session.get(CLAVE_ULTIMA_ACTIVIDAD)
+        or session.get(CLAVE_IDENTIFICADO_EN)
+    )
+    if anterior is None or (ahora - anterior).total_seconds() >= intervalo_segundos:
+        session[CLAVE_ULTIMA_ACTIVIDAD] = ahora.isoformat()
+        return True
+    return False

@@ -373,7 +373,8 @@ class SesionUserViewIsolationTests(TwoTenantIsolationTestCase):
 
     def test_aislamiento_de_estado_de_sesion_entre_dos_tenants(self):
         client_a = TenantClient(self.tenant_a)
-        client_a.force_login(self.usuario_a)
+        with schema_context(self.tenant_a.schema_name):
+            client_a.force_login(self.usuario_a)
 
         res_a = client_a.get('/api/user/')
         self.assertEqual(res_a.status_code, 200)
@@ -383,7 +384,8 @@ class SesionUserViewIsolationTests(TwoTenantIsolationTestCase):
         self.assertEqual(user_a['inactividad_segundos'], 900)
 
         client_b = TenantClient(self.tenant_b)
-        client_b.force_login(self.usuario_b)
+        with schema_context(self.tenant_b.schema_name):
+            client_b.force_login(self.usuario_b)
 
         res_b = client_b.get('/api/user/')
         self.assertEqual(res_b.status_code, 200)

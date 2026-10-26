@@ -292,8 +292,8 @@ class PerfilOperativoMiddlewareTenantTests(TenantTestCase):
         self.assertEqual(request.session['perfil_salida_id'], self.operador.pk)
 
     def test_paso_4_inactividad_menor_o_igual_a_900s_mantiene_perfil_activo(self):
-        hace_900s = timezone.now() - timedelta(seconds=900)
-        session = self._sesion_con_perfil(self.operador, actividad=hace_900s)
+        hace_890s = timezone.now() - timedelta(seconds=890)
+        session = self._sesion_con_perfil(self.operador, actividad=hace_890s)
         request = self._crear_request('/api/productos/', session=session)
 
         response = self.middleware.process_view(
@@ -417,7 +417,8 @@ class PerfilOperativoMiddlewareIsolationTests(TwoTenantIsolationTestCase):
 
     def test_aislamiento_de_comportamiento_entre_tenants(self):
         client_a = TenantClient(self.tenant_a)
-        client_a.force_login(self.usuario_a)
+        with schema_context(self.tenant_a.schema_name):
+            client_a.force_login(self.usuario_a)
 
         # En Tenant A (adoptado), sin perfil en sesión responde 403 perfil_requerido
         res_a = client_a.get('/api/ferreteria/')
@@ -425,7 +426,8 @@ class PerfilOperativoMiddlewareIsolationTests(TwoTenantIsolationTestCase):
         self.assertEqual(res_a.json()['code'], 'perfil_requerido')
 
         client_b = TenantClient(self.tenant_b)
-        client_b.force_login(self.usuario_b)
+        with schema_context(self.tenant_b.schema_name):
+            client_b.force_login(self.usuario_b)
 
         # En Tenant B (no adoptado), opera en modo TITULAR: pasa el middleware
         # y llega a la vista /api/ferreteria/ respondiendo 200

@@ -7,6 +7,7 @@ EXENCIONES_VALIDAS = frozenset({
     'infraestructura',
     'deprecada',
     'requiere_dueno',
+    'perfil_activo',
 })
 EXENCIONES_PERFIL_OPERATIVO = frozenset({
     'publica',
