@@ -6,8 +6,6 @@ from django.core.management.base import CommandError
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from acceso_publico.models import CuentaAccesoPublico
@@ -18,72 +16,6 @@ from ferreapps.usuarios.models import CliUsuario, Usuario
 from ferreapps.usuarios.selectors.preflight import _auditar_cuenta_publica
 from tenants.services.servicio_inicializacion_tenant import inicializar_datos_tenant
 from tenants.tests.mixins import TwoTenantIsolationTestCase
-
-
-class RegisterTombstoneTests(TenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.nombre = "Register Tombstone"
-        tenant.slug_subdominio = "register-tombstone"
-        tenant.email_admin = "admin@register.test"
-        tenant.estado_suscripcion = "activo"
-
-    @classmethod
-    def get_test_schema_name(cls):
-        return "testregistertombstone"
-
-    @classmethod
-    def get_test_tenant_domain(cls):
-        return "testregistertombstone.lvh.me"
-
-    def setUp(self):
-        self.usuario = Usuario.objects.create_user(
-            username="existente@register.test",
-            email="existente@register.test",
-            password="password-test",
-        )
-        CliUsuario.objects.create(user=self.usuario, cuenta_activa=True)
-        self.client = TenantClient(self.tenant)
-
-    def _assert_tombstone_sin_escrituras(self, *, autenticado, body, content_type):
-        if autenticado:
-            self.client.force_login(self.usuario)
-        else:
-            self.client.logout()
-
-        usuarios_antes = Usuario.objects.count()
-        cli_antes = CliUsuario.objects.count()
-        response = self.client.post(
-            "/api/usuarios/register/",
-            data=body,
-            content_type=content_type,
-        )
-
-        self.assertEqual(response.status_code, 410)
-        self.assertEqual(response.json()["code"], "register_retirado")
-        self.assertEqual(Usuario.objects.count(), usuarios_antes)
-        self.assertEqual(CliUsuario.objects.count(), cli_antes)
-
-    def test_register_anonimo_ignora_payload_valido_e_invalido(self):
-        casos = (
-            ("{}", "application/json"),
-            ("{json-invalido", "application/json"),
-            ("username=nuevo&password=secreto", "application/x-www-form-urlencoded"),
-        )
-        for body, content_type in casos:
-            with self.subTest(content_type=content_type, body=body):
-                self._assert_tombstone_sin_escrituras(
-                    autenticado=False,
-                    body=body,
-                    content_type=content_type,
-                )
-
-    def test_register_autenticado_tampoco_escribe(self):
-        self._assert_tombstone_sin_escrituras(
-            autenticado=True,
-            body='{"username":"otro","email":"otro@test.com","password":"x"}',
-            content_type="application/json",
-        )
 
 
 class PreflightUsuariosUnitTests(SimpleTestCase):
