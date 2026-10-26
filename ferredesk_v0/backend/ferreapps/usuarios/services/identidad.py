@@ -119,7 +119,17 @@ def activar_perfiles(*, request, nombre, pin, contrasena):
         )
 
 
-def _validar_pin_dueno(request, perfil, pin):
+def _error_pin_incorrecto(*, cambio_propio=False):
+    if cambio_propio:
+        return ErrorFuncional(
+            status.HTTP_400_BAD_REQUEST,
+            'pin_actual_incorrecto',
+            'El PIN actual es incorrecto.',
+        )
+    return _error_identificacion()
+
+
+def _validar_pin_dueno(request, perfil, pin, *, cambio_propio=False, al_validar=None):
     session = request.session
     if session.get(CLAVE_DUENO_VERSION) != perfil.credencial_version:
         limpiar_intentos_dueno(session)
@@ -134,6 +144,8 @@ def _validar_pin_dueno(request, perfil, pin):
 
     if check_password(pin, perfil.pin_hash):
         limpiar_intentos_dueno(session)
+        if al_validar is not None:
+            al_validar(perfil)
         return perfil
 
     intentos = int(session.get(CLAVE_DUENO_INTENTOS, 0) or 0) + 1
@@ -152,10 +164,16 @@ def _validar_pin_dueno(request, perfil, pin):
         )
         raise _error_espera(espera)
     session[CLAVE_DUENO_INTENTOS] = intentos
-    raise _error_identificacion()
+    raise _error_pin_incorrecto(cambio_propio=cambio_propio)
 
 
-def _validar_pin_ordinario(perfil_id, pin):
+def _validar_pin_ordinario(
+    perfil_id,
+    pin,
+    *,
+    cambio_propio=False,
+    al_validar=None,
+):
     error = None
     perfil = None
     with transaction.atomic():
@@ -174,7 +192,9 @@ def _validar_pin_ordinario(perfil_id, pin):
                     max(1, math.ceil((perfil.bloqueado_hasta - ahora).total_seconds()))
                 )
             elif check_password(pin, perfil.pin_hash):
-                if perfil.intentos_fallidos or perfil.bloqueado_hasta is not None:
+                if al_validar is not None:
+                    al_validar(perfil)
+                elif perfil.intentos_fallidos or perfil.bloqueado_hasta is not None:
                     perfil.intentos_fallidos = 0
                     perfil.bloqueado_hasta = None
                     perfil.save(update_fields=['intentos_fallidos', 'bloqueado_hasta', 'actualizado_en'])
@@ -202,7 +222,7 @@ def _validar_pin_ordinario(perfil_id, pin):
                     )
                     error = _error_espera(espera)
                 else:
-                    error = _error_identificacion()
+                    error = _error_pin_incorrecto(cambio_propio=cambio_propio)
                 perfil.save(update_fields=campos)
     if error is not None:
         raise error
@@ -217,6 +237,34 @@ def validar_pin_objetivo(request, *, perfil_id, pin):
     if perfil.tipo == Perfil.TIPO_DUENO:
         return _validar_pin_dueno(request, perfil, pin)
     return _validar_pin_ordinario(perfil.pk, pin)
+
+
+def validar_pin_actual_y_aplicar(*, request, perfil, pin_actual, aplicar):
+    if perfil.tipo == Perfil.TIPO_ORDINARIO:
+        return _validar_pin_ordinario(
+            perfil.pk,
+            pin_actual,
+            cambio_propio=True,
+            al_validar=aplicar,
+        )
+
+    error = None
+    perfil_bloqueado = None
+    with transaction.atomic():
+        perfil_bloqueado = Perfil.objects.select_for_update().get(pk=perfil.pk)
+        try:
+            _validar_pin_dueno(
+                request,
+                perfil_bloqueado,
+                pin_actual,
+                cambio_propio=True,
+                al_validar=aplicar,
+            )
+        except ErrorFuncional as exc:
+            error = exc
+    if error is not None:
+        raise error
+    return perfil_bloqueado
 
 
 def identificar_perfil(*, request, perfil_id, pin):

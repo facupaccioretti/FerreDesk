@@ -4,6 +4,12 @@ from .administracion import (
     PerfilesAdminListCreateAPIView,
 )
 from .registro_legacy import register
+from .pin import (
+    CambiarPinPropioAPIView,
+    ConfirmarRecuperacionPinDuenoAPIView,
+    RestablecerPinOrdinarioAPIView,
+    SolicitarRecuperacionPinDuenoAPIView,
+)
 from .sesion import (
     ActivarPerfilesAPIView,
     ActividadPerfilAPIView,
@@ -17,6 +23,10 @@ from .sesion import (
 
 __all__ = (
     'register',
+    'CambiarPinPropioAPIView',
+    'ConfirmarRecuperacionPinDuenoAPIView',
+    'RestablecerPinOrdinarioAPIView',
+    'SolicitarRecuperacionPinDuenoAPIView',
     'CatalogoPermisosAPIView',
     'PerfilAdminDetailAPIView',
     'PerfilesAdminListCreateAPIView',

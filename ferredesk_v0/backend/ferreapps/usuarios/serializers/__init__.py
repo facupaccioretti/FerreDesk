@@ -9,6 +9,11 @@ from .sesion import (
     PerfilResumenSerializer,
     PerfilSeleccionSerializer,
 )
+from .pin import (
+    CambiarPinPropioInputSerializer,
+    ConfirmarRecuperacionPinInputSerializer,
+    RestablecerPinInputSerializer,
+)
 
 
 __all__ = (
@@ -19,5 +24,8 @@ __all__ = (
     'IdentificarPerfilInputSerializer',
     'PerfilResumenSerializer',
     'PerfilSeleccionSerializer',
+    'CambiarPinPropioInputSerializer',
+    'ConfirmarRecuperacionPinInputSerializer',
+    'RestablecerPinInputSerializer',
 )
 

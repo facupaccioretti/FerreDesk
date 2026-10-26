@@ -34,6 +34,26 @@ urlpatterns = [
         name='usuarios-perfiles-actividad',
     ),
     path(
+        'perfiles/pin/cambiar/',
+        views.CambiarPinPropioAPIView.as_view(),
+        name='usuarios-perfiles-pin-cambiar',
+    ),
+    path(
+        'perfiles/<int:pk>/pin/restablecer/',
+        views.RestablecerPinOrdinarioAPIView.as_view(),
+        name='usuarios-perfiles-pin-restablecer',
+    ),
+    path(
+        'pin-dueno/recuperacion/solicitar/',
+        views.SolicitarRecuperacionPinDuenoAPIView.as_view(),
+        name='usuarios-pin-dueno-recuperacion-solicitar',
+    ),
+    path(
+        'pin-dueno/recuperacion/confirmar/',
+        views.ConfirmarRecuperacionPinDuenoAPIView.as_view(),
+        name='usuarios-pin-dueno-recuperacion-confirmar',
+    ),
+    path(
         'perfiles/opciones-actor/',
         views.OpcionesActorAPIView.as_view(),
         name='usuarios-perfiles-opciones-actor',
