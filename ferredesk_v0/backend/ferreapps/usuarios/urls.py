@@ -38,4 +38,19 @@ urlpatterns = [
         views.OpcionesActorAPIView.as_view(),
         name='usuarios-perfiles-opciones-actor',
     ),
+    path(
+        'catalogo-permisos/',
+        views.CatalogoPermisosAPIView.as_view(),
+        name='usuarios-catalogo-permisos',
+    ),
+    path(
+        'perfiles/',
+        views.PerfilesAdminListCreateAPIView.as_view(),
+        name='usuarios-perfiles-list-create',
+    ),
+    path(
+        'perfiles/<int:pk>/',
+        views.PerfilAdminDetailAPIView.as_view(),
+        name='usuarios-perfiles-detail',
+    ),
 ]

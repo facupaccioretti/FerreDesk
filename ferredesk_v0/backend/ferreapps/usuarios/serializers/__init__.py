@@ -1,3 +1,7 @@
+from .administracion import (
+    CrearPerfilInputSerializer,
+    ModificarPerfilInputSerializer,
+)
 from .sesion import (
     ActivarPerfilesInputSerializer,
     ActorOpcionSerializer,
@@ -8,6 +12,8 @@ from .sesion import (
 
 
 __all__ = (
+    'CrearPerfilInputSerializer',
+    'ModificarPerfilInputSerializer',
     'ActivarPerfilesInputSerializer',
     'ActorOpcionSerializer',
     'IdentificarPerfilInputSerializer',

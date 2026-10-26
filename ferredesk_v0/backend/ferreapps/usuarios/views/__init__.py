@@ -1,3 +1,8 @@
+from .administracion import (
+    CatalogoPermisosAPIView,
+    PerfilAdminDetailAPIView,
+    PerfilesAdminListCreateAPIView,
+)
 from .registro_legacy import register
 from .sesion import (
     ActivarPerfilesAPIView,
@@ -12,6 +17,9 @@ from .sesion import (
 
 __all__ = (
     'register',
+    'CatalogoPermisosAPIView',
+    'PerfilAdminDetailAPIView',
+    'PerfilesAdminListCreateAPIView',
     'ActivarPerfilesAPIView',
     'ActividadPerfilAPIView',
     'BloquearPerfilAPIView',
