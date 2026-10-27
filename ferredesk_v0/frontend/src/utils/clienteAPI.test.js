@@ -396,6 +396,20 @@ describe('clienteAPI y transporte HTTP', () => {
   });
 
   describe('Manejo de errores y normalizacion de mensajes', () => {
+    test('preserva Retry-After para esperas de PIN', async () => {
+      const respuesta = respuestaJSON({
+        code: 'pin_espera_activa',
+        message: 'Espera activa',
+        fields: {},
+      }, { ok: false, status: 429 });
+      respuesta.headers.set('Retry-After', '60');
+      global.fetch.mockResolvedValueOnce(respuesta);
+
+      const error = await clienteAPI('/api/usuarios/perfiles/identificar/').catch((e) => e);
+
+      expect(error.retryAfter).toBe('60');
+    });
+
     test('maneja HTML 500 sin Unexpected token', async () => {
       const datos = await leerRespuestaAPI(respuestaHTML('<html>Error</html>'));
       const mensaje = normalizarErrorAPI({ status: 500, statusText: 'Server Error' }, datos);

@@ -239,6 +239,7 @@ export async function clienteAPI(url, opciones = {}) {
     error.code = datos?.code || null;
     error.fields = datos?.fields || {};
     error.datos = datos;
+    error.retryAfter = respuesta.headers?.get?.("Retry-After") || null;
     avisarErrorSesion(error);
     throw error;
   }

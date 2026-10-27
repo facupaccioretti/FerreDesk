@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
 // Importar estilos del sistema de diseño FerreDesk
 import './styles/design-tokens.css';
@@ -23,8 +23,6 @@ import ProductosManager from './components/Productos/ProductosManager';
 import ProveedoresManager from './components/Proveedores/ProveedoresManager';
 import PresupuestosManager from './components/Presupuestos y Ventas/PresupuestosManager';
 import LibroIvaVentasManager from './components/Presupuestos y Ventas/LibroIvaVentas/LibroIvaVentasManager';
-import NotasManager from './components/NotasManager';
-import NotasAlertasNotificaciones from './components/NotasAlertasNotificaciones';
 import ConfiguracionManager from './components/ConfiguracionManager';
 import InformesManager from './components/Informes/InformesManager';
 import DashboardsManager from './components/DashboardsManager';
@@ -35,6 +33,11 @@ import CuentaCorrienteProveedorManager from './components/CuentaCorrienteProveed
 import CajaManager from './components/Caja/CajaManager';
 import AsistenteConfiguracion from './components/AsistenteConfiguracion/AsistenteConfiguracion';
 import ErrorBoundary from './components/ErrorBoundary';
+import AppShell from './layouts/AppShell';
+
+function AppShellRoutes() {
+  return <AppShell><Outlet /></AppShell>;
+}
 
 // Componente principal con rutas
 export default function App() {
@@ -61,142 +64,27 @@ export default function App() {
         {/* ========================================== */}
         {/* RUTAS TENANT PROTEGIDAS (ERP Interno)      */}
         {/* ========================================== */}
-        <Route
-          path="/setup"
-          element={
-            <RutaPrivada>
-              <AsistenteConfiguracion />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home"
-          element={
-            <RutaPrivada>
-              <Home />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/carga-inicial-proveedor"
-          element={
-            <RutaPrivada>
-              <CargaInicialProveedor />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/dashboards"
-          element={
-            <RutaPrivada>
-              <DashboardsManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/clientes"
-          element={
-            <RutaPrivada>
-              <ClientesManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/productos"
-          element={
-            <RutaPrivada>
-              <ProductosManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/proveedores"
-          element={
-            <RutaPrivada>
-              <ProveedoresManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/compras"
-          element={
-            <RutaPrivada>
-              <ComprasManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/presupuestos"
-          element={
-            <RutaPrivada permitirSetupIncompleto={true}>
-              <PresupuestosManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/libro-iva-ventas"
-          element={
-            <RutaPrivada>
-              <LibroIvaVentasManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/notas"
-          element={
-            <RutaPrivada>
-              <NotasManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/notas-alertas-notificaciones"
-          element={
-            <RutaPrivada>
-              <NotasAlertasNotificaciones />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/configuracion"
-          element={
-            <RutaPrivada>
-              <ConfiguracionManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/informes"
-          element={
-            <RutaPrivada>
-              <InformesManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/cuenta-corriente"
-          element={
-            <RutaPrivada>
-              <CuentaCorrienteManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/cuenta-corriente-proveedores"
-          element={
-            <RutaPrivada>
-              <CuentaCorrienteProveedorManager />
-            </RutaPrivada>
-          }
-        />
-        <Route
-          path="/home/caja"
-          element={
-            <RutaPrivada>
-              <CajaManager />
-            </RutaPrivada>
-          }
-        />
+        <Route element={<RutaPrivada permitirSetupIncompleto><Outlet /></RutaPrivada>}>
+          <Route path="/setup" element={<RutaPrivada permitirSetupIncompleto><AsistenteConfiguracion /></RutaPrivada>} />
+          <Route element={<AppShellRoutes />}>
+            <Route path="/home" element={<RutaPrivada permiso="dashboard.ver"><Home /></RutaPrivada>} />
+            <Route path="/home/carga-inicial-proveedor" element={<RutaPrivada permiso="proveedores.modificar"><CargaInicialProveedor /></RutaPrivada>} />
+            <Route path="/dashboards" element={<RutaPrivada permiso="dashboard.ver"><DashboardsManager /></RutaPrivada>} />
+            <Route path="/home/clientes" element={<RutaPrivada permiso="clientes.ver"><ClientesManager /></RutaPrivada>} />
+            <Route path="/home/productos" element={<RutaPrivada permiso="productos.ver"><ProductosManager /></RutaPrivada>} />
+            <Route path="/home/proveedores" element={<RutaPrivada permiso="proveedores.ver"><ProveedoresManager /></RutaPrivada>} />
+            <Route path="/home/compras" element={<RutaPrivada permiso="compras.ver"><ComprasManager /></RutaPrivada>} />
+            <Route path="/home/presupuestos" element={<RutaPrivada permitirSetupIncompleto permiso="ventas.ver"><PresupuestosManager /></RutaPrivada>} />
+            <Route path="/home/libro-iva-ventas" element={<RutaPrivada permiso="ventas.ver"><LibroIvaVentasManager /></RutaPrivada>} />
+            <Route path="/home/configuracion" element={<RutaPrivada permisos={["configuracion.negocio", "configuracion.fiscal"]} capacidad="puede_gestionar_perfiles"><ConfiguracionManager /></RutaPrivada>} />
+            <Route path="/home/informes" element={<RutaPrivada permiso="informes.ver"><InformesManager /></RutaPrivada>} />
+            <Route path="/home/cuenta-corriente" element={<RutaPrivada permiso="cuenta_corriente.ver"><CuentaCorrienteManager /></RutaPrivada>} />
+            <Route path="/home/cuenta-corriente-proveedores" element={<RutaPrivada permiso="cuenta_corriente.ver"><CuentaCorrienteProveedorManager /></RutaPrivada>} />
+            <Route path="/home/caja" element={<RutaPrivada permiso="caja.ver"><CajaManager /></RutaPrivada>} />
+            <Route path="/home/notas" element={<Navigate to="/home" replace />} />
+            <Route path="/home/notas-alertas-notificaciones" element={<Navigate to="/home" replace />} />
+          </Route>
+        </Route>
         
         {/* ========================================== */}
         {/* RUTAS CATCH-ALL                            */}

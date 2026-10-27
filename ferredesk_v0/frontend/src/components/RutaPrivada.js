@@ -1,8 +1,8 @@
 import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { usePermisos } from "../domains/session/usePermisos";
 import { useSessionUserQuery } from "../domains/session/useSessionUserQuery";
 import { useSetupStatusQuery } from "../domains/setup/useSetupStatusQuery";
-import AppShell from "../layouts/AppShell";
 
 const HOSTS_PUBLICOS = new Set(["127.0.0.1", "::1", "[::1]"]);
 const SUBDOMINIOS_PUBLICOS_RESERVADOS = new Set([
@@ -84,11 +84,16 @@ export default function RutaPrivada({
     children,
     hostnameActual = window.location.hostname,
     permitirSetupIncompleto = false,
+    permiso,
+    permisos = [],
+    capacidad,
 }) {
     const {
         isLoading: cargandoSesion,
         isAuthenticated,
+        capacidades,
     } = useSessionUserQuery();
+    const { tieneAlguno, tienePermiso } = usePermisos();
     const {
         isLoading: cargandoSetup,
         setupCompleto,
@@ -96,6 +101,7 @@ export default function RutaPrivada({
         enabled: esHostTenantValido(hostnameActual) && isAuthenticated,
     });
     const location = useLocation();
+    const navigate = useNavigate();
     const hostTenantValido = esHostTenantValido(hostnameActual)
     const cargando = hostTenantValido && (cargandoSesion || (isAuthenticated && cargandoSetup))
 
@@ -127,5 +133,25 @@ export default function RutaPrivada({
         return <Navigate to="/home" replace />;
     }
 
-    return <AppShell>{children}</AppShell>;
+    const tieneRestriccion = Boolean(permiso || permisos.length || capacidad);
+    const autorizado = !tieneRestriccion
+        || Boolean(permiso && tienePermiso(permiso))
+        || (permisos.length > 0 && tieneAlguno(permisos))
+        || Boolean(capacidad && capacidades?.[capacidad]);
+
+    if (!autorizado) {
+        return (
+            <section className="flex min-h-[calc(100vh-3rem)] items-center justify-center bg-slate-50 p-6" aria-labelledby="acceso-restringido-titulo">
+                <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-lg">
+                    <h1 id="acceso-restringido-titulo" className="text-xl font-bold text-slate-900">No tenes acceso</h1>
+                    <p className="mt-2 text-sm text-slate-600">Tu perfil no tiene permiso para abrir este modulo.</p>
+                    <button type="button" onClick={() => navigate("/home", { replace: true })} className="mt-5 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700">
+                        Volver a Home
+                    </button>
+                </div>
+            </section>
+        );
+    }
+
+    return children;
 }

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import Navbar from "../components/Navbar"
 import GlobalProcessBanner from "../components/processes/GlobalProcessBanner"
 import ProcessCenterDrawer from "../components/processes/ProcessCenterDrawer"
@@ -8,17 +9,22 @@ import { useSessionUserQuery } from "../domains/session/useSessionUserQuery"
 import { SessionCoordinatorProvider, useSessionCoordinator } from "../domains/session/sessionCoordinator"
 import { useSessionSync } from "../domains/session/useSessionSync"
 import { useInactivitySession } from "../domains/session/useInactivitySession"
+import { useBloquearPerfilMutation } from "../domains/usuarios/usuariosMutations"
 import { AppShellProvider } from "../contexts/AppShellContext"
+import CambiarPinModal from "../modules/usuarios/components/CambiarPinModal"
+import PerfilOperativoGate from "../modules/usuarios/components/PerfilOperativoGate"
+import SessionTransitionOverlay from "../modules/usuarios/components/SessionTransitionOverlay"
 
 function AppShellRuntime({ children }) {
   const { user } = useSessionUserQuery()
   const { logout } = useLogoutMutation()
+  const bloquearMutation = useBloquearPerfilMutation()
+  const [cambiarPinAbierto, setCambiarPinAbierto] = useState(false)
   const {
-    bloqueada,
-    operationalReady,
-    requiereReidentificacion,
+    abrirCambioPerfil,
+    marcarReidentificacionSuave,
+    reportarErrorTransicion,
     sessionGeneration,
-    transitionError,
   } = useSessionCoordinator()
   useSessionSync()
   useInactivitySession()
@@ -29,36 +35,36 @@ function AppShellRuntime({ children }) {
     })
   }
 
+  const handleBloquearPerfil = () => {
+    marcarReidentificacionSuave(user?.perfil_activo?.id)
+    bloquearMutation.mutateAsync().catch(reportarErrorTransicion)
+  }
+
   return (
     <>
-      {operationalReady ? (
+      <PerfilOperativoGate>
         <ProcessProvider key={sessionGeneration}>
           <AppShellProvider value={{ hasGlobalNavbar: true }}>
             <div className="min-h-screen bg-slate-50">
-              <Navbar forceRender user={user} onLogout={handleLogout} />
+              <Navbar
+                forceRender
+                user={user}
+                onBloquearPerfil={handleBloquearPerfil}
+                onCambiarPerfil={abrirCambioPerfil}
+                onCambiarPin={() => setCambiarPinAbierto(true)}
+                onLogout={handleLogout}
+              />
               <GlobalProcessBanner />
               <main>
                 <ProcessRouteGate>{children}</ProcessRouteGate>
               </main>
               <ProcessCenterDrawer />
+              <CambiarPinModal abierto={cambiarPinAbierto} onClose={() => setCambiarPinAbierto(false)} />
             </div>
           </AppShellProvider>
         </ProcessProvider>
-      ) : null}
-      {bloqueada ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60" role="status" aria-live="polite">
-          <div className="rounded-lg bg-white px-6 py-5 text-center shadow-xl">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-b-orange-600" />
-            <p className="font-medium text-slate-800">
-              {transitionError
-                ? "No se pudo validar la sesion. Reintenta al recuperar la conexion."
-                : requiereReidentificacion
-                  ? "Se requiere identificar el perfil operativo."
-                  : "Validando la sesion operativa..."}
-            </p>
-          </div>
-        </div>
-      ) : null}
+      </PerfilOperativoGate>
+      <SessionTransitionOverlay />
     </>
   )
 }

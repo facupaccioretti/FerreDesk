@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAppShellContext } from "../contexts/AppShellContext"
+import { usePermisos } from "../domains/session/usePermisos"
 import { useFerreDeskTheme } from "../hooks/useFerreDeskTheme"
 import NovedadesNavbar from "./NovedadesNavbar"
 
@@ -10,6 +11,7 @@ const NAV_ITEMS = [
   {
     path: "/home",
     label: "Panel Principal",
+    permiso: "dashboard.ver",
     hoverColor: "hover:bg-slate-500/60",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-200">
@@ -20,6 +22,7 @@ const NAV_ITEMS = [
   {
     path: "/home/clientes",
     label: "Clientes",
+    permiso: "clientes.ver",
     hoverColor: "hover:bg-blue-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400">
@@ -30,6 +33,7 @@ const NAV_ITEMS = [
   {
     path: "/home/productos",
     label: "Productos",
+    permiso: "productos.ver",
     hoverColor: "hover:bg-purple-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="w-5 h-5 text-purple-400">
@@ -43,6 +47,7 @@ const NAV_ITEMS = [
   {
     path: "/home/proveedores",
     label: "Proveedores",
+    permiso: "proveedores.ver",
     hoverColor: "hover:bg-red-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-400">
@@ -53,6 +58,7 @@ const NAV_ITEMS = [
   {
     path: "/home/presupuestos",
     label: "Presupuestos y Ventas",
+    permiso: "ventas.ver",
     hoverColor: "hover:bg-emerald-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-400">
@@ -63,6 +69,7 @@ const NAV_ITEMS = [
   {
     path: "/home/compras",
     label: "Compras",
+    permiso: "compras.ver",
     hoverColor: "hover:bg-orange-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-orange-400">
@@ -73,6 +80,7 @@ const NAV_ITEMS = [
   {
     path: "/home/caja",
     label: "Tesorería",
+    permiso: "caja.ver",
     hoverColor: "hover:bg-cyan-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-cyan-400">
@@ -87,6 +95,7 @@ const NAV_ITEMS = [
   {
     path: "/home/cuenta-corriente",
     label: "C.C. Clientes",
+    permiso: "cuenta_corriente.ver",
     hoverColor: "hover:bg-indigo-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-indigo-400">
@@ -98,6 +107,7 @@ const NAV_ITEMS = [
   {
     path: "/home/cuenta-corriente-proveedores",
     label: "C.C. Proveedor",
+    permiso: "cuenta_corriente.ver",
     hoverColor: "hover:bg-rose-500/20",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-rose-400">
@@ -115,6 +125,7 @@ const MORE_ITEMS = [
   {
     path: "/home/informes",
     label: "Informes",
+    permiso: "informes.ver",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-teal-400 group-hover:text-teal-300">
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -124,6 +135,7 @@ const MORE_ITEMS = [
   {
     path: "/home/carga-inicial-proveedor",
     label: "Carga Inicial",
+    permiso: "proveedores.modificar",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-teal-400 group-hover:text-teal-300">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
@@ -154,12 +166,27 @@ function NavSeparator() {
   return <span aria-hidden="true" className="h-3.5 w-px shrink-0 rounded-full bg-slate-400/20" />
 }
 
-export default function Navbar({ user, onLogout, forceRender = false }) {
+export default function Navbar({
+  user,
+  onBloquearPerfil,
+  onCambiarPerfil,
+  onCambiarPin,
+  onLogout,
+  forceRender = false,
+}) {
   const navigate = useNavigate()
   const theme = useFerreDeskTheme()
+  const { tieneAlguno, tienePermiso } = usePermisos()
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const { hasGlobalNavbar } = useAppShellContext()
+  const capacidades = user?.capacidades ?? {}
+  const perfilesAdoptados = Boolean(user?.perfiles_adoptados)
+  const perfilActivo = user?.perfil_activo ?? null
+  const navItems = NAV_ITEMS.filter((item) => !item.permiso || tienePermiso(item.permiso))
+  const moreItems = MORE_ITEMS.filter((item) => !item.permiso || tienePermiso(item.permiso))
+  const puedeVerConfiguracion = capacidades.puede_gestionar_perfiles || tieneAlguno(["configuracion.negocio", "configuracion.fiscal"])
 
   if (hasGlobalNavbar && !forceRender) {
     return null
@@ -169,6 +196,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
     navigate(path)
     setIsMoreMenuOpen(false)
     setIsMobileMenuOpen(false)
+    setIsProfileMenuOpen(false)
   }
 
   const handleLinkClick = (e, path) => {
@@ -200,7 +228,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
 
           {/* Items de nav — visibles solo en pantallas medianas y grandes */}
           <div className="hidden md:flex items-center gap-0.5">
-            {NAV_ITEMS.map((item, index) => (
+            {navItems.map((item, index) => (
               <div key={item.path} className="flex items-center gap-0.5">
                 {index > 0 && <NavSeparator />}
                 <div className="relative group shrink-0">
@@ -238,7 +266,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
                     <p className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-600/40">
                       Herramientas Adicionales
                     </p>
-                    {MORE_ITEMS.map((item) => (
+                    {moreItems.map((item) => (
                       <a
                         key={item.path}
                         href={item.path}
@@ -261,8 +289,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
 
           <NovedadesNavbar user={user} />
 
-          {/* Configuracion — siempre visible */}
-          <div className="relative group">
+          {puedeVerConfiguracion ? <div className="relative group">
             <a
               href="/home/configuracion"
               onClick={(e) => handleLinkClick(e, "/home/configuracion")}
@@ -275,31 +302,43 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
               </svg>
             </a>
             <NavTooltip label="Configuracion" align="right" />
-          </div>
+          </div> : null}
 
-          {/* Usuario — nombre visible solo en sm+ */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-500/40 bg-slate-600/50 px-2 py-1 shadow-inner">
+          <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsProfileMenuOpen((actual) => !actual)}
+            aria-expanded={isProfileMenuOpen}
+            aria-label="Abrir acciones del perfil"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-500/40 bg-slate-600/50 px-2 py-1 text-left shadow-inner"
+          >
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-orange-600 shadow ring-1 ring-orange-400/30">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
               </svg>
             </div>
-            <span className="hidden sm:block max-w-[120px] truncate text-xs font-semibold text-slate-200">
-              {user?.username ?? "Invitado"}
+            <span className="hidden sm:block min-w-0 max-w-[150px]">
+              <span className="block truncate text-xs font-semibold text-slate-100">{perfilActivo?.etiqueta ?? "Titular"}</span>
+              <span className="block truncate text-[10px] text-slate-400">{user?.cuenta?.username ?? user?.username ?? ""}</span>
             </span>
-          </div>
-
-          {/* Salir */}
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-200 hover:from-orange-700 hover:to-orange-800 shadow"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-            </svg>
-            <span className="hidden sm:inline">Salir</span>
           </button>
+          {isProfileMenuOpen ? (
+            <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-600/60 bg-slate-800/95 py-1.5 shadow-2xl backdrop-blur-sm">
+              {perfilesAdoptados && perfilActivo ? (
+                <>
+                  <button type="button" onClick={onCambiarPerfil} className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700">Cambiar perfil</button>
+                  <button type="button" onClick={onBloquearPerfil} className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700">Bloquear perfil</button>
+                  <button type="button" onClick={onCambiarPin} className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700">Cambiar mi PIN</button>
+                </>
+              ) : null}
+              {capacidades.puede_cerrar_sesion_negocio ? (
+                <button type="button" onClick={onLogout} className="block w-full border-t border-slate-600/60 px-3 py-2 text-left text-sm font-semibold text-orange-300 hover:bg-slate-700">
+                  Cerrar sesion del negocio
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          </div>
 
           {/* Hamburguesa — solo en mobile (md:hidden) */}
           <button
@@ -326,7 +365,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
       {isMobileMenuOpen && (
         <div className={`md:hidden sticky top-12 z-40 bg-gradient-to-r ${theme.primario} border-b border-slate-600/60 shadow-xl`}>
           <div className="grid grid-cols-4 gap-1 p-3">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <a
                 key={item.path}
                 href={item.path}
@@ -337,7 +376,7 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
                 <span className="text-slate-300 text-[10px] text-center leading-tight">{item.label}</span>
               </a>
             ))}
-            {MORE_ITEMS.map((item) => (
+            {moreItems.map((item) => (
               <a
                 key={item.path}
                 href={item.path}
@@ -353,12 +392,13 @@ export default function Navbar({ user, onLogout, forceRender = false }) {
       )}
 
       {/* Overlay para cerrar dropdowns al hacer click afuera */}
-      {(isMoreMenuOpen || isMobileMenuOpen) && (
+      {(isMoreMenuOpen || isMobileMenuOpen || isProfileMenuOpen) && (
         <div
           className="fixed inset-0 z-30"
           onClick={() => {
             setIsMoreMenuOpen(false)
             setIsMobileMenuOpen(false)
+            setIsProfileMenuOpen(false)
           }}
         />
       )}

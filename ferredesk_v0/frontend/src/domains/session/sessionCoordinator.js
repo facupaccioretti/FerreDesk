@@ -42,6 +42,9 @@ export function SessionCoordinatorProvider({ children }) {
   const [bloqueada, setBloqueada] = useState(true)
   const [operationalReady, setOperationalReady] = useState(false)
   const [requiereReidentificacion, setRequiereReidentificacion] = useState(false)
+  const [modoIdentificacion, setModoIdentificacion] = useState("identificar")
+  const [motivoIdentificacion, setMotivoIdentificacion] = useState(null)
+  const [perfilAnteriorId, setPerfilAnteriorId] = useState(null)
   const [sessionGeneration, setSessionGeneration] = useState(0)
   const [transitionError, setTransitionError] = useState(null)
   const transicionRef = useRef(null)
@@ -64,6 +67,11 @@ export function SessionCoordinatorProvider({ children }) {
     const requiere = Boolean(user?.requiere_identificacion)
     setRequiereReidentificacion(requiere)
     setBloqueada(requiere)
+    setMotivoIdentificacion(requiere ? (user?.motivo_requiere_identificacion ?? null) : null)
+    if (!requiere) {
+      setModoIdentificacion("identificar")
+      setPerfilAnteriorId(null)
+    }
     setTransitionError(null)
     return user
   }, [queryClient])
@@ -90,6 +98,9 @@ export function SessionCoordinatorProvider({ children }) {
     setBloqueada(true)
     setOperationalReady(false)
     setRequiereReidentificacion(false)
+    setModoIdentificacion("identificar")
+    setMotivoIdentificacion(null)
+    setPerfilAnteriorId(null)
     setTransitionError(null)
     establecerPerfilEsperado(null)
     limpiarEstadoOperativo()
@@ -119,10 +130,38 @@ export function SessionCoordinatorProvider({ children }) {
     return promesa
   }, [ejecutarDura])
 
-  const marcarReidentificacionSuave = useCallback(() => {
+  const marcarReidentificacionSuave = useCallback((perfilIdAnterior, motivo = null) => {
+    const userActual = queryClient.getQueryData(queryKeys.session.user())
+    setPerfilAnteriorId(perfilIdAnterior ?? perfilId(userActual))
+    setModoIdentificacion("identificar")
+    setMotivoIdentificacion(motivo)
     setBloqueada(true)
     setRequiereReidentificacion(true)
     setTransitionError(null)
+  }, [queryClient])
+
+  const abrirCambioPerfil = useCallback(() => {
+    const userActual = queryClient.getQueryData(queryKeys.session.user())
+    setPerfilAnteriorId(perfilId(userActual))
+    setModoIdentificacion("cambiar")
+    setMotivoIdentificacion(null)
+    setBloqueada(true)
+    setRequiereReidentificacion(true)
+    setTransitionError(null)
+  }, [queryClient])
+
+  const cancelarCambioPerfil = useCallback(() => {
+    setModoIdentificacion("identificar")
+    setMotivoIdentificacion(null)
+    setPerfilAnteriorId(null)
+    setRequiereReidentificacion(false)
+    setBloqueada(false)
+    setTransitionError(null)
+  }, [])
+
+  const reportarErrorTransicion = useCallback((error) => {
+    setTransitionError(error)
+    setBloqueada(true)
   }, [])
 
   const reidentificacionSuave = useCallback(async (perfilAnteriorId) => {
@@ -158,7 +197,7 @@ export function SessionCoordinatorProvider({ children }) {
       remoto?.motivo_requiere_identificacion === "perfil_expirado_por_inactividad"
     ) {
       queryClient.setQueryData(queryKeys.session.user(), remoto)
-      marcarReidentificacionSuave()
+      marcarReidentificacionSuave(perfilId(anterior), remoto.motivo_requiere_identificacion)
       return remoto
     }
 
@@ -172,7 +211,7 @@ export function SessionCoordinatorProvider({ children }) {
 
   const manejarAvisoSesion = useCallback((aviso) => {
     if (aviso.accion === "suave") {
-      marcarReidentificacionSuave()
+      marcarReidentificacionSuave(undefined, aviso.code)
       return Promise.resolve()
     }
     if (aviso.accion === "revalidar") return revalidarSesion()
@@ -180,23 +219,35 @@ export function SessionCoordinatorProvider({ children }) {
   }, [marcarReidentificacionSuave, revalidarSesion, transicionDura])
 
   const value = useMemo(() => ({
+    abrirCambioPerfil,
     bloqueada,
+    cancelarCambioPerfil,
     manejarAvisoSesion,
     marcarReidentificacionSuave,
+    modoIdentificacion,
+    motivoIdentificacion,
     operationalReady,
+    perfilAnteriorId,
     reidentificacionSuave,
     revalidarSesion,
+    reportarErrorTransicion,
     sessionGeneration,
     transicionDura,
     transitionError,
     requiereReidentificacion,
   }), [
+    abrirCambioPerfil,
     bloqueada,
+    cancelarCambioPerfil,
     manejarAvisoSesion,
     marcarReidentificacionSuave,
+    modoIdentificacion,
+    motivoIdentificacion,
     operationalReady,
+    perfilAnteriorId,
     reidentificacionSuave,
     revalidarSesion,
+    reportarErrorTransicion,
     requiereReidentificacion,
     sessionGeneration,
     transicionDura,

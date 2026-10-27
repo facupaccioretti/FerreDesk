@@ -7,6 +7,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mockUseSessionUserQuery = jest.fn();
 const mockUseSetupStatusQuery = jest.fn();
+const mockTienePermiso = jest.fn(() => true);
+const mockTieneAlguno = jest.fn(() => true);
 
 jest.mock(
     "react-router-dom",
@@ -24,6 +26,13 @@ jest.mock("../domains/session/useSessionUserQuery", () => ({
 
 jest.mock("../domains/setup/useSetupStatusQuery", () => ({
     useSetupStatusQuery: (...args) => mockUseSetupStatusQuery(...args),
+}));
+
+jest.mock("../domains/session/usePermisos", () => ({
+    usePermisos: () => ({
+        tienePermiso: mockTienePermiso,
+        tieneAlguno: mockTieneAlguno,
+    }),
 }));
 
 jest.mock("../layouts/AppShell", () => ({
@@ -78,6 +87,10 @@ describe("RutaPrivada", () => {
         jest.restoreAllMocks();
         mockUseSessionUserQuery.mockReset();
         mockUseSetupStatusQuery.mockReset();
+        mockTienePermiso.mockReset();
+        mockTienePermiso.mockReturnValue(true);
+        mockTieneAlguno.mockReset();
+        mockTieneAlguno.mockReturnValue(true);
         document.body.innerHTML = "";
     });
 
@@ -136,6 +149,37 @@ describe("RutaPrivada", () => {
         expect(vista.container.textContent).toContain("contenido protegido");
 
         await vista.desmontar();
+    });
+
+    test("no monta el contenido cuando falta el permiso de la ruta", async () => {
+        mockUseSessionUserQuery.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+            capacidades: {},
+        });
+        mockUseSetupStatusQuery.mockReturnValue({
+            isLoading: false,
+            setupCompleto: true,
+        });
+        mockTienePermiso.mockReturnValue(false);
+
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        await act(async () => {
+            root.render(
+                <RutaPrivada hostnameActual="ferretest.localhost" permiso="ventas.ver">
+                    <div>manager protegido</div>
+                </RutaPrivada>
+            );
+            await esperarMicrotareas();
+        });
+
+        expect(container.textContent).toContain("No tenes acceso");
+        expect(container.textContent).not.toContain("manager protegido");
+
+        await act(async () => root.unmount());
+        container.remove();
     });
 
     test("permite que un modulo maneje el setup incompleto dentro de su propia vista", async () => {
