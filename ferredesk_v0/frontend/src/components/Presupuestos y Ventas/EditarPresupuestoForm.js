@@ -15,6 +15,7 @@ import { normalizarItems } from './herramientasforms/normalizadorItems';
 import SelectorDocumento from './herramientasforms/SelectorDocumento';
 import { useListasPrecioAPI } from '../../utils/useListasPrecioAPI';
 import { fechaHoyLocal } from '../../utils/fechas';
+import { operationalLocalStorage } from '../../domains/session/operationalStorage';
 
 // Función para combinar datos iniciales con el estado por defecto, usando la misma lógica que ConVentaForm
 const mergeWithDefaults = (data, sucursales = [], puntosVenta = [], alicuotasMap = {}) => {
@@ -152,7 +153,7 @@ const EditarPresupuestoForm = ({
     if (remountHechoRef.current) return;
     const clave = (initialData && (initialData.ven_id || initialData.id)) ? `editarPresupuestoDraft_${initialData.ven_id ?? initialData.id}` : 'editarPresupuestoDraft_nuevo';
     try {
-      const saved = localStorage.getItem(clave);
+      const saved = operationalLocalStorage.getItem(clave);
       if (!saved) return;
       const borrador = JSON.parse(saved);
       if (Array.isArray(borrador?.items) && borrador.items.length > 0) {

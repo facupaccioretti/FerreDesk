@@ -17,6 +17,7 @@ import { useAlicuotasIVAAPI } from "../../utils/useAlicuotasIVAAPI"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 const MAIN_TAB_KEY = "compras"
 const ORDENES_TAB_KEY = "ordenes-compra"
@@ -55,7 +56,7 @@ const ComprasManager = () => {
   // Tabs estado (persistencia simple en localStorage)
   const [tabs, setTabs] = useState(() => {
     try {
-      const saved = localStorage.getItem("comprasTabs")
+      const saved = operationalLocalStorage.getItem("comprasTabs")
       const parsed = saved ? JSON.parse(saved) : null
       const base = [
         { key: MAIN_TAB_KEY, label: "Compras", closable: false },
@@ -76,13 +77,13 @@ const ComprasManager = () => {
       ]
     }
   })
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem("comprasActiveTab") || MAIN_TAB_KEY)
+  const [activeTab, setActiveTab] = useState(() => operationalLocalStorage.getItem("comprasActiveTab") || MAIN_TAB_KEY)
   const persistTimeout = useRef(null)
   useEffect(() => {
     clearTimeout(persistTimeout.current)
     persistTimeout.current = setTimeout(() => {
-      localStorage.setItem("comprasTabs", JSON.stringify(tabs))
-      localStorage.setItem("comprasActiveTab", activeTab)
+      operationalLocalStorage.setItem("comprasTabs", JSON.stringify(tabs))
+      operationalLocalStorage.setItem("comprasActiveTab", activeTab)
     }, 200)
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])

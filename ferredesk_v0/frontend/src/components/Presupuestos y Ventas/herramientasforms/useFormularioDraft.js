@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { operationalLocalStorage } from '../../../domains/session/operationalStorage';
 
 // Utilidad interna para saber si una función es válida
 const esFuncion = (fn) => typeof fn === 'function';
@@ -88,7 +89,7 @@ export const useFormularioDraft = ({
   // Estado inicial del formulario
   const [formulario, setFormulario] = useState(() => {
     try {
-      const savedData = localStorage.getItem(claveAlmacenamiento);
+      const savedData = operationalLocalStorage.getItem(claveAlmacenamiento);
       if (savedData) {
         try {
           const parsedData = JSON.parse(savedData);
@@ -126,7 +127,7 @@ export const useFormularioDraft = ({
     ultimaFirmaRef.current = firmaActual;
 
     try {
-      localStorage.setItem(claveAlmacenamiento, JSON.stringify(formulario));
+      operationalLocalStorage.setItem(claveAlmacenamiento, JSON.stringify(formulario));
     } catch (e) {
       console.error('Error al guardar borrador:', e);
     }
@@ -135,7 +136,7 @@ export const useFormularioDraft = ({
   // Rehidratación tardía desde borrador cuando datosIniciales aún no estaban listos al montar
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem(claveAlmacenamiento);
+      const savedData = operationalLocalStorage.getItem(claveAlmacenamiento);
       if (!savedData) return;
       const parsedData = JSON.parse(savedData);
       if (esFuncion(validarBorrador)) {
@@ -160,7 +161,7 @@ export const useFormularioDraft = ({
   useEffect(() => {
     if (!datosIniciales || (typeof datosIniciales === 'object' && Object.keys(datosIniciales).length === 0)) return;
     // Si hay borrador guardado, no forzar inicialización desde datos iniciales (prioridad al borrador)
-    const savedData = localStorage.getItem(claveAlmacenamiento);
+    const savedData = operationalLocalStorage.getItem(claveAlmacenamiento);
     if (savedData) return;
     const baseVacia = combinarConValoresPorDefecto({}, ...parametrosPorDefecto);
     // Solo proceder si el formulario actual coincide con la base vacía
@@ -178,7 +179,7 @@ export const useFormularioDraft = ({
 
   // Función para limpiar el borrador
   const limpiarBorrador = () => {
-    localStorage.removeItem(claveAlmacenamiento);
+    operationalLocalStorage.removeItem(claveAlmacenamiento);
     setFormulario(combinarConValoresPorDefecto({}, ...parametrosPorDefecto));
   };
 
@@ -207,4 +208,4 @@ export const useFormularioDraft = ({
     actualizarFormulario,
     actualizarItems
   };
-}; 
+};

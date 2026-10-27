@@ -1,8 +1,9 @@
 export const QUERY_PROFILES = {
   session: {
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: true,
+    retry: (failureCount, error) => ![401, 403].includes(error?.status) && failureCount < 1,
   },
   staticCatalog: {
     staleTime: 12 * 60 * 60 * 1000,

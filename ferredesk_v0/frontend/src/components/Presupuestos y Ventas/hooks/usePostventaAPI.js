@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getCookie } from "../../../utils/csrf"
+import { operationalSessionStorage } from "../../../domains/session/operationalStorage"
 
 const STORAGE_PREFIX = "postventa:idempotency:"
 
@@ -37,22 +38,22 @@ export const obtenerIdempotencyKey = (comprobanteId) => {
   }
 
   const storageKey = `${STORAGE_PREFIX}${comprobanteId}`
-  const existente = window.sessionStorage.getItem(storageKey)
+  const existente = operationalSessionStorage.getItem(storageKey)
 
   if (esUUID(existente)) {
     return existente
   }
 
-  if (existente) window.sessionStorage.removeItem(storageKey)
+  if (existente) operationalSessionStorage.removeItem(storageKey)
 
   const nuevo = generarIdempotencyKey()
-  window.sessionStorage.setItem(storageKey, nuevo)
+  operationalSessionStorage.setItem(storageKey, nuevo)
   return nuevo
 }
 
 const guardarIdempotencyKey = (comprobanteId, value) => {
   if (typeof window === "undefined" || !comprobanteId || !value) return
-  window.sessionStorage.setItem(`${STORAGE_PREFIX}${comprobanteId}`, value)
+  operationalSessionStorage.setItem(`${STORAGE_PREFIX}${comprobanteId}`, value)
 }
 
 const parsearRespuesta = async (response) => {

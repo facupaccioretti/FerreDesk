@@ -15,3 +15,7 @@ export async function obtenerUsuarioSesion() {
 export async function cerrarSesionActual() {
   return clienteAPI("/api/logout/", { method: "POST" })
 }
+
+export async function registrarActividadPerfil() {
+  return clienteAPI("/api/usuarios/perfiles/actividad/", { method: "POST" })
+}

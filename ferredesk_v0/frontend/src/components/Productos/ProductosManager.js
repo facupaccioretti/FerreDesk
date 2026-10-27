@@ -28,6 +28,7 @@ import { ImprimirEtiquetasModal } from "./codigoBarras"
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { leerConsultaPersistida, guardarConsultaPersistida } from "../../utils/consultaPersistida"
 import { invalidarCachesProductos } from "../../core/query/queryKeys"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 const ProductosManager = () => {
   // Hook del tema de FerreDesk
@@ -51,7 +52,7 @@ const ProductosManager = () => {
 
   // Cargar estado de pestañas desde localStorage
   const [tabs, setTabs] = useState(() => {
-    const savedTabs = localStorage.getItem("productosTabs")
+    const savedTabs = operationalLocalStorage.getItem("productosTabs")
     let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
 
     // Aseguramos que "Lista de Productos" esté presente y no sea cerrable
@@ -86,18 +87,18 @@ const ProductosManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    const savedActiveTab = localStorage.getItem("productosActiveTab")
+    const savedActiveTab = operationalLocalStorage.getItem("productosActiveTab")
     return savedActiveTab || "lista"
   })
 
   const [editStates, setEditStates] = useState(() => {
-    const savedStates = localStorage.getItem("productosEditStates")
+    const savedStates = operationalLocalStorage.getItem("productosEditStates")
     return savedStates ? JSON.parse(savedStates) : {}
   })
 
   // Guardar editStates en localStorage cuando cambie
   useEffect(() => {
-    localStorage.setItem("productosEditStates", JSON.stringify(editStates))
+    operationalLocalStorage.setItem("productosEditStates", JSON.stringify(editStates))
   }, [editStates])
   const [expandedId, setExpandedId] = useState(null)
   const [updateStockModal, setUpdateStockModal] = useState({ show: false, stockId: null, providerId: null })
@@ -158,8 +159,8 @@ const ProductosManager = () => {
 
   // Guardar estado de pestañas en localStorage cuando cambie
   useEffect(() => {
-    localStorage.setItem("productosTabs", JSON.stringify(tabs))
-    localStorage.setItem("productosActiveTab", activeTab)
+    operationalLocalStorage.setItem("productosTabs", JSON.stringify(tabs))
+    operationalLocalStorage.setItem("productosActiveTab", activeTab)
   }, [tabs, activeTab])
 
   // Eliminado manejo antiguo de draft global; cada pestaña tendrá su propia clave de borrador
@@ -192,12 +193,12 @@ const ProductosManager = () => {
     // También limpiar el borrador del form y estados relacionados
     const claveBorrador = `stockFormDraft_${key}`
     try {
-      localStorage.removeItem(claveBorrador)
-      localStorage.removeItem(`${claveBorrador}_precios`)
-      localStorage.removeItem(`${claveBorrador}_spPendientes`)
-      localStorage.removeItem(`${claveBorrador}_codPendientes`)
-      localStorage.removeItem(`${claveBorrador}_provAgregados`)
-      localStorage.removeItem(`${claveBorrador}_codPendEdic`)
+      operationalLocalStorage.removeItem(claveBorrador)
+      operationalLocalStorage.removeItem(`${claveBorrador}_precios`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_spPendientes`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_codPendientes`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_provAgregados`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_codPendEdic`)
     } catch (_) { }
   }
 

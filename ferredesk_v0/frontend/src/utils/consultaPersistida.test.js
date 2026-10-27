@@ -3,11 +3,15 @@ import {
   leerConsultaPersistida,
   limpiarConsultaPersistida,
 } from "./consultaPersistida"
+import { configurarAmbitoOperativo, deshabilitarStorageOperativo } from "../domains/session/operationalStorage"
 
 describe("consultaPersistida", () => {
   beforeEach(() => {
     localStorage.clear()
+    configurarAmbitoOperativo({ tenant: "test", perfilId: 1 })
   })
+
+  afterEach(() => deshabilitarStorageOperativo())
 
   test("guarda y lee valores serializados", () => {
     const valor = {

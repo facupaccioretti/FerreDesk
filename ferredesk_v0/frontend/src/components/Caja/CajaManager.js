@@ -16,6 +16,7 @@ import ValoresEnCartera from "./ValoresEnCartera"
 import ControlFondosTab from "./ControlFondosTab"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
@@ -52,7 +53,7 @@ const CajaManager = () => {
   // Estados de tabs
   const [tabs, setTabs] = useState(() => {
     try {
-      const savedTabs = localStorage.getItem("cajaTabs")
+      const savedTabs = operationalLocalStorage.getItem("cajaTabs")
       if (savedTabs) {
         const parsedTabs = JSON.parse(savedTabs)
         // Validar que siempre esté el tab principal
@@ -68,10 +69,10 @@ const CajaManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    const savedActiveTab = localStorage.getItem("cajaActiveTab")
+    const savedActiveTab = operationalLocalStorage.getItem("cajaActiveTab")
     let restoredTabs = []
     try {
-      restoredTabs = JSON.parse(localStorage.getItem("cajaTabs") || "[]")
+      restoredTabs = JSON.parse(operationalLocalStorage.getItem("cajaTabs") || "[]")
     } catch (e) {
       restoredTabs = []
     }
@@ -88,8 +89,8 @@ const CajaManager = () => {
   useEffect(() => {
     clearTimeout(persistTimeout.current)
     persistTimeout.current = setTimeout(() => {
-      localStorage.setItem("cajaTabs", JSON.stringify(tabs))
-      localStorage.setItem("cajaActiveTab", activeTab)
+      operationalLocalStorage.setItem("cajaTabs", JSON.stringify(tabs))
+      operationalLocalStorage.setItem("cajaActiveTab", activeTab)
     }, 300)
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])

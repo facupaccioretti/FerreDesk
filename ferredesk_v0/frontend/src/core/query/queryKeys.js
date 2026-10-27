@@ -5,6 +5,12 @@ export const queryKeys = {
     all: ["session"],
     user: () => ["session", "user"],
   },
+  usuarios: {
+    all: ["usuarios"],
+    seleccion: () => ["usuarios", "seleccion"],
+    perfiles: (parametros = {}) => ["usuarios", "perfiles", normalizarParametrosQuery(parametros)],
+    catalogo: () => ["usuarios", "catalogo"],
+  },
   resources: {
     all: (resource) => ["resource", obtenerTenantScope(), resource],
     list: (resource, parametros = {}) => [

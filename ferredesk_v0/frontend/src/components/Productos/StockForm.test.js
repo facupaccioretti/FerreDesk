@@ -1,5 +1,10 @@
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import {
+  configurarAmbitoOperativo,
+  deshabilitarStorageOperativo,
+  operationalLocalStorage,
+} from '../../domains/session/operationalStorage'
 
 const mockGuardarProductoAtomico = jest.fn()
 
@@ -115,8 +120,9 @@ describe('StockForm', () => {
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
     localStorage.clear()
-    localStorage.setItem('stockFormDraft_test', '{"deno":"borrador"}')
-    localStorage.setItem('stockFormDraft_test_precios', JSON.stringify({
+    configurarAmbitoOperativo({ tenant: 'test', perfilId: 1 })
+    operationalLocalStorage.setItem('stockFormDraft_test', '{"deno":"borrador"}')
+    operationalLocalStorage.setItem('stockFormDraft_test_precios', JSON.stringify({
       lista0: { precio: 100, manual: false },
       lista1: { precio: 90, manual: false },
       lista2: { precio: 87.5, manual: true },
@@ -153,6 +159,7 @@ describe('StockForm', () => {
     document.body.removeChild(container)
     jest.restoreAllMocks()
     mockGuardarProductoAtomico.mockReset()
+    deshabilitarStorageOperativo()
   })
 
   test('si falla el guardado conserva borradores y no llama onSave', async () => {
@@ -180,8 +187,8 @@ describe('StockForm', () => {
     expect(mockGuardarProductoAtomico).toHaveBeenCalledTimes(1)
     expect(onSave).not.toHaveBeenCalled()
     expect(localStorage.removeItem).not.toHaveBeenCalled()
-    expect(localStorage.getItem('stockFormDraft_test')).toBe('{"deno":"borrador"}')
-    expect(localStorage.getItem('stockFormDraft_test_precios')).not.toBeNull()
+    expect(operationalLocalStorage.getItem('stockFormDraft_test')).toBe('{"deno":"borrador"}')
+    expect(operationalLocalStorage.getItem('stockFormDraft_test_precios')).not.toBeNull()
   })
 
   test('al editar preserva el precio manual antes de cargar las alicuotas', async () => {

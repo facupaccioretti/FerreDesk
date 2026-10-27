@@ -1,7 +1,31 @@
 let tokenCSRFCached = null;
 let fetchConCSRFInstalado = false;
+let fetchOriginalReferencia = null;
+let perfilEsperadoId = null;
+
+const avisosSesion = new Set();
 
 const METODOS_MUTANTES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ACCIONES_ERROR_SESION = new Map([
+  ["cuenta_no_autenticada", "login"],
+  ["perfil_requerido", "revalidar"],
+  ["perfil_invalido", "dura"],
+  ["credencial_perfil_cambiada", "dura"],
+  ["perfil_expirado_por_inactividad", "suave"],
+  ["perfil_esperado_requerido", "dura"],
+  ["perfil_desactualizado", "dura"],
+  ["solo_dueno", "revalidar"],
+  ["activacion_no_disponible", "revalidar"],
+  ["adopcion_ya_realizada", "revalidar"],
+]);
+const RUTAS_MUTANTES_EXENTAS = [
+  /^\/api\/(?:login|login-bridge)\/?$/,
+  /^\/api\/auth\/password-reset(?:\/confirm)?\/?$/,
+  /^\/api\/usuarios\/register\/?$/,
+  /^\/api\/usuarios\/activar-perfiles\/?$/,
+  /^\/api\/usuarios\/perfiles\/(?:identificar|cambiar|bloquear)\/?$/,
+  /^\/api\/usuarios\/pin-dueno\/recuperacion\/(?:solicitar|confirmar)\/?$/,
+];
 
 function esFormData(valor) {
   return typeof FormData !== "undefined" && valor instanceof FormData;
@@ -40,8 +64,74 @@ export function invalidarTokenCSRF() {
   tokenCSRFCached = null;
 }
 
+export function establecerPerfilEsperado(perfilId) {
+  perfilEsperadoId = perfilId === null || perfilId === undefined
+    ? null
+    : String(perfilId);
+}
+
+export function obtenerPerfilEsperado() {
+  return perfilEsperadoId;
+}
+
+export function suscribirAvisosSesion(listener) {
+  avisosSesion.add(listener);
+  return () => avisosSesion.delete(listener);
+}
+
 export function esMetodoMutante(metodo = "GET") {
   return METODOS_MUTANTES.has(String(metodo || "GET").toUpperCase());
+}
+
+function obtenerURL(input) {
+  if (typeof input === "string") return input;
+  if (typeof URL !== "undefined" && input instanceof URL) return input.href;
+  return input?.url || "";
+}
+
+function obtenerPathname(input) {
+  const url = obtenerURL(input);
+  if (!url) return "";
+
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    return new URL(url, base).pathname;
+  } catch (_) {
+    return "";
+  }
+}
+
+export function esRutaMutanteExenta(input) {
+  const pathname = obtenerPathname(input);
+  return RUTAS_MUTANTES_EXENTAS.some((patron) => patron.test(pathname));
+}
+
+function aplicarPerfilEsperado(headers, input) {
+  if (esRutaMutanteExenta(input)) {
+    headers.delete("X-Perfil-Esperado");
+    return;
+  }
+
+  if (perfilEsperadoId !== null) {
+    headers.set("X-Perfil-Esperado", perfilEsperadoId);
+  } else {
+    headers.delete("X-Perfil-Esperado");
+  }
+}
+
+function avisarErrorSesion(error) {
+  let accion = ACCIONES_ERROR_SESION.get(error.code);
+  if (!accion && error.status === 401) {
+    accion = "login";
+  }
+  if (!accion) return;
+
+  avisosSesion.forEach((listener) => listener({
+    type: "session-error",
+    accion,
+    code: error.code || "cuenta_no_autenticada",
+    status: error.status,
+  }));
 }
 
 export async function obtenerTokenCSRF({ forzar = false } = {}) {
@@ -135,6 +225,9 @@ export async function clienteAPI(url, opciones = {}) {
   if (esMetodoMutante(metodo)) {
     const tokenCSRF = await obtenerTokenCSRF();
     headers.set("X-CSRFToken", tokenCSRF);
+    if (esRequestMismoOrigen(url)) {
+      aplicarPerfilEsperado(headers, url);
+    }
   }
 
   const respuesta = await fetch(url, opcionesFetch);
@@ -143,7 +236,10 @@ export async function clienteAPI(url, opciones = {}) {
   if (!respuesta.ok) {
     const error = new Error(normalizarErrorAPI(respuesta, datos));
     error.status = respuesta.status;
+    error.code = datos?.code || null;
+    error.fields = datos?.fields || {};
     error.datos = datos;
+    avisarErrorSesion(error);
     throw error;
   }
 
@@ -157,7 +253,7 @@ function obtenerMetodoRequest(input, opciones) {
 function esRequestMismoOrigen(input) {
   if (typeof window === "undefined") return false;
 
-  const url = typeof input === "string" ? input : input?.url;
+  const url = obtenerURL(input);
   if (!url) return true;
 
   try {
@@ -167,11 +263,20 @@ function esRequestMismoOrigen(input) {
   }
 }
 
+export function desinstalarFetchConCSRF() {
+  if (fetchConCSRFInstalado && typeof window !== "undefined" && fetchOriginalReferencia) {
+    window.fetch = fetchOriginalReferencia;
+  }
+  fetchOriginalReferencia = null;
+  fetchConCSRFInstalado = false;
+}
+
 export function instalarFetchConCSRF() {
   if (fetchConCSRFInstalado || typeof window === "undefined" || typeof window.fetch !== "function") {
     return;
   }
 
+  fetchOriginalReferencia = window.fetch;
   const fetchOriginal = window.fetch.bind(window);
 
   window.fetch = async (input, opciones = {}) => {
@@ -182,12 +287,25 @@ export function instalarFetchConCSRF() {
     }
 
     const headers = new Headers(opciones.headers || input?.headers || {});
-    headers.set("X-CSRFToken", await obtenerTokenCSRF());
+    const tokenCSRF = await obtenerTokenCSRF();
+    headers.set("X-CSRFToken", tokenCSRF);
+    aplicarPerfilEsperado(headers, input);
+
+    if (input && typeof input === "object" && input.headers && typeof input.headers.set === "function") {
+      try {
+        input.headers.set("X-CSRFToken", tokenCSRF);
+        if (perfilEsperadoId !== null && !esRutaMutanteExenta(input)) {
+          input.headers.set("X-Perfil-Esperado", perfilEsperadoId);
+        } else {
+          input.headers.delete("X-Perfil-Esperado");
+        }
+      } catch (_) {}
+    }
 
     return fetchOriginal(input, {
       ...opciones,
       method: metodo,
-      credentials: opciones.credentials || "include",
+      credentials: opciones.credentials || input?.credentials || "include",
       headers,
     });
   };

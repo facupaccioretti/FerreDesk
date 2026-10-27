@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { operationalLocalStorage } from "../../../domains/session/operationalStorage"
 
 // Tabs principales que siempre deben estar presentes
 const mainTabs = [
@@ -15,7 +16,7 @@ const useTabsManager = (setEditVendedorData = null) => {
   // Estados principales de tabs
   const [tabs, setTabs] = useState(() => {
     try {
-      const savedTabs = localStorage.getItem("presupuestosTabs")
+      const savedTabs = operationalLocalStorage.getItem("presupuestosTabs")
       if (savedTabs) {
         const parsedTabs = JSON.parse(savedTabs)
         // Validar que siempre estén los mainTabs al principio
@@ -34,7 +35,7 @@ const useTabsManager = (setEditVendedorData = null) => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("presupuestosActiveTab") || "presupuestos"
+    return operationalLocalStorage.getItem("presupuestosActiveTab") || "presupuestos"
   })
 
   const [draggedTabKey, setDraggedTabKey] = useState(null)
@@ -44,8 +45,8 @@ const useTabsManager = (setEditVendedorData = null) => {
   useEffect(() => {
     clearTimeout(persistTimeout.current)
     persistTimeout.current = setTimeout(() => {
-      localStorage.setItem("presupuestosTabs", JSON.stringify(tabs))
-      localStorage.setItem("presupuestosActiveTab", activeTab)
+      operationalLocalStorage.setItem("presupuestosTabs", JSON.stringify(tabs))
+      operationalLocalStorage.setItem("presupuestosActiveTab", activeTab)
     }, 300)
     return () => clearTimeout(persistTimeout.current)
   }, [tabs, activeTab])
@@ -77,29 +78,29 @@ const useTabsManager = (setEditVendedorData = null) => {
       if (key.startsWith("editar")) {
         const tab = tabs.find((t) => t.key === key)
         const idPres = tab?.data?.id || tab?.data?.ven_id || null
-        if (idPres) localStorage.removeItem(`editarPresupuestoDraft_${idPres}`)
+        if (idPres) operationalLocalStorage.removeItem(`editarPresupuestoDraft_${idPres}`)
         // Compatibilidad: eliminar posible clave legada por key
-        localStorage.removeItem(`editarPresupuestoDraft_${key}`)
+        operationalLocalStorage.removeItem(`editarPresupuestoDraft_${key}`)
         // Safety net: eliminar también la variante '_nuevo' si existiera por claves antiguas
-        localStorage.removeItem('editarPresupuestoDraft_nuevo')
+        operationalLocalStorage.removeItem('editarPresupuestoDraft_nuevo')
       } else if (key.startsWith("nuevo-")) {
-        localStorage.removeItem(`presupuestoFormDraft_${key}`)
+        operationalLocalStorage.removeItem(`presupuestoFormDraft_${key}`)
       } else if (key.startsWith("nueva-venta-")) {
-        localStorage.removeItem(`ventaFormDraft_${key}`)
+        operationalLocalStorage.removeItem(`ventaFormDraft_${key}`)
       } else if (key.startsWith("conventa-") || key.startsWith("conv-factura-i")) {
         const tab = tabs.find((t) => t.key === key)
         // Esquema nuevo: claves estables por origen
         if (key.startsWith("conventa-")) {
           const idPres = tab?.data?.presupuestoOrigen?.id ?? null
-          if (idPres) localStorage.removeItem(`conVentaFormDraft_presupuesto_${idPres}`)
+          if (idPres) operationalLocalStorage.removeItem(`conVentaFormDraft_presupuesto_${idPres}`)
         } else if (key.startsWith("conv-factura-i")) {
           const idFacI = tab?.data?.facturaInternaOrigen?.id ?? null
-          if (idFacI) localStorage.removeItem(`conVentaFormDraft_factura_interna_${idFacI}`)
+          if (idFacI) operationalLocalStorage.removeItem(`conVentaFormDraft_factura_interna_${idFacI}`)
         }
         // Compatibilidad: esquema anterior por tabKey
-        localStorage.removeItem(`conVentaFormDraft_${key}`)
+        operationalLocalStorage.removeItem(`conVentaFormDraft_${key}`)
       } else if (key.startsWith("nota-credito-")) {
-        localStorage.removeItem(`notaCreditoFormDraft_${key}`)
+        operationalLocalStorage.removeItem(`notaCreditoFormDraft_${key}`)
       }
     } catch (err) {
       console.warn("[closeTab] No se pudo limpiar borrador:", err)
@@ -205,4 +206,4 @@ const useTabsManager = (setEditVendedorData = null) => {
   }
 }
 
-export default useTabsManager 
+export default useTabsManager

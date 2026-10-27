@@ -10,6 +10,7 @@ import useNavegacionForm from "../../hooks/useNavegacionForm"
 import { BotonEditar } from "../Botones"
 import { useListasPrecioAPI } from "../../utils/useListasPrecioAPI"
 import { calcularPrecioLista, calcularPrecioLista0, calcularMargenDesdePrecios } from "../../utils/calcularPrecioLista"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 // Importar hooks modulares
 import {
@@ -107,7 +108,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     const clavePrecios = `${claveBorrador}_precios`
     if (modo === "nuevo") {
       try {
-        const saved = localStorage.getItem(clavePrecios)
+        const saved = operationalLocalStorage.getItem(clavePrecios)
         if (saved) return JSON.parse(saved)
       } catch (_) { }
     }
@@ -118,7 +119,7 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
   useEffect(() => {
     if (modo !== "nuevo") return
     try {
-      localStorage.setItem(`${claveBorrador}_precios`, JSON.stringify(preciosListas))
+      operationalLocalStorage.setItem(`${claveBorrador}_precios`, JSON.stringify(preciosListas))
     } catch (_) { }
   }, [preciosListas, claveBorrador, modo])
 
@@ -441,8 +442,8 @@ const StockForm = ({ stock, onSave, onCancel, proveedores, familias, modo, tabKe
     const resultado = await guardarProductoAtomico(formConPrecios, preciosAGuardar)
 
     if (resultado.success) {
-      try { localStorage.removeItem(claveBorrador) } catch (_) { }
-      try { localStorage.removeItem(`${claveBorrador}_precios`) } catch (_) { }
+      try { operationalLocalStorage.removeItem(claveBorrador) } catch (_) { }
+      try { operationalLocalStorage.removeItem(`${claveBorrador}_precios`) } catch (_) { }
       if (onSave) await onSave(resultado.data)
     }
   }

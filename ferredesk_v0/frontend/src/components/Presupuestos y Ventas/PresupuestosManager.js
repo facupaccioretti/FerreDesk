@@ -38,6 +38,7 @@ import EliminadorResiduoModal from "./EliminadorResiduoModal"
 import ModalTicketVenta from "./ModalTicketVenta"
 import { useLogoutMutation } from "../../domains/session/useLogoutMutation"
 import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 
 
@@ -257,14 +258,14 @@ const PresupuestosManager = () => {
     const newKey = `nuevo-${Date.now()}`
     openTab(newKey, "Nuevo Presupuesto")
     setTipoComprobante(4) // Forzar tipoComprobante a 4 para presupuesto
-    localStorage.removeItem("presupuestoFormDraft")
+    operationalLocalStorage.removeItem("presupuestoFormDraft")
   }
 
   const handleNuevaVenta = () => {
     const newKey = `nueva-venta-${Date.now()}`
     openTab(newKey, "Nueva Venta")
     setTipoComprobante(1) // Forzar tipoComprobante a 1 para venta
-    localStorage.removeItem("ventaFormDraft")
+    operationalLocalStorage.removeItem("ventaFormDraft")
   }
 
   const mostrarBloqueoSetup = !loadingFerreteria && bloqueoTotalSetup

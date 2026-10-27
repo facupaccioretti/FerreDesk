@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { operationalLocalStorage } from '../../domains/session/operationalStorage';
 
 const DRAFT_KEY = 'proveedorFormDraft';
 
@@ -15,7 +16,7 @@ export default function useProveedores() {
   // Draft
   useEffect(() => {
     if (showModal && !editId) {
-      const draft = localStorage.getItem(DRAFT_KEY);
+      const draft = operationalLocalStorage.getItem(DRAFT_KEY);
       if (draft) {
         setForm(JSON.parse(draft));
       } else {
@@ -26,7 +27,7 @@ export default function useProveedores() {
 
   useEffect(() => {
     if (showModal && !editId) {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+      operationalLocalStorage.setItem(DRAFT_KEY, JSON.stringify(form));
     }
   }, [form, showModal, editId]);
 
@@ -45,7 +46,7 @@ export default function useProveedores() {
     setForm({ razon: '', fantasia: '', domicilio: '', tel1: '', cuit: '', sigla: '' });
     setEditId(null);
     setShowModal(false);
-    localStorage.removeItem(DRAFT_KEY);
+    operationalLocalStorage.removeItem(DRAFT_KEY);
     return true;
   };
 
@@ -68,7 +69,7 @@ export default function useProveedores() {
     setForm({ razon: '', fantasia: '', domicilio: '', tel1: '', cuit: '', sigla: '' });
     setEditId(null);
     setShowModal(false);
-    localStorage.removeItem(DRAFT_KEY);
+    operationalLocalStorage.removeItem(DRAFT_KEY);
   };
 
   const proveedoresFiltrados = proveedores.filter(p =>
@@ -97,4 +98,4 @@ export default function useProveedores() {
     handleCancel,
     proveedoresFiltrados,
   };
-} 
+}

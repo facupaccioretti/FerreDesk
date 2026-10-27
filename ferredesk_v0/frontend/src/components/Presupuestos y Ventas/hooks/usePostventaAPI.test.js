@@ -1,6 +1,7 @@
 import React, { act } from "react"
 import { createRoot } from "react-dom/client"
 import usePostventaAPI, { esUUID, generarIdempotencyKey } from "./usePostventaAPI"
+import { configurarAmbitoOperativo, deshabilitarStorageOperativo } from "../../../domains/session/operationalStorage"
 
 describe("usePostventaAPI", () => {
   let container
@@ -14,6 +15,7 @@ describe("usePostventaAPI", () => {
 
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    configurarAmbitoOperativo({ tenant: "test", perfilId: 1 })
     window.sessionStorage.setItem("postventa:idempotency:42", "123e4567-e89b-42d3-a456-426614174000")
     container = document.createElement("div")
     document.body.appendChild(container)
@@ -25,6 +27,7 @@ describe("usePostventaAPI", () => {
     act(() => root.unmount())
     document.body.removeChild(container)
     window.sessionStorage.clear()
+    deshabilitarStorageOperativo()
     jest.restoreAllMocks()
   })
 

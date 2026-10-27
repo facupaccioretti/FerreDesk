@@ -4,10 +4,13 @@ import { useLibroIvaAPI } from '../../../utils/useLibroIVAAPI';
 import LibroIvaPeriodoSelector from './LibroIvaPeriodoSelector';
 import LibroIvaTable from './LibroIvaTable';
 import LibroIvaExport from './LibroIvaExport';
+import { useSessionUserQuery } from '../../../domains/session/useSessionUserQuery';
+import { useLogoutMutation } from '../../../domains/session/useLogoutMutation';
 
 const LibroIvaVentasManager = () => {
-  const [user, setUser] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
+  const { user } = useSessionUserQuery();
+  const { logout } = useLogoutMutation();
   
   
   const {
@@ -22,22 +25,12 @@ const LibroIvaVentasManager = () => {
 
   useEffect(() => {
     document.title = "Libro IVA Ventas - FerreDesk";
-    
-    // Obtener información del usuario desde localStorage
-    const userInfo = localStorage.getItem('user');
-    if (userInfo) {
-      try {
-        setUser(JSON.parse(userInfo));
-      } catch (error) {
-        console.error('Error al parsear información del usuario:', error);
-      }
-    }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    window.location.href = '/login';
+    logout().finally(() => {
+      window.location.href = '/login';
+    });
   };
 
   const handleGenerarLibro = async (mes, anio, tipoLibro = 'convencional', incluirPresupuestos = false) => {

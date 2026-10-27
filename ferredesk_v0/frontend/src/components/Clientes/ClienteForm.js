@@ -9,6 +9,7 @@ import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import useNavegacionForm from "../../hooks/useNavegacionForm"
 import MaestroModal from "./MaestrosModales"
 import { useFerreteriaAPI } from "../../utils/useFerreteriaAPI"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 // --- Constantes y Componentes Auxiliares Extraídos ---
 
@@ -135,7 +136,7 @@ const ClienteForm = ({
 
   const [form, setForm] = useState(() => {
     try {
-      const saved = localStorage.getItem(claveBorradorCliente)
+      const saved = operationalLocalStorage.getItem(claveBorradorCliente)
       if (saved) {
         return JSON.parse(saved)
       }
@@ -197,13 +198,13 @@ const ClienteForm = ({
   }, [initialData, plazos, form.plazo])
 
   useEffect(() => {
-    try { localStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) { }
+    try { operationalLocalStorage.setItem(claveBorradorCliente, JSON.stringify(form)) } catch (_) { }
   }, [form, claveBorradorCliente])
 
   // Si cambia la clave (p.ej., de nuevo a edición con id), borrar la anterior para no dejar borrador huérfano
   useEffect(() => {
     if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
-      try { localStorage.removeItem(claveAnteriorRef.current) } catch (_) { }
+      try { operationalLocalStorage.removeItem(claveAnteriorRef.current) } catch (_) { }
     }
     claveAnteriorRef.current = claveBorradorCliente
   }, [claveBorradorCliente])
@@ -1024,9 +1025,9 @@ const ClienteForm = ({
                     const confirmar = window.confirm('¿Desea cancelar y descartar los cambios?')
                     if (!confirmar) return
                     try {
-                      localStorage.removeItem(claveBorradorCliente)
+                      operationalLocalStorage.removeItem(claveBorradorCliente)
                       if (claveAnteriorRef.current && claveAnteriorRef.current !== claveBorradorCliente) {
-                        localStorage.removeItem(claveAnteriorRef.current)
+                        operationalLocalStorage.removeItem(claveAnteriorRef.current)
                       }
                     } catch (_) { }
                     onCancel()

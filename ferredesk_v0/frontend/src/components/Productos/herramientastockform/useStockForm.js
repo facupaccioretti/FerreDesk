@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { operationalLocalStorage } from "../../../domains/session/operationalStorage"
 
 // Función para obtener el token CSRF de la cookie
 function getCookie(name) {
@@ -69,7 +70,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
   const [form, setForm] = useState(() => {
     if (modo === "nuevo") {
       try {
-        const saved = localStorage.getItem(claveBorrador)
+        const saved = operationalLocalStorage.getItem(claveBorrador)
         if (saved) {
           return JSON.parse(saved)
         }
@@ -103,7 +104,7 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
   useEffect(() => {
     if (modo !== "nuevo") return
     try {
-      localStorage.setItem(claveBorrador, JSON.stringify(form))
+      operationalLocalStorage.setItem(claveBorrador, JSON.stringify(form))
     } catch (_) {
       // Ignorar errores de almacenamiento
     }
@@ -199,12 +200,12 @@ const useStockForm = ({ stock, modo, onSave, onCancel, tabKey }) => {
   // Función para cancelar
   const handleCancel = () => {
     try {
-      localStorage.removeItem(claveBorrador)
-      localStorage.removeItem(`${claveBorrador}_precios`)
-      localStorage.removeItem(`${claveBorrador}_spPendientes`)
-      localStorage.removeItem(`${claveBorrador}_codPendientes`)
-      localStorage.removeItem(`${claveBorrador}_provAgregados`)
-      localStorage.removeItem(`${claveBorrador}_codPendEdic`)
+      operationalLocalStorage.removeItem(claveBorrador)
+      operationalLocalStorage.removeItem(`${claveBorrador}_precios`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_spPendientes`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_codPendientes`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_provAgregados`)
+      operationalLocalStorage.removeItem(`${claveBorrador}_codPendEdic`)
     } catch (_) { }
     onCancel()
   }

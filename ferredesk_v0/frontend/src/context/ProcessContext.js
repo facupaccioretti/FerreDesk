@@ -4,6 +4,10 @@ import { useQueryClient } from "@tanstack/react-query"
 import { obtenerTenantScope } from "../core/query/tenantScope"
 import { queryKeys } from "../core/query/queryKeys"
 import { clienteAPI } from "../utils/clienteAPI"
+import {
+  estaStorageOperativoHabilitado,
+  operationalLocalStorage,
+} from "../domains/session/operationalStorage"
 
 const ProcessContext = createContext(null)
 
@@ -142,6 +146,7 @@ function sonProcesosIguales(procesoAnterior, procesoActualizado) {
 
 export function ProcessProvider({ children }) {
   const tenantScope = obtenerTenantScope()
+  const storageHabilitado = estaStorageOperativoHabilitado()
   const queryClient = useQueryClient()
   const [procesos, setProcesos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -149,13 +154,13 @@ export function ProcessProvider({ children }) {
   const estadoPrevioRef = useRef(new Map())
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !storageHabilitado) {
       setLoading(false)
       return
     }
 
     try {
-      const raw = window.localStorage.getItem(crearStorageKey(tenantScope))
+      const raw = operationalLocalStorage.getItem(crearStorageKey(tenantScope))
       const parsed = raw ? JSON.parse(raw) : []
       const procesosPersistidos = Array.isArray(parsed)
         ? parsed
@@ -168,15 +173,15 @@ export function ProcessProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [tenantScope])
+  }, [storageHabilitado, tenantScope])
 
   useEffect(() => {
-    if (typeof window === "undefined" || loading) {
+    if (typeof window === "undefined" || loading || !storageHabilitado) {
       return
     }
 
-    window.localStorage.setItem(crearStorageKey(tenantScope), JSON.stringify(procesos))
-  }, [loading, procesos, tenantScope])
+    operationalLocalStorage.setItem(crearStorageKey(tenantScope), JSON.stringify(procesos))
+  }, [loading, procesos, storageHabilitado, tenantScope])
 
   useEffect(() => {
     if (loading) {
@@ -217,7 +222,7 @@ export function ProcessProvider({ children }) {
   }, [loading, procesos, queryClient])
 
   useEffect(() => {
-    if (loading) {
+    if (loading || !storageHabilitado) {
       return undefined
     }
 
@@ -278,7 +283,7 @@ export function ProcessProvider({ children }) {
       cancelado = true
       window.clearInterval(timer)
     }
-  }, [loading, procesos])
+  }, [loading, procesos, storageHabilitado])
 
   const value = useMemo(() => {
     const procesosActivos = procesos.filter((proceso) => ESTADOS_ACTIVOS.has(proceso.estado))

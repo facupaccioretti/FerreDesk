@@ -23,6 +23,7 @@ import { useSessionUserQuery } from "../../domains/session/useSessionUserQuery"
 // Hook del tema de FerreDesk
 import { useFerreDeskTheme } from "../../hooks/useFerreDeskTheme"
 import { leerConsultaPersistida, guardarConsultaPersistida } from "../../utils/consultaPersistida"
+import { operationalLocalStorage } from "../../domains/session/operationalStorage"
 
 // Contenedor principal de gestión de clientes
 const ClientesManager = () => {
@@ -53,7 +54,7 @@ const ClientesManager = () => {
 
   // ---------- Tabs tipo navegador ----------
   const [tabs, setTabs] = useState(() => {
-    const savedTabs = localStorage.getItem("clientesTabs")
+    const savedTabs = operationalLocalStorage.getItem("clientesTabs")
     // Empezamos con un array base de las pestañas que el usuario pueda tener.
     let currentTabs = savedTabs ? JSON.parse(savedTabs) : []
 
@@ -85,7 +86,7 @@ const ClientesManager = () => {
   })
 
   const [activeTab, setActiveTab] = useState(() => {
-    const savedActiveTab = localStorage.getItem("clientesActiveTab")
+    const savedActiveTab = operationalLocalStorage.getItem("clientesActiveTab")
     return savedActiveTab === "maestros" ? "lista" : (savedActiveTab || "lista")
   })
 
@@ -129,8 +130,8 @@ const ClientesManager = () => {
 
   // Persistencia de tabs
   useEffect(() => {
-    localStorage.setItem("clientesTabs", JSON.stringify(tabs))
-    localStorage.setItem("clientesActiveTab", activeTab)
+    operationalLocalStorage.setItem("clientesTabs", JSON.stringify(tabs))
+    operationalLocalStorage.setItem("clientesActiveTab", activeTab)
   }, [tabs, activeTab])
 
   const handleLogout = () => {
